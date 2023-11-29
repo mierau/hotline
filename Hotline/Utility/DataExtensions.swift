@@ -29,26 +29,36 @@ extension Data {
     return (endianness == .big) ? value.bigEndian : value.littleEndian
   }
   
-  func read<T: FixedWidthInteger>(type: T.Type, at offset: Int) -> T? {
-    guard offset >= 0, offset + MemoryLayout<T>.size <= self.count else {
-      return nil // Ensure the offset is within the Data's range
+  func readData(at offset: Int, length: Int) -> Data? {
+    guard offset >= 0, offset + length <= self.count else {
+      return nil
     }
-    
-    return self.withUnsafeBytes { rawBufferPointer in
-      let pointer = rawBufferPointer.baseAddress!
-        .advanced(by: offset)
-        .assumingMemoryBound(to: T.self)
-      
-//      switch endianness {
-//      case .big:
-      return pointer.pointee.bigEndian
-//      case .little:
-//        return pointer.pointee.littleEndian
-//      }
-    }
+    return self[offset..<(offset + length)]
   }
   
   func readString(at offset: Int, length: Int, encoding: String.Encoding) -> String? {
     return String(data: self[offset..<(offset + length)], encoding: encoding)
+  }
+  
+  
+  mutating func appendUInt8(_ value: UInt8, endianness: Endianness = .big) {
+    var val = endianness == .big ? value.bigEndian : value.littleEndian
+    append(&val, count: MemoryLayout<UInt8>.size)
+  }
+  
+  mutating func appendUInt16(_ value: UInt16, endianness: Endianness = .big) {
+    var val = endianness == .big ? value.bigEndian : value.littleEndian
+    Swift.withUnsafeBytes(of: &val) { buffer in
+      append(buffer.bindMemory(to: UInt8.self))
+    }
+//    append(&val, count: MemoryLayout<UInt16>.size)
+  }
+  
+  mutating func appendUInt32(_ value: UInt32, endianness: Endianness = .big) {
+    var val = endianness == .big ? value.bigEndian : value.littleEndian
+    Swift.withUnsafeBytes(of: &val) { buffer in
+      append(buffer.bindMemory(to: UInt8.self))
+    }
+//    append(&val, count: MemoryLayout<UInt32>.size)
   }
 }

@@ -7,9 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DA4F2BF62B1668A700D8ADDC /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */; };
+		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA9CAFBB2B126D5700CDA197 /* HotlineApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBA2B126D5700CDA197 /* HotlineApp.swift */; };
 		DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */; };
-		DA9CAFBF2B126D5700CDA197 /* Item.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBE2B126D5700CDA197 /* Item.swift */; };
 		DA9CAFC12B126D5800CDA197 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DA9CAFC02B126D5800CDA197 /* Assets.xcassets */; };
 		DA9CAFC42B126D5800CDA197 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DA9CAFC32B126D5800CDA197 /* Preview Assets.xcassets */; };
 		DA9CAFCB2B126E3300CDA197 /* HotlineTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFCA2B126E3300CDA197 /* HotlineTracker.swift */; };
@@ -17,10 +18,11 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
+		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA9CAFB72B126D5700CDA197 /* Hotline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hotline.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA9CAFBA2B126D5700CDA197 /* HotlineApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineApp.swift; sourceTree = "<group>"; };
 		DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackerView.swift; sourceTree = "<group>"; };
-		DA9CAFBE2B126D5700CDA197 /* Item.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Item.swift; sourceTree = "<group>"; };
 		DA9CAFC02B126D5800CDA197 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DA9CAFC32B126D5800CDA197 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		DA9CAFCA2B126E3300CDA197 /* HotlineTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineTracker.swift; sourceTree = "<group>"; };
@@ -59,7 +61,6 @@
 			children = (
 				DA9CAFBA2B126D5700CDA197 /* HotlineApp.swift */,
 				DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */,
-				DA9CAFBE2B126D5700CDA197 /* Item.swift */,
 				DABFCC262B1530AE009F40D2 /* Network */,
 				DABFCC272B1530BE009F40D2 /* Utility */,
 				DA9CAFC02B126D5800CDA197 /* Assets.xcassets */,
@@ -79,7 +80,9 @@
 		DABFCC262B1530AE009F40D2 /* Network */ = {
 			isa = PBXGroup;
 			children = (
+				DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */,
 				DA9CAFCA2B126E3300CDA197 /* HotlineTracker.swift */,
+				DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -163,10 +166,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
-				DA9CAFBF2B126D5700CDA197 /* Item.swift in Sources */,
 				DA9CAFCB2B126E3300CDA197 /* HotlineTracker.swift in Sources */,
 				DA9CAFBB2B126D5700CDA197 /* HotlineApp.swift in Sources */,
+				DA4F2BF62B1668A700D8ADDC /* HotlineClient.swift in Sources */,
 				DABFCC292B1530DC009F40D2 /* DataExtensions.swift in Sources */,
+				DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

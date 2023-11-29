@@ -1,15 +1,6 @@
 import Foundation
 import Network
 
-struct HotlineServer: Identifiable {
-  var id = UUID()
-  let address: String
-  let port: UInt16
-  let users: UInt16
-  let name: String?
-  let description: String?
-}
-
 enum HotlineTrackerStatus: Int {
   case disconnected
   case connecting
@@ -19,7 +10,6 @@ enum HotlineTrackerStatus: Int {
 class HotlineTracker : ObservableObject {
   let serverAddress: NWEndpoint.Host
   let serverPort: NWEndpoint.Port = NWEndpoint.Port(rawValue: 5498)!
-  let callback: ([HotlineServer]) -> Void
   
   static let magicPacket = Data([
     0x48, 0x54, 0x52, 0x4B, // 'HTRK'
@@ -35,9 +25,8 @@ class HotlineTracker : ObservableObject {
   @Published var connectionStatus: HotlineTrackerStatus = .disconnected
   @Published var servers: [HotlineServer] = []
   
-  init(address: String, callback: @escaping ([HotlineServer]) -> Void) {
+  init(address: String) {
     self.serverAddress = NWEndpoint.Host(address)
-    self.callback = callback
   }
   
   func fetch() {
@@ -56,20 +45,28 @@ class HotlineTracker : ObservableObject {
       switch newState {
       case .ready:
         print("READY TO SEND AND RECEIVE DATA")
-        self?.connectionStatus = .connected
+        DispatchQueue.main.async {
+          self?.connectionStatus = .connected
+        }
         self?.sendMagic()
       case .cancelled:
         print("CONNECTION CANCELLED")
-        self?.connectionStatus = .disconnected
+        DispatchQueue.main.async {
+          self?.connectionStatus = .disconnected
+        }
       case .failed(let err):
         print("CONNECTION ERROR \(err)")
-        self?.connectionStatus = .disconnected
+        DispatchQueue.main.async {
+          self?.connectionStatus = .disconnected
+        }
       default:
         print("CONNECTION OTHER THING")
       }
     }
     
-    self.connectionStatus = .connecting
+    DispatchQueue.main.async {
+      self.connectionStatus = .connecting
+    }
     self.connection?.start(queue: .global())
   }
   
@@ -89,7 +86,7 @@ class HotlineTracker : ObservableObject {
       return
     }
     
-//    let packet: [UInt8] = [0x48, 0x54, 0x52, 0x4B, 0x00, self.serverVersion]
+    //    let packet: [UInt8] = [0x48, 0x54, 0x52, 0x4B, 0x00, self.serverVersion]
     
     c.send(content: HotlineTracker.magicPacket, completion: .contentProcessed { [weak self] (error) in
       if let err = error {
@@ -120,9 +117,9 @@ class HotlineTracker : ObservableObject {
         self.disconnect()
         return
       }
-//      if let data = data, !data.isEmpty {
+      //      if let data = data, !data.isEmpty {
       print("HotlineTracker: received magic response!")
-//      }
+      //      }
       
       if let error = error {
         print("HotlineTracker: receive error \(error)")
@@ -153,7 +150,7 @@ class HotlineTracker : ObservableObject {
       
       if let data = data, !data.isEmpty {
         print("HotlineTracker: received \(data.count) header bytes")
-
+        
         self.maxDataLength = Int(data[2]) * 0xFF + Int(data[3])
         self.maxDataLength -= 4
         print("HotlineTracker: message size = \(self.maxDataLength)")
@@ -182,7 +179,7 @@ class HotlineTracker : ObservableObject {
       guard let self = self else {
         return
       }
-            
+      
       if let data = data, !data.isEmpty {
         print("HotlineTracker: received \(data.count) bytes")
         self.bytes.append(contentsOf: data)
@@ -216,7 +213,7 @@ class HotlineTracker : ObservableObject {
     // Description size (1 byte)
     // Description (description size)
     
-    var servers: [HotlineServer] = []
+    var foundServers: [HotlineServer] = []
     
     var cursor = 0
     for _ in 1...self.serverCount {
@@ -243,7 +240,7 @@ class HotlineTracker : ObservableObject {
               
               print("SERVER: \(server)")
               
-              servers.append(server)
+              foundServers.append(server)
               
               cursor += 11 + nameLength + 1 + descLength
             }
@@ -255,9 +252,8 @@ class HotlineTracker : ObservableObject {
     }
     
     DispatchQueue.main.async {
-      print("CALLING CALLBACK")
-      self.servers = servers
-      self.callback(servers)
+//      print("CALLING CALLBACK")
+      self.servers = foundServers
     }
     
   }
