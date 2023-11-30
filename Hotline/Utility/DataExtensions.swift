@@ -6,6 +6,21 @@ enum Endianness {
 }
 
 extension Data {
+  init(_ val: UInt8) {
+    self.init()
+    self.appendUInt8(val)
+  }
+  
+  init(_ val: UInt16) {
+    self.init()
+    self.appendUInt16(val)
+  }
+  
+  init(_ val: UInt32) {
+    self.init()
+    self.appendUInt32(val)
+  }
+  
   func readUInt8(at offset: Int) -> UInt8? {
     guard offset >= 0, offset + MemoryLayout<UInt8>.size <= self.count else {
       return nil
