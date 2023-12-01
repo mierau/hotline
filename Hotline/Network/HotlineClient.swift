@@ -24,11 +24,13 @@ class HotlineClient : ObservableObject {
   @Published var userList: [HotlineUser] = []
   @Published var chatMessages: [String] = []
   
-  let userName: String = "bolt"
-  let userIconID: UInt32 = 128
-  
+  var userName: String = "bolt"
+  var userIconID: UInt16 = 128
+  var serverVersion: UInt16 = 151
   var server: HotlineServer?
   var connection: NWConnection?
+  
+  private var transactionLog: [UInt32:HotlineTransactionType] = [:]
   
   init() {
     
@@ -94,6 +96,10 @@ class HotlineClient : ObservableObject {
       return
     }
     
+    print("HotlineClient => \(t.id) \(t.type)")
+    
+    self.transactionLog[t.id] = t.type
+    
     c.send(content: t.encoded(), completion: .contentProcessed { [weak self] (error) in
       if disconnectOnError, error != nil {
         self?.disconnect()
@@ -110,7 +116,7 @@ class HotlineClient : ObservableObject {
       return
     }
     
-    print("HotlineClient: waiting for transaction...")
+    print("HotlineClient ⏳")
     c.receive(minimumIncompleteLength: HotlineTransaction.headerSize, maximumLength: HotlineTransaction.headerSize) { [weak self] (headerData, context, isComplete, error) in
       guard let self = self else {
         return
@@ -127,39 +133,40 @@ class HotlineClient : ObservableObject {
         return
       }
       
-      print("HotlineClient: received \(headerData.count) header bytes")
+//      print("HotlineClient: received \(headerData.count) header bytes")
       
       if var transaction = self.parseTransaction(data: headerData) {
         // Receive additional data if the transaction has data attached to it.
         print("DATA SIZE: \(transaction.dataSize)")
         if transaction.dataSize > 0 {
-          c.receive(minimumIncompleteLength: Int(transaction.dataSize), maximumLength: Int(transaction.dataSize)) { [weak self] (parameterData, context, isComplete, error) in
+          c.receive(minimumIncompleteLength: Int(transaction.dataSize), maximumLength: Int(transaction.dataSize)) { [weak self] (fieldData, context, isComplete, error) in
             guard let self = self else {
               return
             }
             
-            guard let parameterData = parameterData, !parameterData.isEmpty else {
-              print("HotlineClient: transaction parameter data is empty!")
+            guard let fieldData = fieldData, !fieldData.isEmpty else {
+              print("HotlineClient: transaction field data is empty!")
               self.disconnect()
               return
             }
             
-            let parameterCount = parameterData.readUInt16(at: 0)!
+            let fieldCount = fieldData.readUInt16(at: 0)!
             
-            if parameterCount > 0 {
+            if fieldCount > 0 {
               var dataCursor = 2
-              for _ in 0..<parameterCount {
+              for _ in 0..<fieldCount {
                 if
-                  let fieldID = parameterData.readUInt16(at: dataCursor),
-                  let fieldSize = parameterData.readUInt16(at: dataCursor + 2),
-                  let fieldData = parameterData.readData(at: dataCursor + 4, length: Int(fieldSize)) {
+                  let fieldID = fieldData.readUInt16(at: dataCursor),
+                  let fieldSize = fieldData.readUInt16(at: dataCursor + 2),
+                  let fieldRemainingData = fieldData.readData(at: dataCursor + 4, length: Int(fieldSize)) {
                   
                   if let fieldType = HotlineTransactionFieldType(rawValue: fieldID) {
-                    transaction.parameters.append(HotlineTransactionParameter(type: fieldType, dataSize: fieldSize, data: fieldData))
-//                    transaction.parameters[fieldType] = HotlineTransactionParameter(type: fieldType, dataSize: fieldSize, data: fieldData)
+                    
+                    transaction.fields.append(HotlineTransactionField(type: fieldType, dataSize: fieldSize, data: fieldRemainingData))
+//                    transaction.parameters[fieldType] = HotlineTransactionField(type: fieldType, dataSize: fieldSize, data: fieldData)
                   }
                   else {
-                    print("HotlineClient: UNKNOWN PARAM TYPE!", fieldID, fieldSize)
+                    print("HotlineClient: UNKNOWN FIELD TYPE!", fieldID, fieldSize)
                   }
                   
                   dataCursor += 4 + Int(fieldSize)
@@ -201,9 +208,11 @@ class HotlineClient : ObservableObject {
       let transactionSize = data.readUInt32(at: 12),
       let dataSize = data.readUInt32(at: 16) {
       
-      print("HotlineClient: Parsing transaction type \(type) with data \(dataSize)")
       if let transactionType = HotlineTransactionType(rawValue: type) {
         return HotlineTransaction(type: transactionType, flags: flags, isReply: isReply, id: id, errorCode: errorCode, totalSize: transactionSize, dataSize: dataSize)
+      }
+      else {
+        print("HotlineClient: Unknown type \(type) parsing with \(dataSize) bytes")
       }
     }
     
@@ -249,8 +258,11 @@ class HotlineClient : ObservableObject {
           return
         }
         
-        print("HotlineClient: completed handshake")
-        self.sendLogin()
+        print("HotlineClient 🤝")
+        self.sendLogin() { [weak self] in
+          self?.sendSetClientUserInfo()
+          self?.sendGetUserList()
+        }
         self.receiveTransaction()
       }
     })
@@ -262,15 +274,13 @@ class HotlineClient : ObservableObject {
     }
     
     var t = HotlineTransaction(type: .login)
-    t.setParameterEncodedString(type: .userLogin, val: "")
-    t.setParameterEncodedString(type: .userPassword, val: "")
-    t.setParameterUInt32(type: .userIconID, val: self.userIconID)
-    t.setParameterString(type: .userName, val: self.userName)
-    t.setParameterUInt32(type: .versionNumber, val: 151)
+    t.setFieldEncodedString(type: .userLogin, val: "")
+    t.setFieldEncodedString(type: .userPassword, val: "")
+    t.setFieldUInt16(type: .userIconID, val: self.userIconID)
+    t.setFieldString(type: .userName, val: self.userName)
+    t.setFieldUInt32(type: .versionNumber, val: 123)
     
-    print("HotlineClient: logging in...")
     self.sendTransaction(t) { [weak self] in
-      print("HotlineClient: logged in!")
       DispatchQueue.main.async {
         self?.connectionStatus = .loggedIn
       }
@@ -279,44 +289,100 @@ class HotlineClient : ObservableObject {
     }
   }
   
+  func sendSetClientUserInfo(callback: (() -> Void)? = nil) {
+    var t = HotlineTransaction(type: .setClientUserInfo)
+    t.setFieldString(type: .userName, val: self.userName)
+    t.setFieldUInt16(type: .userIconID, val: self.userIconID)
+    
+    self.sendTransaction(t, callback: callback)
+  }
+  
   func sendAgree(callback: (() -> Void)? = nil) {
     var t = HotlineTransaction(type: .agreed)
-    t.setParameterString(type: .userName, val: self.userName)
-    t.setParameterUInt32(type: .userIconID, val: self.userIconID)
-    t.setParameterUInt32(type: .options, val: 0)
-    
-    print("HotlineClient: agreeing")
+    t.setFieldString(type: .userName, val: self.userName)
+    t.setFieldUInt16(type: .userIconID, val: self.userIconID)
+    t.setFieldUInt32(type: .options, val: 0)
     self.sendTransaction(t, callback: callback)
   }
   
   func sendChat(message: String, callback: (() -> Void)? = nil) {
     var t = HotlineTransaction(type: .sendChat)
-    t.setParameterString(type: .data, val: message)
-    
-    print("HotlineClient: sending chat...")
+    t.setFieldString(type: .data, val: message)
     self.sendTransaction(t, callback: callback)
   }
   
   func sendGetUserList(callback: (() -> Void)? = nil) {
     let t = HotlineTransaction(type: .getUserNameList)
-    print("HotlineClient: fetching user list...")
     self.sendTransaction(t, callback: callback)
   }
   
   // MARK: - Incoming
   
+  private func processReply(_ transaction: HotlineTransaction) {
+    guard transaction.errorCode == 0 else {
+      if let errorParam = transaction.getField(type: .errorText), let errorText = errorParam.getString() {
+        print("HotlineClient 😵 \(transaction.errorCode): \(errorText)")
+      }
+      else {
+        print("HotlineClient 😵 \(transaction.errorCode)")
+      }
+      return
+    }
+    
+    guard let repliedTransactionType = self.transactionLog[transaction.id] else {
+      return
+    }
+    
+    print("HotlineClient reply in response to \(repliedTransactionType)")
+    
+    switch(repliedTransactionType) {
+    case .login:
+      print("GOT REPLY TO LOGIN!")
+      
+      if
+        let serverVersionField = transaction.getField(type: .versionNumber),
+        let serverVersion = serverVersionField.getUInt16() {
+        self.serverVersion = serverVersion
+        print("SERVER VERSION: \(serverVersion)")
+      }
+    case .getUserNameList:
+      print("GOT USER LIST")
+      var newUserList: [HotlineUser] = []
+      for u in transaction.getFieldList(type: .userNameWithInfo) {
+        let info = u.getUserInfo()
+        print("USER: \(info)")
+        let user = HotlineUser(id: info.id, iconID: info.iconID, status: info.flags, name: info.userName)
+        newUserList.append(user)
+      }
+      DispatchQueue.main.async {
+        self.userList = newUserList
+      }
+    default:
+      break
+    }
+  }
+  
   private func processTransaction(_ transaction: HotlineTransaction) {
+    if transaction.type == .reply {
+      print("HotlineClient <= \(transaction.type) to \(transaction.id):")
+      print(transaction)
+    }
+    else {
+      print("HotlineClient <= \(transaction.type)")
+    }
+    
     switch(transaction.type) {
     case .reply:
-      print("HotlineClient: GOT REPLY TRANSACTION? \(transaction)")
+      self.processReply(transaction)
+//      print("HotlineClient: Received reply transaction: \(transaction)")
+      
     case .chatMessage:
-      print("HotlineClient: CHAT MESSAGE!")
-      if 
-        let chatTextParam = transaction.getParameter(type: .data),
+      if
+        let chatTextParam = transaction.getField(type: .data),
         let chatText = chatTextParam.getString(),
-        let userNameParam = transaction.getParameter(type: .userName),
+        let userNameParam = transaction.getField(type: .userName),
         let userName = userNameParam.getString(),
-        let userIDParam = transaction.getParameter(type: .userID),
+        let userIDParam = transaction.getField(type: .userID),
         let userID = userIDParam.getUInt16() {
         print("HotlineClient: \(userName):\(userID): \(chatText)")
           DispatchQueue.main.async {
@@ -325,37 +391,42 @@ class HotlineClient : ObservableObject {
         }
     case .getUserNameList:
       print("HotlineClient: GOT USER NAME LIST!")
-      let userList = transaction.getParameterList(type: .userInfo)
+      let userList = transaction.getFieldList(type: .userNameWithInfo)
       for u in userList {
         let userInfo = u.getUserInfo()
         print("HotlineClient: user \(userInfo.userName)")
       }
     case .notifyOfUserChange:
-      print("HotlineClient: user changed")
-      if let p = transaction.getParameter(type: .userName),
+//      print("HotlineClient: user changed")
+      if let p = transaction.getField(type: .userName),
          let userName = p.getString() {
-        print("HotlineClient: user name \(userName)")
+        print("HotlineClient: User changed \(userName)")
       }
     case .disconnectMessage:
-      print("HotlineClient: DISCONNECTED BY SERVER!")
+      print("HotlineClient ❌")
       self.disconnect()
     case .showAgreement:
-      if let agreementParam = transaction.getParameter(type: .data) {
+      if let noAgreementField = transaction.getField(type: .noServerAgreement) {
+        print("NO AGREEMENT?")
+      }
+      if let agreementParam = transaction.getField(type: .data) {
         if let agreementText = agreementParam.getString() {
-          print("AGREEMENT:", agreementText)
+          print("\n\n--------------------------\n")
+          print(agreementText)
+          print("\n--------------------------\n\n")
           DispatchQueue.main.async {
             self.agreement = agreementText
           }
-          self.sendAgree() {
+//          self.sendAgree() {
 //            self.sendGetUserList()
-          }
+//          }
         }
       }
     case .userAccess:
-      print("HotlineClient: user access transaction.")
+      print("")
     default:
-      print("HotlineClient: UNKNOWN transaction \(transaction.type) with \(transaction.parameters.count) parameters")
-      print(transaction.parameters)
+      print("HotlineClient: UNKNOWN transaction \(transaction.type) with \(transaction.fields.count) parameters")
+      print(transaction.fields)
     }
   }
 }

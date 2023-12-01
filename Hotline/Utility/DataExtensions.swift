@@ -22,33 +22,33 @@ extension Data {
   }
   
   func readUInt8(at offset: Int) -> UInt8? {
-    guard offset >= 0, offset + MemoryLayout<UInt8>.size <= self.count else {
+    guard offset >= 0, offset + 1 <= self.count else {
       return nil
     }
     return self[offset]
   }
   
-  func readUInt16(at offset: Int, endianness: Endianness = .big) -> UInt16? {
-    guard offset >= 0, offset + MemoryLayout<UInt16>.size <= self.count else {
+  func readUInt16(at offset: Int) -> UInt16? {
+    guard offset >= 0, offset + 2 <= self.count else {
       return nil
     }
-    let value = self.subdata(in: offset..<(offset + MemoryLayout<UInt16>.size)).withUnsafeBytes { $0.load(as: UInt16.self) }
-    return (endianness == .big) ? value.bigEndian : value.littleEndian
+    
+    return (UInt16(self[offset]) << 8) + UInt16(self[offset + 1])
   }
   
-  func readUInt32(at offset: Int, endianness: Endianness = .big) -> UInt32? {
-    guard offset >= 0, offset + MemoryLayout<UInt32>.size <= self.count else {
+  func readUInt32(at offset: Int) -> UInt32? {
+    guard offset >= 0, offset + 4 <= self.count else {
       return nil
     }
-    let value = self.subdata(in: offset..<(offset + MemoryLayout<UInt32>.size)).withUnsafeBytes { $0.load(as: UInt32.self) }
-    return (endianness == .big) ? value.bigEndian : value.littleEndian
+    
+    return (UInt32(self[offset]) << 24) + (UInt32(self[offset + 1]) << 16) + (UInt32(self[offset + 2]) << 8) + UInt32(self[offset + 3])
   }
   
   func readData(at offset: Int, length: Int) -> Data? {
     guard offset >= 0, offset + length <= self.count else {
       return nil
     }
-    return self[offset..<(offset + length)]
+    return self.subdata(in: offset..<(offset + length))
   }
   
   func readString(at offset: Int, length: Int, encoding: String.Encoding) -> String? {
