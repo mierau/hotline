@@ -16,9 +16,15 @@ struct HotlineApp: App {
 //    }
 //  }()
   
+  @State private var hotline = HotlineClient()
+  @State private var tracker = HotlineTrackerClient(tracker: HotlineTracker("hltracker.com"))
+  
   var body: some Scene {
+    
     WindowGroup {
-      TrackerView()
+      HotlineView()
+        .environment(hotline)
+        .environment(tracker)
     }
 //    .modelContainer(sharedModelContainer)
   }

@@ -7,26 +7,42 @@ enum HotlineTrackerStatus: Int {
   case connected
 }
 
-class HotlineTracker : ObservableObject {
-  let serverAddress: NWEndpoint.Host
-  let serverPort: NWEndpoint.Port = NWEndpoint.Port(rawValue: 5498)!
+struct HotlineTracker: Identifiable {
+  var address: String
+  var port: UInt16
+  var servers: [HotlineServer] = []
+  var expanded: Bool = false
   
+  var id: String { get { return self.address } }
+  
+  init(_ address: String, port: UInt16 = 5498) {
+    self.address = address
+    self.port = port
+  }
+}
+
+@Observable
+class HotlineTrackerClient {
   static let magicPacket = Data([
     0x48, 0x54, 0x52, 0x4B, // 'HTRK'
     0x00, 0x01 // Version
   ])
   
-  var connection: NWConnection?
+  @ObservationIgnored private let serverAddress: NWEndpoint.Host
+  @ObservationIgnored private let serverPort: NWEndpoint.Port
+  @ObservationIgnored private var connection: NWConnection?
+  @ObservationIgnored private var bytes = Data()
+  @ObservationIgnored private var maxDataLength: Int = 0
+  @ObservationIgnored private var serverCount: Int = 0
   
-  var bytes = Data()
-  var maxDataLength: Int = 0
-  var serverCount: Int = 0
+  var tracker: HotlineTracker
+  var connectionStatus: HotlineTrackerStatus = .disconnected
+  var servers: [HotlineServer] = []
   
-  @Published var connectionStatus: HotlineTrackerStatus = .disconnected
-  @Published var servers: [HotlineServer] = []
-  
-  init(address: String) {
-    self.serverAddress = NWEndpoint.Host(address)
+  init(tracker: HotlineTracker) {
+    self.tracker = tracker
+    self.serverAddress = NWEndpoint.Host(tracker.address)
+    self.serverPort = NWEndpoint.Port(rawValue: tracker.port)!
   }
   
   func fetch() {
@@ -88,7 +104,7 @@ class HotlineTracker : ObservableObject {
     
     //    let packet: [UInt8] = [0x48, 0x54, 0x52, 0x4B, 0x00, self.serverVersion]
     
-    c.send(content: HotlineTracker.magicPacket, completion: .contentProcessed { [weak self] (error) in
+    c.send(content: HotlineTrackerClient.magicPacket, completion: .contentProcessed { [weak self] (error) in
       if let err = error {
         print("HotlineTracker: sending magic failed \(err)")
         return
@@ -112,7 +128,7 @@ class HotlineTracker : ObservableObject {
         return
       }
       
-      if data.isEmpty || !data.elementsEqual(HotlineTracker.magicPacket) {
+      if data.isEmpty || !data.elementsEqual(HotlineTrackerClient.magicPacket) {
         print("HotlineTracker: invalid magic response")
         self.disconnect()
         return
@@ -252,6 +268,7 @@ class HotlineTracker : ObservableObject {
     }
     
     DispatchQueue.main.async {
+      self.tracker.servers = foundServers
 //      print("CALLING CALLBACK")
       self.servers = foundServers
     }

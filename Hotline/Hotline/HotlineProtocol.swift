@@ -73,22 +73,6 @@ struct HotlineUser: Identifiable, Hashable {
   }
 }
 
-struct HotlineUserInfo {
-  let id: UInt16
-  let iconID: UInt16
-  let flags: UInt16
-  let userName: String
-  
-  init(data: Data) {
-    self.id = data.readUInt16(at: 0)!
-    self.iconID = data.readUInt16(at: 2)!
-    self.flags = data.readUInt16(at: 4)!
-    
-    let userNameLength = data.readUInt16(at: 6)!
-    self.userName = data.readString(at: 8, length: Int(userNameLength), encoding: .ascii)!
-  }
-}
-
 struct HotlineTransactionField {
   let type: HotlineTransactionFieldType
   let dataSize: UInt16
@@ -171,8 +155,8 @@ struct HotlineTransactionField {
     return String(data: self.data, encoding: encoding)
   }
   
-  func getUserInfo() -> HotlineUserInfo {
-    return HotlineUserInfo(data: self.data)
+  func getUser() -> HotlineUser {
+    return HotlineUser(from: self.data)
   }
 }
 

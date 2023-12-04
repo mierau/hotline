@@ -9,8 +9,15 @@ enum HotlineClientStatus: Int {
   case loggedIn
 }
 
-class HotlineClient : ObservableObject {
-  static let shared = HotlineClient()
+struct HotlineChat {
+  let message: String
+  let userID: UInt16?
+  let isTopic: Bool
+}
+
+@Observable
+class HotlineClient {
+//  static let shared = HotlineClient()
   
   static let handshakePacket = Data([
     0x54, 0x52, 0x54, 0x50, // 'TRTP' protocol ID
@@ -19,18 +26,19 @@ class HotlineClient : ObservableObject {
     0x00, 0x02, // Sub-version
   ])
     
-  @Published var connectionStatus: HotlineClientStatus = .disconnected
-  @Published var agreement: String?
-  @Published var userList: [HotlineUser] = []
-  @Published var chatMessages: [String] = []
+  var connectionStatus: HotlineClientStatus = .disconnected
+  var agreement: String?
+  var users: [UInt16:HotlineUser] = [:]
+  var userList: [UInt16] = []
+  var chatMessages: [HotlineChat] = []
   
   var userName: String = "bolt"
   var userIconID: UInt16 = 128
   var serverVersion: UInt16 = 151
   var server: HotlineServer?
-  var connection: NWConnection?
   
-  private var transactionLog: [UInt32:HotlineTransactionType] = [:]
+  @ObservationIgnored private var connection: NWConnection?
+  @ObservationIgnored private var transactionLog: [UInt32:HotlineTransactionType] = [:]
   
   init() {
     
@@ -347,15 +355,19 @@ class HotlineClient : ObservableObject {
       }
     case .getUserNameList:
       print("GOT USER LIST")
-      var newUserList: [HotlineUser] = []
+      var newUsers: [UInt16:HotlineUser] = [:]
+      var newUserList: [UInt16] = []
       for u in transaction.getFieldList(type: .userNameWithInfo) {
-        let info = u.getUserInfo()
-        print("USER: \(info)")
-        let user = HotlineUser(id: info.id, iconID: info.iconID, status: info.flags, name: info.userName)
-        newUserList.append(user)
+        let user = u.getUser()
+        newUsers[user.id] = user
+        newUserList.append(user.id)
       }
       DispatchQueue.main.async {
+        self.users = newUsers
         self.userList = newUserList
+        
+        print("HotlineClient got users:\n")
+        print("\(self.userList)\n\n")
       }
     default:
       break
@@ -386,16 +398,9 @@ class HotlineClient : ObservableObject {
         let userID = userIDParam.getUInt16() {
         print("HotlineClient: \(userName):\(userID): \(chatText)")
           DispatchQueue.main.async {
-            self.chatMessages.append(chatText)
+            self.chatMessages.append(HotlineChat(message: chatText, userID: userID, isTopic: false))
           }
         }
-    case .getUserNameList:
-      print("HotlineClient: GOT USER NAME LIST!")
-      let userList = transaction.getFieldList(type: .userNameWithInfo)
-      for u in userList {
-        let userInfo = u.getUserInfo()
-        print("HotlineClient: user \(userInfo.userName)")
-      }
     case .notifyOfUserChange:
 //      print("HotlineClient: user changed")
       if let p = transaction.getField(type: .userName),
