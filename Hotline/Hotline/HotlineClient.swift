@@ -9,10 +9,26 @@ enum HotlineClientStatus: Int {
   case loggedIn
 }
 
-struct HotlineChat {
+struct HotlineChat: Identifiable {
+  let id = UUID()
   let message: String
-  let userID: UInt16?
+  let username: String
   let isTopic: Bool
+  
+  static let parser = /\s+(.+):\s+(.*)/
+  
+  init(message: String, isTopic: Bool = false) {
+    self.isTopic = isTopic
+    
+    if let match = message.firstMatch(of: HotlineChat.parser) {
+      self.username = String(match.1)
+      self.message = String(match.2)
+    }
+    else {
+      self.username = ""
+      self.message = message
+    }
+  }
 }
 
 @Observable
@@ -29,8 +45,9 @@ class HotlineClient {
   var connectionStatus: HotlineClientStatus = .disconnected
   var agreement: String?
   var users: [UInt16:HotlineUser] = [:]
-  var userList: [UInt16] = []
+  var userList: [HotlineUser] = []
   var chatMessages: [HotlineChat] = []
+  var messageBoard: String = ""
   
   var userName: String = "bolt"
   var userIconID: UInt16 = 128
@@ -324,6 +341,19 @@ class HotlineClient {
     self.sendTransaction(t, callback: callback)
   }
   
+  func sendGetNews(callback: (() -> Void)? = nil) {
+    let t = HotlineTransaction(type: .getMessages)
+    self.sendTransaction(t, callback: callback)
+  }
+  
+  func sendGetFileList(path: String? = nil, callback: (() -> Void)? = nil) {
+    let t = HotlineTransaction(type: .getFileNameList)
+    if let p = path {
+//      t.setFieldString(type: .filePath)
+    }
+    self.sendTransaction(t, callback: callback)
+  }
+  
   // MARK: - Incoming
   
   private func processReply(_ transaction: HotlineTransaction) {
@@ -356,11 +386,11 @@ class HotlineClient {
     case .getUserNameList:
       print("GOT USER LIST")
       var newUsers: [UInt16:HotlineUser] = [:]
-      var newUserList: [UInt16] = []
+      var newUserList: [HotlineUser] = []
       for u in transaction.getFieldList(type: .userNameWithInfo) {
         let user = u.getUser()
         newUsers[user.id] = user
-        newUserList.append(user.id)
+        newUserList.append(user)
       }
       DispatchQueue.main.async {
         self.users = newUsers
@@ -368,6 +398,13 @@ class HotlineClient {
         
         print("HotlineClient got users:\n")
         print("\(self.userList)\n\n")
+      }
+    case .getMessages:
+      print("GOT MESSAGE BOARD")
+      if let textField = transaction.getField(type: .data), let text = textField.getString() {
+        DispatchQueue.main.async {
+          self.messageBoard = text
+        }
       }
     default:
       break
@@ -389,16 +426,18 @@ class HotlineClient {
 //      print("HotlineClient: Received reply transaction: \(transaction)")
       
     case .chatMessage:
+      print("HotlineClient: chat \(transaction)")
       if
         let chatTextParam = transaction.getField(type: .data),
-        let chatText = chatTextParam.getString(),
-        let userNameParam = transaction.getField(type: .userName),
-        let userName = userNameParam.getString(),
-        let userIDParam = transaction.getField(type: .userID),
-        let userID = userIDParam.getUInt16() {
-        print("HotlineClient: \(userName):\(userID): \(chatText)")
+        let chatText = chatTextParam.getString()
+//        let userNameParam = transaction.getField(type: .userName),
+//        let userName = userNameParam.getString(),
+//        let userIDParam = transaction.getField(type: .userID),
+//        let userID = userIDParam.getUInt16() {
+      {
+        print("HotlineClient: \(chatText)")
           DispatchQueue.main.async {
-            self.chatMessages.append(HotlineChat(message: chatText, userID: userID, isTopic: false))
+            self.chatMessages.append(HotlineChat(message: chatText, isTopic: false))
           }
         }
     case .notifyOfUserChange:

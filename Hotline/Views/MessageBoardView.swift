@@ -1,9 +1,10 @@
 import SwiftUI
 
-struct AgreementView: View {
+struct MessageBoardView: View {
   @Environment(HotlineState.self) private var appState
+  @Environment(HotlineClient.self) private var hotline
   
-  let text: String
+  @State private var fetched = false
   
   var body: some View {
 //    @Bindable var config = appState
@@ -11,30 +12,31 @@ struct AgreementView: View {
     VStack(alignment: .leading) {
       ScrollView {
         VStack(alignment: .leading) {
-          Text(text)
+          Text(hotline.messageBoard)
             .fontDesign(.monospaced)
             .padding()
             .dynamicTypeSize(.small)
             .textSelection(.enabled)
         }
       }
-      Button("OK") {
-        print("DONE")
-        appState.dismissAgreement()
-      }
-      .bold()
-      .padding(EdgeInsets(top: 16, leading: 24, bottom: 16, trailing: 24))
-      .frame(maxWidth: .infinity)
     }
     .presentationDetents([.fraction(0.6)])
     .presentationDragIndicator(.visible)
+    .task {
+      if !fetched {
+        hotline.sendGetNews() {
+          fetched = true
+        }
+      }
+    }
+    .refreshable {
+      hotline.sendGetNews()
+    }
   }
 }
 
 #Preview {
-  AgreementView(text: """
-Welcome!
-
-Take it on real one.
-""")
+  MessageBoardView()
+    .environment(HotlineState())
+    .environment(HotlineClient())
 }

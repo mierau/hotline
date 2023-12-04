@@ -16,6 +16,7 @@ struct HotlineApp: App {
 //    }
 //  }()
   
+  @State private var appState = HotlineState()
   @State private var hotline = HotlineClient()
   @State private var tracker = HotlineTrackerClient(tracker: HotlineTracker("hltracker.com"))
   
@@ -23,6 +24,7 @@ struct HotlineApp: App {
     
     WindowGroup {
       HotlineView()
+        .environment(appState)
         .environment(hotline)
         .environment(tracker)
     }

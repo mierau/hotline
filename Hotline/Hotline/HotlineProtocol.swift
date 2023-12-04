@@ -285,6 +285,7 @@ enum HotlineTransactionFieldType: UInt16 {
   case versionNumber = 160 // Integer
   case communityBannerID = 161 // Integer
   case serverName = 162 // String
+  case fileNameWithInfo = 200 // Data { type: 4, creator: 4, file size: 4, reserved: 4, name script: 2, name size: 2, name data: size }
   // TODO: Add file field types
   case quotingMessage = 214 // String?
   case automaticResponse = 215 // String
@@ -348,6 +349,9 @@ enum HotlineTransactionType: UInt16 {
   case downloadInfo = 211 // Server
   case downloadBanner = 212
   case uploadFolder = 213
+  case getNewsFile = 294
+  case postNews = 295
+  case receiveNewsFile = 296 // Server
   case getUserNameList = 300
   case notifyOfUserChange = 301 // Server
   case notifyOfUserDelete = 302 // Server

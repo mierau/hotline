@@ -1,53 +1,64 @@
 import SwiftUI
 
 struct ServerView: View {
+  @Environment(HotlineState.self) private var appState
   @Environment(HotlineClient.self) private var hotline
   @Environment(HotlineTrackerClient.self) private var tracker
-  
-  @State private var isTrackerVisible = false
-  
+    
   var body: some View {
+    @Bindable var config = appState
+    
     TabView {
       NavigationView {
         ChatView()
-          .navigationTitle("Badmoon")
+          .navigationTitle(hotline.server?.name ?? "Hotline")
+          .navigationBarTitleDisplayMode(.inline)
           .navigationBarItems(
             leading: Button(action: {
-              withAnimation {
-                isTrackerVisible.toggle()
-              }
+              appState.presentTracker()
             }) {
-              Image(systemName: "line.horizontal.3") // Hamburger icon or similar
+              Image(systemName: "globe.americas.fill") // Hamburger icon or similar
                 .imageScale(.large)
             }
           )
-          .toolbarBackground(.visible, for: .navigationBar)
-          .toolbarBackground(.red, for: .navigationBar)
+//          .toolbarBackground(.visible, for: .navigationBar)
+//          .toolbarBackground(.red, for: .navigationBar)
       }
-      .navigationBarTitleDisplayMode(.inline)
       .tabItem {
         Image(systemName: "message")
       }
       
-      Text("Users")
-        .tabItem {
-          Image(systemName: "person.fill")
-        }
+      NavigationView {
+        UserListView()
+          .navigationTitle("User List")
+          .navigationBarTitleDisplayMode(.inline)
+      }
+      .tabItem {
+        Image(systemName: "person.fill")
+      }
       
       Text("News")
         .tabItem {
           Image(systemName: "newspaper")
         }
       
-      Text("Files")
-        .tabItem {
-          Image(systemName: "folder")
-        }
+      NavigationView {
+        MessageBoardView()
+          .navigationTitle("Message Board")
+          .navigationBarTitleDisplayMode(.inline)
+      }
+      .tabItem {
+        Image(systemName: "pin")
+      }
       
-      Text("Transfers")
-        .tabItem {
-          Image(systemName: "network")
-        }
+      NavigationView {
+        FilesView()
+          .navigationTitle("Files")
+          .navigationBarTitleDisplayMode(.inline)
+      }
+      .tabItem {
+        Image(systemName: "folder")
+      }
     }
 //      .sheet(isPresented: Binding(get: { hotline.connectionStatus != .loggedIn }, set: { _ in })) {
 //        TrackerView()

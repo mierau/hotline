@@ -1,11 +1,15 @@
 import SwiftUI
 
 struct TrackerServerView: View {
-  @Environment(\.dismiss) var dismiss
+  @Environment(HotlineState.self) private var appState
+  @Environment(HotlineClient.self) private var hotline
+  @Environment(\.dismiss) private var dismiss
   
   let server: HotlineServer
   
   var body: some View {
+    @Bindable var config = appState
+    
     VStack(alignment: .leading) {
       HStack {
         Text("🌎").dynamicTypeSize(.xxxLarge)
@@ -20,9 +24,9 @@ struct TrackerServerView: View {
       
       HStack(alignment: .center) {
         Button("Connect") {
-          print("WHAT", "HELLO", server.address)
-//          HotlineClient.shared.connect(to: server)
-          dismiss()
+          hotline.connect(to: server)
+          config.dismissTracker()
+//          dismiss()
         }
         .bold()
         .padding(EdgeInsets(top: 16, leading: 24, bottom: 16, trailing: 24))
@@ -44,4 +48,5 @@ struct TrackerServerView: View {
 
 #Preview {
   TrackerServerView(server: HotlineServer(address: "192.168.1.1", port: 5050, users: 5, name: "Ye Olde Server", description: "This is a server"))
+    .environment(HotlineClient())
 }
