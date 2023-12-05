@@ -11,6 +11,7 @@
 		DA0D698D2B1E7CF700C71DF5 /* UserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UserListView.swift */; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; };
+		DA161B6C2B1FA520000918F3 /* FileListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA161B6B2B1FA520000918F3 /* FileListView.swift */; };
 		DA43205C2B1D003B00FC8843 /* HotlineClientModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43205B2B1D003B00FC8843 /* HotlineClientModel.swift */; };
 		DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43205D2B1D615600FC8843 /* ServerView.swift */; };
 		DA4F2BF62B1668A700D8ADDC /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */; };
@@ -32,6 +33,7 @@
 		DA0D698C2B1E7CF700C71DF5 /* UserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserListView.swift; sourceTree = "<group>"; };
 		DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardView.swift; sourceTree = "<group>"; };
 		DA0D69902B1E894800C71DF5 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
+		DA161B6B2B1FA520000918F3 /* FileListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileListView.swift; sourceTree = "<group>"; };
 		DA43205B2B1D003B00FC8843 /* HotlineClientModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClientModel.swift; sourceTree = "<group>"; };
 		DA43205D2B1D615600FC8843 /* ServerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerView.swift; sourceTree = "<group>"; };
 		DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
@@ -71,6 +73,7 @@
 				DA4F2C002B1A558E00D8ADDC /* ChatView.swift */,
 				DA0D698C2B1E7CF700C71DF5 /* UserListView.swift */,
 				DA0D69902B1E894800C71DF5 /* FilesView.swift */,
+				DA161B6B2B1FA520000918F3 /* FileListView.swift */,
 				DA4F2BFC2B1A52EF00D8ADDC /* TrackerServerView.swift */,
 				DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */,
 			);
@@ -203,6 +206,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA161B6C2B1FA520000918F3 /* FileListView.swift in Sources */,
 				DA43205C2B1D003B00FC8843 /* HotlineClientModel.swift in Sources */,
 				DA4F2BFB2B1A518500D8ADDC /* AgreementView.swift in Sources */,
 				DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */,

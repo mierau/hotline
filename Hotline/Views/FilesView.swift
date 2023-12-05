@@ -6,15 +6,8 @@ struct FilesView: View {
   @State private var fetched = false
   
   var body: some View {
-    ScrollView {
-      VStack(spacing: 0) {
-        List(hotline.userList) { u in
-          HStack(alignment: .firstTextBaseline) {
-            Text(u.name).bold().foregroundStyle(u.isAdmin ? Color.red : Color.black)
-          }
-        }
-        .padding()
-      }
+    List(hotline.fileList) {
+      FileListView(item: $0)
     }
     .task {
       if !fetched {

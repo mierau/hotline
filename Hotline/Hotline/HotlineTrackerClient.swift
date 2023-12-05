@@ -45,9 +45,9 @@ class HotlineTrackerClient {
     self.serverPort = NWEndpoint.Port(rawValue: tracker.port)!
   }
   
-  func fetch() {
+  func fetch(_ callback: (() -> Void)? = nil) {
     self.reset()
-    self.connect()
+    self.connect(callback)
   }
   
   private func reset() {
@@ -55,7 +55,7 @@ class HotlineTrackerClient {
     self.serverCount = 0
   }
   
-  private func connect() {
+  private func connect(_ callback: (() -> Void)? = nil) {
     self.connection = NWConnection(host: self.serverAddress, port: self.serverPort, using: .tcp)
     self.connection?.stateUpdateHandler = { [weak self] (newState: NWConnection.State) in
       switch newState {
@@ -69,11 +69,13 @@ class HotlineTrackerClient {
         print("CONNECTION CANCELLED")
         DispatchQueue.main.async {
           self?.connectionStatus = .disconnected
+          callback?()
         }
       case .failed(let err):
         print("CONNECTION ERROR \(err)")
         DispatchQueue.main.async {
           self?.connectionStatus = .disconnected
+          callback?()
         }
       default:
         print("CONNECTION OTHER THING")

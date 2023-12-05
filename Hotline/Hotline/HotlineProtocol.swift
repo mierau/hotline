@@ -17,6 +17,65 @@ struct HotlineServer: Identifiable, Hashable {
   }
 }
 
+extension UInt32 {
+  func decodeFromUInt32() -> String {
+    let bytes = [
+      UInt8((self >> 24) & 0xFF),
+      UInt8((self >> 16) & 0xFF),
+      UInt8((self >> 8) & 0xFF),
+      UInt8(self & 0xFF)
+    ]
+    return String(bytes: bytes, encoding: .utf8) ?? ""
+  }
+}
+
+struct HotlineFile: Identifiable, Hashable {
+  let id = UUID()
+  let type: String
+  let creator: String
+  let fileSize: UInt32
+  let name: String
+  
+  var isExpanded: Bool = false
+  var files: [HotlineFile] = []
+  
+  let isFolder: Bool
+  
+  static func == (lhs: HotlineFile, rhs: HotlineFile) -> Bool {
+    return lhs.id == rhs.id
+  }
+  
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(self.id)
+  }
+  
+  init(type: String, creator: String, fileSize: UInt32, fileName: String) {
+    self.type = type
+    self.creator = creator
+    self.fileSize = fileSize
+    self.name = fileName
+    
+    self.isFolder = (self.type == "fldr")
+  }
+  
+  init(from data: Data) {
+    let typeRaw = data.readUInt32(at: 0)!
+    let creatorRaw = data.readUInt32(at: 4)!
+    
+    self.type = typeRaw.decodeFromUInt32()
+    self.creator = creatorRaw.decodeFromUInt32()
+    self.fileSize = data.readUInt32(at: 8)!
+    
+    self.isFolder = (self.type == "fldr")
+    
+//    data.readUInt32(at: 12)! // reserved
+//    let nameScript = data.readUInt16(at: 16)! // name script
+    
+    let nameLength = data.readUInt16(at: 18)!
+    self.name = data.readString(at: 20, length: Int(nameLength), encoding: .ascii)!
+  }
+}
+
 struct HotlineUser: Identifiable, Hashable {
   let id: UInt16
   let iconID: UInt16
@@ -157,6 +216,10 @@ struct HotlineTransactionField {
   
   func getUser() -> HotlineUser {
     return HotlineUser(from: self.data)
+  }
+  
+  func getFile() -> HotlineFile {
+    return HotlineFile(from: self.data)
   }
 }
 

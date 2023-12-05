@@ -5,19 +5,14 @@ struct HotlineView: View {
   @Environment(HotlineClient.self) private var hotline
   @Environment(HotlineTrackerClient.self) private var tracker
   
-  @State private var isTrackerVisible = true
-  
   var body: some View {
     @Bindable var config = appState
     
     NavigationStack {
-      ServerView()
+      TrackerView()
     }
     .sheet(isPresented: $config.agreementPresented) {
       AgreementView(text: hotline.agreement!)
-    }
-    .sheet(isPresented: $config.trackerPresented) {
-      TrackerView()
     }
   }
 }

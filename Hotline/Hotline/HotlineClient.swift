@@ -48,6 +48,7 @@ class HotlineClient {
   var userList: [HotlineUser] = []
   var chatMessages: [HotlineChat] = []
   var messageBoard: String = ""
+  var fileList: [HotlineFile] = []
   
   var userName: String = "bolt"
   var userIconID: UInt16 = 128
@@ -405,6 +406,16 @@ class HotlineClient {
         DispatchQueue.main.async {
           self.messageBoard = text
         }
+      }
+    case .getFileNameList:
+      var files: [HotlineFile] = []
+      for fi in transaction.getFieldList(type: .fileNameWithInfo) {
+        let file = fi.getFile()
+//        print("GOT FILE: \(file.name) \(file.creator) \(file.type) \(file.fileSize)")
+        files.append(file)
+      }
+      DispatchQueue.main.async {
+        self.fileList = files
       }
     default:
       break
