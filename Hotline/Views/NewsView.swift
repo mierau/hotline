@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct MessageBoardView: View {
+struct NewsView: View {
   @Environment(HotlineState.self) private var appState
   @Environment(HotlineClient.self) private var hotline
   
@@ -11,25 +11,25 @@ struct MessageBoardView: View {
     NavigationStack {
       ScrollView {
         LazyVStack(alignment: .leading) {
-          ForEach(hotline.messageBoardMessages, id: \.self) {
-            Text($0)
-              .lineLimit(100)
-              .padding()
-              .textSelection(.enabled)
-            Divider()
-          }
+//          ForEach(hotline.messageBoardMessages, id: \.self) {
+//            Text($0)
+//              .lineLimit(100)
+//              .padding()
+//              .textSelection(.enabled)
+//            Divider()
+//          }
         }
         Spacer()
       }
       .task {
         if !fetched {
-          hotline.sendGetMessageBoard() {
+          hotline.sendGetNewsCategories() {
             fetched = true
           }
         }
       }
       .refreshable {
-        hotline.sendGetMessageBoard()
+        hotline.sendGetNewsCategories()
       }
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

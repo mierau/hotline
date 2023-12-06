@@ -23,7 +23,7 @@ struct HotlineApp: App {
   var body: some Scene {
     
     WindowGroup {
-      HotlineView()
+      TrackerView()
         .environment(appState)
         .environment(hotline)
         .environment(tracker)

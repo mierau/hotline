@@ -29,6 +29,51 @@ extension UInt32 {
   }
 }
 
+struct HotlineNewsCategory: Identifiable, Hashable {
+  let id = UUID()
+  let type: UInt16
+  let count: UInt16
+  let name: String
+  
+  static func == (lhs: HotlineNewsCategory, rhs: HotlineNewsCategory) -> Bool {
+    return lhs.id == rhs.id
+  }
+  
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(self.id)
+  }
+  
+  init(type: UInt16, count: UInt16, name: String) {
+    self.type = type
+    self.count = count
+    self.name = name
+  }
+  
+  init(from data: Data) {
+    self.type = data.readUInt16(at: 0)!
+    
+    if self.type == 2 {
+      // Read bundle properties
+      self.count = data.readUInt16(at: 2)!
+      
+      let nameSize = data.readUInt8(at: 4)!
+      self.name = data.readString(at: 5, length: Int(nameSize))!
+    }
+    else if self.type == 3 {
+      // Read category properties
+      self.count = data.readUInt16(at: 2)!
+      
+      let nameSize = data.readUInt8(at: 2 + 2 + 4 + 4)!
+      self.name = data.readString(at: 2 + 2 + 4 + 4 + 1, length: Int(nameSize))!
+    }
+    else {
+      self.count = 0
+      self.name = ""
+    }
+  }
+}
+
+
 struct HotlineFile: Identifiable, Hashable {
   let id = UUID()
   let type: String
@@ -72,7 +117,7 @@ struct HotlineFile: Identifiable, Hashable {
 //    let nameScript = data.readUInt16(at: 16)! // name script
     
     let nameLength = data.readUInt16(at: 18)!
-    self.name = data.readString(at: 20, length: Int(nameLength), encoding: .ascii)!
+    self.name = data.readString(at: 20, length: Int(nameLength))!
   }
 }
 
@@ -107,7 +152,7 @@ struct HotlineUser: Identifiable, Hashable {
     self.status = data.readUInt16(at: 4)!
     
     let userNameLength = Int(data.readUInt16(at: 6)!)
-    self.name = data.readString(at: 8, length: userNameLength, encoding: .ascii)!
+    self.name = data.readString(at: 8, length: userNameLength)!
   }
   
   func hash(into hasher: inout Hasher) {
@@ -210,8 +255,8 @@ struct HotlineTransactionField {
     return nil
   }
   
-  func getString(encoding: String.Encoding = .ascii) -> String? {
-    return String(data: self.data, encoding: encoding)
+  func getString() -> String? {
+    return String(data: self.data, encoding: .utf8) ?? String(data: self.data, encoding: .ascii)
   }
   
   func getUser() -> HotlineUser {
@@ -220,6 +265,10 @@ struct HotlineTransactionField {
   
   func getFile() -> HotlineFile {
     return HotlineFile(from: self.data)
+  }
+  
+  func getNewsCategory() -> HotlineNewsCategory {
+    return HotlineNewsCategory(from: self.data)
   }
 }
 

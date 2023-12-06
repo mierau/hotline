@@ -9,24 +9,32 @@ enum HotlineClientStatus: Int {
   case loggedIn
 }
 
+enum HotlineChatType: Int {
+  case message
+  case agreement
+  case status
+}
+
 struct HotlineChat: Identifiable {
   let id = UUID()
-  let message: String
+  let text: String
   let username: String
-  let isTopic: Bool
+  let type: HotlineChatType
   
   static let parser = /\s+(.+):\s+(.*)/
   
-  init(message: String, isTopic: Bool = false) {
-    self.isTopic = isTopic
+  init(text: String, type: HotlineChatType = .message) {
+    self.type = type
     
-    if let match = message.firstMatch(of: HotlineChat.parser) {
+    if 
+      type == .message,
+      let match = text.firstMatch(of: HotlineChat.parser) {
       self.username = String(match.1)
-      self.message = String(match.2)
+      self.text = String(match.2)
     }
     else {
       self.username = ""
-      self.message = message
+      self.text = text
     }
   }
 }
@@ -47,7 +55,6 @@ class HotlineClient {
   var users: [UInt16:HotlineUser] = [:]
   var userList: [HotlineUser] = []
   var chatMessages: [HotlineChat] = []
-  var messageBoard: String = ""
   var messageBoardMessages: [String] = []
   var fileList: [HotlineFile] = []
   
@@ -60,7 +67,8 @@ class HotlineClient {
   @ObservationIgnored private var transactionLog: [UInt32:HotlineTransactionType] = [:]
   
   init() {
-    
+//    let downloadsPath = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)
+//    print("DOWNLOAD TO: \(downloadsPath)")
   }
   
   // MARK: -
@@ -91,11 +99,13 @@ class HotlineClient {
         DispatchQueue.main.async {
           self?.connectionStatus = .disconnected
         }
+        self?.reset()
       case .failed(let err):
         print("HotlineClient: connection error \(err)")
         DispatchQueue.main.async {
           self?.connectionStatus = .disconnected
         }
+        self?.reset()
       default:
         print("HotlineClient: unhandled connection state \(newState)")
       }
@@ -107,13 +117,20 @@ class HotlineClient {
     self.connection?.start(queue: .global())
   }
   
-  private func disconnect() {
+  func reset() {
+    DispatchQueue.main.async {
+      self.chatMessages = []
+      self.agreement = nil
+      self.users = [:]
+      self.userList = []
+      self.messageBoardMessages = []
+      self.fileList = []
+    }
+  }
+  
+  func disconnect() {
     self.connection?.cancel()
     self.connection = nil
-    
-    DispatchQueue.main.async {
-      self.connectionStatus = .disconnected
-    }
   }
   
   // MARK: -
@@ -343,16 +360,26 @@ class HotlineClient {
     self.sendTransaction(t, callback: callback)
   }
   
-  func sendGetNews(callback: (() -> Void)? = nil) {
+  func sendGetMessageBoard(callback: (() -> Void)? = nil) {
     let t = HotlineTransaction(type: .getMessages)
+    self.sendTransaction(t, callback: callback)
+  }
+  
+  func sendGetNewsCategories(callback: (() -> Void)? = nil) {
+    let t = HotlineTransaction(type: .getNewsCategoryNameList)
+    self.sendTransaction(t, callback: callback)
+  }
+  
+  func sendGetNewsArticles(callback: (() -> Void)? = nil) {
+    let t = HotlineTransaction(type: .getNewsArticleNameList)
     self.sendTransaction(t, callback: callback)
   }
   
   func sendGetFileList(path: String? = nil, callback: (() -> Void)? = nil) {
     let t = HotlineTransaction(type: .getFileNameList)
-    if let p = path {
+//    if let p = path {
 //      t.setFieldString(type: .filePath)
-    }
+//    }
     self.sendTransaction(t, callback: callback)
   }
   
@@ -407,14 +434,19 @@ class HotlineClient {
         let messageBoardRegex = /([\s\r\n]*[_\-]+[\s\r\n]+)/
         let matches = text.matches(of: messageBoardRegex)
         var start = text.startIndex
-        for match in matches {
-          let range = match.range
-          messages.append(String(text[start..<range.lowerBound]))
-          start = range.upperBound
+        
+        if matches.count > 0 {
+          for match in matches {
+            let range = match.range
+            messages.append(String(text[start..<range.lowerBound]))
+            start = range.upperBound
+          }
+        }
+        else {
+          messages.append(text)
         }
         
         DispatchQueue.main.async {
-          self.messageBoard = text
           self.messageBoardMessages = messages
         }
       }
@@ -422,11 +454,15 @@ class HotlineClient {
       var files: [HotlineFile] = []
       for fi in transaction.getFieldList(type: .fileNameWithInfo) {
         let file = fi.getFile()
-//        print("GOT FILE: \(file.name) \(file.creator) \(file.type) \(file.fileSize)")
         files.append(file)
       }
       DispatchQueue.main.async {
         self.fileList = files
+      }
+    case .getNewsCategoryNameList:
+      for fi in transaction.getFieldList(type: .newsCategoryListData15) {
+        let c = fi.getNewsCategory()
+        print("CATEGORY: \(c)")
       }
     default:
       break
@@ -459,7 +495,7 @@ class HotlineClient {
       {
         print("HotlineClient: \(chatText)")
           DispatchQueue.main.async {
-            self.chatMessages.append(HotlineChat(message: chatText, isTopic: false))
+            self.chatMessages.append(HotlineChat(text: chatText, type: .message))
           }
         }
     case .notifyOfUserChange:
@@ -481,6 +517,7 @@ class HotlineClient {
           print(agreementText)
           print("\n--------------------------\n\n")
           DispatchQueue.main.async {
+            self.chatMessages.insert(HotlineChat(text: agreementText, type: .agreement), at: 0)
             self.agreement = agreementText
           }
 //          self.sendAgree() {

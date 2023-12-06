@@ -51,8 +51,15 @@ extension Data {
     return self.subdata(in: offset..<(offset + length))
   }
   
-  func readString(at offset: Int, length: Int, encoding: String.Encoding) -> String? {
-    return String(data: self[offset..<(offset + length)], encoding: encoding)
+  func readString(at offset: Int, length: Int) -> String? {
+    var str: String?
+    
+    str = String(data: self[offset..<(offset + length)], encoding: .utf8)
+    if str == nil {
+      str = String(data: self[offset..<(offset + length)], encoding: .ascii)
+    }
+    
+    return str
   }
   
   
