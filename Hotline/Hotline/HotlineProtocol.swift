@@ -37,7 +37,7 @@ struct HotlineFile: Identifiable, Hashable {
   let name: String
   
   var isExpanded: Bool = false
-  var files: [HotlineFile] = []
+  var files: [HotlineFile]? = nil
   
   let isFolder: Bool
   

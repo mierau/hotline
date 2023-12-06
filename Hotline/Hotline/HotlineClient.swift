@@ -48,6 +48,7 @@ class HotlineClient {
   var userList: [HotlineUser] = []
   var chatMessages: [HotlineChat] = []
   var messageBoard: String = ""
+  var messageBoardMessages: [String] = []
   var fileList: [HotlineFile] = []
   
   var userName: String = "bolt"
@@ -401,10 +402,20 @@ class HotlineClient {
         print("\(self.userList)\n\n")
       }
     case .getMessages:
-      print("GOT MESSAGE BOARD")
       if let textField = transaction.getField(type: .data), let text = textField.getString() {
+        var messages: [String] = []
+        let messageBoardRegex = /([\s\r\n]*[_\-]+[\s\r\n]+)/
+        let matches = text.matches(of: messageBoardRegex)
+        var start = text.startIndex
+        for match in matches {
+          let range = match.range
+          messages.append(String(text[start..<range.lowerBound]))
+          start = range.upperBound
+        }
+        
         DispatchQueue.main.async {
           self.messageBoard = text
+          self.messageBoardMessages = messages
         }
       }
     case .getFileNameList:

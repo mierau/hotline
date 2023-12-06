@@ -10,18 +10,18 @@ struct ChatView: View {
   var body: some View {
     VStack(spacing: 0) {
       List(hotline.chatMessages) { msg in
-        if msg.username == "" {
-          
-        }
         HStack(alignment: .firstTextBaseline) {
-          Text("\(msg.username):").bold().fontDesign(.monospaced).font(.system(size: 12))
+          if !msg.username.isEmpty {
+            Text("\(msg.username):").bold().fontDesign(.monospaced).font(.system(size: 12))
+          }
           Text(msg.message)
             .fontDesign(.monospaced)
             .textSelection(.enabled)
             .font(.system(size: 12))
         }
+        .listRowSeparator(.hidden)
       }
-      .padding()
+      .listStyle(.plain)
       
 //      GeometryReader { geometry in
 //        ScrollView(.vertical) {

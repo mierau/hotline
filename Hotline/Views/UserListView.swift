@@ -7,9 +7,10 @@ struct UserListView: View {
     VStack(spacing: 0) {
       List(hotline.userList) { u in
         HStack(alignment: .firstTextBaseline) {
-          Text(u.name).bold().foregroundStyle(u.isAdmin ? Color.red : Color.black)
+          Text(u.name).bold().foregroundStyle(u.isAdmin ? Color.red : Color.black).opacity(u.isIdle ? 0.5 : 1.0)
         }
       }
+      .listStyle(.plain)
       .padding()
     }
   }

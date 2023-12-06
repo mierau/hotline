@@ -1,22 +1,26 @@
 import SwiftUI
 
 struct FileListView: View {
-  var item: HotlineFile
+  @State var files: [HotlineFile]
   
   var body: some View {
-    List {
-      ForEach(item.files) { f in
-        if f.isFolder {
-          DisclosureGroup(f.name, isExpanded: false)
-        }
-        else {
-          Text("HELLO")
-        }
-      }
-    }
+    Text("HI")
+//    @Bindable var fls = files
+//    List {
+//      ForEach($fls, id: \.self) { f in
+//        if f.isFolder {
+//          DisclosureGroup(f.name, isExpanded: false)
+//        }
+//        else {
+//          Text("HELLO")
+//        }
+//      }
+//    }
   }
 }
 
 #Preview {
-  FileListView(item: HotlineFile(type: "fldr", creator: "", fileSize: 0, fileName: "Folder"))
+  FileListView(files: [
+    HotlineFile(type: "fldr", creator: "", fileSize: 0, fileName: "Folder")
+  ])
 }

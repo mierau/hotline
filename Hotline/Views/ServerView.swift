@@ -106,9 +106,10 @@ struct ServerView: View {
             .navigationTitle("Files")
             .navigationBarTitleDisplayMode(.inline)
             .tabItem {
-              Image(systemName: "folder")
+              Image(systemName: "folder").tint(.black)
             }
         }
+        .accentColor(.black)
       }
       
       //      .sheet(isPresented: Binding(get: { hotline.connectionStatus != .loggedIn }, set: { _ in })) {
