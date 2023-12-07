@@ -3,6 +3,7 @@ import SwiftUI
 struct NewsView: View {
   @Environment(HotlineState.self) private var appState
   @Environment(HotlineClient.self) private var hotline
+  @Environment(\.colorScheme) var colorScheme
   
   @State private var fetched = false
   @State private var selectedCategory: HotlineNewsCategory? = nil
@@ -43,6 +44,7 @@ struct NewsView: View {
       }
       .padding()
     }
+    .background(colorScheme == .dark ? Color(white: 0.1) : Color(uiColor: UIColor.systemBackground))
   }
   
   var body: some View {
@@ -54,14 +56,19 @@ struct NewsView: View {
           Divider()
           Spacer()
           HStack(alignment: .center) {
-            Image(systemName: "line.3.horizontal")
-              .opacity(0.2)
-              .font(.system(size: 14))
+            Rectangle()
+              .fill(.tertiary)
+              .frame(width: 50, height: 6, alignment: .center)
+              .cornerRadius(10)
+//              .opacity(0.3)
+//            Image(systemName: "line.3.horizontal")
+//              .opacity(0.2)
+//              .font(.system(size: 14))
           }
           Spacer()
 //          Divider()
         }
-        .background(Color(uiColor: UIColor.systemBackground))
+        .background(colorScheme == .dark ? Color(white: 0.1) : Color(uiColor: UIColor.systemBackground))
         .frame(maxWidth: .infinity)
         .frame(height: dividerHeight)
         .gesture(

@@ -44,28 +44,46 @@ struct FilesView: View {
   var body: some View {
     NavigationStack {
       List(hotline.fileList, id: \.self, children: \.files) { tree in
-        HStack {
           if tree.isFolder {
-            HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
-              Image(systemName: "folder.fill")
+            DisclosureGroup {
+              HStack {
+                HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
+                  Image(systemName: "folder.fill")
+                }
+                .frame(minWidth: 25)
+                Text("File").fontWeight(.medium)
+                Spacer()
+                Text("4").foregroundStyle(.secondary)
+//                HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
+//                }
+//                .frame(minWidth: 25)
+//                ProgressView(value: 0.8)
+              }
+            } label: {
+              HStack {
+                HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
+                  Image(systemName: "folder.fill")
+                }
+                .frame(minWidth: 25)
+                Text(tree.name).fontWeight(.medium)
+                Spacer()
+                Text("\(tree.fileSize)").foregroundStyle(.secondary)
+              }
             }
-            .frame(minWidth: 25)
-            Text(tree.name).bold()
-            Spacer()
-            Text("\(tree.fileSize)").foregroundStyle(.gray)
           }
           else {
-            HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
-              Image(uiImage: fileIcon(name: tree.name))
-                .renderingMode(.template)
-                .foregroundColor(.accentColor)
+            HStack {
+              HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
+                Image(uiImage: fileIcon(name: tree.name))
+                  .renderingMode(.template)
+                  .foregroundColor(.accentColor)
+              }
+              .frame(minWidth: 25)
+              Text(tree.name)
+              Spacer()
+              Text(formattedFileSize(tree.fileSize)).foregroundStyle(.gray)
             }
-            .frame(minWidth: 25)
-            Text(tree.name).bold()
-            Spacer()
-            Text(formattedFileSize(tree.fileSize)).foregroundStyle(.gray)
           }
-        }
       }
       .listStyle(.plain)
       .task {

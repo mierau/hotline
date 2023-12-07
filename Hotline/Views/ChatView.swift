@@ -15,7 +15,7 @@ struct ChatView: View {
   @State private var contentHeight: CGFloat = 0
   
   @Namespace var bottomID
-  
+    
   var body: some View {
     NavigationStack {
       VStack(spacing: 0) {
@@ -26,6 +26,7 @@ struct ChatView: View {
                 if msg.type == .agreement {
                   VStack(alignment: .leading) {
                     Text(msg.text)
+                      .font(.system(size: 11, weight: .regular, design: .monospaced))
                       .padding()
                       .opacity(0.75)
                       .background(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.96))
@@ -36,10 +37,12 @@ struct ChatView: View {
                 else {
                   HStack(alignment: .firstTextBaseline) {
                     if !msg.username.isEmpty {
-                      Text("\(msg.username):").bold()
+                      Text("**\(msg.username):** \(msg.text)")
                     }
-                    Text(msg.text)
-                      .textSelection(.enabled)
+                    else {
+                      Text(msg.text)
+                        .textSelection(.enabled)
+                    }
                     Spacer()
                   }
                   .padding()
