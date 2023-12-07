@@ -21,7 +21,7 @@ struct HotlineChat: Identifiable {
   let username: String
   let type: HotlineChatType
   
-  static let parser = /\s+(.+):\s+(.*)/
+  static let parser = /^\s*([^\:]+)\:\s*(.*)/
   
   init(text: String, type: HotlineChatType = .message) {
     self.type = type
