@@ -31,13 +31,13 @@ struct ServerView: View {
     TabView {
       ChatView()
         .tabItem {
-          Image(systemName: "message")
+          Image(systemName: "bubble")
         }
         .tag(Tab.chat)
       
       UserListView()
         .tabItem {
-          Image(systemName: "person.fill")
+          Image(systemName: "person.2")
         }
         .tag(Tab.users)
       
@@ -49,7 +49,7 @@ struct ServerView: View {
       
       MessageBoardView()
         .tabItem {
-          Image(systemName: "pin")
+          Image(systemName: "book.closed")
         }
         .tag(Tab.messageBoard)
       

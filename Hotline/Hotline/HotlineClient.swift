@@ -409,6 +409,8 @@ class HotlineClient {
       return
     }
     
+    self.transactionLog[transaction.id] = nil
+    
     print("HotlineClient reply in response to \(repliedTransactionType)")
     
     switch(repliedTransactionType) {

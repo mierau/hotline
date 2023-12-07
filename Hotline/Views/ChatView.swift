@@ -1,5 +1,11 @@
 import SwiftUI
 
+extension View {
+  func endEditing() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+  }
+}
+
 struct ChatView: View {
   @Environment(HotlineClient.self) private var hotline
   @Environment(\.colorScheme) var colorScheme
@@ -54,18 +60,37 @@ struct ChatView: View {
             }
           }
         }
+        .scrollDismissesKeyboard(.interactively)
+        .onTapGesture {
+          self.endEditing()
+        }
         
         Divider()
         
         HStack(alignment: .top) {
-          Image(systemName: "chevron.right")
+          Image(systemName: "chevron.right").opacity(0.4)
           TextField("", text: $input, axis: .vertical)
+            .autocapitalization(.none)
             .lineLimit(1...5)
             .onSubmit {
-              hotline.sendChat(message: self.input)
-              //        HotlineClient.shared.sendChat(message: self.input)
+              if !self.input.isEmpty {
+                hotline.sendChat(message: self.input)
+              }
               self.input = ""
             }
+            .frame(maxWidth: .infinity)
+          Button {
+            if !self.input.isEmpty {
+              hotline.sendChat(message: self.input)
+            }
+            self.input = ""
+          } label: {
+            Image(systemName: self.input.isEmpty ? "arrow.up.circle" : "arrow.up.circle.fill")
+              .resizable()
+              .scaledToFit()
+              .frame(width: 24.0, height: 24.0)
+              .opacity(self.input.isEmpty ? 0.4 : 1.0)
+          }
         }.padding()
       }
       .navigationBarTitleDisplayMode(.inline)
