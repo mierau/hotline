@@ -17,15 +17,33 @@ struct HotlineServer: Identifiable, Hashable {
   }
 }
 
-extension UInt32 {
-  func decodeFromUInt32() -> String {
-    let bytes = [
-      UInt8((self >> 24) & 0xFF),
-      UInt8((self >> 16) & 0xFF),
-      UInt8((self >> 8) & 0xFF),
-      UInt8(self & 0xFF)
-    ]
-    return String(bytes: bytes, encoding: .utf8) ?? ""
+enum HotlineChatType: Int {
+  case message
+  case agreement
+  case status
+}
+
+struct HotlineChat: Identifiable {
+  let id = UUID()
+  let text: String
+  let username: String
+  let type: HotlineChatType
+  
+  static let parser = /^\s*([^\:]+)\:\s*(.*)/
+  
+  init(text: String, type: HotlineChatType = .message) {
+    self.type = type
+    
+    if
+      type == .message,
+      let match = text.firstMatch(of: HotlineChat.parser) {
+      self.username = String(match.1)
+      self.text = String(match.2)
+    }
+    else {
+      self.username = ""
+      self.text = text
+    }
   }
 }
 
@@ -109,8 +127,8 @@ struct HotlineFile: Identifiable, Hashable {
     let typeRaw = data.readUInt32(at: 0)!
     let creatorRaw = data.readUInt32(at: 4)!
     
-    self.type = typeRaw.decodeFromUInt32()
-    self.creator = creatorRaw.decodeFromUInt32()
+    self.type = typeRaw.toStringLiteral()
+    self.creator = creatorRaw.toStringLiteral()
     self.fileSize = data.readUInt32(at: 8)!
     
     self.isFolder = (self.type == "fldr")
@@ -435,6 +453,7 @@ enum HotlineTransactionFieldType: UInt16 {
   case communityBannerID = 161 // Integer
   case serverName = 162 // String
   case fileNameWithInfo = 200 // Data { type: 4, creator: 4, file size: 4, reserved: 4, name script: 2, name size: 2, name data: size }
+  case filePath = 202 // Path
   // TODO: Add file field types
   case quotingMessage = 214 // String?
   case automaticResponse = 215 // String
@@ -458,6 +477,11 @@ enum HotlineTransactionFieldType: UInt16 {
   case newsArticleParentArticle = 335 // Integer
   case newsArticleFirstChildArticle = 336 // Integer
   case newsArticleRecursiveDelete = 337 // Integer
+}
+
+func transactionTypeHasReply(_ type: HotlineTransactionType) -> Bool {
+  
+  return false
 }
 
 enum HotlineTransactionType: UInt16 {

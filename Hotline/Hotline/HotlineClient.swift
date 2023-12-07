@@ -9,36 +9,6 @@ enum HotlineClientStatus: Int {
   case loggedIn
 }
 
-enum HotlineChatType: Int {
-  case message
-  case agreement
-  case status
-}
-
-struct HotlineChat: Identifiable {
-  let id = UUID()
-  let text: String
-  let username: String
-  let type: HotlineChatType
-  
-  static let parser = /^\s*([^\:]+)\:\s*(.*)/
-  
-  init(text: String, type: HotlineChatType = .message) {
-    self.type = type
-    
-    if 
-      type == .message,
-      let match = text.firstMatch(of: HotlineChat.parser) {
-      self.username = String(match.1)
-      self.text = String(match.2)
-    }
-    else {
-      self.username = ""
-      self.text = text
-    }
-  }
-}
-
 @Observable
 class HotlineClient {
 //  static let shared = HotlineClient()
@@ -64,7 +34,7 @@ class HotlineClient {
   var server: HotlineServer?
   
   @ObservationIgnored private var connection: NWConnection?
-  @ObservationIgnored private var transactionLog: [UInt32:HotlineTransactionType] = [:]
+  @ObservationIgnored private var transactionLog: [UInt32:(HotlineTransactionType, (() -> Void)?)] = [:]
   
   init() {
 //    let downloadsPath = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)
@@ -136,14 +106,14 @@ class HotlineClient {
   
   // MARK: -
   
-  private func sendTransaction(_ t: HotlineTransaction, autodisconnect disconnectOnError: Bool = true, callback: (() -> Void)? = nil) {
+  private func sendTransaction(_ t: HotlineTransaction, autodisconnect disconnectOnError: Bool = true, callback: (() -> Void)? = nil, reply: (() -> Void)? = nil) {
     guard let c = connection else {
       return
     }
     
     print("HotlineClient => \(t.id) \(t.type)")
     
-    self.transactionLog[t.id] = t.type
+    self.transactionLog[t.id] = (t.type, reply)
     
     c.send(content: t.encoded(), completion: .contentProcessed { [weak self] (error) in
       if disconnectOnError, error != nil {
@@ -153,6 +123,10 @@ class HotlineClient {
       
       callback?()
     })
+  }
+  
+  private func sendTransaction(_ t: HotlineTransaction, autodisconnect disconnectOnError: Bool = true, callback: (() -> Void)? = nil) {
+    sendTransaction(t, autodisconnect: disconnectOnError, callback: callback, reply: nil)
   }
   
   private func receiveTransaction() {
@@ -379,12 +353,16 @@ class HotlineClient {
     self.sendTransaction(t, callback: callback)
   }
   
-  func sendGetFileList(path: String? = nil, callback: (() -> Void)? = nil) {
-    let t = HotlineTransaction(type: .getFileNameList)
+  func sendGetFileList(path: [String] = [], callback: (() -> Void)? = nil, reply: (() -> Void)?) {
+    var t = HotlineTransaction(type: .getFileNameList)
+    
+    if !path.isEmpty {
+      t.setFieldPath(type: .filePath, val: path)
+    }
 //    if let p = path {
 //      t.setFieldString(type: .filePath)
 //    }
-    self.sendTransaction(t, callback: callback)
+    self.sendTransaction(t, callback: callback, reply: reply)
   }
   
 //  func sendGetNews(callback: (() -> Void)? = nil) {
@@ -409,11 +387,18 @@ class HotlineClient {
       return
     }
     
+    defer {
+      let replyCallback = repliedTransactionType.1
+      DispatchQueue.main.async {
+        replyCallback?()
+      }
+    }
+    
     self.transactionLog[transaction.id] = nil
     
     print("HotlineClient reply in response to \(repliedTransactionType)")
     
-    switch(repliedTransactionType) {
+    switch(repliedTransactionType.0) {
     case .login:
       print("GOT REPLY TO LOGIN!")
       
@@ -483,6 +468,8 @@ class HotlineClient {
     default:
       break
     }
+    
+    
   }
   
   private func processTransaction(_ transaction: HotlineTransaction) {

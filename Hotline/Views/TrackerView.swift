@@ -92,7 +92,9 @@ struct TrackerView: View {
                   Text("\(server.address)").opacity(0.3).font(.system(size: 13))
                 }
                 Spacer()
-                Text("\(server.users)").opacity(0.3).font(.system(size: 16)).fontWeight(.medium)
+                if server.users > 0 {
+                  Text("\(server.users)").opacity(0.3).font(.system(size: 16)).fontWeight(.medium)
+                }
               }
               if server == selectedServer {
                 Spacer(minLength: 16)

@@ -94,3 +94,15 @@ extension Data {
 //    append(&val, count: MemoryLayout<UInt32>.size)
   }
 }
+
+extension UInt32 {
+  func toStringLiteral() -> String {
+    let bytes = [
+      UInt8((self >> 24) & 0xFF),
+      UInt8((self >> 16) & 0xFF),
+      UInt8((self >> 8) & 0xFF),
+      UInt8(self & 0xFF)
+    ]
+    return String(bytes: bytes, encoding: .utf8) ?? ""
+  }
+}

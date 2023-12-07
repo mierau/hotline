@@ -1,22 +1,25 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct FilesView: View {
+struct FileListView: View {
   @Environment(HotlineClient.self) private var hotline
   
   @State private var fetched = false
+  @State var fileList: [HotlineFile] = []
+  
+  var path: [String] = []
   
   static let byteFormatter = ByteCountFormatter()
   
   private func formattedFileSize(_ fileSize: UInt32) -> String {
-//    let bcf = ByteCountFormatter()
-    FilesView.byteFormatter.allowedUnits = [.useAll]
-    FilesView.byteFormatter.countStyle = .file
-    return FilesView.byteFormatter.string(fromByteCount: Int64(fileSize))
+    //    let bcf = ByteCountFormatter()
+    FileListView.byteFormatter.allowedUnits = [.useAll]
+    FileListView.byteFormatter.countStyle = .file
+    return FileListView.byteFormatter.string(fromByteCount: Int64(fileSize))
   }
   
   private func fileIcon(name: String) -> UIImage {
-//    func utTypeForFilename(_ filename: String) -> UTType? {
+    //    func utTypeForFilename(_ filename: String) -> UTType? {
     let fileExtension = (name as NSString).pathExtension
     if let fileType = UTType(filenameExtension: fileExtension) {
       print("\(name) \(fileExtension) = \(fileType)")
@@ -42,57 +45,103 @@ struct FilesView: View {
   }
   
   var body: some View {
-    NavigationStack {
-      List(hotline.fileList, id: \.self, children: \.files) { tree in
-          if tree.isFolder {
-            DisclosureGroup {
-              HStack {
-                HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
-                  Image(systemName: "folder.fill")
-                }
-                .frame(minWidth: 25)
-                Text("File").fontWeight(.medium)
-                Spacer()
-                Text("4").foregroundStyle(.secondary)
-//                HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
-//                }
-//                .frame(minWidth: 25)
-//                ProgressView(value: 0.8)
-              }
-            } label: {
-              HStack {
-                HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
-                  Image(systemName: "folder.fill")
-                }
-                .frame(minWidth: 25)
-                Text(tree.name).fontWeight(.medium)
-                Spacer()
-                Text("\(tree.fileSize)").foregroundStyle(.secondary)
-              }
+    List {
+      ForEach(fileList, id: \.self) { file in
+        if file.isFolder {
+          DisclosureGroup {
+            if !fetched {
+              ProgressView()
             }
-          }
-          else {
+            else {
+              FileListView(path: [])
+            }
+          } label: {
             HStack {
               HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
-                Image(uiImage: fileIcon(name: tree.name))
-                  .renderingMode(.template)
-                  .foregroundColor(.accentColor)
+                Image(systemName: "folder.fill")
               }
               .frame(minWidth: 25)
-              Text(tree.name)
+              Text(file.name).fontWeight(.medium)
               Spacer()
-              Text(formattedFileSize(tree.fileSize)).foregroundStyle(.gray)
+              Text("\(file.fileSize)").foregroundStyle(.secondary)
             }
           }
-      }
-      .listStyle(.plain)
-      .task {
-        if !fetched {
-          hotline.sendGetFileList() {
-            fetched = true
+        }
+        else {
+          HStack {
+            HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
+              Image(uiImage: fileIcon(name: file.name))
+                .renderingMode(.template)
+                .foregroundColor(.accentColor)
+            }
+            .frame(minWidth: 25)
+            Text(file.name)
+            Spacer()
+            Text(formattedFileSize(file.fileSize)).foregroundStyle(.gray)
           }
         }
       }
+    }
+    .listStyle(.plain)
+    .task {
+      if !fetched {
+        hotline.sendGetFileList() {
+          print("FETCHED!")
+          fetched = true
+        } reply: {
+          print("GOT FILES REPLY?")
+          fileList = hotline.fileList
+        }
+      }
+    }
+  }
+}
+
+struct FilesView: View {
+  @Environment(HotlineClient.self) private var hotline
+  
+  @State private var fetched = false
+  
+//  let fileList: [HotlineFile]
+  
+//  static let byteFormatter = ByteCountFormatter()
+//  
+//  private func formattedFileSize(_ fileSize: UInt32) -> String {
+//    //    let bcf = ByteCountFormatter()
+//    FilesView.byteFormatter.allowedUnits = [.useAll]
+//    FilesView.byteFormatter.countStyle = .file
+//    return FilesView.byteFormatter.string(fromByteCount: Int64(fileSize))
+//  }
+//  
+//  private func fileIcon(name: String) -> UIImage {
+//    //    func utTypeForFilename(_ filename: String) -> UTType? {
+//    let fileExtension = (name as NSString).pathExtension
+//    if let fileType = UTType(filenameExtension: fileExtension) {
+//      print("\(name) \(fileExtension) = \(fileType)")
+//      
+//      if fileType.isSubtype(of: .movie) {
+//        return UIImage(systemName: "play.rectangle")!
+//      }
+//      else if fileType.isSubtype(of: .image) {
+//        return UIImage(systemName: "photo")!
+//      }
+//      else if fileType.isSubtype(of: .archive) {
+//        return UIImage(systemName: "doc.zipper")!
+//      }
+//      else if fileType.isSubtype(of: .text) {
+//        return UIImage(systemName: "doc.text")!
+//      }
+//      else {
+//        return UIImage(systemName: "doc")!
+//      }
+//    }
+//    
+//    return UIImage(systemName: "doc")!
+//  }
+  
+  var body: some View {
+    NavigationStack {
+      FileListView(path: [])
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .principal) {

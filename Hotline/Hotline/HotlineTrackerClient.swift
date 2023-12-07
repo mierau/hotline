@@ -255,31 +255,10 @@ class HotlineTrackerClient {
         if let name = serverName,
            let desc = serverDescription {
           let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
-          
-          print("SERVER: \(server)")
-          
           foundServers.append(server)
-          
-          
         }
         
         cursor += 10 + nameByteCount + descByteCount
-        
-//        let nameLength = Int(nameLengthByte)
-//        if let name = self.bytes.readString(at: cursor + 11, length: nameLength) {
-//          if let descLengthByte = self.bytes.readUInt8(at: cursor + 11 + nameLength) {
-//            let descLength = Int(descLengthByte)
-//            if let desc = self.bytes.readString(at: cursor + 11 + nameLength + 1, length: descLength) {
-//              let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
-//              
-//              print("SERVER: \(server)")
-//              
-//              foundServers.append(server)
-//              
-//              cursor += 11 + nameLength + 1 + descLength
-//            }
-//          }
-//        }
       }
       
       print(cursor)
