@@ -55,16 +55,18 @@ struct HotlineNewsCategory: Identifiable, Hashable {
     if self.type == 2 {
       // Read bundle properties
       self.count = data.readUInt16(at: 2)!
-      
-      let nameSize = data.readUInt8(at: 4)!
-      self.name = data.readString(at: 5, length: Int(nameSize))!
+      let (n, _) = data.readPString(at: 4)
+      self.name = n!
     }
     else if self.type == 3 {
       // Read category properties
       self.count = data.readUInt16(at: 2)!
-      
-      let nameSize = data.readUInt8(at: 2 + 2 + 4 + 4)!
-      self.name = data.readString(at: 2 + 2 + 4 + 4 + 1, length: Int(nameSize))!
+//      let guid = data.readUInt32(at: 4)!
+//      print("CATEGORY GUID: \(guid)")
+//      let addSN = data.readUInt32(at: 20)!
+//      let removeSN = data.readUInt32(at: 24)!
+      let (n, _) = data.readPString(at: 28)
+      self.name = n!
     }
     else {
       self.count = 0
@@ -221,6 +223,37 @@ struct HotlineTransactionField {
   init(type: HotlineTransactionFieldType, string: String, encrypt: Bool) {
     self.init(type: type, string: string, encoding: .ascii, encrypt: encrypt)
   }
+  
+  init(type: HotlineTransactionFieldType, path: String) {
+    var components: [String] = []
+    
+    for component in path.components(separatedBy: "/") {
+      if !component.isEmpty {
+        components.append(component)
+      }
+    }
+    
+    self.init(type: type, pathComponents: components)
+  }
+  
+  init(type: HotlineTransactionFieldType, pathComponents: [String]) {
+    var pathData = Data()
+    
+    pathData.appendUInt16(UInt16(pathComponents.count))
+    for name in pathComponents {
+      pathData.appendUInt16(0)
+      
+      var nameData = name.data(using: .ascii, allowLossyConversion: true)
+      if nameData == nil {
+        nameData = Data()
+      }
+      
+      pathData.appendUInt8(UInt8(nameData!.count))
+      pathData.append(nameData!)
+    }
+    
+    self.init(type: type, dataSize: UInt16(pathData.count), data: pathData)
+  }
 
   func getUInt8() -> UInt8? {
     return self.data.readUInt8(at: 0)
@@ -323,6 +356,10 @@ struct HotlineTransaction {
   
   mutating func setFieldString(type: HotlineTransactionFieldType, val: String) {
     self.fields.append(HotlineTransactionField(type: type, string: val))
+  }
+  
+  mutating func setFieldPath(type: HotlineTransactionFieldType, val: [String]) {
+    self.fields.append(HotlineTransactionField(type: type, pathComponents: val))
   }
   
   func getField(type: HotlineTransactionFieldType) -> HotlineTransactionField? {

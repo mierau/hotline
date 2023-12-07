@@ -62,6 +62,16 @@ extension Data {
     return str
   }
   
+  func readPString(at offset: Int) -> (String?, Int) {
+    let len = Int(self.readUInt8(at: offset)!)
+    return (self.readString(at: offset+1, length: len), 1 + len)
+  }
+  
+  func readLongPString(at offset: Int) -> (String?, Int) {
+    let len = Int(self.readUInt16(at: offset)!)
+    return (self.readString(at: offset+2, length: len), 2 + len)
+  }
+  
   
   mutating func appendUInt8(_ value: UInt8, endianness: Endianness = .big) {
     var val = endianness == .big ? value.bigEndian : value.littleEndian

@@ -51,12 +51,12 @@ class HotlineClient {
   ])
     
   var connectionStatus: HotlineClientStatus = .disconnected
-  var agreement: String?
   var users: [UInt16:HotlineUser] = [:]
   var userList: [HotlineUser] = []
   var chatMessages: [HotlineChat] = []
   var messageBoardMessages: [String] = []
   var fileList: [HotlineFile] = []
+  var newsCategories: [HotlineNewsCategory] = []
   
   var userName: String = "bolt"
   var userIconID: UInt16 = 128
@@ -118,13 +118,14 @@ class HotlineClient {
   }
   
   func reset() {
+    self.transactionLog = [:]
     DispatchQueue.main.async {
       self.chatMessages = []
-      self.agreement = nil
       self.users = [:]
       self.userList = []
       self.messageBoardMessages = []
       self.fileList = []
+      self.newsCategories = []
     }
   }
   
@@ -370,8 +371,11 @@ class HotlineClient {
     self.sendTransaction(t, callback: callback)
   }
   
-  func sendGetNewsArticles(callback: (() -> Void)? = nil) {
-    let t = HotlineTransaction(type: .getNewsArticleNameList)
+  func sendGetNewsArticles(path: [String]? = nil, callback: (() -> Void)? = nil) {
+    var t = HotlineTransaction(type: .getNewsArticleNameList)
+    if path != nil {
+      t.setFieldPath(type: .newsPath, val: path!)
+    }
     self.sendTransaction(t, callback: callback)
   }
   
@@ -382,6 +386,11 @@ class HotlineClient {
 //    }
     self.sendTransaction(t, callback: callback)
   }
+  
+//  func sendGetNews(callback: (() -> Void)? = nil) {
+//    let t = HotlineTransaction(type: .getNewsFile)
+//    self.sendTransaction(t, callback: callback)
+//  }
   
   // MARK: - Incoming
   
@@ -460,9 +469,14 @@ class HotlineClient {
         self.fileList = files
       }
     case .getNewsCategoryNameList:
+      var categories: [HotlineNewsCategory] = []
       for fi in transaction.getFieldList(type: .newsCategoryListData15) {
         let c = fi.getNewsCategory()
+        categories.append(c)
         print("CATEGORY: \(c)")
+      }
+      DispatchQueue.main.async {
+        self.newsCategories = categories
       }
     default:
       break
@@ -508,7 +522,7 @@ class HotlineClient {
       print("HotlineClient ❌")
       self.disconnect()
     case .showAgreement:
-      if let noAgreementField = transaction.getField(type: .noServerAgreement) {
+      if let _ = transaction.getField(type: .noServerAgreement) {
         print("NO AGREEMENT?")
       }
       if let agreementParam = transaction.getField(type: .data) {
@@ -518,7 +532,7 @@ class HotlineClient {
           print("\n--------------------------\n\n")
           DispatchQueue.main.async {
             self.chatMessages.insert(HotlineChat(text: agreementText, type: .agreement), at: 0)
-            self.agreement = agreementText
+//            self.agreement = agreementText
           }
 //          self.sendAgree() {
 //            self.sendGetUserList()

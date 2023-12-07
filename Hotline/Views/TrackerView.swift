@@ -11,6 +11,7 @@ struct TrackerView: View {
   @Environment(\.colorScheme) var colorScheme
   
   @State private var selectedServer: HotlineServer?
+  @State var scrollOffset: CGFloat = CGFloat.zero
   
   func shouldDisplayDescription(server: HotlineServer) -> Bool {
     guard let name = server.name, let desc = server.description else {
@@ -36,83 +37,126 @@ struct TrackerView: View {
     }
   }
   
+  func inverseLerp(lower: Double, upper: Double, v: Double) -> Double {
+    return (v - lower) / (upper - lower)
+  }
+  
   var body: some View {
     @Bindable var config = appState
     @Bindable var client = hotline
     
-    ScrollView {
-      LazyVStack(alignment: .leading) {
-        ForEach(tracker.servers) { server in
-          VStack(alignment: .leading) {
-            HStack(alignment: .firstTextBaseline) {
-              Image(systemName: "globe.americas.fill").font(.title3)
-              VStack(alignment: .leading) {
-                Text(server.name!).font(.title3).fontWeight(.medium)
-                if shouldDisplayDescription(server: server) {
+    ZStack(alignment: .center) {
+      VStack(alignment: .center) {
+        ZStack(alignment: .top) {
+          Image("Hotline")
+            .resizable()
+            .renderingMode(.template)
+            .foregroundColor(Color(hex: 0xE10000))
+            .scaledToFit()
+            .frame(width: 40.0, height: 40.0)
+          HStack(alignment: .center) {
+            Spacer()
+            Button {
+    //          hotline.disconnect()
+            } label: {
+              Text(Image(systemName: "point.3.connected.trianglepath.dotted"))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundColor(.primary)
+                .font(.title2)
+                .padding(.trailing, 16)
+            }
+          }
+          .frame(height: 40.0)
+        }
+        .padding()
+        .opacity(scrollOffset > 80 ? 0 : 1.0)
+//        .padding(.top, 5)
+        .opacity(inverseLerp(lower: -80, upper: 0, v: scrollOffset))
+//        .opacity(inverseLerp(lower: 20, upper: 0, v: scrollOffset))
+        
+        Spacer()
+      }
+      ObservableScrollView(scrollOffset: $scrollOffset) {
+        LazyVStack(alignment: .leading) {
+          ForEach(tracker.servers) { server in
+            VStack(alignment: .leading) {
+              HStack(alignment: .firstTextBaseline) {
+                Image(systemName: "globe.americas.fill").font(.title3)
+                VStack(alignment: .leading) {
+                  Text(server.name!).font(.title3).fontWeight(.medium)
+                  if shouldDisplayDescription(server: server) {
+                    Spacer()
+                    Text(server.description!).opacity(0.5).font(.system(size: 16))
+                  }
                   Spacer()
-                  Text(server.description!).opacity(0.4).font(.system(size: 16))
+                  Text("\(server.address)").opacity(0.3).font(.system(size: 13))
                 }
                 Spacer()
-                Text("\(server.address)").opacity(0.2).font(.system(size: 13))
+                Text("\(server.users)").opacity(0.3).font(.system(size: 16)).fontWeight(.medium)
               }
-              Spacer()
-              Text("\(server.users)").opacity(0.2).font(.system(size: 16)).fontWeight(.medium)
-            }
-            if server == selectedServer {
-              Spacer(minLength: 16)
-              
-              if hotline.server == server && hotline.connectionStatus != .disconnected {
-                ProgressView("", value: connectionStatusToProgress(status: hotline.connectionStatus))
-              }
-              else {
-                Button("Connect") {
-                  hotline.connect(to: server)
+              if server == selectedServer {
+                Spacer(minLength: 16)
+                
+                if hotline.server == server && hotline.connectionStatus != .disconnected {
+                  ProgressView(value: connectionStatusToProgress(status: hotline.connectionStatus))
+                    .frame(minHeight: 10)
+                    .accentColor(colorScheme == .dark ? .white : .black)
                 }
-                .bold()
-                .padding(EdgeInsets(top: 16, leading: 24, bottom: 16, trailing: 24))
-                .frame(maxWidth: .infinity)
-                .foregroundColor(.black)
-                .background(LinearGradient(gradient: Gradient(colors: [Color(white: 0.95), Color(white: 0.91)]), startPoint: .top, endPoint: .bottom))
-                .overlay(
-                  RoundedRectangle(cornerRadius: 10.0).stroke(.black, lineWidth: 3).opacity(0.4)
-                )
-                .cornerRadius(10.0)
+                else {
+                  Button("Connect") {
+                    hotline.connect(to: server)
+                  }
+                  .bold()
+                  .padding(EdgeInsets(top: 16, leading: 24, bottom: 16, trailing: 24))
+                  .frame(maxWidth: .infinity)
+                  .foregroundColor(colorScheme == .dark ? .white : .black)
+                  .background(
+                    colorScheme == .dark ?
+                    LinearGradient(gradient: Gradient(colors: [Color(white: 0.4), Color(white: 0.3)]), startPoint: .top, endPoint: .bottom)
+                    :
+                    LinearGradient(gradient: Gradient(colors: [Color(white: 0.95), Color(white: 0.91)]), startPoint: .top, endPoint: .bottom)
+                  )
+                  .overlay(
+                    RoundedRectangle(cornerRadius: 10.0).stroke(.black, lineWidth: 3).opacity(colorScheme == .dark ? 0.0 : 0.2)
+                  )
+                  .cornerRadius(10.0)
+                }
+              }
+            }
+            .multilineTextAlignment(.leading)
+            .padding()
+            .background(colorScheme == .dark ? Color(white: 0.12) : .white)
+            .cornerRadius(16)
+            .shadow(color: Color(white: 0.0, opacity: 0.1), radius: 16, x: 0, y: 10)
+            .onTapGesture {
+              withAnimation(.bouncy(duration: 0.25, extraBounce: 0.2)) {
+                selectedServer = server
               }
             }
           }
-          .multilineTextAlignment(.leading)
-          .padding()
-          .background(colorScheme == .dark ? Color(white: 0.1) : .white)
-          .cornerRadius(20)
-          .shadow(color: Color(white: 0.0, opacity: 0.1), radius: 16, x: 0, y: 10)
-          .onTapGesture {
-            withAnimation(.bouncy(duration: 0.25, extraBounce: 0.2)) {
-              selectedServer = server
-            }
+          .padding(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+        }
+        .padding(EdgeInsets(top: 75, leading: 0, bottom: 0, trailing: 0))
+      }
+      .refreshable {
+        await withCheckedContinuation { continuation in
+          tracker.fetch() {
+            continuation.resume()
           }
         }
-        .padding(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
       }
+      
     }
     .fullScreenCover(isPresented: Binding(get: { return hotline.connectionStatus == .loggedIn }, set: { _ in }), onDismiss: {
       hotline.disconnect()
     }) {
       ServerView()
     }
-    .background(colorScheme == .dark ? .black : Color(white: 0.95))
+    .background(Color(uiColor: UIColor.systemGroupedBackground))
     .frame(maxWidth: .infinity)
     .task {
       tracker.fetch()
     }
-    .refreshable {
-      await withCheckedContinuation { continuation in
-        tracker.fetch() {
-          continuation.resume()
-        }
-      }
-    }
-    .navigationTitle("Tracker")
-    .navigationBarTitleDisplayMode(.inline)
   }
 }
 

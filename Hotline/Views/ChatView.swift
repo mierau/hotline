@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChatView: View {
   @Environment(HotlineClient.self) private var hotline
+  @Environment(\.colorScheme) var colorScheme
   
   @State var input: String = ""
   @State private var scrollPos: Int?
@@ -17,13 +18,12 @@ struct ChatView: View {
             LazyVStack(alignment: .leading) {
               ForEach(hotline.chatMessages) { msg in
                 if msg.type == .agreement {
-                  
                   VStack(alignment: .leading) {
                     Text(msg.text)
                       .padding()
                       .opacity(0.75)
-                      .background(Color(white: 0.96))
-                      .cornerRadius(20)
+                      .background(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.96))
+                      .cornerRadius(16)
                   }
                   .padding()
                 }

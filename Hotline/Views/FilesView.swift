@@ -57,6 +57,8 @@ struct FilesView: View {
           else {
             HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
               Image(uiImage: fileIcon(name: tree.name))
+                .renderingMode(.template)
+                .foregroundColor(.accentColor)
             }
             .frame(minWidth: 25)
             Text(tree.name).bold()

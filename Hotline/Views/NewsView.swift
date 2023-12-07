@@ -5,32 +5,89 @@ struct NewsView: View {
   @Environment(HotlineClient.self) private var hotline
   
   @State private var fetched = false
+  @State private var selectedCategory: HotlineNewsCategory? = nil
+  @State private var topListHeight: CGFloat = 200
+  @State private var dividerHeight: CGFloat = 30
+  
+  var topList: some View {
+    
+    // Your list content goes here
+    List {
+      ForEach(hotline.newsCategories, id: \.self) { cat in
+        DisclosureGroup {
+          ProgressView(value: 0.4)
+            .task {
+              print("EXPANDED?", cat.name)
+              hotline.sendGetNewsArticles(path: [cat.name]) {
+                print("OK")
+              }
+            }
+        } label: {
+          Text(cat.name)
+            .fontWeight(.medium)
+            .lineLimit(1)
+            .truncationMode(.tail)
+        }
+      }
+    }
+//    .listStyle(.plain)
+  }
+  
+  var bottomList: some View {
+    // Your list content goes here
+    ScrollView(.vertical) {
+      HStack(alignment: .top, spacing: 0) {
+        Text("HELLO")
+          .multilineTextAlignment(.leading)
+        Spacer()
+      }
+      .padding()
+    }
+  }
   
   var body: some View {
-//    @Bindable var config = appState
     NavigationStack {
-      ScrollView {
-        LazyVStack(alignment: .leading) {
-//          ForEach(hotline.messageBoardMessages, id: \.self) {
-//            Text($0)
-//              .lineLimit(100)
-//              .padding()
-//              .textSelection(.enabled)
-//            Divider()
-//          }
+      VStack(spacing: 0) {
+        topList
+          .frame(height: topListHeight)
+        VStack(alignment: .center) {
+          Divider()
+          Spacer()
+          HStack(alignment: .center) {
+            Image(systemName: "line.3.horizontal")
+              .opacity(0.2)
+              .font(.system(size: 14))
+          }
+          Spacer()
+//          Divider()
         }
-        Spacer()
+        .background(Color(uiColor: UIColor.systemBackground))
+        .frame(maxWidth: .infinity)
+        .frame(height: dividerHeight)
+        .gesture(
+          DragGesture()
+            .onChanged { gesture in
+              let delta = gesture.translation.height
+              topListHeight = max(min(topListHeight + delta, 500), 50)
+              //                bottomListHeight = max(min(bottomListHeight - delta, 400), 0)
+            }
+        )
+        bottomList
       }
       .task {
         if !fetched {
           hotline.sendGetNewsCategories() {
             fetched = true
           }
+          
+          //          hotline.sendGetNewsArticles(path: ["News"]) {
+          //            print("GOT ARTICLES?")
+          //          }
         }
       }
-      .refreshable {
-        hotline.sendGetNewsCategories()
-      }
+      //      .refreshable {
+      //        hotline.sendGetNewsCategories()
+      //      }
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .principal) {
@@ -52,8 +109,8 @@ struct NewsView: View {
             
           } label: {
             Image(systemName: "square.and.pencil")
-//              .symbolRenderingMode(.hierarchical)
-//              .foregroundColor(.secondary)
+            //              .symbolRenderingMode(.hierarchical)
+            //              .foregroundColor(.secondary)
           }
           
         }

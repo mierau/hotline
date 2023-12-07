@@ -246,24 +246,40 @@ class HotlineTrackerClient {
         let ip_3 = self.bytes.readUInt8(at: cursor + 2),
         let ip_4 = self.bytes.readUInt8(at: cursor + 3),
         let port = self.bytes.readUInt16(at: cursor + 4),
-        let userCount = self.bytes.readUInt16(at: cursor + 6),
-        let nameLengthByte = self.bytes.readUInt8(at: cursor + 10) {
+        let userCount = self.bytes.readUInt16(at: cursor + 6) {
+//        let nameLengthByte = self.bytes.readUInt8(at: cursor + 10) {
         
-        let nameLength = Int(nameLengthByte)
-        if let name = self.bytes.readString(at: cursor + 11, length: nameLength) {
-          if let descLengthByte = self.bytes.readUInt8(at: cursor + 11 + nameLength) {
-            let descLength = Int(descLengthByte)
-            if let desc = self.bytes.readString(at: cursor + 11 + nameLength + 1, length: descLength) {
-              let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
-              
-              print("SERVER: \(server)")
-              
-              foundServers.append(server)
-              
-              cursor += 11 + nameLength + 1 + descLength
-            }
-          }
+        let (serverName, nameByteCount) = self.bytes.readPString(at: cursor + 10)
+        let (serverDescription, descByteCount) = self.bytes.readPString(at: cursor + 10 + nameByteCount)
+        
+        if let name = serverName,
+           let desc = serverDescription {
+          let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
+          
+          print("SERVER: \(server)")
+          
+          foundServers.append(server)
+          
+          
         }
+        
+        cursor += 10 + nameByteCount + descByteCount
+        
+//        let nameLength = Int(nameLengthByte)
+//        if let name = self.bytes.readString(at: cursor + 11, length: nameLength) {
+//          if let descLengthByte = self.bytes.readUInt8(at: cursor + 11 + nameLength) {
+//            let descLength = Int(descLengthByte)
+//            if let desc = self.bytes.readString(at: cursor + 11 + nameLength + 1, length: descLength) {
+//              let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
+//              
+//              print("SERVER: \(server)")
+//              
+//              foundServers.append(server)
+//              
+//              cursor += 11 + nameLength + 1 + descLength
+//            }
+//          }
+//        }
       }
       
       print(cursor)
