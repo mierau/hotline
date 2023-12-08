@@ -26,6 +26,9 @@
 		DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFCA2B126E3300CDA197 /* HotlineTrackerClient.swift */; };
 		DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DABFCC282B1530DC009F40D2 /* FoundationExtensions.swift */; };
 		DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */; };
+		DADDB28B2B22B31F0024040D /* Tracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28A2B22B31F0024040D /* Tracker.swift */; };
+		DADDB28D2B22B5920024040D /* Server.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28C2B22B5920024040D /* Server.swift */; };
+		DADDB28F2B238D850024040D /* Hotline.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28E2B238D850024040D /* Hotline.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +52,9 @@
 		DA9CAFCA2B126E3300CDA197 /* HotlineTrackerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineTrackerClient.swift; sourceTree = "<group>"; };
 		DABFCC282B1530DC009F40D2 /* FoundationExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationExtensions.swift; sourceTree = "<group>"; };
 		DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUIExtensions.swift; sourceTree = "<group>"; };
+		DADDB28A2B22B31F0024040D /* Tracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tracker.swift; sourceTree = "<group>"; };
+		DADDB28C2B22B5920024040D /* Server.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server.swift; sourceTree = "<group>"; };
+		DADDB28E2B238D850024040D /* Hotline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hotline.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,6 +105,7 @@
 				DA9CAFBA2B126D5700CDA197 /* HotlineApp.swift */,
 				DA0D698A2B1E5A5200C71DF5 /* HotlineState.swift */,
 				DA4F2BF92B1A516F00D8ADDC /* Views */,
+				DADDB2892B22B2C60024040D /* Models */,
 				DABFCC262B1530AE009F40D2 /* Hotline */,
 				DABFCC272B1530BE009F40D2 /* Utility */,
 				DA9CAFC02B126D5800CDA197 /* Assets.xcassets */,
@@ -134,6 +141,16 @@
 				DA7725402B21435B006C5ABB /* ObservableScrollView.swift */,
 			);
 			path = Utility;
+			sourceTree = "<group>";
+		};
+		DADDB2892B22B2C60024040D /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				DADDB28C2B22B5920024040D /* Server.swift */,
+				DADDB28E2B238D850024040D /* Hotline.swift */,
+				DADDB28A2B22B31F0024040D /* Tracker.swift */,
+			);
+			path = Models;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -212,6 +229,8 @@
 				DA0D698B2B1E5A5200C71DF5 /* HotlineState.swift in Sources */,
 				DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */,
 				DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */,
+				DADDB28F2B238D850024040D /* Hotline.swift in Sources */,
+				DADDB28D2B22B5920024040D /* Server.swift in Sources */,
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,
 				DA9CAFBB2B126D5700CDA197 /* HotlineApp.swift in Sources */,
@@ -222,6 +241,7 @@
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
 				DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */,
 				DA0D698D2B1E7CF700C71DF5 /* UserListView.swift in Sources */,
+				DADDB28B2B22B31F0024040D /* Tracker.swift in Sources */,
 				DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

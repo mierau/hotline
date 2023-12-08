@@ -7,8 +7,11 @@ struct TrackerView: View {
   
   @Environment(HotlineState.self) private var appState
   @Environment(HotlineClient.self) private var hotline
-  @Environment(HotlineTrackerClient.self) private var tracker
+  @Environment(HotlineTrackerClient.self) private var trackerClient
+  @Environment(Hotline.self) private var model: Hotline
   @Environment(\.colorScheme) var colorScheme
+  
+//  @State private var tracker = Tracker(address: "hltracker.com", service: trackerService)
   
   @State private var selectedServer: HotlineServer?
   @State var scrollOffset: CGFloat = CGFloat.zero
@@ -32,7 +35,6 @@ struct TrackerView: View {
     case .loggingIn:
       return 0.5
     case .loggedIn:
-      
       return 1.0
     }
   }

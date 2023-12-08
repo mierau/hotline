@@ -28,8 +28,8 @@ class HotlineTrackerClient {
     0x00, 0x01 // Version
   ])
   
-  @ObservationIgnored private let serverAddress: NWEndpoint.Host
-  @ObservationIgnored private let serverPort: NWEndpoint.Port
+  @ObservationIgnored private var serverAddress: NWEndpoint.Host
+  @ObservationIgnored private var serverPort: NWEndpoint.Port
   @ObservationIgnored private var connection: NWConnection?
   @ObservationIgnored private var bytes = Data()
   @ObservationIgnored private var maxDataLength: Int = 0
@@ -39,15 +39,43 @@ class HotlineTrackerClient {
   var connectionStatus: HotlineTrackerStatus = .disconnected
   var servers: [HotlineServer] = []
   
+  init() {
+    let t = HotlineTracker("hltracker.com")
+    self.tracker = t
+    self.serverAddress = NWEndpoint.Host(t.address)
+    self.serverPort = NWEndpoint.Port(rawValue: t.port)!
+  }
+  
   init(tracker: HotlineTracker) {
     self.tracker = tracker
     self.serverAddress = NWEndpoint.Host(tracker.address)
     self.serverPort = NWEndpoint.Port(rawValue: tracker.port)!
   }
   
-  func fetch(_ callback: (() -> Void)? = nil) {
+  func fetch(callback: (() -> Void)? = nil) {
     self.reset()
     self.connect(callback)
+  }
+  
+  func fetch2(address: String, port: Int, callback: (([Server]) -> Void)? = nil) {
+    self.serverAddress = NWEndpoint.Host(address)
+    self.serverPort = NWEndpoint.Port(rawValue: UInt16(port))!
+    
+    self.reset()
+    self.connect { [weak self] in
+      var allServers: [Server] = []
+      
+      if let servers = self?.servers {
+        for server in servers {
+          let s = Server(name: server.name!, description: server.description, address: server.address, port: Int(server.port))
+          allServers.append(s)
+        }
+      }
+      
+      DispatchQueue.main.async {
+        callback?(allServers)
+      }
+    }
   }
   
   private func reset() {

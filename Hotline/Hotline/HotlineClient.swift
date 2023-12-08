@@ -377,7 +377,6 @@ class HotlineClient {
       
       DispatchQueue.main.async {
         if var pf = parentFile {
-          print("\(pf.name) <= \(files.count) files")
           pf.files = files
         }
         else {
