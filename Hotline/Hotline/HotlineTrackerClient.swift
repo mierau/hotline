@@ -203,7 +203,6 @@ class HotlineTrackerClient {
         self.bytes.append(contentsOf: data)
         
         if bytes.count >= maxDataLength {
-          print("HotlineTracker: done with data, should close. \(self.bytes.count) \(self.maxDataLength)")
           self.disconnect()
           self.parseListing()
           return
@@ -260,8 +259,6 @@ class HotlineTrackerClient {
         
         cursor += 10 + nameByteCount + descByteCount
       }
-      
-      print(cursor)
     }
     
     DispatchQueue.main.async {

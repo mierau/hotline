@@ -6,7 +6,7 @@ struct UserListView: View {
   var body: some View {
     NavigationStack {
       List(hotline.userList) { u in
-        Text(u.name)
+        Text("🤖 \(u.name)")
           .fontWeight(.medium)
           .lineLimit(1)
           .truncationMode(.tail)
@@ -24,8 +24,9 @@ struct UserListView: View {
           Button {
             hotline.disconnect()
           } label: {
-            Image(systemName: "xmark.circle.fill")
+            Text(Image(systemName: "xmark.circle.fill"))
               .symbolRenderingMode(.hierarchical)
+              .font(.title2)
               .foregroundColor(.secondary)
           }
         }

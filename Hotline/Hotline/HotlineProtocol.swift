@@ -94,13 +94,15 @@ struct HotlineNewsCategory: Identifiable, Hashable {
 }
 
 
-struct HotlineFile: Identifiable, Hashable {
+@Observable
+class HotlineFile: Identifiable, Hashable {
   let id = UUID()
   let type: String
   let creator: String
   let fileSize: UInt32
   let name: String
   
+  var path: [String] = []
   var isExpanded: Bool = false
   var files: [HotlineFile]? = nil
   
@@ -121,6 +123,9 @@ struct HotlineFile: Identifiable, Hashable {
     self.name = fileName
     
     self.isFolder = (self.type == "fldr")
+    if self.isFolder {
+      self.files = []
+    }
   }
   
   init(from data: Data) {
@@ -132,6 +137,9 @@ struct HotlineFile: Identifiable, Hashable {
     self.fileSize = data.readUInt32(at: 8)!
     
     self.isFolder = (self.type == "fldr")
+    if self.isFolder {
+      self.files = []
+    }
     
 //    data.readUInt32(at: 12)! // reserved
 //    let nameScript = data.readUInt16(at: 16)! // name script

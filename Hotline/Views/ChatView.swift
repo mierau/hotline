@@ -106,11 +106,11 @@ struct ChatView: View {
           Button {
             hotline.disconnect()
           } label: {
-            Image(systemName: "xmark.circle.fill")
+            Text(Image(systemName: "xmark.circle.fill"))
               .symbolRenderingMode(.hierarchical)
+              .font(.title2)
               .foregroundColor(.secondary)
           }
-          
         }
       }
       

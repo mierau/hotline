@@ -34,7 +34,7 @@ class HotlineClient {
   var server: HotlineServer?
   
   @ObservationIgnored private var connection: NWConnection?
-  @ObservationIgnored private var transactionLog: [UInt32:(HotlineTransactionType, (() -> Void)?)] = [:]
+  @ObservationIgnored private var transactionLog: [UInt32:(HotlineTransactionType, ((HotlineTransaction) -> Void)?)] = [:]
   
   init() {
 //    let downloadsPath = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)
@@ -106,7 +106,7 @@ class HotlineClient {
   
   // MARK: -
   
-  private func sendTransaction(_ t: HotlineTransaction, autodisconnect disconnectOnError: Bool = true, callback: (() -> Void)? = nil, reply: (() -> Void)? = nil) {
+  private func sendTransaction(_ t: HotlineTransaction, autodisconnect disconnectOnError: Bool = true, callback: (() -> Void)? = nil, reply: ((HotlineTransaction) -> Void)? = nil) {
     guard let c = connection else {
       return
     }
@@ -353,16 +353,61 @@ class HotlineClient {
     self.sendTransaction(t, callback: callback)
   }
   
-  func sendGetFileList(path: [String] = [], callback: (() -> Void)? = nil, reply: (() -> Void)?) {
+  func sendGetFileList(path: [String] = [], callback: (() -> Void)? = nil, reply: (([HotlineFile]) -> Void)? = nil) {
     var t = HotlineTransaction(type: .getFileNameList)
+    var parentFile: HotlineFile? = nil
     
     if !path.isEmpty {
       t.setFieldPath(type: .filePath, val: path)
+      parentFile = self.findFile(in: self.fileList, at: path)
     }
+    
+    
+    
 //    if let p = path {
 //      t.setFieldString(type: .filePath)
 //    }
-    self.sendTransaction(t, callback: callback, reply: reply)
+    self.sendTransaction(t, callback: callback, reply: { r in
+      var files: [HotlineFile] = []
+      for fi in r.getFieldList(type: .fileNameWithInfo) {
+        var file = fi.getFile()
+        file.path = path + [file.name]
+        files.append(file)
+      }
+      
+      DispatchQueue.main.async {
+        if var pf = parentFile {
+          print("\(pf.name) <= \(files.count) files")
+          pf.files = files
+        }
+        else {
+          self.fileList = files
+        }
+        reply?(files)
+      }
+    })
+  }
+  
+  func findFile(in filesToSearch: [HotlineFile], at path: [String]) -> HotlineFile? {
+    guard !path.isEmpty, !filesToSearch.isEmpty else { return nil }
+    
+//    var stack: [([HotlineFile], [String])] = [(self.files!, path)]
+    
+    let currentName = path[0]
+    
+    for file in filesToSearch {
+      if file.name == currentName {
+        if path.count == 1 {
+          return file
+        }
+        else if let subfiles = file.files {
+          let remainingPath = Array(path[1...])
+          return self.findFile(in: subfiles, at: remainingPath)
+        }
+      }
+    }
+    
+    return nil
   }
   
 //  func sendGetNews(callback: (() -> Void)? = nil) {
@@ -390,7 +435,7 @@ class HotlineClient {
     defer {
       let replyCallback = repliedTransactionType.1
       DispatchQueue.main.async {
-        replyCallback?()
+        replyCallback?(transaction)
       }
     }
     
@@ -446,15 +491,15 @@ class HotlineClient {
           self.messageBoardMessages = messages
         }
       }
-    case .getFileNameList:
-      var files: [HotlineFile] = []
-      for fi in transaction.getFieldList(type: .fileNameWithInfo) {
-        let file = fi.getFile()
-        files.append(file)
-      }
-      DispatchQueue.main.async {
-        self.fileList = files
-      }
+//    case .getFileNameList:
+//      var files: [HotlineFile] = []
+//      for fi in transaction.getFieldList(type: .fileNameWithInfo) {
+//        let file = fi.getFile()
+//        files.append(file)
+//      }
+//      DispatchQueue.main.async {
+//        self.fileList = files
+//      }
     case .getNewsCategoryNameList:
       var categories: [HotlineNewsCategory] = []
       for fi in transaction.getFieldList(type: .newsCategoryListData15) {
