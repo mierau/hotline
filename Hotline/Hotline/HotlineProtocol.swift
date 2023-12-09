@@ -143,6 +143,7 @@ class HotlineFile: Identifiable, Hashable {
     
 //    data.readUInt32(at: 12)! // reserved
 //    let nameScript = data.readUInt16(at: 16)! // name script
+//    print("NAME SCRIPT: \(nameScript)")
     
     let nameLength = data.readUInt16(at: 18)!
     self.name = data.readString(at: 20, length: Int(nameLength))!
@@ -269,7 +270,7 @@ struct HotlineTransactionField {
     for name in pathComponents {
       pathData.appendUInt16(0)
       
-      var nameData = name.data(using: .ascii, allowLossyConversion: true)
+      var nameData = name.data(using: .macOSRoman, allowLossyConversion: true)
       if nameData == nil {
         nameData = Data()
       }
@@ -315,7 +316,7 @@ struct HotlineTransactionField {
   }
   
   func getString() -> String? {
-    return String(data: self.data, encoding: .utf8) ?? String(data: self.data, encoding: .ascii)
+    return self.data.readString(at: 0, length: self.data.count)
   }
   
   func getUser() -> HotlineUser {

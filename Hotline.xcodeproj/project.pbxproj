@@ -15,7 +15,6 @@
 		DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43205D2B1D615600FC8843 /* ServerView.swift */; };
 		DA4F2BF62B1668A700D8ADDC /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
-		DA4F2BFF2B1A54FF00D8ADDC /* HotlineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BFE2B1A54FF00D8ADDC /* HotlineView.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; };
 		DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA77253E2B21176D006C5ABB /* NewsView.swift */; };
 		DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7725402B21435B006C5ABB /* ObservableScrollView.swift */; };
@@ -40,7 +39,6 @@
 		DA43205D2B1D615600FC8843 /* ServerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerView.swift; sourceTree = "<group>"; };
 		DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
-		DA4F2BFE2B1A54FF00D8ADDC /* HotlineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineView.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		DA77253E2B21176D006C5ABB /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
 		DA7725402B21435B006C5ABB /* ObservableScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservableScrollView.swift; sourceTree = "<group>"; };
@@ -71,7 +69,6 @@
 		DA4F2BF92B1A516F00D8ADDC /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				DA4F2BFE2B1A54FF00D8ADDC /* HotlineView.swift */,
 				DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */,
 				DA77253E2B21176D006C5ABB /* NewsView.swift */,
 				DA43205D2B1D615600FC8843 /* ServerView.swift */,
@@ -235,7 +232,6 @@
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,
 				DA9CAFBB2B126D5700CDA197 /* HotlineApp.swift in Sources */,
 				DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */,
-				DA4F2BFF2B1A54FF00D8ADDC /* HotlineView.swift in Sources */,
 				DA4F2BF62B1668A700D8ADDC /* HotlineClient.swift in Sources */,
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,

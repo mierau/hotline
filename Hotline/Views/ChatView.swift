@@ -25,12 +25,27 @@ struct ChatView: View {
               ForEach(hotline.chatMessages) { msg in
                 if msg.type == .agreement {
                   VStack(alignment: .leading) {
-                    Text(msg.text)
-                      .font(.system(size: 11, weight: .regular, design: .monospaced))
+                    VStack(alignment: .leading, spacing: 0) {
+                      Text(msg.text)
+                        .textSelection(.enabled)
+                        .padding()
+                        .opacity(0.75)
+                      HStack {
+                        Spacer()
+                        Text((hotline.server?.name ?? "") + " Server Agreement")
+                          .font(.caption)
+                          .fontWeight(.medium)
+                          .opacity(0.4)
+                          .lineLimit(1)
+                          .truncationMode(.middle)
+                        Spacer()
+                      }
                       .padding()
-                      .opacity(0.75)
-                      .background(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.96))
-                      .cornerRadius(16)
+                      .background(colorScheme == .dark ? Color(white: 0.2) : Color(white: 0.9))
+                    }
+                    .background(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.96))
+                    .cornerRadius(16)
+                    .frame(maxWidth: .infinity)
                   }
                   .padding()
                 }

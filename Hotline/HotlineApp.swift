@@ -18,7 +18,6 @@ struct HotlineApp: App {
   
   @State private var appState = HotlineState()
   @State private var hotline = HotlineClient()
-  @State private var tracker = HotlineTrackerClient(tracker: HotlineTracker("hltracker.com"))
   
   private var model = Hotline(trackerClient: HotlineTrackerClient())
   
@@ -28,7 +27,8 @@ struct HotlineApp: App {
       TrackerView()
         .environment(appState)
         .environment(hotline)
-        .environment(tracker)
+//        .environment(tracker)
+        .environment(model)
     }
 //    .modelContainer(sharedModelContainer)
   }

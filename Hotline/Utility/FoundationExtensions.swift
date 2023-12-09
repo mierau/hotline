@@ -5,6 +5,24 @@ enum Endianness {
   case little
 }
 
+func detectStringEncoding(of data: Data) -> String.Encoding {
+//  var nsString: NSString? = nil
+//  guard case let rawValue = NSString.stringEncoding(for: data, encodingOptions: [.allowLossyKey: false], convertedString: nil, usedLossyConversion: nil) else {
+//    print("NO ENCODING")
+//    return nil
+//  }
+  
+  let rawValue = NSString.stringEncoding(for: data, encodingOptions: [.allowLossyKey: false], convertedString: nil, usedLossyConversion: nil)
+  
+//  let cfEnc: CFStringEncoding = CFStringConvertNSStringEncodingToEncoding(rawValue);
+  
+//    let encodingString: CFString? = CFStringGetNameOfEncoding(cfEnc)
+    
+    print("DETECTED ENCODING \(rawValue)")
+
+  return String.Encoding(rawValue: rawValue)
+}
+
 extension Data {
   init(_ val: UInt8) {
     self.init()
@@ -50,16 +68,37 @@ extension Data {
     }
     return self.subdata(in: offset..<(offset + length))
   }
-  
+
   func readString(at offset: Int, length: Int) -> String? {
-    var str: String?
-    
-    str = String(data: self[offset..<(offset + length)], encoding: .utf8)
-    if str == nil {
-      str = String(data: self[offset..<(offset + length)], encoding: .ascii)
+    let subdata = self[offset..<(offset + length)]
+    if subdata.count == 0 {
+      return ""
     }
     
-    return str
+    let allowedEncodings = [
+      NSUTF8StringEncoding,
+      NSShiftJISStringEncoding,
+      NSUnicodeStringEncoding,
+      NSWindowsCP1251StringEncoding
+    ]
+
+    var decodedNSString: NSString?
+    let rawValue = NSString.stringEncoding(for: subdata, encodingOptions: [.allowLossyKey: false], convertedString: &decodedNSString, usedLossyConversion: nil)
+    
+    if allowedEncodings.contains(rawValue) {
+      return decodedNSString as? String
+    }
+    
+    else if rawValue > 1 {
+      print("ENCODING FOUND \(rawValue)")
+    }
+    
+    var macStr = String(data: subdata, encoding: .macOSRoman)
+    if macStr == nil {
+      macStr = String(data: subdata, encoding: .nonLossyASCII)
+    }
+    
+    return macStr
   }
   
   func readPString(at offset: Int) -> (String?, Int) {

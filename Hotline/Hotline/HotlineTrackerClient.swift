@@ -7,37 +7,37 @@ enum HotlineTrackerStatus: Int {
   case connected
 }
 
-struct HotlineTracker: Identifiable {
+struct HotlineTracker: Identifiable, Equatable {
+  let id: UUID = UUID()
   var address: String
   var port: UInt16
-  var servers: [HotlineServer] = []
-  var expanded: Bool = false
-  
-  var id: String { get { return self.address } }
-  
+    
   init(_ address: String, port: UInt16 = 5498) {
     self.address = address
     self.port = port
   }
+  
+  static func == (lhs: HotlineTracker, rhs: HotlineTracker) -> Bool {
+    return lhs.address == rhs.address && lhs.port == rhs.port
+  }
 }
 
-@Observable
 class HotlineTrackerClient {
   static let magicPacket = Data([
     0x48, 0x54, 0x52, 0x4B, // 'HTRK'
     0x00, 0x01 // Version
   ])
   
-  @ObservationIgnored private var serverAddress: NWEndpoint.Host
-  @ObservationIgnored private var serverPort: NWEndpoint.Port
-  @ObservationIgnored private var connection: NWConnection?
-  @ObservationIgnored private var bytes = Data()
-  @ObservationIgnored private var maxDataLength: Int = 0
-  @ObservationIgnored private var serverCount: Int = 0
+  private var tracker: HotlineTracker
+  private var connectionStatus: HotlineTrackerStatus = .disconnected
+  private var servers: [HotlineServer] = []
   
-  var tracker: HotlineTracker
-  var connectionStatus: HotlineTrackerStatus = .disconnected
-  var servers: [HotlineServer] = []
+  private var serverAddress: NWEndpoint.Host
+  private var serverPort: NWEndpoint.Port
+  private var connection: NWConnection?
+  private var bytes = Data()
+  private var maxDataLength: Int = 0
+  private var serverCount: Int = 0
   
   init() {
     let t = HotlineTracker("hltracker.com")
@@ -51,29 +51,16 @@ class HotlineTrackerClient {
     self.serverAddress = NWEndpoint.Host(tracker.address)
     self.serverPort = NWEndpoint.Port(rawValue: tracker.port)!
   }
-  
-  func fetch(callback: (() -> Void)? = nil) {
-    self.reset()
-    self.connect(callback)
-  }
-  
-  func fetch2(address: String, port: Int, callback: (([Server]) -> Void)? = nil) {
+    
+  func fetchServers(address: String, port: Int, callback: (([HotlineServer]) -> Void)? = nil) async -> [HotlineServer] {
     self.serverAddress = NWEndpoint.Host(address)
     self.serverPort = NWEndpoint.Port(rawValue: UInt16(port))!
     
     self.reset()
-    self.connect { [weak self] in
-      var allServers: [Server] = []
-      
-      if let servers = self?.servers {
-        for server in servers {
-          let s = Server(name: server.name!, description: server.description, address: server.address, port: Int(server.port))
-          allServers.append(s)
-        }
-      }
-      
-      DispatchQueue.main.async {
-        callback?(allServers)
+    
+    return await withCheckedContinuation { [weak self] continuation in
+      self?.connect { [weak self] in
+        continuation.resume(returning: self?.servers ?? [])
       }
     }
   }
@@ -81,6 +68,7 @@ class HotlineTrackerClient {
   private func reset() {
     self.maxDataLength = 0
     self.serverCount = 0
+    self.servers = []
   }
   
   private func connect(_ callback: (() -> Void)? = nil) {
@@ -88,37 +76,30 @@ class HotlineTrackerClient {
     self.connection?.stateUpdateHandler = { [weak self] (newState: NWConnection.State) in
       switch newState {
       case .ready:
-        print("READY TO SEND AND RECEIVE DATA")
-        DispatchQueue.main.async {
-          self?.connectionStatus = .connected
-        }
+        self?.connectionStatus = .connected
         self?.sendMagic()
       case .cancelled:
-        print("CONNECTION CANCELLED")
+        self?.connectionStatus = .disconnected
         DispatchQueue.main.async {
-          self?.connectionStatus = .disconnected
           callback?()
         }
       case .failed(let err):
-        print("CONNECTION ERROR \(err)")
+        print("HotlineTrackerClient: Connection error \(err)")
+        self?.connectionStatus = .disconnected
         DispatchQueue.main.async {
-          self?.connectionStatus = .disconnected
           callback?()
         }
       default:
-        print("CONNECTION OTHER THING")
+        return
       }
     }
     
-    DispatchQueue.main.async {
-      self.connectionStatus = .connecting
-    }
+    self.connectionStatus = .connecting
     self.connection?.start(queue: .global())
   }
   
   private func disconnect() {
     guard let c = connection else {
-      print("HotlineTracker: already disconnected")
       return
     }
     
@@ -128,7 +109,7 @@ class HotlineTrackerClient {
   
   private func sendMagic() {
     guard let c = connection else {
-      print("HotlineTracker: invalid connection to send magic.")
+      print("HotlineTrackerClient: invalid connection to send magic.")
       return
     }
     
@@ -136,11 +117,9 @@ class HotlineTrackerClient {
     
     c.send(content: HotlineTrackerClient.magicPacket, completion: .contentProcessed { [weak self] (error) in
       if let err = error {
-        print("HotlineTracker: sending magic failed \(err)")
+        print("HotlineTrackerClient: sending magic failed \(err)")
         return
       }
-      
-      print("HotlineTracker: sent magic!")
       
       self?.receiveMagic()
     })
@@ -148,27 +127,23 @@ class HotlineTrackerClient {
   
   private func receiveMagic() {
     guard let c = connection else {
-      print("HotlineTracker: invalid connection to receive magic.")
+      print("HotlineTrackerClient: invalid connection to receive magic.")
       return
     }
     
-    print("HotlineTracker: receiving...")
     c.receive(minimumIncompleteLength: 6, maximumLength: 6) { [weak self] (data, context, isComplete, error) in
       guard let self = self, let data = data else {
         return
       }
       
       if data.isEmpty || !data.elementsEqual(HotlineTrackerClient.magicPacket) {
-        print("HotlineTracker: invalid magic response")
+        print("HotlineTrackerClient: invalid magic response")
         self.disconnect()
         return
       }
-      //      if let data = data, !data.isEmpty {
-      print("HotlineTracker: received magic response!")
-      //      }
       
       if let error = error {
-        print("HotlineTracker: receive error \(error)")
+        print("HotlineTrackerClient: receive error \(error)")
       }
       else {
         self.receiveHeader()
@@ -178,35 +153,29 @@ class HotlineTrackerClient {
   
   private func receiveHeader() {
     guard let c = connection else {
-      print("HotlineTracker: invalid connection to receive header.")
+      print("HotlineTrackerClient: invalid connection to receive header.")
       return
     }
     
-    print("HotlineTracker: receiving...")
     c.receive(minimumIncompleteLength: 8, maximumLength: 8) { [weak self] (data, context, isComplete, error) in
       guard let self = self else {
         return
       }
       
       if let error = error {
-        print("HotlineTracker: receive error \(error)")
+        print("HotlineTrackerClient: receive error \(error)")
         self.disconnect()
         return
       }
       
       if let data = data, !data.isEmpty {
-        print("HotlineTracker: received \(data.count) header bytes")
-        
         self.maxDataLength = Int(data[2]) * 0xFF + Int(data[3])
         self.maxDataLength -= 4
-        print("HotlineTracker: message size = \(self.maxDataLength)")
-        
         self.serverCount = Int(data[4]) * 256 + Int(data[5])
-        print("HotlineTracker: server count = \(self.serverCount)")
       }
       
       if let error = error {
-        print("HotlineTracker: receive error \(error)")
+        print("HotlineTrackerClient: receive error \(error)")
       }
       else {
         self.receiveListing()
@@ -216,33 +185,32 @@ class HotlineTrackerClient {
   
   private func receiveListing() {
     guard let c = connection else {
-      print("HotlineTracker: invalid connection to receive data.")
+      print("HotlineTrackerClient: invalid connection to receive data.")
       return
     }
     
-    print("HotlineTracker: receiving...")
     c.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] (data, context, isComplete, error) in
       guard let self = self else {
         return
       }
       
       if let data = data, !data.isEmpty {
-        print("HotlineTracker: received \(data.count) bytes")
         self.bytes.append(contentsOf: data)
         
         if bytes.count >= maxDataLength {
-          self.disconnect()
           self.parseListing()
+          print("HotlineTrackerClient: Found \(self.servers.count) servers on tracker \(self.serverAddress):\(self.serverPort)")
+          self.disconnect()
           return
         }
       }
       
       if let error = error {
-        print("HotlineTracker: receive error \(error)")
+        print("HotlineTrackerClient: receive error \(error)")
         self.disconnect()
       }
       else {
-        print("HotlineTracker: not complete")
+        print("HotlineTrackerClient: not complete")
         self.receiveListing()
       }
     }
@@ -258,12 +226,13 @@ class HotlineTrackerClient {
     // Description size (1 byte)
     // Description (description size)
     
+    let trackerSeparatorRegex = /^[-]+$/
     var foundServers: [HotlineServer] = []
     
     var cursor = 0
     for _ in 1...self.serverCount {
       if self.bytes.count < cursor + 12 {
-        print("HotlineTracker: Data isn't long enough for next server")
+        print("HotlineTrackerClient: Data isn't long enough for next server")
         break
       }
       
@@ -281,19 +250,18 @@ class HotlineTrackerClient {
         
         if let name = serverName,
            let desc = serverDescription {
-          let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
-          foundServers.append(server)
+          let validName = try? trackerSeparatorRegex.prefixMatch(in: name)
+          if validName == nil {
+//          if name.range(of: regex, options: .regularExpression) == nil {
+            let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
+            foundServers.append(server)
+          }
         }
         
         cursor += 10 + nameByteCount + descByteCount
       }
     }
     
-    DispatchQueue.main.async {
-      self.tracker.servers = foundServers
-//      print("CALLING CALLBACK")
-      self.servers = foundServers
-    }
-    
+    self.servers = foundServers
   }
 }

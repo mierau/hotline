@@ -5,23 +5,23 @@ struct TrackerView: View {
   //  @Environment(\.modelContext) private var modelContext
   //  @Query private var items: [Item]
   
-  @Environment(HotlineState.self) private var appState
   @Environment(HotlineClient.self) private var hotline
-  @Environment(HotlineTrackerClient.self) private var trackerClient
   @Environment(Hotline.self) private var model: Hotline
   @Environment(\.colorScheme) var colorScheme
   
 //  @State private var tracker = Tracker(address: "hltracker.com", service: trackerService)
   
-  @State private var selectedServer: HotlineServer?
+  @State private var servers: [Server] = []
+  @State private var selectedServer: Server?
   @State var scrollOffset: CGFloat = CGFloat.zero
+  @State private var initialLoadComplete = false
   
-  func shouldDisplayDescription(server: HotlineServer) -> Bool {
-    guard let name = server.name, let desc = server.description else {
+  func shouldDisplayDescription(server: Server) -> Bool {
+    guard let desc = server.description else {
       return false
     }
     
-    return desc.count > 0 && desc != name && !desc.contains(/^-+/)
+    return desc.count > 0 && desc != server.name
   }
   
   func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
@@ -43,10 +43,11 @@ struct TrackerView: View {
     return (v - lower) / (upper - lower)
   }
   
+  func updateServers() async {
+    self.servers = await model.getServers(address: "tracker.preterhuman.net")
+  }
+  
   var body: some View {
-    @Bindable var config = appState
-    @Bindable var client = hotline
-    
     ZStack(alignment: .center) {
       VStack(alignment: .center) {
         ZStack(alignment: .top) {
@@ -80,18 +81,18 @@ struct TrackerView: View {
       }
       ObservableScrollView(scrollOffset: $scrollOffset) {
         LazyVStack(alignment: .leading) {
-          ForEach(tracker.servers) { server in
+          ForEach(self.servers) { server in
             VStack(alignment: .leading) {
               HStack(alignment: .firstTextBaseline) {
                 Image(systemName: "globe.americas.fill").font(.title3)
                 VStack(alignment: .leading) {
-                  Text(server.name!).font(.title3).fontWeight(.medium)
+                  Text(server.name).font(.title3).fontWeight(.medium)
                   if shouldDisplayDescription(server: server) {
                     Spacer()
                     Text(server.description!).opacity(0.5).font(.system(size: 16))
                   }
                   Spacer()
-                  Text("\(server.address)").opacity(0.3).font(.system(size: 13))
+                  Text("\(server.address):" + String(format: "%i", server.port)).opacity(0.3).font(.system(size: 13))
                 }
                 Spacer()
                 if server.users > 0 {
@@ -101,14 +102,14 @@ struct TrackerView: View {
               if server == selectedServer {
                 Spacer(minLength: 16)
                 
-                if hotline.server == server && hotline.connectionStatus != .disconnected {
+                if hotline.connectionStatus != .disconnected && hotline.server! == server {
                   ProgressView(value: connectionStatusToProgress(status: hotline.connectionStatus))
                     .frame(minHeight: 10)
                     .accentColor(colorScheme == .dark ? .white : .black)
                 }
                 else {
                   Button("Connect") {
-                    hotline.connect(to: server)
+                    hotline.connect(to: HotlineServer(address: server.address, port: UInt16(server.port), users: UInt16(server.users), name: server.name, description: server.description))
                   }
                   .bold()
                   .padding(EdgeInsets(top: 16, leading: 24, bottom: 16, trailing: 24))
@@ -142,12 +143,18 @@ struct TrackerView: View {
         }
         .padding(EdgeInsets(top: 75, leading: 0, bottom: 0, trailing: 0))
       }
-      .refreshable {
-        await withCheckedContinuation { continuation in
-          tracker.fetch() {
-            continuation.resume()
+      .overlay {
+        if !initialLoadComplete {
+          VStack {
+            ProgressView()
+              .controlSize(.large)
           }
+          .frame(maxWidth: .infinity)
         }
+      }
+      .refreshable {
+        initialLoadComplete = true
+        await updateServers()
       }
       
     }
@@ -159,7 +166,9 @@ struct TrackerView: View {
     .background(Color(uiColor: UIColor.systemGroupedBackground))
     .frame(maxWidth: .infinity)
     .task {
-      tracker.fetch()
+      await updateServers()
+      initialLoadComplete = true
+//      tracker.fetch()
     }
   }
 }
@@ -167,7 +176,6 @@ struct TrackerView: View {
 #Preview {
   TrackerView()
     .environment(HotlineClient())
-    .environment(HotlineTrackerClient(tracker: HotlineTracker("hltracker.com")))
     .environment(HotlineState())
   //    .modelContainer(for: Item.self, inMemory: true)
 }
