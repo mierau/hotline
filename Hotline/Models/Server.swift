@@ -1,6 +1,8 @@
 import SwiftUI
 
 @Observable final class Server: Identifiable, Equatable {
+  static let defaultPort: Int = 5500
+  
   let id: UUID = UUID()
   let name: String
   let description: String?

@@ -1,27 +1,8 @@
 import SwiftUI
 
 struct ServerView: View {
-  @Environment(HotlineClient.self) private var hotline
+  @Environment(Hotline.self) private var model: Hotline
   @Environment(\.colorScheme) var colorScheme
-  
-  func connectionStatusTitle(status: HotlineClientStatus) -> String {
-    switch(status) {
-    case .disconnected:
-      return "Disconnected"
-    case .connecting:
-      return "Connecting"
-    case .connected:
-      return "Connected"
-    case .loggingIn:
-      return "Logging In"
-    case .loggedIn:
-      return "Logged In"
-    }
-  }
-  
-  func connectionProgress(status: HotlineClientStatus) -> Double {
-    return Double(status.rawValue) / Double(HotlineClientStatus.loggedIn.rawValue)
-  }
   
   enum Tab {
     case chat, users, news, messageBoard, files
@@ -35,17 +16,19 @@ struct ServerView: View {
         }
         .tag(Tab.chat)
       
-      UserListView()
+      UsersView()
         .tabItem {
           Image(systemName: "person.2")
         }
         .tag(Tab.users)
       
-      NewsView()
-        .tabItem {
-          Image(systemName: "newspaper")
-        }
-        .tag(Tab.news)
+      if let v = model.serverVersion, v >= 150 {
+        NewsView()
+          .tabItem {
+            Image(systemName: "newspaper")
+          }
+          .tag(Tab.news)
+      }
       
       MessageBoardView()
         .tabItem {
@@ -65,5 +48,4 @@ struct ServerView: View {
 
 #Preview {
   ServerView()
-    .environment(HotlineClient())
 }

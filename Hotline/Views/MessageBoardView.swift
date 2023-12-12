@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct MessageBoardView: View {
-  @Environment(HotlineState.self) private var appState
-  @Environment(HotlineClient.self) private var hotline
+  @Environment(Hotline.self) private var model: Hotline
+//  @Environment(HotlineState.self) private var appState
+//  @Environment(HotlineClient.self) private var hotline
   
   @State private var fetched = false
   
@@ -11,7 +12,7 @@ struct MessageBoardView: View {
     NavigationStack {
       ScrollView {
         LazyVStack(alignment: .leading) {
-          ForEach(hotline.messageBoardMessages, id: \.self) {
+          ForEach(model.messageBoard, id: \.self) {
             Text($0)
               .lineLimit(100)
               .padding()
@@ -23,23 +24,26 @@ struct MessageBoardView: View {
       }
       .task {
         if !fetched {
-          hotline.sendGetMessageBoard() {
-            fetched = true
-          }
+          let _ = await model.getMessageBoard()
+//          hotline.sendGetMessageBoard() {
+          fetched = true
+//          }
         }
       }
       .refreshable {
-        hotline.sendGetMessageBoard()
+        let _ = await model.getMessageBoard()
+//        hotline.sendGetMessageBoard()
       }
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .principal) {
-          Text(hotline.server?.name ?? "")
+          Text(model.server?.name ?? "")
             .font(.headline)
         }
         ToolbarItem(placement: .navigationBarLeading) {
           Button {
-            hotline.disconnect()
+            model.disconnect()
+//            hotline.disconnect()
           } label: {
             Text(Image(systemName: "xmark.circle.fill"))
               .symbolRenderingMode(.hierarchical)
@@ -65,6 +69,7 @@ struct MessageBoardView: View {
 
 #Preview {
   MessageBoardView()
-    .environment(HotlineState())
-    .environment(HotlineClient())
+    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineNewClient()))
+//    .environment(HotlineState())
+//    .environment(HotlineClient())
 }

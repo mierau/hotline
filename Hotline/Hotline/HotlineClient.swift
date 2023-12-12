@@ -336,7 +336,7 @@ class HotlineClient {
   }
   
   func sendGetMessageBoard(callback: (() -> Void)? = nil) {
-    let t = HotlineTransaction(type: .getMessages)
+    let t = HotlineTransaction(type: .getMessageBoard)
     self.sendTransaction(t, callback: callback)
   }
   
@@ -468,7 +468,7 @@ class HotlineClient {
         print("HotlineClient got users:\n")
         print("\(self.userList)\n\n")
       }
-    case .getMessages:
+    case .getMessageBoard:
       if let textField = transaction.getField(type: .data), let text = textField.getString() {
         var messages: [String] = []
         let messageBoardRegex = /([\s\r\n]*[_\-]+[\s\r\n]+)/

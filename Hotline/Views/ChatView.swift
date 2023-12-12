@@ -7,7 +7,8 @@ extension View {
 }
 
 struct ChatView: View {
-  @Environment(HotlineClient.self) private var hotline
+//  @Environment(HotlineClient.self) private var hotline
+  @Environment(Hotline.self) private var model: Hotline
   @Environment(\.colorScheme) var colorScheme
   
   @State var input: String = ""
@@ -22,7 +23,7 @@ struct ChatView: View {
         ScrollView {
           ScrollViewReader { reader in
             LazyVStack(alignment: .leading) {
-              ForEach(hotline.chatMessages) { msg in
+              ForEach(model.chat) { msg in
                 if msg.type == .agreement {
                   VStack(alignment: .leading) {
                     VStack(alignment: .leading, spacing: 0) {
@@ -32,7 +33,7 @@ struct ChatView: View {
                         .opacity(0.75)
                       HStack {
                         Spacer()
-                        Text((hotline.server?.name ?? "") + " Server Agreement")
+                        Text((model.server?.name ?? "") + " Server Agreement")
                           .font(.caption)
                           .fontWeight(.medium)
                           .opacity(0.4)
@@ -49,10 +50,21 @@ struct ChatView: View {
                   }
                   .padding()
                 }
+                else if msg.type == .status {
+                  HStack {
+                    Spacer()
+                    Text(msg.text)
+                      .lineLimit(1)
+                      .truncationMode(.middle)
+                      .opacity(0.3)
+                    Spacer()
+                  }
+                  .padding()
+                }
                 else {
                   HStack(alignment: .firstTextBaseline) {
-                    if !msg.username.isEmpty {
-                      Text("**\(msg.username):** \(msg.text)")
+                    if let username = msg.username {
+                      Text("**\(username):** \(msg.text)")
                     }
                     else {
                       Text(msg.text)
@@ -63,9 +75,9 @@ struct ChatView: View {
                   .padding()
                 }
               }
-              Text("").id(bottomID)
+              EmptyView().id(bottomID)
             }
-            .onChange(of: hotline.chatMessages.count) {
+            .onChange(of: model.chat.count) {
               withAnimation {
                 reader.scrollTo(bottomID, anchor: .bottom)
               }
@@ -92,14 +104,16 @@ struct ChatView: View {
             .lineLimit(1...5)
             .onSubmit {
               if !self.input.isEmpty {
-                hotline.sendChat(message: self.input)
+                model.sendChat(self.input)
+//                hotline.sendChat(message: self.input)
               }
               self.input = ""
             }
             .frame(maxWidth: .infinity)
           Button {
             if !self.input.isEmpty {
-              hotline.sendChat(message: self.input)
+              model.sendChat(self.input)
+//              hotline.sendChat(message: self.input)
             }
             self.input = ""
           } label: {
@@ -114,12 +128,12 @@ struct ChatView: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .principal) {
-          Text(hotline.server?.name ?? "")
+          Text(model.server?.name ?? "")
             .font(.headline)
         }
         ToolbarItem(placement: .navigationBarLeading) {
           Button {
-            hotline.disconnect()
+            model.disconnect()
           } label: {
             Text(Image(systemName: "xmark.circle.fill"))
               .symbolRenderingMode(.hierarchical)
@@ -166,5 +180,5 @@ struct ChatView: View {
 
 #Preview {
   ChatView()
-    .environment(HotlineClient())
+    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineNewClient()))
 }

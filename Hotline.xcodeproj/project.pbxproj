@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		DA0D698B2B1E5A5200C71DF5 /* HotlineState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698A2B1E5A5200C71DF5 /* HotlineState.swift */; };
-		DA0D698D2B1E7CF700C71DF5 /* UserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UserListView.swift */; };
+		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; };
 		DA43205C2B1D003B00FC8843 /* HotlineClientModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43205B2B1D003B00FC8843 /* HotlineClientModel.swift */; };
@@ -16,6 +16,7 @@
 		DA4F2BF62B1668A700D8ADDC /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; };
+		DA6300972B24036B0034CBFD /* HotlineNewClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineNewClient.swift */; };
 		DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA77253E2B21176D006C5ABB /* NewsView.swift */; };
 		DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7725402B21435B006C5ABB /* ObservableScrollView.swift */; };
 		DA9CAFBB2B126D5700CDA197 /* HotlineApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBA2B126D5700CDA197 /* HotlineApp.swift */; };
@@ -32,7 +33,7 @@
 
 /* Begin PBXFileReference section */
 		DA0D698A2B1E5A5200C71DF5 /* HotlineState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineState.swift; sourceTree = "<group>"; };
-		DA0D698C2B1E7CF700C71DF5 /* UserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserListView.swift; sourceTree = "<group>"; };
+		DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersView.swift; sourceTree = "<group>"; };
 		DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardView.swift; sourceTree = "<group>"; };
 		DA0D69902B1E894800C71DF5 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
 		DA43205B2B1D003B00FC8843 /* HotlineClientModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClientModel.swift; sourceTree = "<group>"; };
@@ -40,6 +41,7 @@
 		DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		DA6300962B24036B0034CBFD /* HotlineNewClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineNewClient.swift; sourceTree = "<group>"; };
 		DA77253E2B21176D006C5ABB /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
 		DA7725402B21435B006C5ABB /* ObservableScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservableScrollView.swift; sourceTree = "<group>"; };
 		DA9CAFB72B126D5700CDA197 /* Hotline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hotline.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -73,7 +75,7 @@
 				DA77253E2B21176D006C5ABB /* NewsView.swift */,
 				DA43205D2B1D615600FC8843 /* ServerView.swift */,
 				DA4F2C002B1A558E00D8ADDC /* ChatView.swift */,
-				DA0D698C2B1E7CF700C71DF5 /* UserListView.swift */,
+				DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */,
 				DA0D69902B1E894800C71DF5 /* FilesView.swift */,
 				DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */,
 			);
@@ -123,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */,
+				DA6300962B24036B0034CBFD /* HotlineNewClient.swift */,
 				DA9CAFCA2B126E3300CDA197 /* HotlineTrackerClient.swift */,
 				DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */,
 				DA43205B2B1D003B00FC8843 /* HotlineClientModel.swift */,
@@ -143,8 +146,8 @@
 		DADDB2892B22B2C60024040D /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				DADDB28C2B22B5920024040D /* Server.swift */,
 				DADDB28E2B238D850024040D /* Hotline.swift */,
+				DADDB28C2B22B5920024040D /* Server.swift */,
 				DADDB28A2B22B31F0024040D /* Tracker.swift */,
 			);
 			path = Models;
@@ -220,6 +223,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA6300972B24036B0034CBFD /* HotlineNewClient.swift in Sources */,
 				DA43205C2B1D003B00FC8843 /* HotlineClientModel.swift in Sources */,
 				DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */,
 				DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */,
@@ -236,7 +240,7 @@
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
 				DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */,
-				DA0D698D2B1E7CF700C71DF5 /* UserListView.swift in Sources */,
+				DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */,
 				DADDB28B2B22B31F0024040D /* Tracker.swift in Sources */,
 				DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */,
 			);

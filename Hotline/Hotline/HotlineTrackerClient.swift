@@ -98,12 +98,8 @@ class HotlineTrackerClient {
     self.connection?.start(queue: .global())
   }
   
-  private func disconnect() {
-    guard let c = connection else {
-      return
-    }
-    
-    c.cancel()
+  func disconnect() {
+    self.connection?.cancel()
     self.connection = nil
   }
   

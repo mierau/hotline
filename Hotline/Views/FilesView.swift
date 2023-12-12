@@ -2,16 +2,17 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct FileView: View {
-  @Environment(HotlineClient.self) private var hotline
+//  @Environment(HotlineClient.self) private var hotline
+  @Environment(Hotline.self) private var model: Hotline
   
   @State var expanded = false
   
-  var file: HotlineFile
+  var file: FileInfo
   
   var body: some View {
     if file.isFolder {
       DisclosureGroup(isExpanded: $expanded) {
-        ForEach(file.files!) { childFile in
+        ForEach(file.children!) { childFile in
           FileView(file: childFile)
             .frame(height: 44)
         }
@@ -27,9 +28,9 @@ struct FileView: View {
         }
       }
       .onChange(of: expanded) {
-        print("EXPANDED CHANGED")
-        
-        hotline.sendGetFileList(path: file.path)
+        Task {
+          await model.getFileList(path: file.path)
+        }
       }
     }
     else {
@@ -48,7 +49,7 @@ struct FileView: View {
   
   static let byteFormatter = ByteCountFormatter()
   
-  private func formattedFileSize(_ fileSize: UInt32) -> String {
+  private func formattedFileSize(_ fileSize: UInt) -> String {
     //    let bcf = ByteCountFormatter()
     FileView.byteFormatter.allowedUnits = [.useAll]
     FileView.byteFormatter.countStyle = .file
@@ -83,35 +84,33 @@ struct FileView: View {
 }
 
 struct FilesView: View {
-  @Environment(HotlineClient.self) private var hotline
+//  @Environment(HotlineClient.self) private var hotline
+  @Environment(Hotline.self) private var model: Hotline
     
   @State var initialLoad = false
   
   var body: some View {
     NavigationStack {
-      List(hotline.fileList) { file in
-//        OutlineGroup(hotline.fileList, children: \.files, expanded: $expandedFolders) { file in
+      List(model.files) { file in
         FileView(file: file)
           .frame(height: 44)
-//        }
       }
       .task {
         if !initialLoad {
-          hotline.sendGetFileList(path: []) {
-            initialLoad = true
-          }
+          let _ = await model.getFileList()
+          initialLoad = true
         }
       }
       .listStyle(.plain)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .principal) {
-          Text(hotline.server?.name ?? "")
+          Text(model.server?.name ?? "")
             .font(.headline)
         }
         ToolbarItem(placement: .navigationBarLeading) {
           Button {
-            hotline.disconnect()
+            model.disconnect()
           } label: {
             Text(Image(systemName: "xmark.circle.fill"))
               .symbolRenderingMode(.hierarchical)

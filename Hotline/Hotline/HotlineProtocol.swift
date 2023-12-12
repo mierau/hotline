@@ -496,7 +496,7 @@ func transactionTypeHasReply(_ type: HotlineTransactionType) -> Bool {
 enum HotlineTransactionType: UInt16 {
   case reply = 0
   case error = 100
-  case getMessages = 101
+  case getMessageBoard = 101
   case newMessage = 102  // Server
   case oldPostNews = 103
   case serverMessage = 104 // Server

@@ -19,7 +19,7 @@ struct HotlineApp: App {
   @State private var appState = HotlineState()
   @State private var hotline = HotlineClient()
   
-  private var model = Hotline(trackerClient: HotlineTrackerClient())
+  private var model = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineNewClient())
   
   var body: some Scene {
     
