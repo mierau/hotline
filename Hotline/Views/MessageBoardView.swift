@@ -2,13 +2,11 @@ import SwiftUI
 
 struct MessageBoardView: View {
   @Environment(Hotline.self) private var model: Hotline
-//  @Environment(HotlineState.self) private var appState
-//  @Environment(HotlineClient.self) private var hotline
   
+  @State private var initialLoadComplete = false
   @State private var fetched = false
   
   var body: some View {
-//    @Bindable var config = appState
     NavigationStack {
       ScrollView {
         LazyVStack(alignment: .leading) {
@@ -23,16 +21,23 @@ struct MessageBoardView: View {
         Spacer()
       }
       .task {
-        if !fetched {
+        if !initialLoadComplete {
           let _ = await model.getMessageBoard()
-//          hotline.sendGetMessageBoard() {
-          fetched = true
-//          }
+          initialLoadComplete = true
+        }
+      }
+      .overlay {
+        if !initialLoadComplete {
+          VStack {
+            ProgressView()
+              .controlSize(.large)
+          }
+          .frame(maxWidth: .infinity)
         }
       }
       .refreshable {
         let _ = await model.getMessageBoard()
-//        hotline.sendGetMessageBoard()
+        initialLoadComplete = true
       }
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -43,7 +48,6 @@ struct MessageBoardView: View {
         ToolbarItem(placement: .navigationBarLeading) {
           Button {
             model.disconnect()
-//            hotline.disconnect()
           } label: {
             Text(Image(systemName: "xmark.circle.fill"))
               .symbolRenderingMode(.hierarchical)
@@ -56,10 +60,7 @@ struct MessageBoardView: View {
             
           } label: {
             Image(systemName: "square.and.pencil")
-//              .symbolRenderingMode(.hierarchical)
-//              .foregroundColor(.secondary)
           }
-          
         }
       }
     }
@@ -69,7 +70,5 @@ struct MessageBoardView: View {
 
 #Preview {
   MessageBoardView()
-    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineNewClient()))
-//    .environment(HotlineState())
-//    .environment(HotlineClient())
+    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
 }

@@ -37,5 +37,5 @@ struct UsersView: View {
 
 #Preview {
   ChatView()
-    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineNewClient()))
+    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
 }

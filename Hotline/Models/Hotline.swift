@@ -1,5 +1,38 @@
 import SwiftUI
 
+enum NewsCategoryType {
+  case bundle
+  case category
+}
+
+@Observable class NewsCategory: Identifiable, Hashable {
+  let id: UUID = UUID()
+  
+  let name: String
+  let count: UInt16
+  let type: NewsCategoryType
+  
+  init(hotlineNewsCategory: HotlineNewsCategory) {
+    self.name = hotlineNewsCategory.name
+    self.count = hotlineNewsCategory.count
+    
+    if hotlineNewsCategory.type == 2 {
+      self.type = .bundle
+    }
+    else {
+      self.type = .category
+    }
+  }
+  
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(self.id)
+  }
+  
+  static func == (lhs: NewsCategory, rhs: NewsCategory) -> Bool {
+    return lhs.id == rhs.id
+  }
+}
+
 @Observable class FileInfo: Identifiable {
   let id: UUID = UUID()
   
@@ -96,11 +129,11 @@ struct User: Identifiable {
   }
 }
 
-@Observable final class Hotline: HotlineNewClientDelegate {
+@Observable final class Hotline: HotlineClientDelegate {
   let trackerClient: HotlineTrackerClient
-  let client: HotlineNewClient
+  let client: HotlineClient
   
-  var status: HotlineNewClientStatus = .disconnected
+  var status: HotlineClientStatus = .disconnected
   
   var server: Server? = nil
   var serverVersion: UInt16? = nil
@@ -111,10 +144,11 @@ struct User: Identifiable {
   var chat: [ChatMessage] = []
   var messageBoard: [String] = []
   var files: [FileInfo] = []
+  var news: [NewsCategory] = []
   
   // MARK: -
   
-  init(trackerClient: HotlineTrackerClient, client: HotlineNewClient) {
+  init(trackerClient: HotlineTrackerClient, client: HotlineClient) {
     self.trackerClient = trackerClient
     self.client = client
     self.client.delegate = self
@@ -200,6 +234,25 @@ struct User: Identifiable {
       })
     }
   }
+  
+  @MainActor func getNewsCategories() async -> [NewsCategory] {
+    return await withCheckedContinuation { [weak self] continuation in
+      self?.client.sendGetNewsCategories(sent: { success in
+        if !success {
+          continuation.resume(returning: [])
+          return
+        }
+      }, reply: { [weak self] categories in
+        var newCategories: [NewsCategory] = []
+        for category in categories {
+          newCategories.append(NewsCategory(hotlineNewsCategory: category))
+        }
+        self?.news = newCategories
+        
+        continuation.resume(returning: newCategories)
+      })
+    }
+  }
 
   
 //  @MainActor func updateUsers() async -> [User] {
@@ -212,7 +265,7 @@ struct User: Identifiable {
   
   // MARK: - Hotline Delegate
   
-  func hotlineStatusChanged(status: HotlineNewClientStatus) {
+  func hotlineStatusChanged(status: HotlineClientStatus) {
     print("Hotline: Connection status changed to: \(status)")
     
     if status == .disconnected {
@@ -221,6 +274,7 @@ struct User: Identifiable {
       self.chat = []
       self.messageBoard = []
       self.files = []
+      self.news = []
     }
     
     self.status = status

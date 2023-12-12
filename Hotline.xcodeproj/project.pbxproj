@@ -11,12 +11,10 @@
 		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; };
-		DA43205C2B1D003B00FC8843 /* HotlineClientModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43205B2B1D003B00FC8843 /* HotlineClientModel.swift */; };
 		DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43205D2B1D615600FC8843 /* ServerView.swift */; };
-		DA4F2BF62B1668A700D8ADDC /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; };
-		DA6300972B24036B0034CBFD /* HotlineNewClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineNewClient.swift */; };
+		DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineClient.swift */; };
 		DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA77253E2B21176D006C5ABB /* NewsView.swift */; };
 		DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7725402B21435B006C5ABB /* ObservableScrollView.swift */; };
 		DA9CAFBB2B126D5700CDA197 /* HotlineApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBA2B126D5700CDA197 /* HotlineApp.swift */; };
@@ -36,12 +34,11 @@
 		DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersView.swift; sourceTree = "<group>"; };
 		DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardView.swift; sourceTree = "<group>"; };
 		DA0D69902B1E894800C71DF5 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
-		DA43205B2B1D003B00FC8843 /* HotlineClientModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClientModel.swift; sourceTree = "<group>"; };
+		DA32CD472B28EE640053B98B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DA43205D2B1D615600FC8843 /* ServerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerView.swift; sourceTree = "<group>"; };
-		DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
-		DA6300962B24036B0034CBFD /* HotlineNewClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineNewClient.swift; sourceTree = "<group>"; };
+		DA6300962B24036B0034CBFD /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
 		DA77253E2B21176D006C5ABB /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
 		DA7725402B21435B006C5ABB /* ObservableScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservableScrollView.swift; sourceTree = "<group>"; };
 		DA9CAFB72B126D5700CDA197 /* Hotline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hotline.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -71,13 +68,13 @@
 		DA4F2BF92B1A516F00D8ADDC /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */,
-				DA77253E2B21176D006C5ABB /* NewsView.swift */,
+				DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */,
 				DA43205D2B1D615600FC8843 /* ServerView.swift */,
 				DA4F2C002B1A558E00D8ADDC /* ChatView.swift */,
 				DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */,
+				DA77253E2B21176D006C5ABB /* NewsView.swift */,
+				DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */,
 				DA0D69902B1E894800C71DF5 /* FilesView.swift */,
-				DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -101,6 +98,7 @@
 		DA9CAFB92B126D5700CDA197 /* Hotline */ = {
 			isa = PBXGroup;
 			children = (
+				DA32CD472B28EE640053B98B /* Info.plist */,
 				DA9CAFBA2B126D5700CDA197 /* HotlineApp.swift */,
 				DA0D698A2B1E5A5200C71DF5 /* HotlineState.swift */,
 				DA4F2BF92B1A516F00D8ADDC /* Views */,
@@ -124,11 +122,9 @@
 		DABFCC262B1530AE009F40D2 /* Hotline */ = {
 			isa = PBXGroup;
 			children = (
-				DA4F2BF52B1668A700D8ADDC /* HotlineClient.swift */,
-				DA6300962B24036B0034CBFD /* HotlineNewClient.swift */,
+				DA6300962B24036B0034CBFD /* HotlineClient.swift */,
 				DA9CAFCA2B126E3300CDA197 /* HotlineTrackerClient.swift */,
 				DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */,
-				DA43205B2B1D003B00FC8843 /* HotlineClientModel.swift */,
 			);
 			path = Hotline;
 			sourceTree = "<group>";
@@ -223,8 +219,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DA6300972B24036B0034CBFD /* HotlineNewClient.swift in Sources */,
-				DA43205C2B1D003B00FC8843 /* HotlineClientModel.swift in Sources */,
+				DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */,
 				DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */,
 				DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */,
 				DA0D698B2B1E5A5200C71DF5 /* HotlineState.swift in Sources */,
@@ -236,7 +231,6 @@
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,
 				DA9CAFBB2B126D5700CDA197 /* HotlineApp.swift in Sources */,
 				DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */,
-				DA4F2BF62B1668A700D8ADDC /* HotlineClient.swift in Sources */,
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
 				DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */,
@@ -379,6 +373,7 @@
 				DEVELOPMENT_TEAM = USME6DU5G6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Hotline/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -389,7 +384,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = co.goodmake.Hotline;
+				PRODUCT_BUNDLE_IDENTIFIER = co.goodmake.hotline;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -408,6 +403,7 @@
 				DEVELOPMENT_TEAM = USME6DU5G6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Hotline/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -418,7 +414,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = co.goodmake.Hotline;
+				PRODUCT_BUNDLE_IDENTIFIER = co.goodmake.hotline;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

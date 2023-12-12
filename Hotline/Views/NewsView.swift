@@ -1,12 +1,11 @@
 import SwiftUI
 
 struct NewsView: View {
-  @Environment(HotlineState.self) private var appState
-  @Environment(HotlineClient.self) private var hotline
+  @Environment(Hotline.self) private var model: Hotline
   @Environment(\.colorScheme) var colorScheme
   
   @State private var fetched = false
-  @State private var selectedCategory: HotlineNewsCategory? = nil
+  @State private var selectedCategory: NewsCategory? = nil
   @State private var topListHeight: CGFloat = 200
   @State private var dividerHeight: CGFloat = 30
   
@@ -14,17 +13,17 @@ struct NewsView: View {
     
     // Your list content goes here
     List {
-      ForEach(hotline.newsCategories, id: \.self) { cat in
+      ForEach(model.news, id: \.self) { category in
         DisclosureGroup {
           ProgressView(value: 0.4)
             .task {
-              print("EXPANDED?", cat.name)
-              hotline.sendGetNewsArticles(path: [cat.name]) {
-                print("OK")
-              }
+              print("EXPANDED?", category.name)
+//              hotline.sendGetNewsArticles(path: [cat.name]) {
+//                print("OK")
+//              }
             }
         } label: {
-          Text(cat.name)
+          Text(category.name)
             .fontWeight(.medium)
             .lineLimit(1)
             .truncationMode(.tail)
@@ -60,13 +59,8 @@ struct NewsView: View {
               .fill(.tertiary)
               .frame(width: 50, height: 6, alignment: .center)
               .cornerRadius(10)
-//              .opacity(0.3)
-//            Image(systemName: "line.3.horizontal")
-//              .opacity(0.2)
-//              .font(.system(size: 14))
           }
           Spacer()
-//          Divider()
         }
         .background(colorScheme == .dark ? Color(white: 0.1) : Color(uiColor: UIColor.systemBackground))
         .frame(maxWidth: .infinity)
@@ -83,9 +77,8 @@ struct NewsView: View {
       }
       .task {
         if !fetched {
-          hotline.sendGetNewsCategories() {
-            fetched = true
-          }
+          let _ = await model.getNewsCategories()
+          fetched = true
           
           //          hotline.sendGetNewsArticles(path: ["News"]) {
           //            print("GOT ARTICLES?")
@@ -98,12 +91,12 @@ struct NewsView: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .principal) {
-          Text(hotline.server?.name ?? "")
+          Text(model.server?.name ?? "")
             .font(.headline)
         }
         ToolbarItem(placement: .navigationBarLeading) {
           Button {
-            hotline.disconnect()
+            model.disconnect()
           } label: {
             Text(Image(systemName: "xmark.circle.fill"))
               .symbolRenderingMode(.hierarchical)
@@ -111,16 +104,16 @@ struct NewsView: View {
               .foregroundColor(.secondary)
           }
         }
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button {
-            
-          } label: {
-            Image(systemName: "square.and.pencil")
-            //              .symbolRenderingMode(.hierarchical)
-            //              .foregroundColor(.secondary)
-          }
-          
-        }
+//        ToolbarItem(placement: .navigationBarTrailing) {
+//          Button {
+//            
+//          } label: {
+//            Image(systemName: "square.and.pencil")
+//            //              .symbolRenderingMode(.hierarchical)
+//            //              .foregroundColor(.secondary)
+//          }
+//          
+//        }
       }
     }
     
@@ -130,5 +123,5 @@ struct NewsView: View {
 #Preview {
   MessageBoardView()
     .environment(HotlineState())
-    .environment(HotlineClient())
+    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
 }

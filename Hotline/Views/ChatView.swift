@@ -7,7 +7,6 @@ extension View {
 }
 
 struct ChatView: View {
-//  @Environment(HotlineClient.self) private var hotline
   @Environment(Hotline.self) private var model: Hotline
   @Environment(\.colorScheme) var colorScheme
   
@@ -180,5 +179,5 @@ struct ChatView: View {
 
 #Preview {
   ChatView()
-    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineNewClient()))
+    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
 }

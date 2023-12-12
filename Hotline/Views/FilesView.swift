@@ -2,7 +2,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct FileView: View {
-//  @Environment(HotlineClient.self) private var hotline
   @Environment(Hotline.self) private var model: Hotline
   
   @State var expanded = false
@@ -84,7 +83,6 @@ struct FileView: View {
 }
 
 struct FilesView: View {
-//  @Environment(HotlineClient.self) private var hotline
   @Environment(Hotline.self) private var model: Hotline
     
   @State var initialLoad = false
@@ -125,5 +123,5 @@ struct FilesView: View {
 
 #Preview {
   FilesView()
-    .environment(HotlineClient())
+    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
 }

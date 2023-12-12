@@ -11,7 +11,7 @@ struct TrackerConnectView: View {
   @State private var password = ""
   @State private var connecting = false
   
-  func connectionStatusToProgress(status: HotlineNewClientStatus) -> Double {
+  func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
     switch status {
     case .disconnected:
       return 0.0
@@ -25,8 +25,6 @@ struct TrackerConnectView: View {
       return 1.0
     }
   }
-  
-  
   
   var body: some View {
       VStack(alignment: .leading) {
@@ -176,7 +174,7 @@ struct TrackerView: View {
     return desc.count > 0 && desc != server.name
   }
   
-  func connectionStatusToProgress(status: HotlineNewClientStatus) -> Double {
+  func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
     switch status {
     case .disconnected:
       return 0.0
@@ -196,7 +194,12 @@ struct TrackerView: View {
   }
   
   func updateServers() async {
-    self.servers = await model.getServers(address: "tracker.preterhuman.net")
+//    "hltracker.com"
+//    "tracker.preterhuman.net"
+//    "hotline.ubersoft.org"
+//    "tracked.nailbat.com"
+//    "hotline.duckdns.org"
+    self.servers = await model.getServers(address: "tracked.agent79.org")
   }
   
   var body: some View {
@@ -347,11 +350,28 @@ struct TrackerView: View {
       await updateServers()
       initialLoadComplete = true
     }
+    .onOpenURL(perform: { url in
+      guard url.scheme == "hotline" else {
+        return
+      }
+      
+      if let address = url.host() {
+        let login = url.user(percentEncoded: false) ?? ""
+        let password = url.password(percentEncoded: false) ?? ""
+        let port = url.port ?? Server.defaultPort
+        
+        Task {
+          model.disconnect()
+          let _ = await model.login(server: Server(name: address, description: nil, address: address, port: port, users: 0), login: login, password: password, username: "bolt", iconID: 128)
+        }
+        
+        // TODO: Find a better way to show login status when trying to connect outside of the Tracker server list. Perhaps this opens the connect sheet prefilled.
+      }
+    })
   }
 }
 
 #Preview {
   TrackerView()
-    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineNewClient()))
-  //    .modelContainer(for: Item.self, inMemory: true)
+    .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
 }
