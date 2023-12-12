@@ -199,13 +199,33 @@ struct TrackerView: View {
 //    "hotline.ubersoft.org"
 //    "tracked.nailbat.com"
 //    "hotline.duckdns.org"
-    self.servers = await model.getServers(address: "tracked.agent79.org")
+//    "tracked.agent79.org"
+    self.servers = await model.getServers(address: "hltracker.com")
   }
   
   var body: some View {
     ZStack(alignment: .center) {
       VStack(alignment: .center) {
         ZStack(alignment: .top) {
+          HStack(alignment: .center) {
+            Button {
+              connectVisible = true
+              connectDismissed = false
+            } label: {
+              Text(Image(systemName: "gearshape.fill"))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundColor(.primary)
+                .font(.title2)
+                .padding(.leading, 16)
+            }
+            .sheet(isPresented: $connectVisible) {
+              connectDismissed = true
+            } content: {
+              TrackerConnectView()
+            }
+            Spacer()
+          }
+          .frame(height: 40.0)
           Image("Hotline")
             .resizable()
             .renderingMode(.template)

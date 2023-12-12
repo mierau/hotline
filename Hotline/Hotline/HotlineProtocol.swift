@@ -1,5 +1,51 @@
 import Foundation
 
+struct HotlineUserAccessOptions: OptionSet {
+  let rawValue: UInt64
+  
+  static let canRenameFolders = HotlineUserAccessOptions(rawValue: 1 << 0)
+  static let canDeleteFolders = HotlineUserAccessOptions(rawValue: 1 << 1)
+  static let canCreateFolders = HotlineUserAccessOptions(rawValue: 1 << 2)
+  static let canMoveFiles = HotlineUserAccessOptions(rawValue: 1 << 3)
+  static let canRenameFiles = HotlineUserAccessOptions(rawValue: 1 << 4)
+  static let canDownloadFiles = HotlineUserAccessOptions(rawValue: 1 << 5)
+  static let canUploadFiles = HotlineUserAccessOptions(rawValue: 1 << 6)
+  static let canDeleteFiles = HotlineUserAccessOptions(rawValue: 1 << 7)
+  
+  static let canDeleteUsers = HotlineUserAccessOptions(rawValue: 1 << 8)
+  static let canCreateUsers = HotlineUserAccessOptions(rawValue: 1 << 9)
+  static let canSendChat = HotlineUserAccessOptions(rawValue: 1 << 13)
+  static let canReadChat = HotlineUserAccessOptions(rawValue: 1 << 14)
+  static let canMoveFolders = HotlineUserAccessOptions(rawValue: 1 << 15)
+  
+  static let cannotBeDisconnected = HotlineUserAccessOptions(rawValue: 1 << 16)
+  static let canDisconnectUsers = HotlineUserAccessOptions(rawValue: 1 << 17)
+  static let canPostNews = HotlineUserAccessOptions(rawValue: 1 << 18)
+  static let canReadNews = HotlineUserAccessOptions(rawValue: 1 << 19)
+  static let canModifyUsers = HotlineUserAccessOptions(rawValue: 1 << 22)
+  static let canReadUsers = HotlineUserAccessOptions(rawValue: 1 << 23)
+  
+  static let canMakeAliases = HotlineUserAccessOptions(rawValue: 1 << 24)
+  static let canViewDropBoxes = HotlineUserAccessOptions(rawValue: 1 << 25)
+  static let canCommentFolders = HotlineUserAccessOptions(rawValue: 1 << 26)
+  static let canCommentFiles = HotlineUserAccessOptions(rawValue: 1 << 27)
+  static let dontShowAgreement = HotlineUserAccessOptions(rawValue: 1 << 28)
+  static let canUseAnyName = HotlineUserAccessOptions(rawValue: 1 << 29)
+  static let canUploadAnywhere = HotlineUserAccessOptions(rawValue: 1 << 30)
+  static let canGetUserInfo = HotlineUserAccessOptions(rawValue: 1 << 31)
+  
+  static let canDownloadFolders = HotlineUserAccessOptions(rawValue: 1 << 32)
+  static let canUploadFolders = HotlineUserAccessOptions(rawValue: 1 << 33)
+  static let canDeleteNewsFolders = HotlineUserAccessOptions(rawValue: 1 << 34)
+  static let canCreateNewsFolders = HotlineUserAccessOptions(rawValue: 1 << 35)
+  static let canDeleteNewsCategories = HotlineUserAccessOptions(rawValue: 1 << 36)
+  static let canCreateNewsCategories = HotlineUserAccessOptions(rawValue: 1 << 37)
+  static let canDeleteNewsArticles = HotlineUserAccessOptions(rawValue: 1 << 38)
+  static let canBroadcast = HotlineUserAccessOptions(rawValue: 1 << 39)
+  
+  static let canSendMessages = HotlineUserAccessOptions(rawValue: 1 << 47)
+}
+
 struct HotlineServer: Identifiable, Hashable {
   let id = UUID()
   let address: String
@@ -294,6 +340,10 @@ struct HotlineTransactionField {
     return self.data.readUInt32(at: 0)
   }
   
+  func getUInt64() -> UInt64? {
+    return self.data.readUInt64(at: 0)
+  }
+  
   func getInteger() -> Int? {
     switch(self.data.count) {
     case 1:
@@ -306,6 +356,10 @@ struct HotlineTransactionField {
       }
     case 4:
       if let val = self.getUInt32() {
+        return Int(val)
+      }
+    case 8:
+      if let val = self.getUInt64() {
         return Int(val)
       }
     default:
@@ -381,8 +435,8 @@ struct HotlineTransaction {
     self.fields.append(HotlineTransactionField(type: type, string: val, encrypt: true))
   }
   
-  mutating func setFieldString(type: HotlineTransactionFieldType, val: String) {
-    self.fields.append(HotlineTransactionField(type: type, string: val))
+  mutating func setFieldString(type: HotlineTransactionFieldType, val: String, encoding: String.Encoding = .utf8) {
+    self.fields.append(HotlineTransactionField(type: type, string: val, encoding: encoding, encrypt: false))
   }
   
   mutating func setFieldPath(type: HotlineTransactionFieldType, val: [String]) {

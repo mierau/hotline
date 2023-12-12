@@ -11,6 +11,7 @@ enum HotlineClientStatus: Int {
 
 enum HotlineTransactionError: Error {
   case networkFailure
+  case timeout
   case error(UInt32, String?)
   case invalidMessage(UInt32, String?)
 }
@@ -38,6 +39,7 @@ protocol HotlineClientDelegate: AnyObject {
   func hotlineReceivedChatMessage(message: String)
   func hotlineReceivedUserList(users: [HotlineUser])
   func hotlineReceivedServerMessage(message: String)
+  func hotlineReceivedUserAccess(options: HotlineUserAccessOptions)
   func hotlineUserChanged(user: HotlineUser)
   func hotlineUserDisconnected(userID: UInt16)
 }
@@ -48,6 +50,7 @@ extension HotlineClientDelegate {
   func hotlineReceivedChatMessage(message: String) {}
   func hotlineReceivedUserList(users: [HotlineUser]) {}
   func hotlineReceivedServerMessage(message: String) {}
+  func hotlineReceivedUserAccess(options: HotlineUserAccessOptions) {}
   func hotlineUserChanged(user: HotlineUser) {}
   func hotlineUserDisconnected(userID: UInt16) {}
 }
@@ -66,12 +69,6 @@ class HotlineClient {
   
   var connectionStatus: HotlineClientStatus = .disconnected
   var connectCallback: ((Bool) -> Void)?
-//  var chatMessages: [HotlineChat] = []
-//  var messageBoardMessages: [String] = []
-//  var fileList: [HotlineFile] = []
-  var newsCategories: [HotlineNewsCategory] = []
-  
-  var serverVersion: UInt16 = 151
   
   private var connection: NWConnection?
   private var transactionLog: [UInt32:(HotlineTransactionType, ((HotlineTransaction, HotlineTransactionError?) -> Void)?)] = [:]
@@ -83,12 +80,12 @@ class HotlineClient {
   
   // MARK: -
   
-  func login(_ address: String, port: UInt16, login: String, password: String, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, UInt16) -> Void)?) -> Bool {
+  func login(_ address: String, port: UInt16, login: String, password: String, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) -> Bool {
     print("AWAITING CONNECT")
     self.connect(address: address, port: port) { [weak self] success in
       guard success else {
         DispatchQueue.main.async {
-          callback?(.networkFailure, 0)
+          callback?(.networkFailure, nil, nil)
         }
         return
       }
@@ -97,28 +94,27 @@ class HotlineClient {
       self?.sendHandshake() { [weak self] success in
         guard success else {
           DispatchQueue.main.async {
-            callback?(.networkFailure, 0)
+            callback?(.networkFailure, nil, nil)
           }
           return
         }
         
         print("AWAITING LOGIN")
-        self?.sendLogin(login: login, password: password, username: username, iconID: iconID) { [weak self] err, serverVersion in
+        self?.sendLogin(login: login, password: password, username: username, iconID: iconID) { [weak self] err, serverName, serverVersion in
           guard err == nil else {
             DispatchQueue.main.async {
-              callback?(err, 0)
+              callback?(err, nil, nil)
             }
             return
           }
           
-          self?.serverVersion = serverVersion
-          print("SERVER VERSION: \(serverVersion)")
+          print("LOGGED INTO SERVER: \(serverName) \(serverVersion)")
           
           self?.sendSetClientUserInfo(username: username, iconID: iconID)
           self?.sendGetUserList()
           
           DispatchQueue.main.async {
-            callback?(nil, serverVersion)
+            callback?(nil, serverName, serverVersion)
           }
           
         }
@@ -222,30 +218,24 @@ class HotlineClient {
   
   private func reset() {
     self.transactionLog = [:]
-    DispatchQueue.main.async {
-//      self.chatMessages = []
-//      self.messageBoardMessages = []
-//      self.fileList = []
-      self.newsCategories = []
-    }
   }
   
   func disconnect() {
+    for (_, replyInfo) in self.transactionLog {
+      let replyCallback = replyInfo.1
+      replyCallback?(HotlineTransaction(type: replyInfo.0), .networkFailure)
+    }
+    self.transactionLog = [:]
+    
     self.connection?.cancel()
     self.connection = nil
-  }
-  
-  private func updateConnectionStatus(_ status: HotlineClientStatus) {
-    self.connectionStatus = status
-    DispatchQueue.main.async { [weak self] in
-      self?.delegate?.hotlineStatusChanged(status: status)
-    }
   }
   
   // MARK: -
   
   private func sendTransaction(_ t: HotlineTransaction, sent sentCallback: ((Bool) -> Void)? = nil, reply replyCallback: ((HotlineTransaction, HotlineTransactionError?) -> Void)? = nil) {
     guard let c = connection else {
+      print("NO CONNECTION?????")
       return
     }
     
@@ -430,7 +420,7 @@ class HotlineClient {
     })
   }
   
-  func sendLogin(login: String, password: String, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, UInt16) -> Void)?) {
+  func sendLogin(login: String, password: String, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) {
     self.updateConnectionStatus(.loggingIn)
     
     var t = HotlineTransaction(type: .login)
@@ -443,7 +433,7 @@ class HotlineClient {
     self.sendTransaction(t) { success in
       if !success {
         DispatchQueue.main.async {
-          callback?(.networkFailure, 0)
+          callback?(.networkFailure, nil, nil)
         }
       }
     } reply: { [weak self] replyTransaction, err in
@@ -451,16 +441,24 @@ class HotlineClient {
       self?.updateConnectionStatus(.loggedIn)
       
       var serverVersion: UInt16?
+      var serverName: String?
+      
       if
         let serverVersionField = replyTransaction.getField(type: .versionNumber),
         let serverVersionValue = serverVersionField.getUInt16() {
-        self?.serverVersion = serverVersionValue
         serverVersion = serverVersionValue
         print("SERVER VERSION: \(serverVersionValue)")
       }
       
+      if
+        let serverNameField = replyTransaction.getField(type: .serverName),
+        let serverNameValue = serverNameField.getString() {
+        serverName = serverNameValue
+        print("SERVER NAME: \(serverNameValue)")
+      }
+      
       DispatchQueue.main.async {
-        callback?(err, serverVersion ?? 0)
+        callback?(err, serverName, serverVersion)
       }
     }
   }
@@ -480,9 +478,9 @@ class HotlineClient {
     self.sendTransaction(t, sent: sent)
   }
   
-  func sendChat(message: String, sent sentCallback: ((Bool) -> Void)?) {
+  func sendChat(message: String, encoding: String.Encoding = .utf8, sent sentCallback: ((Bool) -> Void)?) {
     var t = HotlineTransaction(type: .sendChat)
-    t.setFieldString(type: .data, val: message)
+    t.setFieldString(type: .data, val: message, encoding: encoding)
     self.sendTransaction(t, sent: sentCallback)
   }
   
@@ -563,7 +561,6 @@ class HotlineClient {
       }
       DispatchQueue.main.async {
         reply?(categories)
-//        self.newsCategories = categories
       }
     })
   }
@@ -641,87 +638,20 @@ class HotlineClient {
     }
     
     replyCallback?(transaction, nil)
-    
-    
-//    switch(replyCallbackInfo.0) {
-//    case .login:
-//      print("GOT REPLY TO LOGIN!")
-      
-//      if
-//        let serverVersionField = transaction.getField(type: .versionNumber),
-//        let serverVersion = serverVersionField.getUInt16() {
-//        self.serverVersion = serverVersion
-//        print("SERVER VERSION: \(serverVersion)")
-//      }
-//    case .getUserNameList:
-//      print("GOT USER LIST")
-//      var newUsers: [UInt16:HotlineUser] = [:]
-//      var newUserList: [HotlineUser] = []
-//      for u in transaction.getFieldList(type: .userNameWithInfo) {
-//        let user = u.getUser()
-//        newUsers[user.id] = user
-//        newUserList.append(user)
-//      }
-//      DispatchQueue.main.async { [weak self] in
-////        self.userList = newUserList
-//        
-//        self?.delegate?.hotlineReceivedUserList(users: newUserList)
-//      }
-//    case .getMessageBoard:
-//      if let textField = transaction.getField(type: .data), let text = textField.getString() {
-//        var messages: [String] = []
-//        let messageBoardRegex = /([\s\r\n]*[_\-]+[\s\r\n]+)/
-//        let matches = text.matches(of: messageBoardRegex)
-//        var start = text.startIndex
-//        
-//        if matches.count > 0 {
-//          for match in matches {
-//            let range = match.range
-//            messages.append(String(text[start..<range.lowerBound]))
-//            start = range.upperBound
-//          }
-//        }
-//        else {
-//          messages.append(text)
-//        }
-//        
-//        DispatchQueue.main.async {
-//          self.messageBoardMessages = messages
-//        }
-//      }
-      //    case .getFileNameList:
-      //      var files: [HotlineFile] = []
-      //      for fi in transaction.getFieldList(type: .fileNameWithInfo) {
-      //        let file = fi.getFile()
-      //        files.append(file)
-      //      }
-      //      DispatchQueue.main.async {
-      //        self.fileList = files
-      //      }
-//    case .getNewsCategoryNameList:
-//      var categories: [HotlineNewsCategory] = []
-//      for fi in transaction.getFieldList(type: .newsCategoryListData15) {
-//        let c = fi.getNewsCategory()
-//        categories.append(c)
-//        print("CATEGORY: \(c)")
-//      }
-//      DispatchQueue.main.async {
-//        self.newsCategories = categories
-//      }
-//    default:
-//      break
-//    }
-    
-    
   }
-  
+    
   private func processTransaction(_ transaction: HotlineTransaction) {
-    if transaction.type == .reply {
+    if transaction.type == .reply || self.transactionLog[transaction.id] != nil {
       print("HotlineClient <= \(transaction.type) to \(transaction.id):")
       print(transaction)
     }
     else {
-      print("HotlineClient <= \(transaction.type)")
+      print("HotlineClient <= \(transaction.type) \(transaction.id)")
+    }
+    
+    if self.transactionLog[transaction.id] != nil {
+      self.processReply(transaction)
+      return
     }
     
     switch(transaction.type) {
@@ -739,6 +669,7 @@ class HotlineClient {
           self?.delegate?.hotlineReceivedChatMessage(message: chatText)
         }
       }
+      
     case .notifyOfUserChange:
       if let usernameField = transaction.getField(type: .userName),
          let username = usernameField.getString(),
@@ -763,9 +694,12 @@ class HotlineClient {
           self?.delegate?.hotlineUserDisconnected(userID: userID)
         }
       }
+      
     case .disconnectMessage:
+      // Server disconnected us.
       print("HotlineClient ❌")
       self.disconnect()
+    
     case .serverMessage:
       if let messageField = transaction.getField(type: .data),
          let message = messageField.getString() {
@@ -773,8 +707,10 @@ class HotlineClient {
           self?.delegate?.hotlineReceivedServerMessage(message: message)
         }
       }
+      
     case .showAgreement:
       if let _ = transaction.getField(type: .noServerAgreement) {
+        // Server told us there is no agreement to show.
         return
       }
       if let agreementParam = transaction.getField(type: .data) {
@@ -784,11 +720,31 @@ class HotlineClient {
           }
         }
       }
+      
     case .userAccess:
       print("HotlineClient: user access info \(transaction.getField(type: .userAccess).debugDescription)")
+      if let accessParam = transaction.getField(type: .userAccess) {
+        if let accessValue = accessParam.getUInt64() {
+          let accessOptions = HotlineUserAccessOptions(rawValue: accessValue)
+          DispatchQueue.main.async { [weak self] in
+            self?.delegate?.hotlineReceivedUserAccess(options: accessOptions)
+          }
+        }
+      }
+      
     default:
       print("HotlineClient: UNKNOWN transaction \(transaction.type) with \(transaction.fields.count) parameters")
       print(transaction.fields)
     }
   }
+  
+  // MARK: - Utility
+
+  private func updateConnectionStatus(_ status: HotlineClientStatus) {
+    self.connectionStatus = status
+    DispatchQueue.main.async { [weak self] in
+      self?.delegate?.hotlineStatusChanged(status: status)
+    }
+  }
+
 }

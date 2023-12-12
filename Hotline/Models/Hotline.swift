@@ -137,6 +137,7 @@ struct User: Identifiable {
   
   var server: Server? = nil
   var serverVersion: UInt16? = nil
+  var serverName: String? = nil
   var username: String = "bolt"
   var iconID: UInt = 128
   
@@ -180,8 +181,11 @@ struct User: Identifiable {
     self.iconID = iconID
     
     return await withCheckedContinuation { [weak self] continuation in
-      let _ = self?.client.login(server.address, port: UInt16(server.port), login: login, password: password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverVersion in
+      let _ = self?.client.login(server.address, port: UInt16(server.port), login: login, password: password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
         self?.serverVersion = serverVersion
+        if serverName != nil {
+          self?.serverName = serverName
+        }
         continuation.resume(returning: (err != nil))
       }
     }
@@ -212,7 +216,6 @@ struct User: Identifiable {
           continuation.resume(returning: [])
           return
         }
-        // Failed to send?
       }, reply: { [weak self] files in
         let parentFile = self?.findFile(in: self?.files ?? [], at: path)
         
@@ -222,11 +225,9 @@ struct User: Identifiable {
         }
         
         if let parent = parentFile {
-          print("FOUND PARENT AT \(path)")
           parent.children = newFiles
         }
         else if path.isEmpty {
-          print("FOUND ROOT AT \(path)")
           self?.files = newFiles
         }
         
@@ -270,6 +271,7 @@ struct User: Identifiable {
     
     if status == .disconnected {
       self.serverVersion = nil
+      self.serverName = nil
       self.users = []
       self.chat = []
       self.messageBoard = []
@@ -332,6 +334,11 @@ struct User: Identifiable {
       let user = self.users.remove(at: existingUserIndex)
       self.chat.append(ChatMessage(text: "\(user.name) left", type: .status, date: Date()))
     }
+  }
+  
+  func hotlineReceivedUserAccess(options: HotlineUserAccessOptions) {
+    print("Hotline: got access options")
+    print(options, options.contains(.canSendChat), options.contains(.canBroadcast))
   }
   
   func hotlineReceivedError(message: String) {

@@ -5,24 +5,6 @@ enum Endianness {
   case little
 }
 
-func detectStringEncoding(of data: Data) -> String.Encoding {
-//  var nsString: NSString? = nil
-//  guard case let rawValue = NSString.stringEncoding(for: data, encodingOptions: [.allowLossyKey: false], convertedString: nil, usedLossyConversion: nil) else {
-//    print("NO ENCODING")
-//    return nil
-//  }
-  
-  let rawValue = NSString.stringEncoding(for: data, encodingOptions: [.allowLossyKey: false], convertedString: nil, usedLossyConversion: nil)
-  
-//  let cfEnc: CFStringEncoding = CFStringConvertNSStringEncodingToEncoding(rawValue);
-  
-//    let encodingString: CFString? = CFStringGetNameOfEncoding(cfEnc)
-    
-    print("DETECTED ENCODING \(rawValue)")
-
-  return String.Encoding(rawValue: rawValue)
-}
-
 extension Data {
   init(_ val: UInt8) {
     self.init()
@@ -60,6 +42,18 @@ extension Data {
     }
     
     return (UInt32(self[offset]) << 24) + (UInt32(self[offset + 1]) << 16) + (UInt32(self[offset + 2]) << 8) + UInt32(self[offset + 3])
+  }
+  
+  func readUInt64(at offset: Int) -> UInt64? {
+    guard offset >= 0, offset + 8 <= self.count else {
+      return nil
+    }
+    
+    return withUnsafeBytes { $0.load(as: UInt64.self ) }
+    
+//    return 0
+    
+//    return (UInt64(self[offset]) << 56) + (UInt64(self[offset + 1]) << 48) + (UInt64(self[offset + 2]) << 40) + (UInt64(self[offset + 3]) << 32) + (UInt64(self[offset + 4]) << 24) + (UInt64(self[offset + 5]) << 16) + (UInt64(self[offset + 6]) << 8) + UInt64(self[offset + 7])
   }
   
   func readData(at offset: Int, length: Int) -> Data? {

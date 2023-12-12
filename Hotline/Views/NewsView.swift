@@ -9,7 +9,7 @@ struct NewsView: View {
   @State private var topListHeight: CGFloat = 200
   @State private var dividerHeight: CGFloat = 30
   
-  var topList: some View {
+  var articleList: some View {
     
     // Your list content goes here
     List {
@@ -30,10 +30,11 @@ struct NewsView: View {
         }
       }
     }
+    .scrollBounceBehavior(.basedOnSize)
 //    .listStyle(.plain)
   }
   
-  var bottomList: some View {
+  var readerView: some View {
     // Your list content goes here
     ScrollView(.vertical) {
       HStack(alignment: .top, spacing: 0) {
@@ -43,13 +44,14 @@ struct NewsView: View {
       }
       .padding()
     }
+    .scrollBounceBehavior(.basedOnSize)
     .background(colorScheme == .dark ? Color(white: 0.1) : Color(uiColor: UIColor.systemBackground))
   }
   
   var body: some View {
     NavigationStack {
       VStack(spacing: 0) {
-        topList
+        articleList
           .frame(height: topListHeight)
         VStack(alignment: .center) {
           Divider()
@@ -73,7 +75,7 @@ struct NewsView: View {
               //                bottomListHeight = max(min(bottomListHeight - delta, 400), 0)
             }
         )
-        bottomList
+        readerView
       }
       .task {
         if !fetched {

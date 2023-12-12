@@ -27,6 +27,10 @@ struct FileView: View {
         }
       }
       .onChange(of: expanded) {
+        if !expanded {
+          return
+        }
+        
         Task {
           await model.getFileList(path: file.path)
         }
@@ -85,7 +89,7 @@ struct FileView: View {
 struct FilesView: View {
   @Environment(Hotline.self) private var model: Hotline
     
-  @State var initialLoad = false
+  @State var initialLoadComplete = false
   
   var body: some View {
     NavigationStack {
@@ -94,9 +98,18 @@ struct FilesView: View {
           .frame(height: 44)
       }
       .task {
-        if !initialLoad {
+        if !initialLoadComplete {
           let _ = await model.getFileList()
-          initialLoad = true
+          initialLoadComplete = true
+        }
+      }
+      .overlay {
+        if !initialLoadComplete {
+          VStack {
+            ProgressView()
+              .controlSize(.large)
+          }
+          .frame(maxWidth: .infinity)
         }
       }
       .listStyle(.plain)

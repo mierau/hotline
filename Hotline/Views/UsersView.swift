@@ -13,7 +13,7 @@ struct UsersView: View {
           .foregroundStyle(u.status.contains(.admin) ? Color(hex: 0xE10000) : Color.accentColor)
           .opacity(u.status.contains(.idle) ? 0.5 : 1.0)
       }
-//      .listStyle(.grouped)
+      .scrollBounceBehavior(.basedOnSize)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .principal) {

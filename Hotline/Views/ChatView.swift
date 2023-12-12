@@ -15,12 +15,12 @@ struct ChatView: View {
   @State private var contentHeight: CGFloat = 0
   
   @Namespace var bottomID
-    
+  
   var body: some View {
     NavigationStack {
       VStack(spacing: 0) {
-        ScrollView {
-          ScrollViewReader { reader in
+        ScrollViewReader { reader in
+          ScrollView {
             LazyVStack(alignment: .leading) {
               ForEach(model.chat) { msg in
                 if msg.type == .agreement {
@@ -71,27 +71,27 @@ struct ChatView: View {
                     }
                     Spacer()
                   }
-                  .padding()
+                  .padding(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                 }
               }
               EmptyView().id(bottomID)
             }
-            .onChange(of: model.chat.count) {
-              withAnimation {
-                reader.scrollTo(bottomID, anchor: .bottom)
-              }
-              print("SCROLLED TO BOTTOM")
-            }
-            .onAppear {
-              withAnimation {
-                reader.scrollTo("bottom view", anchor: .bottom)
-              }
-            }
+            .padding(.bottom, 12)
           }
-        }
-        .scrollDismissesKeyboard(.interactively)
-        .onTapGesture {
-          self.endEditing()
+          .onChange(of: model.chat.count) {
+            withAnimation {
+              reader.scrollTo(bottomID, anchor: .bottom)
+            }
+            print("SCROLLED TO BOTTOM")
+          }
+          .onAppear {
+            print("SCROLLED TO BOTTOM ON APPEAR")
+            reader.scrollTo(bottomID, anchor: .bottom)
+          }
+          .scrollDismissesKeyboard(.interactively)
+          .onTapGesture {
+            self.endEditing()
+          }
         }
         
         Divider()
@@ -104,7 +104,7 @@ struct ChatView: View {
             .onSubmit {
               if !self.input.isEmpty {
                 model.sendChat(self.input)
-//                hotline.sendChat(message: self.input)
+                //                hotline.sendChat(message: self.input)
               }
               self.input = ""
             }
@@ -112,7 +112,7 @@ struct ChatView: View {
           Button {
             if !self.input.isEmpty {
               model.sendChat(self.input)
-//              hotline.sendChat(message: self.input)
+              //              hotline.sendChat(message: self.input)
             }
             self.input = ""
           } label: {
@@ -143,37 +143,6 @@ struct ChatView: View {
       }
       
     }
-    
-    
-    //      GeometryReader { geometry in
-    //        ScrollView(.vertical) {
-    //          ScrollViewReader { scrollReader in
-    //            VStack(alignment: .leading) {
-    //              Spacer()
-    //              List(hotline.chatMessages) { msg in
-    //                HStack(alignment: .firstTextBaseline) {
-    //                  Text("\(msg.username):").bold().fontDesign(.monospaced)
-    //                  Text(msg.message)
-    //                    .fontDesign(.monospaced)
-    //                    .textSelection(.enabled)
-    //                }
-    //              }
-    //              .padding()
-    //            }
-    //            //          .frame(width: geometry.size.width)
-    //            .frame(minHeight: geometry.size.height)
-    ////            .background(Color.red)
-    //            .onAppear() {
-    ////              scrollReader.scrollTo("bottomScroll", anchor: .bottom)
-    //            }
-    //            //          .onChange() {
-    //            //            scrollReader.scrollTo(10000, anchor: .bottomTrailing)
-    //            //          }
-    //          }
-    //        }
-    //      }
-    
-    
   }
 }
 
