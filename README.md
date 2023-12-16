@@ -14,12 +14,12 @@ Written in Swift and SwiftUI.
 - User list
 - Message board reading
 - File browsing
-- News category listing
+- News browsing and reading
 
 # Todo
-- News reading
 - Username and icon changing
-- Messaging
+- News posting/replying
+- Private messaging
 - File downloading
 - File uploading
 - Branch out UI for macOS
