@@ -32,7 +32,7 @@ struct ChatView: View {
                         .opacity(0.75)
                       HStack {
                         Spacer()
-                        Text((model.server?.name ?? "") + " Server Agreement")
+                        Text((model.serverTitle) + " Server Agreement")
                           .font(.caption)
                           .fontWeight(.medium)
                           .opacity(0.4)
@@ -78,6 +78,7 @@ struct ChatView: View {
             }
             .padding(.bottom, 12)
           }
+          .defaultScrollAnchor(.bottom)
           .onChange(of: model.chat.count) {
             withAnimation {
               reader.scrollTo(bottomID, anchor: .bottom)
@@ -127,7 +128,7 @@ struct ChatView: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .principal) {
-          Text(model.server?.name ?? "")
+          Text(model.serverTitle)
             .font(.headline)
         }
         ToolbarItem(placement: .navigationBarLeading) {

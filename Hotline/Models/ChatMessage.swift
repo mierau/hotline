@@ -15,7 +15,7 @@ struct ChatMessage: Identifiable {
   let date: Date
   let username: String?
   
-  static let parser = /^\s*([^\:]+)\:\s*(.+)/
+  static let parser = /^\s*([^\:]+):\s*([\s\S]+)$/
   
   init(text: String, type: ChatMessageType, date: Date) {
     self.type = type

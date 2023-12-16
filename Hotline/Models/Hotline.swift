@@ -6,17 +6,31 @@ import SwiftUI
   
   var status: HotlineClientStatus = .disconnected
   
-  var server: Server? = nil
-  var serverVersion: UInt16? = nil
-  var serverName: String? = nil
+  var server: Server?  {
+    didSet {
+      self.updateServerTitle()
+    }
+  }
+  var serverVersion: UInt16?  {
+    didSet {
+      self.updateServerTitle()
+    }
+  }
+  var serverName: String? {
+    didSet {
+      self.updateServerTitle()
+    }
+  }
+  var serverTitle: String = "Server"
   var username: String = "bolt"
   var iconID: UInt = 128
+  var access: HotlineUserAccessOptions?
   
   var users: [User] = []
   var chat: [ChatMessage] = []
   var messageBoard: [String] = []
   var files: [FileInfo] = []
-  var news: [NewsCategory] = []
+  var news: [NewsInfo] = []
   
   // MARK: -
   
@@ -28,8 +42,8 @@ import SwiftUI
   
   // MARK: -
   
-  @MainActor func getServers(address: String, port: Int = Tracker.defaultPort) async -> [Server] {
-    let fetchedServers: [HotlineServer] = await self.trackerClient.fetchServers(address: address, port: port)
+  @MainActor func getServerList(tracker: String, port: Int = Tracker.defaultPort) async -> [Server] {
+    let fetchedServers: [HotlineServer] = await self.trackerClient.fetchServers(address: tracker, port: port)
     
     var servers: [Server] = []
     
@@ -48,6 +62,7 @@ import SwiftUI
   
   @MainActor func login(server: Server, login: String, password: String, username: String, iconID: UInt) async -> Bool {
     self.server = server
+    self.serverName = server.name
     self.username = username
     self.iconID = iconID
     
@@ -107,22 +122,162 @@ import SwiftUI
     }
   }
   
-  @MainActor func getNewsCategories() async -> [NewsCategory] {
+  @MainActor func getNewsArticle(id articleID: UInt, at path: [String], flavor: String) async -> String? {
     return await withCheckedContinuation { [weak self] continuation in
-      self?.client.sendGetNewsCategories(sent: { success in
+      self?.client.sendGetNewsArticle(id: UInt32(articleID), path: path, flavor: flavor, sent: { success in
+        if !success {
+          continuation.resume(returning: nil)
+          return
+        }
+        
+        print("GET NEWS CATS FROM \(path)")
+      }, reply: { articleText in
+//          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
+        
+//        var newCategories: [NewsInfo] = []
+//        for category in categories {
+//          newCategories.append(NewsInfo(hotlineNewsCategory: category))
+//        }
+//        
+//        if let parent = existingNewsItem {
+//          parent.children = newCategories
+//        }
+//        else if path.isEmpty {
+//          self?.news = newCategories
+//        }
+        
+        continuation.resume(returning: articleText)
+      })
+    }
+    
+  }
+  
+  @MainActor func getNewsList(at path: [String] = []) async -> [NewsInfo] {
+    return await withCheckedContinuation { [weak self] continuation in
+      var requestCategories = true
+      
+      let existingNewsItem = self?.findNews(in: self?.news ?? [], at: path)
+      
+      if existingNewsItem != nil {
+        if existingNewsItem!.type != .bundle {
+          requestCategories = false
+        }
+      }
+      
+      if requestCategories {
+        self?.client.sendGetNewsCategories(path: path, sent: { success in
+          if !success {
+            continuation.resume(returning: [])
+            return
+          }
+          
+          print("GET NEWS CATS FROM \(path)")
+        }, reply: { [weak self] categories in
+//          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
+          
+          var newCategories: [NewsInfo] = []
+          for category in categories {
+            newCategories.append(NewsInfo(hotlineNewsCategory: category))
+          }
+          
+          if let parent = existingNewsItem {
+            parent.children = newCategories
+          }
+          else if path.isEmpty {
+            self?.news = newCategories
+          }
+          
+          continuation.resume(returning: newCategories)
+        })
+      }
+      else {
+        self?.client.sendGetNewsArticles(path: path, sent: { success in
+          if !success {
+            continuation.resume(returning: [])
+            return
+          }
+          
+          print("GET NEWS ARTICLES FROM \(path)")
+        }, reply: { [weak self] articles in
+//          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
+          print("GENERATING NEWS")
+          
+          var newArticles: [NewsInfo] = []
+          for article in articles {
+            newArticles.append(NewsInfo(hotlineNewsArticle: article))
+          }
+          
+          if let parent = existingNewsItem {
+            print("UNDER PARENT:", parent.name)
+            parent.children = newArticles
+            
+            print(parent.children)
+          }
+          else if path.isEmpty {
+            self?.news = newArticles
+          }
+          
+          continuation.resume(returning: newArticles)
+        })
+      }
+    }
+  }
+  
+  @MainActor func getNewsCategories(at path: [String] = []) async -> [NewsInfo] {
+    return await withCheckedContinuation { [weak self] continuation in
+      self?.client.sendGetNewsCategories(path: path, sent: { success in
         if !success {
           continuation.resume(returning: [])
           return
         }
+        
+        print("GET NEWS CATS FROM \(path)")
       }, reply: { [weak self] categories in
-        var newCategories: [NewsCategory] = []
+        let parentNews = self?.findNews(in: self?.news ?? [], at: path)
+        
+        var newCategories: [NewsInfo] = []
         for category in categories {
-          newCategories.append(NewsCategory(hotlineNewsCategory: category))
+          newCategories.append(NewsInfo(hotlineNewsCategory: category))
         }
-        self?.news = newCategories
+        
+        if let parent = parentNews {
+          parent.children = newCategories
+        }
+        else if path.isEmpty {
+          self?.news = newCategories
+        }
         
         continuation.resume(returning: newCategories)
       })
+    }
+  }
+  
+  @MainActor func getArticles(at path: [String]) async -> [NewsInfo] {
+    return await withCheckedContinuation { [weak self] continuation in
+      self?.client.sendGetNewsArticles(path: path, sent: { success in
+        if !success {
+          continuation.resume(returning: [])
+          return
+        }
+      }, reply: { [weak self] articles in
+        print("ARTICLES?", articles)
+        
+        continuation.resume(returning: [])
+      })
+//      self?.client.sendGetNewsCategories(sent: { success in
+//        if !success {
+//          continuation.resume(returning: [])
+//          return
+//        }
+//      }, reply: { [weak self] categories in
+//        var newCategories: [NewsCategory] = []
+//        for category in categories {
+//          newCategories.append(NewsCategory(hotlineNewsCategory: category))
+//        }
+//        self?.news = newCategories
+//        
+//        continuation.resume(returning: newCategories)
+//      })
     }
   }
 
@@ -143,6 +298,7 @@ import SwiftUI
     if status == .disconnected {
       self.serverVersion = nil
       self.serverName = nil
+      self.access = nil
       self.users = []
       self.chat = []
       self.messageBoard = []
@@ -210,6 +366,8 @@ import SwiftUI
   func hotlineReceivedUserAccess(options: HotlineUserAccessOptions) {
     print("Hotline: got access options")
     print(options, options.contains(.canSendChat), options.contains(.canBroadcast))
+    
+    self.access = options
   }
   
   func hotlineReceivedError(message: String) {
@@ -217,6 +375,10 @@ import SwiftUI
   }
   
   // MARK: - Utilities
+  
+  func updateServerTitle() {
+    self.serverTitle = self.serverName ?? self.server?.name ?? server?.address ?? "Server"
+  }
   
   private func addOrUpdateHotlineUser(_ user: HotlineUser) {
     if let i = self.users.firstIndex(where: { $0.id == user.id }) {
@@ -233,8 +395,6 @@ import SwiftUI
   private func findFile(in filesToSearch: [FileInfo], at path: [String]) -> FileInfo? {
     guard !path.isEmpty, !filesToSearch.isEmpty else { return nil }
     
-    //    var stack: [([HotlineFile], [String])] = [(self.files!, path)]
-    
     let currentName = path[0]
     
     for file in filesToSearch {
@@ -245,6 +405,26 @@ import SwiftUI
         else if let subfiles = file.children {
           let remainingPath = Array(path[1...])
           return self.findFile(in: subfiles, at: remainingPath)
+        }
+      }
+    }
+    
+    return nil
+  }
+  
+  private func findNews(in newsToSearch: [NewsInfo], at path: [String]) -> NewsInfo? {
+    guard !path.isEmpty, !newsToSearch.isEmpty else { return nil }
+    
+    let currentName = path[0]
+    
+    for news in newsToSearch {
+      if news.name == currentName {
+        if path.count == 1 {
+          return news
+        }
+        else if !news.children.isEmpty {
+          let remainingPath = Array(path[1...])
+          return self.findNews(in: news.children, at: remainingPath)
         }
       }
     }

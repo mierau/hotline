@@ -86,7 +86,7 @@ struct TrackerConnectView: View {
           )
           .cornerRadius(10.0)
           Button {
-            let s = Server(name: address, description: nil, address: address, port: Server.defaultPort, users: 0)
+            let s = Server(name: nil, description: nil, address: address, port: Server.defaultPort, users: 0)
             server = s
             connecting = true
             Task {
@@ -200,7 +200,7 @@ struct TrackerView: View {
 //    "tracked.nailbat.com"
 //    "hotline.duckdns.org"
 //    "tracked.agent79.org"
-    self.servers = await model.getServers(address: "hltracker.com")
+    self.servers = await model.getServerList(tracker: "hltracker.com")
   }
   
   var body: some View {
@@ -267,7 +267,7 @@ struct TrackerView: View {
               HStack(alignment: .firstTextBaseline) {
                 Image(systemName: "globe.americas.fill").font(.title3)
                 VStack(alignment: .leading) {
-                  Text(server.name).font(.title3).fontWeight(.medium)
+                  Text(server.name ?? server.address).font(.title3).fontWeight(.medium)
                   if shouldDisplayDescription(server: server) {
                     Spacer()
                     Text(server.description!).opacity(0.5).font(.system(size: 16))
@@ -382,7 +382,7 @@ struct TrackerView: View {
         
         Task {
           model.disconnect()
-          let _ = await model.login(server: Server(name: address, description: nil, address: address, port: port, users: 0), login: login, password: password, username: "bolt", iconID: 128)
+          let _ = await model.login(server: Server(name: nil, description: nil, address: address, port: port, users: 0), login: login, password: password, username: "bolt", iconID: 128)
         }
         
         // TODO: Find a better way to show login status when trying to connect outside of the Tracker server list. Perhaps this opens the connect sheet prefilled.

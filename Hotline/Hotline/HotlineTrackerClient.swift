@@ -239,7 +239,6 @@ class HotlineTrackerClient {
         let ip_4 = self.bytes.readUInt8(at: cursor + 3),
         let port = self.bytes.readUInt16(at: cursor + 4),
         let userCount = self.bytes.readUInt16(at: cursor + 6) {
-//        let nameLengthByte = self.bytes.readUInt8(at: cursor + 10) {
         
         let (serverName, nameByteCount) = self.bytes.readPString(at: cursor + 10)
         let (serverDescription, descByteCount) = self.bytes.readPString(at: cursor + 10 + nameByteCount)
@@ -248,7 +247,6 @@ class HotlineTrackerClient {
            let desc = serverDescription {
           let validName = try? trackerSeparatorRegex.prefixMatch(in: name)
           if validName == nil {
-//          if name.range(of: regex, options: .regularExpression) == nil {
             let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
             foundServers.append(server)
           }

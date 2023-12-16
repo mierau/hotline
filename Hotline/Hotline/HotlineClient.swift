@@ -550,12 +550,17 @@ class HotlineClient {
     }
   }
   
-  func sendGetNewsCategories(sent: ((Bool) -> Void)? = nil, reply: (([HotlineNewsCategory]) -> Void)?) {
-    let t = HotlineTransaction(type: .getNewsCategoryNameList)
+  func sendGetNewsCategories(path: [String] = [], sent: ((Bool) -> Void)? = nil, reply: (([HotlineNewsCategory]) -> Void)?) {
+    var t = HotlineTransaction(type: .getNewsCategoryNameList)
+    if !path.isEmpty {
+      t.setFieldPath(type: .newsPath, val: path)
+    }
+    
     self.sendTransaction(t, sent: sent, reply: { rt, err in
       var categories: [HotlineNewsCategory] = []
       for categoryListItem in rt.getFieldList(type: .newsCategoryListData15) {
-        let c = categoryListItem.getNewsCategory()
+        var c = categoryListItem.getNewsCategory()
+        c.path = path + [c.name]
         categories.append(c)
         print("CATEGORY: \(c)")
       }
@@ -565,12 +570,57 @@ class HotlineClient {
     })
   }
   
-  func sendGetNewsArticles(path: [String]? = nil, sent: ((Bool) -> Void)? = nil, reply: ((String) -> Void)? = nil) {
+  func sendGetNewsArticle(id articleID: UInt32, path: [String], flavor: String, sent: ((Bool) -> Void)? = nil, reply: ((String?) -> Void)? = nil) {
+    var t = HotlineTransaction(type: .getNewsArticleData)
+    t.setFieldPath(type: .newsPath, val: path)
+    t.setFieldUInt32(type: .newsArticleID, val: articleID)
+    t.setFieldString(type: .newsArticleDataFlavor, val: flavor, encoding: .ascii)
+    
+    self.sendTransaction(t, sent: sent, reply: { r, err in
+      if err != nil {
+        reply?(nil)
+        return
+      }
+      
+      let articleData = r.getField(type: .newsArticleData)
+      let articleString = articleData?.getString()
+      
+      print("GOT ARTICLE", articleString)
+      
+      reply?(articleString)
+    })
+  }
+  
+  func sendGetNewsArticles(path: [String] = [], sent: ((Bool) -> Void)? = nil, reply: (([HotlineNewsArticle]) -> Void)? = nil) {
     var t = HotlineTransaction(type: .getNewsArticleNameList)
-    if path != nil {
-      t.setFieldPath(type: .newsPath, val: path!)
+    if !path.isEmpty {
+      t.setFieldPath(type: .newsPath, val: path)
     }
-    self.sendTransaction(t, sent: sent)
+    self.sendTransaction(t, sent: sent, reply: { r, err in
+      if err != nil {
+        reply?([])
+        return
+      }
+      
+      var articles: [HotlineNewsArticle] = []
+      var articleData = r.getField(type: .newsArticleListData)
+      
+      print("ARTICLE DATA?", articleData)
+      
+      if let newsList = articleData?.getNewsList() {
+        for art in newsList.articles {
+          var blah = art
+          blah.path = path
+          articles.append(blah)
+          
+          print(blah.title)
+        }
+      }
+      
+      DispatchQueue.main.async {
+        reply?(articles)
+      }
+    })
   }
   
   func sendGetFileList(path: [String] = [], sent: ((Bool) -> Void)? = nil, reply: (([HotlineFile]) -> Void)? = nil) {

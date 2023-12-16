@@ -14,7 +14,7 @@
 		DA32CD492B2931640053B98B /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD482B2931640053B98B /* User.swift */; };
 		DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD4A2B29318E0053B98B /* FileInfo.swift */; };
 		DA32CD4D2B2931B50053B98B /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD4C2B2931B50053B98B /* ChatMessage.swift */; };
-		DA32CD4F2B2931CC0053B98B /* NewsCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD4E2B2931CC0053B98B /* NewsCategory.swift */; };
+		DA32CD4F2B2931CC0053B98B /* NewsInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD4E2B2931CC0053B98B /* NewsInfo.swift */; };
 		DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43205D2B1D615600FC8843 /* ServerView.swift */; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; };
@@ -42,7 +42,7 @@
 		DA32CD482B2931640053B98B /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		DA32CD4A2B29318E0053B98B /* FileInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileInfo.swift; sourceTree = "<group>"; };
 		DA32CD4C2B2931B50053B98B /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
-		DA32CD4E2B2931CC0053B98B /* NewsCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsCategory.swift; sourceTree = "<group>"; };
+		DA32CD4E2B2931CC0053B98B /* NewsInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsInfo.swift; sourceTree = "<group>"; };
 		DA43205D2B1D615600FC8843 /* ServerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerView.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -156,7 +156,7 @@
 				DA32CD482B2931640053B98B /* User.swift */,
 				DA32CD4A2B29318E0053B98B /* FileInfo.swift */,
 				DA32CD4C2B2931B50053B98B /* ChatMessage.swift */,
-				DA32CD4E2B2931CC0053B98B /* NewsCategory.swift */,
+				DA32CD4E2B2931CC0053B98B /* NewsInfo.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -243,7 +243,7 @@
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
 				DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */,
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,
-				DA32CD4F2B2931CC0053B98B /* NewsCategory.swift in Sources */,
+				DA32CD4F2B2931CC0053B98B /* NewsInfo.swift in Sources */,
 				DA9CAFBB2B126D5700CDA197 /* HotlineApp.swift in Sources */,
 				DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */,
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,
@@ -386,7 +386,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
-				DEVELOPMENT_TEAM = USME6DU5G6;
+				DEVELOPMENT_TEAM = 5AEEV7QB2U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Hotline/Info.plist;
@@ -416,7 +416,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
-				DEVELOPMENT_TEAM = USME6DU5G6;
+				DEVELOPMENT_TEAM = 5AEEV7QB2U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Hotline/Info.plist;

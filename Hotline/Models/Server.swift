@@ -4,13 +4,13 @@ import SwiftUI
   static let defaultPort: Int = 5500
   
   let id: UUID = UUID()
-  let name: String
+  let name: String?
   let description: String?
   let users: Int
   let address: String
   let port: Int
   
-  init(name: String, description: String?, address: String, port: Int, users: Int = 0) {
+  init(name: String?, description: String?, address: String, port: Int, users: Int = 0) {
     self.name = name
     self.description = description
     self.address = address

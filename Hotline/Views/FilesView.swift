@@ -116,7 +116,7 @@ struct FilesView: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .principal) {
-          Text(model.server?.name ?? "")
+          Text(model.serverTitle)
             .font(.headline)
         }
         ToolbarItem(placement: .navigationBarLeading) {

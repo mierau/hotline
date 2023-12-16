@@ -63,32 +63,102 @@ struct HotlineServer: Identifiable, Hashable {
   }
 }
 
-enum HotlineChatType: Int {
-  case message
-  case agreement
-  case status
+struct HotlineNewsArticle: Identifiable {
+  let id: UInt32
+  let parentID: UInt32
+  let flags: UInt32
+  let title: String
+  let username: String
+  var flavors: [(String, UInt16)] = []
+  var path: [String] = []
+  
+  static func == (lhs: HotlineNewsArticle, rhs: HotlineNewsArticle) -> Bool {
+    return lhs.id == rhs.id
+  }
 }
 
-struct HotlineChat: Identifiable {
-  let id = UUID()
-  let text: String
-  let username: String
-  let type: HotlineChatType
+struct HotlineNewsList: Identifiable {
+  let id: UInt32
+  let name: String
+  let description: String
+  let count: UInt32
+  var path: [String] = []
   
-  static let parser = /^\s*([^\:]+)\:\s*(.*)/
+  var articles: [HotlineNewsArticle] = []
   
-  init(text: String, type: HotlineChatType = .message) {
-    self.type = type
+  init(from data: Data) {
+    self.id = data.readUInt32(at: 0)!
     
-    if
-      type == .message,
-      let match = text.firstMatch(of: HotlineChat.parser) {
-      self.username = String(match.1)
-      self.text = String(match.2)
-    }
-    else {
-      self.username = ""
-      self.text = text
+    self.count = data.readUInt32(at: 4)!
+    
+    let (n, nl) = data.readPString(at: 8)
+    self.name = n!
+    
+    let (d, dl) = data.readPString(at: 8 + nl)
+    self.description = d!
+    
+    var baseIndex = Int(8 + nl + dl)
+    
+    for i in 0..<Int(self.count) {
+      let articleID = data.readUInt32(at: baseIndex)!
+      baseIndex += 4
+      
+      let timestampData = data.readData(at: baseIndex, length: 8)!
+      baseIndex += 8
+      
+      let parentID = data.readUInt32(at: baseIndex)!
+      baseIndex += 4
+      
+      let flags = data.readUInt32(at: baseIndex)!
+      baseIndex += 4
+      
+      let flavorCount = data.readUInt16(at: baseIndex)!
+      baseIndex += 2
+      
+      let titleLength = data.readUInt8(at: baseIndex)!
+      baseIndex += 1
+      
+      let title = data.readString(at: baseIndex, length: Int(titleLength))!
+      baseIndex += Int(titleLength)
+      
+      let posterLength = data.readUInt8(at: baseIndex)!
+      baseIndex += 1
+      
+      let poster = data.readString(at: baseIndex, length: Int(posterLength))!
+      baseIndex += Int(posterLength)
+      
+      var newArticle = HotlineNewsArticle(id: articleID, parentID: parentID, flags: flags, title: title, username: poster) 
+      
+      print("ARTICLE ID: \(articleID)")
+      print("PARENT ID: \(parentID)")
+      print("FLAGS: \(flags)")
+      print("FLAVOR COUNT: \(flavorCount)")
+      print("TITLE: \(title)")
+      print("POSTER: \(poster)")
+      
+      for _ in 0..<Int(flavorCount) {
+        let flavorLength = data.readUInt8(at: baseIndex)!
+        baseIndex += 1
+        
+        let flavorText = data.readString(at: baseIndex, length: Int(flavorLength))!
+        baseIndex += Int(flavorLength)
+        
+        let articleSize = data.readUInt16(at: baseIndex)!
+        baseIndex += 2
+        
+        newArticle.flavors.append((flavorText, articleSize))
+        
+        
+//        let articleString = data.readString(at: baseIndex + i + 4 + 8 + 4 + 4 + 2 + 1 + Int(titleLength) + 1 + Int(posterLength) + 1 + Int(flavorLength) + 2, length: Int(articleSize))!
+        
+        print("FLAVOR: \(flavorText)")
+        print("ARTICLE SIZE: \(articleSize)")
+//        print("ARTICLE: \(articleString)")
+      }
+      
+      self.articles.append(newArticle)
+      
+//      break
     }
   }
 }
@@ -98,6 +168,7 @@ struct HotlineNewsCategory: Identifiable, Hashable {
   let type: UInt16
   let count: UInt16
   let name: String
+  var path: [String] = []
   
   static func == (lhs: HotlineNewsCategory, rhs: HotlineNewsCategory) -> Bool {
     return lhs.id == rhs.id
@@ -383,6 +454,10 @@ struct HotlineTransactionField {
   
   func getNewsCategory() -> HotlineNewsCategory {
     return HotlineNewsCategory(from: self.data)
+  }
+  
+  func getNewsList() -> HotlineNewsList {
+    return HotlineNewsList(from: self.data)
   }
 }
 
