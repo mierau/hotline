@@ -32,7 +32,7 @@ struct ServerView: View {
       
       MessageBoardView()
         .tabItem {
-          Image(systemName: "book.closed")
+          Image(systemName: "note.text")
         }
         .tag(Tab.messageBoard)
       

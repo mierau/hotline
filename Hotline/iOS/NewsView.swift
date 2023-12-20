@@ -8,10 +8,18 @@ struct NewsItemView: View {
   let news: NewsInfo
   
   static var dateFormatter: DateFormatter = {
-    var dateFormatter = DateFormatter()
-    dateFormatter.dateFormat = "MM/dd/yy, h:mm a"
-    dateFormatter.timeZone = .gmt
-    return dateFormatter
+    var formatter = DateFormatter()
+    formatter.dateFormat = "MM/dd/yy, h:mm a"
+    formatter.timeZone = .gmt
+    return formatter
+  }()
+  
+  static var relativeDateFormatter: RelativeDateTimeFormatter = {
+    var formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .abbreviated
+    formatter.dateTimeStyle = .numeric
+    formatter.formattingContext = .listItem
+    return formatter
   }()
   
   @State var expanded = false
@@ -48,7 +56,7 @@ struct NewsItemView: View {
       }
     }
     else {
-      HStack {
+      HStack(alignment: .firstTextBaseline) {
         Text(Image(systemName: "quote.opening"))
         Text(news.name)
           .lineLimit(1)
@@ -56,7 +64,17 @@ struct NewsItemView: View {
         Spacer()
         if news.count > 0 {
           Text("\(news.count)")
+            .lineLimit(1)
             .foregroundStyle(.secondary)
+        }
+        else if let postAuthor = news.articleUsername {
+//          Text("\(NewsItemView.relativeDateFormatter.localizedString(for: postDate, relativeTo: Date.now))")
+          Text(postAuthor)
+            .foregroundStyle(.secondary)
+            .truncationMode(.tail)
+//            .frame(maxWidth: 50)
+            .font(.caption)
+            .lineLimit(1)
         }
       }
       .onTapGesture {
@@ -84,7 +102,7 @@ struct NewsView: View {
   
   @State private var fetched = false
   @State private var selectedCategory: NewsInfo? = nil
-  @State private var topListHeight: CGFloat = 200
+  @State private var topListHeight: CGFloat = 280
   @State private var dividerHeight: CGFloat = 30
   
   @State private var articleSelection = NewsItemSelection()
@@ -171,31 +189,30 @@ struct NewsView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .textSelection(.enabled)
-                    .padding()
+//                    .padding()
                   Spacer()
                   Text("\(NewsItemView.dateFormatter.string(from: postDate))")
                     .foregroundStyle(.secondary)
                     .font(.subheadline)
                     .lineLimit(1)
                     .textSelection(.enabled)
-                    .padding()
                 }
-                .background(RoundedRectangle(cornerSize: CGSize(width: 8, height: 8)).fill(Color(uiColor: .tertiarySystemFill)))
-//                  Capsule(style: .circular).fill(.secondary))
-//                .padding(.bottom, 16)
                 .padding(.bottom, 8)
+                
+                Divider()
+                  .padding(.bottom, 16)
               }
               
-              Text(news.name).font(.title3)
+              Text(news.name).font(.title3).fontWeight(.medium)
                 .textSelection(.enabled)
-              
-              Divider()
+                .padding(.bottom, 8)
             }
             
             Text(self.articleText)
               .multilineTextAlignment(.leading)
-              .padding(.top, 16)
+              .textSelection(.enabled)
           }
+          .frame(maxWidth: .infinity)
           .padding()
         }
         .scrollBounceBehavior(.basedOnSize)
