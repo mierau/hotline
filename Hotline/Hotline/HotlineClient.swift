@@ -108,7 +108,7 @@ class HotlineClient {
             return
           }
           
-          print("LOGGED INTO SERVER: \(serverName) \(serverVersion)")
+          print("LOGGED INTO SERVER: \(String(describing: serverName?.debugDescription)) \(serverVersion.debugDescription)")
           
           self?.sendSetClientUserInfo(username: username, iconID: iconID)
           self?.sendGetUserList()
@@ -236,6 +236,7 @@ class HotlineClient {
   private func sendTransaction(_ t: HotlineTransaction, sent sentCallback: ((Bool) -> Void)? = nil, reply replyCallback: ((HotlineTransaction, HotlineTransactionError?) -> Void)? = nil) {
     guard let c = connection else {
       print("NO CONNECTION?????")
+      sentCallback?(false)
       return
     }
     
@@ -585,9 +586,9 @@ class HotlineClient {
       let articleData = r.getField(type: .newsArticleData)
       let articleString = articleData?.getString()
       
-      print("GOT ARTICLE", articleString)
-      
-      reply?(articleString)
+      DispatchQueue.main.async {
+        reply?(articleString)
+      }
     })
   }
   
@@ -603,11 +604,12 @@ class HotlineClient {
       }
       
       var articles: [HotlineNewsArticle] = []
-      var articleData = r.getField(type: .newsArticleListData)
+//      let articleData = r.getField(type: .newsArticleListData)
       
-      print("ARTICLE DATA?", articleData)
+//      print("ARTICLE DATA?", articleData)
       
-      if let newsList = articleData?.getNewsList() {
+      if let articleData = r.getField(type: .newsArticleListData) {
+        let newsList = articleData.getNewsList()
         for art in newsList.articles {
           var blah = art
           blah.path = path
@@ -687,7 +689,9 @@ class HotlineClient {
       return
     }
     
-    replyCallback?(transaction, nil)
+    DispatchQueue.main.async {
+      replyCallback?(transaction, nil)
+    }
   }
     
   private func processTransaction(_ transaction: HotlineTransaction) {

@@ -1,13 +1,18 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-
-
 struct NewsItemView: View {
   @Environment(Hotline.self) private var model: Hotline
   @Environment(NewsItemSelection.self) private var selectedArticle: NewsItemSelection
   
   let news: NewsInfo
+  
+  static var dateFormatter: DateFormatter = {
+    var dateFormatter = DateFormatter()
+    dateFormatter.dateFormat = "MM/dd/yy, h:mm a"
+    dateFormatter.timeZone = .gmt
+    return dateFormatter
+  }()
   
   @State var expanded = false
   
@@ -16,19 +21,13 @@ struct NewsItemView: View {
       DisclosureGroup(isExpanded: $expanded) {
         ForEach(news.children) { childNews in
           NewsItemView(news: childNews)
-            .environment(self.selectedArticle)
             .frame(height: 38)
+            .environment(self.selectedArticle)
         }
       } label: {
         HStack {
-          if news.type == .bundle {
-            Text(Image(systemName: "tray.2.fill"))
-          }
-          else {
-            Text(Image(systemName: "tray.full.fill"))
-          }
           Text(news.name)
-            .fontWeight(.medium)
+            .fontWeight(.bold)
             .lineLimit(1)
             .truncationMode(.tail)
           Spacer()
@@ -50,9 +49,8 @@ struct NewsItemView: View {
     }
     else {
       HStack {
-        Text(Image(systemName: "doc.text"))
+        Text(Image(systemName: "quote.opening"))
         Text(news.name)
-          .fontWeight(.medium)
           .lineLimit(1)
           .truncationMode(.tail)
         Spacer()
@@ -91,6 +89,7 @@ struct NewsView: View {
   
   @State private var articleSelection = NewsItemSelection()
   @State private var articleText = ""
+  
 //  @State private var selectedArticleID: UInt?
   
   var articleList: some View {
@@ -103,8 +102,8 @@ struct NewsView: View {
       else {
         List(model.news) { category in
           NewsItemView(news: category)
-            .environment(self.articleSelection)
             .frame(height: 38)
+            .environment(self.articleSelection)
         }
         .scrollBounceBehavior(.basedOnSize)
       }
@@ -161,10 +160,41 @@ struct NewsView: View {
         
         // Reader View
         ScrollView(.vertical) {
-          HStack(alignment: .top, spacing: 0) {
+          VStack(alignment: .leading) {
+            
+            if let news = self.articleSelection.selectedArticle {
+              if let poster = news.articleUsername, let postDate = news.articleDate {
+                HStack(alignment: .firstTextBaseline) {
+                  Text(poster)
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .textSelection(.enabled)
+                    .padding()
+                  Spacer()
+                  Text("\(NewsItemView.dateFormatter.string(from: postDate))")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+                    .padding()
+                }
+                .background(RoundedRectangle(cornerSize: CGSize(width: 8, height: 8)).fill(Color(uiColor: .tertiarySystemFill)))
+//                  Capsule(style: .circular).fill(.secondary))
+//                .padding(.bottom, 16)
+                .padding(.bottom, 8)
+              }
+              
+              Text(news.name).font(.title3)
+                .textSelection(.enabled)
+              
+              Divider()
+            }
+            
             Text(self.articleText)
               .multilineTextAlignment(.leading)
-            Spacer()
+              .padding(.top, 16)
           }
           .padding()
         }

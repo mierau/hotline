@@ -1,7 +1,7 @@
 import SwiftUI
 
-@Observable class FileInfo: Identifiable {
-  let id: UUID = UUID()
+@Observable class FileInfo: Identifiable, Hashable {
+  let id: UUID
   
   let path: [String]
   let name: String
@@ -11,9 +11,11 @@ import SwiftUI
   let fileSize: UInt
   
   let isFolder: Bool
+  var expanded: Bool = false
   var children: [FileInfo]? = nil
   
   init(hotlineFile: HotlineFile) {
+    self.id = UUID()
     self.path = hotlineFile.path
     self.name = hotlineFile.name
     self.type = hotlineFile.type
@@ -27,5 +29,9 @@ import SwiftUI
   
   static func == (lhs: FileInfo, rhs: FileInfo) -> Bool {
     return lhs.id == rhs.id
+  }
+  
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(self.id)
   }
 }

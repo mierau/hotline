@@ -17,9 +17,12 @@ enum NewsInfoType {
   let articleID: UInt?
   
   let path: [String]
+  var expanded: Bool = false
   var children: [NewsInfo] = []
   
   var articleFlavors: [String]?
+  var articleUsername: String?
+  var articleDate: Date?
   
   init(hotlineNewsCategory: HotlineNewsCategory) {
     self.categoryID = hotlineNewsCategory.id
@@ -46,6 +49,8 @@ enum NewsInfoType {
     self.type = .article
     
     self.articleFlavors = hotlineNewsArticle.flavors.map { $0.0 }
+    self.articleUsername = hotlineNewsArticle.username
+    self.articleDate = hotlineNewsArticle.date
   }
   
   func hash(into hasher: inout Hasher) {

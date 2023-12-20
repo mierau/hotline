@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct UserStatus: OptionSet {
-  let rawValue: Int
+  let rawValue: UInt
 
   static let idle = UserStatus(rawValue: 1 << 0)
   static let admin = UserStatus(rawValue: 1 << 1)

@@ -29,8 +29,11 @@ import SwiftUI
   var users: [User] = []
   var chat: [ChatMessage] = []
   var messageBoard: [String] = []
+  var messageBoardLoaded: Bool = false
   var files: [FileInfo] = []
+  var filesLoaded: Bool = false
   var news: [NewsInfo] = []
+  var newsLoaded: Bool = false
   
   // MARK: -
   
@@ -92,6 +95,8 @@ import SwiftUI
       }
     }
     
+    self.messageBoardLoaded = true
+    
     return self.messageBoard
   }
   
@@ -110,14 +115,18 @@ import SwiftUI
           newFiles.append(FileInfo(hotlineFile: f))
         }
         
-        if let parent = parentFile {
-          parent.children = newFiles
+        DispatchQueue.main.async {
+          if let parent = parentFile {
+            parent.children = newFiles
+          }
+          else if path.isEmpty {
+            self?.filesLoaded = true
+            
+            self?.files = newFiles
+          }
+          
+          continuation.resume(returning: newFiles)
         }
-        else if path.isEmpty {
-          self?.files = newFiles
-        }
-        
-        continuation.resume(returning: newFiles)
       })
     }
   }
@@ -180,20 +189,25 @@ import SwiftUI
             newCategories.append(NewsInfo(hotlineNewsCategory: category))
           }
           
-          if let parent = existingNewsItem {
-            parent.children = newCategories
+          DispatchQueue.main.async {
+            if let parent = existingNewsItem {
+              parent.children = newCategories
+            }
+            else if path.isEmpty {
+              self?.newsLoaded = true
+              self?.news = newCategories
+            }
+            
+            continuation.resume(returning: newCategories)
           }
-          else if path.isEmpty {
-            self?.news = newCategories
-          }
-          
-          continuation.resume(returning: newCategories)
         })
       }
       else {
         self?.client.sendGetNewsArticles(path: path, sent: { success in
           if !success {
-            continuation.resume(returning: [])
+            DispatchQueue.main.async {
+              continuation.resume(returning: [])
+            }
             return
           }
           
@@ -207,17 +221,19 @@ import SwiftUI
             newArticles.append(NewsInfo(hotlineNewsArticle: article))
           }
           
-          if let parent = existingNewsItem {
-            print("UNDER PARENT:", parent.name)
-            parent.children = newArticles
+          DispatchQueue.main.async {
+            if let parent = existingNewsItem {
+              print("UNDER PARENT:", parent.name)
+              parent.children = newArticles
+              
+              print(parent.children)
+            }
+            else if path.isEmpty {
+              self?.news = newArticles
+            }
             
-            print(parent.children)
+            continuation.resume(returning: newArticles)
           }
-          else if path.isEmpty {
-            self?.news = newArticles
-          }
-          
-          continuation.resume(returning: newArticles)
         })
       }
     }
@@ -227,7 +243,9 @@ import SwiftUI
     return await withCheckedContinuation { [weak self] continuation in
       self?.client.sendGetNewsCategories(path: path, sent: { success in
         if !success {
-          continuation.resume(returning: [])
+          DispatchQueue.main.async {
+            continuation.resume(returning: [])
+          }
           return
         }
         
@@ -240,14 +258,16 @@ import SwiftUI
           newCategories.append(NewsInfo(hotlineNewsCategory: category))
         }
         
-        if let parent = parentNews {
-          parent.children = newCategories
+        DispatchQueue.main.async {
+          if let parent = parentNews {
+            parent.children = newCategories
+          }
+          else if path.isEmpty {
+            self?.news = newCategories
+          }
+          
+          continuation.resume(returning: newCategories)
         }
-        else if path.isEmpty {
-          self?.news = newCategories
-        }
-        
-        continuation.resume(returning: newCategories)
       })
     }
   }
@@ -256,28 +276,16 @@ import SwiftUI
     return await withCheckedContinuation { [weak self] continuation in
       self?.client.sendGetNewsArticles(path: path, sent: { success in
         if !success {
-          continuation.resume(returning: [])
+          DispatchQueue.main.async {
+            continuation.resume(returning: [])
+          }
           return
         }
-      }, reply: { [weak self] articles in
-        print("ARTICLES?", articles)
-        
-        continuation.resume(returning: [])
+      }, reply: { articles in
+        DispatchQueue.main.async {
+          continuation.resume(returning: [])
+        }
       })
-//      self?.client.sendGetNewsCategories(sent: { success in
-//        if !success {
-//          continuation.resume(returning: [])
-//          return
-//        }
-//      }, reply: { [weak self] categories in
-//        var newCategories: [NewsCategory] = []
-//        for category in categories {
-//          newCategories.append(NewsCategory(hotlineNewsCategory: category))
-//        }
-//        self?.news = newCategories
-//        
-//        continuation.resume(returning: newCategories)
-//      })
     }
   }
 
@@ -302,8 +310,11 @@ import SwiftUI
       self.users = []
       self.chat = []
       self.messageBoard = []
+      self.messageBoardLoaded = false
       self.files = []
+      self.filesLoaded = false
       self.news = []
+      self.newsLoaded = false
     }
     
     self.status = status

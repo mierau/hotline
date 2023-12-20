@@ -69,6 +69,7 @@ struct HotlineNewsArticle: Identifiable {
   let flags: UInt32
   let title: String
   let username: String
+  let date: Date?
   var flavors: [(String, UInt16)] = []
   var path: [String] = []
   
@@ -99,7 +100,7 @@ struct HotlineNewsList: Identifiable {
     
     var baseIndex = Int(8 + nl + dl)
     
-    for i in 0..<Int(self.count) {
+    for _ in 0..<Int(self.count) {
       let articleID = data.readUInt32(at: baseIndex)!
       baseIndex += 4
       
@@ -127,7 +128,12 @@ struct HotlineNewsList: Identifiable {
       let poster = data.readString(at: baseIndex, length: Int(posterLength))!
       baseIndex += Int(posterLength)
       
-      var newArticle = HotlineNewsArticle(id: articleID, parentID: parentID, flags: flags, title: title, username: poster) 
+      // Parse date info
+      let yearData = timestampData.readUInt16(at: 0)!
+      let millisecondData = timestampData.readUInt16(at: 2)!
+      let secondsData = timestampData.readUInt32(at: 4)!
+      let articleData = convertHotlineDate(year: yearData, seconds: secondsData, milliseconds: millisecondData)
+      var newArticle = HotlineNewsArticle(id: articleID, parentID: parentID, flags: flags, title: title, username: poster, date: articleData)
       
       print("ARTICLE ID: \(articleID)")
       print("PARENT ID: \(parentID)")
@@ -473,7 +479,7 @@ struct HotlineTransaction {
   var flags: UInt8 = 0
   var isReply: UInt8 = 0
   var type: HotlineTransactionType
-  var id: UInt32 = HotlineTransaction.nextID()
+  var id: UInt32
   var errorCode: UInt32 = 0
   var totalSize: UInt32 = UInt32(HotlineTransaction.headerSize)
   var dataSize: UInt32 = 0
@@ -482,6 +488,7 @@ struct HotlineTransaction {
   
   init(type: HotlineTransactionType) {
     self.type = type
+    self.id = HotlineTransaction.nextID()
   }
   
   init(type: HotlineTransactionType, flags: UInt8, isReply: UInt8, id: UInt32, errorCode: UInt32, totalSize: UInt32, dataSize: UInt32) {
@@ -617,11 +624,6 @@ enum HotlineTransactionFieldType: UInt16 {
   case newsArticleRecursiveDelete = 337 // Integer
 }
 
-func transactionTypeHasReply(_ type: HotlineTransactionType) -> Bool {
-  
-  return false
-}
-
 enum HotlineTransactionType: UInt16 {
   case reply = 0
   case error = 100
@@ -685,3 +687,17 @@ enum HotlineTransactionType: UInt16 {
   case connectionKeepAlive = 500
 }
 
+// MARK: - Utilities
+
+private func convertHotlineDate(year: UInt16, seconds: UInt32, milliseconds: UInt16) -> Date? {
+  let days = round((Double(seconds) + (Double(milliseconds) * 1000.0)) / 86400.0)
+  
+  var components = DateComponents()
+  components.timeZone = .gmt
+  components.year = Int(year)
+  components.month = 1
+  components.day = 1 + Int(days)
+  components.second = Int(seconds) - Int(days * 86400.0)
+    
+  return Calendar.current.date(from: components)
+}

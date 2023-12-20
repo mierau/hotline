@@ -39,7 +39,7 @@ struct FileView: View {
     else {
       HStack {
         HStack(alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/) {
-          Image(uiImage: fileIcon(name: file.name))
+          fileIcon(name: file.name)
             .renderingMode(.template)
         }
         .frame(minWidth: 25)
@@ -59,30 +59,35 @@ struct FileView: View {
     return FileView.byteFormatter.string(fromByteCount: Int64(fileSize))
   }
   
-  private func fileIcon(name: String) -> UIImage {
+  private func fileIcon(name: String) -> Image {
     //    func utTypeForFilename(_ filename: String) -> UTType? {
     let fileExtension = (name as NSString).pathExtension
     if let fileType = UTType(filenameExtension: fileExtension) {
       print("\(name) \(fileExtension) = \(fileType)")
       
       if fileType.isSubtype(of: .movie) {
-        return UIImage(systemName: "play.rectangle")!
+        return Image(systemName: "play.rectangle")
+//        return UIImage(systemName: "play.rectangle")!
       }
       else if fileType.isSubtype(of: .image) {
-        return UIImage(systemName: "photo")!
+        return Image(systemName: "photo")
+//        return UIImage(systemName: "photo")!
       }
       else if fileType.isSubtype(of: .archive) {
-        return UIImage(systemName: "doc.zipper")!
+        return Image(systemName: "doc.zipper")
+//        return UIImage(systemName: "doc.zipper")!
       }
       else if fileType.isSubtype(of: .text) {
-        return UIImage(systemName: "doc.text")!
+        return Image(systemName: "doc.text")
+//        return UIImage(systemName: "doc.text")!
       }
       else {
-        return UIImage(systemName: "doc")!
+        return Image(systemName: "doc")
+//        return UIImage(systemName: "doc")!
       }
     }
     
-    return UIImage(systemName: "doc")!
+    return Image(systemName: "doc")
   }
 }
 

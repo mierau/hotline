@@ -1,9 +1,9 @@
 import SwiftUI
 
-@Observable final class Server: Identifiable, Equatable {
+@Observable final class Server: Identifiable, Equatable, Hashable, Codable {
   static let defaultPort: Int = 5500
   
-  let id: UUID = UUID()
+  let id: UUID
   let name: String?
   let description: String?
   let users: Int
@@ -11,6 +11,7 @@ import SwiftUI
   let port: Int
   
   init(name: String?, description: String?, address: String, port: Int, users: Int = 0) {
+    self.id = UUID()
     self.name = name
     self.description = description
     self.address = address
@@ -18,11 +19,11 @@ import SwiftUI
     self.users = users
   }
   
-  static func == (lhs: Server, rhs: Server) -> Bool {
-    return lhs.id == rhs.id
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(self.id)
   }
   
-  static func == (lhs: HotlineServer, rhs: Server) -> Bool {
-    return lhs.name == rhs.name && lhs.address == rhs.address && lhs.port == rhs.port
+  static func == (lhs: Server, rhs: Server) -> Bool {
+    return lhs.id == rhs.id
   }
 }
