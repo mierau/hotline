@@ -2,6 +2,7 @@ import SwiftUI
 
 enum MenuItemType {
   case banner
+  case progress
   case chat
   case news
   case messageBoard
@@ -70,6 +71,7 @@ private func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
 struct ServerView: View {
   @Environment(Hotline.self) private var model: Hotline
   @State private var selectedCategoryId: MenuItem.ID?
+  @Environment(\.dismiss) var dismiss
   
   let server: Server
   
@@ -89,8 +91,6 @@ struct ServerView: View {
   
   var body: some View {
     NavigationSplitView {
-//      Divider()
-      
       List(selection: $selection) {
         
         HStack {
@@ -111,9 +111,13 @@ struct ServerView: View {
         .padding(.bottom, 16)
         
         if model.status != .loggedIn {
-          ProgressView(value: connectionStatusToProgress(status: model.status))
-            .padding()
-            .selectionDisabled()
+          HStack {
+            ProgressView(value: connectionStatusToProgress(status: model.status))
+              .padding()
+          }
+          .tag(MenuItem(name: "progress", image: "", type: .progress))
+          .frame(maxWidth: .infinity, minHeight: 60)
+          .selectionDisabled()
         }
         
         if model.status == .loggedIn {
@@ -137,8 +141,14 @@ struct ServerView: View {
                   Text("🙂")
                     .font(.headline)
                   if user.status.contains(.admin) {
-                    Text(user.name)
-                      .foregroundStyle(.red, .red.opacity(0.3))
+                    if user.status.contains(.idle) {
+                      Text(user.name)
+                        .foregroundStyle(.red.opacity(0.5))
+                    }
+                    else {
+                      Text(user.name)
+                        .foregroundStyle(.red)
+                    }
                   }
                   else if user.status.contains(.idle) {
                     Text(user.name)
@@ -155,10 +165,14 @@ struct ServerView: View {
           }
         }
       }
+      .frame(minWidth: 200, idealWidth: 200)
     } detail: {
       if let selection = self.selection {
         switch selection.type {
         case .banner:
+          EmptyView()
+        case .progress
+          :
           EmptyView()
         case .chat:
           ChatView()
@@ -184,9 +198,13 @@ struct ServerView: View {
       }
     }
     .onDisappear {
-      print("DISCONNECTING FROM SERVER")
       Task {
         model.disconnect()
+      }
+    }
+    .onChange(of: model.status) {
+      if model.status == .disconnected {
+        dismiss()
       }
     }
   }

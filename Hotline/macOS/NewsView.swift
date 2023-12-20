@@ -31,20 +31,26 @@ struct NewsItemView: View {
         Button {
           news.expanded.toggle()
         } label: {
-          Image(systemName: news.expanded ? "chevron.down" : "chevron.right")
-            .renderingMode(.template)
-            .frame(width: 10, height: 10)
-            .aspectRatio(contentMode: .fit)
+          Text(Image(systemName: news.expanded ? "chevron.down" : "chevron.right"))
+            .bold()
+            .font(.system(size: 10))
             .opacity(0.5)
+            .frame(alignment: .center)
         }
         .buttonStyle(.plain)
-        .frame(width: 12)
+        .frame(width: 10)
+        .padding(.leading, 4)
       }
-      if news.type == .article {
-        HStack(alignment: .center) {
-          Image(systemName: "quote.opening")
-        }
-        .frame(width: 15)
+      else if news.type == .article {
+//        HStack(alignment: .center) {
+//          Text(Image(systemName: "quote.opening"))
+//            .font(.system(size: 12))
+//            .opacity(0.5)
+//            .frame(alignment: .centerFirstTextBaseline)
+          
+//          Image(systemName: "quote.opening")
+//        }
+//        .frame(width: 14)
       }
       Text(news.name)
         .fontWeight((news.type == .bundle || news.type == .category) ? .bold : .regular)

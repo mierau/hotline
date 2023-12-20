@@ -14,7 +14,7 @@ import SwiftUI
     self.id = UUID()
     self.name = name
     self.description = description
-    self.address = address
+    self.address = address.lowercased()
     self.port = port
     self.users = users
   }
@@ -24,6 +24,6 @@ import SwiftUI
   }
   
   static func == (lhs: Server, rhs: Server) -> Bool {
-    return lhs.id == rhs.id
+    return (lhs.address == rhs.address) && (lhs.port == rhs.port)
   }
 }

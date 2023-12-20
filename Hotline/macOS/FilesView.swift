@@ -18,19 +18,20 @@ struct FileView: View {
             file.expanded.toggle()
           }
         } label: {
-          Image(systemName: file.expanded ? "chevron.down" : "chevron.right")
-            .renderingMode(.template)
-            .frame(width: 10, height: 10)
-            .aspectRatio(contentMode: .fit)
+          Text(Image(systemName: file.expanded ? "chevron.down" : "chevron.right"))
+            .bold()
+            .font(.system(size: 10))
             .opacity(0.5)
         }
         .buttonStyle(.plain)
-        .frame(width: 12)
+        .frame(width: 10)
+        .padding(.leading, 4)
       }
       else {
         HStack {
           
-        }.frame(width: 12)
+        }.frame(width: 10)
+          .padding(.leading, 4)
       }
       HStack(alignment: .center) {
         if file.isFolder {
@@ -39,17 +40,18 @@ struct FileView: View {
         else {
           fileIcon(name: file.name)
             .resizable()
-            .scaledToFill()
+            .aspectRatio(contentMode: .fit)
+//            .scaledToFill()
             .frame(width: 16, height: 16)
         }
       }
       .frame(width: 15)
       Text(file.name).lineLimit(1).truncationMode(.tail)
+      if file.isFolder && loading {
+        ProgressView().controlSize(.small).padding([.leading, .trailing], 1)
+      }
       Spacer()
       if file.isFolder {
-        if loading {
-          ProgressView().controlSize(.small).padding(.trailing, 4)
-        }
         Text("^[\(file.fileSize) file](inflect: true)")
           .foregroundStyle(.secondary)
           .lineLimit(1)
@@ -152,6 +154,31 @@ struct FilesView: View {
               .controlSize(.large)
           }
           .frame(maxWidth: .infinity)
+        }
+      }
+      .toolbar {
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+          } label: {
+            Label("Download File", systemImage: "square.and.arrow.down")
+          }
+          .help("Download")
+        }
+        
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+          } label: {
+            Label("Preview File", systemImage: "eye")
+          }
+          .help("Preview")
+        }
+        
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+          } label: {
+            Label("Delete File", systemImage: "trash")
+          }
+          .help("Delete")
         }
       }
     }

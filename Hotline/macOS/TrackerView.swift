@@ -46,16 +46,6 @@ class TrackerItem: Identifiable, Hashable {
     hasher.combine(self.id)
   }
   
-  func setServers(_ servers: [Server]) {
-    var newServers: [TrackerItem] = []
-    
-    for server in servers {
-      newServers.append(TrackerItem(server: server))
-    }
-    
-    self.servers = newServers
-  }
-  
   @MainActor
   func loadServers() async {
     guard
@@ -112,19 +102,29 @@ struct TrackerItemView: View {
         Button {
           item.expanded.toggle()
         } label: {
-          Image(systemName: item.expanded ? "chevron.down" : "chevron.right")
-            .renderingMode(.template)
-            .frame(width: 10, height: 10)
-            .aspectRatio(contentMode: .fit)
+          Text(Image(systemName: item.expanded ? "chevron.down" : "chevron.right"))
+            .bold()
+            .font(.system(size: 10))
             .opacity(0.5)
+            .frame(alignment: .center)
         }
         .buttonStyle(.plain)
-        .frame(width: 12)
+        .frame(width: 10)
+        .padding(.leading, 4)
       }
       else {
         HStack {
-          
-        }.frame(width: 12)
+          if let bookmark = item.bookmark, bookmark.type == .server {
+            Image(systemName: "bookmark.fill")
+              .resizable()
+              .renderingMode(.template)
+              .aspectRatio(contentMode: .fit)
+              .frame(width: 11, height: 11, alignment: .center)
+              .opacity(0.5)
+          }
+        }
+        .frame(width: 10)
+        .padding(.leading, 4)
       }
       
       HStack(alignment: .center) {
@@ -215,8 +215,10 @@ struct TrackerView: View {
 //  @AppStorage("servers", store: .standard)
   var bookmarks: [TrackerBookmark] = [
     TrackerBookmark(type: .server, name: "Bob Kiwi's House", address: "73.132.92.104"),
+    TrackerBookmark(type: .server, name: "System 7 Today", address: "158.174.146.146"),
     TrackerBookmark(type: .tracker, name: "Featured Servers", address: "hltracker.com"),
-    TrackerBookmark(type: .tracker, name: "Ubersoft", address: "hotline.ubersoft.org")
+    TrackerBookmark(type: .tracker, name: "Ubersoft", address: "hotline.ubersoft.org"),
+    TrackerBookmark(type: .tracker, name: "Preterhuman", address: "tracker.preterhuman.net"),
     
     //    "hltracker.com"
     //    "tracker.preterhuman.net"
@@ -227,23 +229,38 @@ struct TrackerView: View {
 
   ]
   
-  private var client = HotlineTrackerClient()
-  
   @MainActor
   func refresh() async {
-//    self.servers = []
-//    
-//    let fetchedServers: [HotlineServer] = await self.client.fetchServers(address: "hltracker.com", port: Tracker.defaultPort)
-//    
-//    var newServers: [Server] = []
-//    
-//    for s in fetchedServers {
-//      if let serverName = s.name {
-//        newServers.append(Server(name: serverName, description: s.description, address: s.address, port: Int(s.port), users: Int(s.users)))
-//      }
-//    }
-//    
-//    self.servers = newServers
+    
+    // When a tracker is selected, refresh only that tracker.
+    if
+      let selectedItem = selection,
+      let bookmark = selectedItem.bookmark,
+      bookmark.type == .tracker {
+      if !selectedItem.expanded {
+        selectedItem.expanded.toggle()
+      }
+      else {
+        await selectedItem.loadServers()
+      }
+      return
+    }
+    
+    // Otherwise refresh/expand all trackers.
+    for server in self.servers {
+      if
+        let bookmark = server.bookmark,
+        bookmark.type == .tracker {
+        if !server.expanded {
+          server.expanded.toggle()
+        }
+        else {
+          Task {
+            await server.loadServers()
+          }
+        }
+      }
+    }
   }
   
   @State private var servers: [TrackerItem] = []
@@ -258,43 +275,6 @@ struct TrackerView: View {
   @State private var connectVisible = false
   @State private var connectDismissed = true
   @State private var serverVisible = false
-  
-  func shouldDisplayDescription(server: Server) -> Bool {
-    guard let desc = server.description else {
-      return false
-    }
-    
-    return desc.count > 0 && desc != server.name
-  }
-  
-  func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
-    switch status {
-    case .disconnected:
-      return 0.0
-    case .connecting:
-      return 0.1
-    case .connected:
-      return 0.25
-    case .loggingIn:
-      return 0.5
-    case .loggedIn:
-      return 1.0
-    }
-  }
-  
-  func inverseLerp(lower: Double, upper: Double, v: Double) -> Double {
-    return (v - lower) / (upper - lower)
-  }
-  
-//  func updateServers() async {
-    //    "hltracker.com"
-    //    "tracker.preterhuman.net"
-    //    "hotline.ubersoft.org"
-    //    "tracked.nailbat.com"
-    //    "hotline.duckdns.org"
-    //    "tracked.agent79.org"
-//    self.servers = await model.getServerList(tracker: "hltracker.com")
-//  }
   
   var body: some View {
     List(self.servers, id: \.self, selection: $selection) { item in
@@ -367,30 +347,26 @@ struct TrackerView: View {
         } label: {
           Label("Refresh", systemImage: "arrow.clockwise")
         }
+        .help("Refresh")
       }
       
       ToolbarItem(placement: .primaryAction) {
         Button {
-          //            Task {
-          //              initialLoadComplete = false
-          //              await updateServers()
-          //              initialLoadComplete = true
-          //            }
         } label: {
-          Label("Add Tracker", systemImage: "point.3.connected.trianglepath.dotted")
+          Label("Add Tracker", systemImage: "point.3.filled.connected.trianglepath.dotted")
         }
+        .help("Add Tracker")
       }
       
       ToolbarItem(placement: .primaryAction) {
         Button {
-          //            Task {
-          //              initialLoadComplete = false
-          //              await updateServers()
-          //              initialLoadComplete = true
-          //            }
+          Task {
+            await refresh()
+          }
         } label: {
           Label("Add Server", systemImage: "plus")
         }
+        .help("Add Server")
       }
     }
     .onAppear {
