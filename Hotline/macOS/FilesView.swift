@@ -1,16 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-@Observable
-class FileSelection: Equatable {
-  var selectedFile: FileInfo? = nil
-  
-  static func == (lhs: FileSelection, rhs: FileSelection) -> Bool {
-    return lhs.selectedFile == rhs.selectedFile
-  }
-}
-
-
 struct FileView: View {
   @Environment(Hotline.self) private var model: Hotline
   

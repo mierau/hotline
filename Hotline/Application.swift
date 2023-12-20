@@ -16,7 +16,11 @@ struct Application: App {
     #elseif os(macOS)
     WindowGroup {
       TrackerView()
+        .frame(minWidth: 250, minHeight: 250)
     }
+    .defaultSize(width: 700, height: 600)
+    .defaultPosition(.center)
+    
     WindowGroup(for: Server.self) { $server in
       if let s = server {
         ServerView(server: s)
@@ -25,6 +29,7 @@ struct Application: App {
       }
     }
     .defaultSize(width: 700, height: 800)
+    .defaultPosition(.center)
 
     #endif
   }

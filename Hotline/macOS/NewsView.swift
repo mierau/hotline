@@ -181,9 +181,9 @@ struct NewsView: View {
             if let news = selection {
               if news.type == .article {
                 
-                Text(news.name).font(.title)
-                  .textSelection(.enabled)
-                  .padding(.bottom, 8)
+//                Text(news.name).font(.title)
+//                  .textSelection(.enabled)
+//                  .padding(.bottom, 8)
                 
                 if let poster = news.articleUsername, let postDate = news.articleDate {
                   HStack(alignment: .firstTextBaseline) {
@@ -208,7 +208,7 @@ struct NewsView: View {
                 if let newsText = self.articleText {
                   Text(newsText)
                     .textSelection(.enabled)
-                    .lineSpacing(9)
+                    .lineSpacing(4)
                     .padding(.top, 16)
                 }
               }
