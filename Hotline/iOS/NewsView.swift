@@ -247,6 +247,5 @@ struct NewsView: View {
 
 #Preview {
   MessageBoardView()
-    .environment(HotlineState())
     .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
 }

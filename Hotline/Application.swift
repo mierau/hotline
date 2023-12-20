@@ -3,8 +3,6 @@ import SwiftData
 
 @main
 struct Application: App {
-  @State private var appState = HotlineState()
-  
   #if os(iOS)
   private var model = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
   #endif
@@ -13,7 +11,6 @@ struct Application: App {
     #if os(iOS)
     WindowGroup {
       TrackerView()
-        .environment(appState)
         .environment(model)
     }
     #elseif os(macOS)

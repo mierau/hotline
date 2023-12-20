@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		DA0D698B2B1E5A5200C71DF5 /* HotlineState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698A2B1E5A5200C71DF5 /* HotlineState.swift */; };
 		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; platformFilter = ios; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; platformFilter = ios; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; platformFilter = ios; };
@@ -43,7 +42,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		DA0D698A2B1E5A5200C71DF5 /* HotlineState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineState.swift; sourceTree = "<group>"; };
 		DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersView.swift; sourceTree = "<group>"; };
 		DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardView.swift; sourceTree = "<group>"; };
 		DA0D69902B1E894800C71DF5 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
@@ -124,15 +122,14 @@
 		DA9CAFB92B126D5700CDA197 /* Hotline */ = {
 			isa = PBXGroup;
 			children = (
-				DA32CD472B28EE640053B98B /* Info.plist */,
 				DA9CAFBA2B126D5700CDA197 /* Application.swift */,
-				DA0D698A2B1E5A5200C71DF5 /* HotlineState.swift */,
 				DA4F2BF92B1A516F00D8ADDC /* iOS */,
 				DAE734F72B2E4126000C56F6 /* macOS */,
 				DADDB2892B22B2C60024040D /* Models */,
 				DABFCC262B1530AE009F40D2 /* Hotline */,
 				DABFCC272B1530BE009F40D2 /* Utility */,
 				DA9CAFC02B126D5800CDA197 /* Assets.xcassets */,
+				DA32CD472B28EE640053B98B /* Info.plist */,
 				DA9CAFC22B126D5800CDA197 /* Preview Content */,
 			);
 			path = Hotline;
@@ -271,7 +268,6 @@
 				DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */,
 				DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */,
 				DAE735092B329810000C56F6 /* VisualEffectView.swift in Sources */,
-				DA0D698B2B1E5A5200C71DF5 /* HotlineState.swift in Sources */,
 				DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */,
 				DAE734FF2B2E6750000C56F6 /* ChatView.swift in Sources */,
 				DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */,
