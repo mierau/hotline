@@ -11,9 +11,18 @@ struct NewsItemView: View {
   
   static var dateFormatter: DateFormatter = {
     var dateFormatter = DateFormatter()
-    dateFormatter.dateFormat = "MM/dd/yy, h:mm a"
+    dateFormatter.dateStyle = .long
+    dateFormatter.timeStyle = .short
     dateFormatter.timeZone = .gmt
     return dateFormatter
+  }()
+  
+  static var relativeDateFormatter: RelativeDateTimeFormatter = {
+    var formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .full
+    formatter.dateTimeStyle = .named
+    formatter.formattingContext = .listItem
+    return formatter
   }()
   
   var body: some View {
@@ -44,6 +53,7 @@ struct NewsItemView: View {
       if news.type == .article && news.articleUsername != nil {
         Text(news.articleUsername!).foregroundStyle(.secondary).lineLimit(1)
       }
+      Spacer()
       if news.type == .bundle || news.type == .category {
         Text("^[\(news.count) \(news.type == .bundle ? "Category" : "Post")](inflect: true)")
         
@@ -54,10 +64,9 @@ struct NewsItemView: View {
           .padding([.top, .bottom], 2)
           .background(Capsule(style: .circular).stroke(.secondary.opacity(0.3), lineWidth: 1))
       }
-      Spacer()
       if news.type == .article && news.articleUsername != nil {
         if let d = news.articleDate {
-          Text(NewsItemView.dateFormatter.string(from: d)).foregroundStyle(.secondary)
+          Text(NewsItemView.relativeDateFormatter.localizedString(for: d, relativeTo: Date.now)).lineLimit(1).foregroundStyle(.secondary)
         }
       }
     }
