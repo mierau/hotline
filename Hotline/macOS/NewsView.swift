@@ -3,8 +3,6 @@ import UniformTypeIdentifiers
 
 struct NewsItemView: View {
   @Environment(Hotline.self) private var model: Hotline
-
-  @State var expanded = false
   
   var news: NewsInfo
   let depth: Int
@@ -79,15 +77,13 @@ struct NewsItemView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .padding(.leading, CGFloat(depth * (12 + 10)))
     .onChange(of: news.expanded) {
-//      if news.isFolder {
-      print("EXPANDED \(news.name)? \(expanded)")
       if news.type == .bundle || news.type == .category {
-        Task {
-          await model.getNewsList(at: news.path)
-//            await model.getFileList(path: file.path)
+        if news.expanded {
+          Task {
+            await model.getNewsList(at: news.path)
+          }
         }
       }
-//      }
     }
     
     if news.expanded {

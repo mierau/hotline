@@ -165,9 +165,10 @@ struct TrackerItemView: View {
         Text("\(server.users) \(Image(systemName: "person.fill"))")
           .lineLimit(1)
           .foregroundStyle(.secondary)
-          .padding([.leading, .trailing], 8)
+          .padding([.leading, .trailing], 4)
           .padding([.top, .bottom], 2)
-          .background(Capsule(style: .circular).stroke(.secondary.opacity(0.3), lineWidth: 1))
+//          .background(Capsule(style: .circular).stroke(.secondary, lineWidth: 1))
+//          .opacity(0.5)
       }
       else if
         let bookmark = item.bookmark,
@@ -360,9 +361,6 @@ struct TrackerView: View {
       
       ToolbarItem(placement: .primaryAction) {
         Button {
-          Task {
-            await refresh()
-          }
         } label: {
           Label("Add Server", systemImage: "plus")
         }
