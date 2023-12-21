@@ -87,25 +87,11 @@ struct NewsItemView: View {
     }
     
     if news.expanded {
-      ForEach(news.children, id: \.self) { childNews in
+      ForEach(news.children.reversed(), id: \.self) { childNews in
         NewsItemView(news: childNews, depth: self.depth + 1).tag(childNews.id)
       }
     }
   }
-  
-//  static let byteFormatter = ByteCountFormatter()
-//  
-//  private func formattedFileSize(_ fileSize: UInt) -> String {
-//    //    let bcf = ByteCountFormatter()
-//    FileView.byteFormatter.allowedUnits = [.useAll]
-//    FileView.byteFormatter.countStyle = .file
-//    return FileView.byteFormatter.string(fromByteCount: Int64(fileSize))
-//  }
-//  
-//  private func fileIcon(name: String) -> Image {
-//    let fileExtension = (name as NSString).pathExtension
-//    return Image(nsImage: NSWorkspace.shared.icon(for: UTType(filenameExtension: fileExtension) ?? UTType.content))
-//  }
 }
 
 struct NewsView: View {

@@ -35,10 +35,11 @@ struct ChatView: View {
                         VStack(alignment: .leading) {
                           Text(msg.text)
                             .textSelection(.enabled)
-                            .padding()
+                            .lineSpacing(4)
+                            .padding(32)
                             .opacity(0.75)
                         }
-                        .frame(minWidth: 40, maxWidth: 400, alignment: .center)
+                        .frame(minWidth: 150, maxWidth: 450, alignment: .center)
                         .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow).cornerRadius(24))
                         .padding()
                       }
@@ -63,10 +64,14 @@ struct ChatView: View {
                     HStack(alignment: .firstTextBaseline) {
                       if let username = msg.username {
                         Text("**\(username):** \(msg.text)")
+                          .lineSpacing(4)
+                          .multilineTextAlignment(.leading)
                           .textSelection(.enabled)
                       }
                       else {
                         Text(msg.text)
+                          .lineSpacing(4)
+                          .multilineTextAlignment(.leading)
                           .textSelection(.enabled)
                       }
                       Spacer()
@@ -82,9 +87,9 @@ struct ChatView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .defaultScrollAnchor(.bottom)
             .onChange(of: model.chat.count) {
-              withAnimation {
-                reader.scrollTo(bottomID, anchor: .bottom)
-              }
+//              withAnimation {
+              reader.scrollTo(bottomID, anchor: .bottom)
+//              }
               print("SCROLLED TO BOTTOM")
             }
             .onAppear {
