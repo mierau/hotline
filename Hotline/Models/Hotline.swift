@@ -25,6 +25,7 @@ import SwiftUI
   var username: String = "bolt"
   var iconID: UInt = 128
   var access: HotlineUserAccessOptions?
+  var agreed: Bool = false
   
   var users: [User] = []
   var chat: [ChatMessage] = []
@@ -34,6 +35,16 @@ import SwiftUI
   var filesLoaded: Bool = false
   var news: [NewsInfo] = []
   var newsLoaded: Bool = false
+  
+  var downloads: [HotlineFileClient] = []
+  
+  @ObservationIgnored var bannerClient: HotlineFileClient?
+  #if os(macOS)
+  var bannerImage: NSImage? = nil
+  #elseif os(iOS)
+  var bannerImage: UIImage? = nil
+  #endif
+  
   
   // MARK: -
   
@@ -63,25 +74,44 @@ import SwiftUI
     self.trackerClient.disconnect()
   }
   
-  @MainActor func login(server: Server, login: String, password: String, username: String, iconID: UInt) async -> Bool {
+  @MainActor func login(server: Server, login: String, password: String, username: String, iconID: UInt, callback: ((Bool) -> Void)? = nil) {
     self.server = server
     self.serverName = server.name
     self.username = username
     self.iconID = iconID
     
-    return await withCheckedContinuation { [weak self] continuation in
-      let _ = self?.client.login(server.address, port: UInt16(server.port), login: login, password: password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
-        self?.serverVersion = serverVersion
-        if serverName != nil {
-          self?.serverName = serverName
-        }
-        continuation.resume(returning: (err != nil))
+    self.client.login(server.address, port: UInt16(server.port), login: login, password: password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
+      self?.serverVersion = serverVersion
+      if serverName != nil {
+        self?.serverName = serverName
       }
+      
+      callback?(err == nil)
+    }
+  }
+  
+  @MainActor func sendUserInfo(username: String, iconID: UInt, options: HotlineUserOptions = [], autoresponse: String? = nil, callback: ((Bool) -> Void)? = nil) {
+    self.username = username
+    self.iconID = iconID
+    
+    self.client.sendSetClientUserInfo(username: username, iconID: UInt16(iconID), options: options, autoresponse: autoresponse) { success in
+      callback?(success)
+    }
+  }
+  
+  @MainActor func getUserList(callback: ((Bool) -> Void)? = nil) {
+    self.client.sendGetUserList() { success in
+      callback?(success)
     }
   }
   
   @MainActor func disconnect() {
     self.client.disconnect()
+    self.bannerClient?.disconnect()
+  }
+  
+  @MainActor func sendAgree() {
+    self.client.sendAgree(username: self.username, iconID: UInt16(self.iconID), options: .none)
   }
   
   @MainActor func sendChat(_ text: String) {
@@ -288,15 +318,59 @@ import SwiftUI
       })
     }
   }
-
   
-//  @MainActor func updateUsers() async -> [User] {
-//    let userList = await self.client.sendGetUserList()
-//    var users = []
-////    self.client.sendChat(message: text)
-//    
-//    return users
-//  }
+  func downloadFile(path: [String], callback: ((Bool) -> Void)?) {
+    
+  }
+  
+  @MainActor func downloadBanner(force: Bool = false, callback: ((Bool) -> Void)?) {
+    if let b = self.bannerClient {
+      b.disconnect()
+      self.bannerClient = nil
+    }
+    
+    if force {
+      self.bannerImage = nil
+    }
+    
+    if self.bannerImage != nil {
+      callback?(true)
+      return
+    }
+    
+    self.client.sendDownloadBanner(sent: { success in
+      if !success {
+        print("FAIL BANNER")
+        callback?(false)
+        return
+      }
+    }, reply: { [weak self] downloadReferenceNumber, downloadTransferSize in
+      if
+        let self = self,
+        let address = self.server?.address,
+        let port = self.server?.port,
+        let referenceNumber = downloadReferenceNumber,
+        let transferSize = downloadTransferSize {
+        self.bannerClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .banner)
+        self.bannerClient?.downloadToMemory({ [weak self] data in
+          if let b = self?.bannerClient {
+            b.disconnect()
+            self?.bannerClient = nil
+          }
+          
+          if data != nil {
+            #if os(macOS)
+            self?.bannerImage = NSImage(data: data!)
+            #elseif os(iOS)
+            self?.bannerImage = UIImage(data: data!)
+            #endif
+          }
+          
+          callback?(data != nil)
+        })
+      }
+    })
+  }
   
   // MARK: - Hotline Delegate
   
@@ -307,6 +381,7 @@ import SwiftUI
       self.serverVersion = nil
       self.serverName = nil
       self.access = nil
+      
       self.users = []
       self.chat = []
       self.messageBoard = []
@@ -315,6 +390,13 @@ import SwiftUI
       self.filesLoaded = false
       self.news = []
       self.newsLoaded = false
+      
+      self.bannerImage = nil
+      
+      if let b = self.bannerClient {
+        b.disconnect()
+        self.bannerClient = nil
+      }
     }
     
     self.status = status

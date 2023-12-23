@@ -1,5 +1,15 @@
 import Foundation
 
+struct HotlineUserOptions: OptionSet {
+  let rawValue: UInt16
+  
+  static let none: HotlineUserOptions = []
+  
+  static let refusePrivateMessages = HotlineUserOptions(rawValue: 1 << 0)
+  static let refusePrivateChat = HotlineUserOptions(rawValue: 1 << 1)
+  static let automaticResponse = HotlineUserOptions(rawValue: 1 << 2)
+}
+
 struct HotlineUserAccessOptions: OptionSet {
   let rawValue: UInt64
   
@@ -141,6 +151,10 @@ struct HotlineNewsList: Identifiable {
       print("FLAVOR COUNT: \(flavorCount)")
       print("TITLE: \(title)")
       print("POSTER: \(poster)")
+      
+      if flavorCount > 1 {
+        print("MORE THAN ONE FLAVOR!!")
+      }
       
       for _ in 0..<Int(flavorCount) {
         let flavorLength = data.readUInt8(at: baseIndex)!
@@ -422,7 +436,7 @@ struct HotlineTransactionField {
   }
   
   func getInteger() -> Int? {
-    switch(self.data.count) {
+    switch(self.dataSize) {
     case 1:
       if let val = self.getUInt8() {
         return Int(val)

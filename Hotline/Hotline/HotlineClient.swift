@@ -16,21 +16,11 @@ enum HotlineTransactionError: Error {
   case invalidMessage(UInt32, String?)
 }
 
-//struct HotlineTransactionError {
-//  let code: UInt32
-//  let message: String
-//}
-
 struct HotlineTransactionInfo {
   let type: HotlineTransactionType
   let callback: ((HotlineTransaction) -> Void)?
   let reply: ((HotlineTransaction) -> Void)?
 }
-
-//struct HotlineAccount {
-//  let username: String
-//  let iconID: UInt16
-//}
 
 protocol HotlineClientDelegate: AnyObject {
   func hotlineGetUserInfo() -> (String, UInt16)
@@ -56,8 +46,6 @@ extension HotlineClientDelegate {
 }
 
 class HotlineClient {
-  //  static let shared = HotlineClient()
-  
   static let handshakePacket = Data([
     0x54, 0x52, 0x54, 0x50, // 'TRTP' protocol ID
     0x48, 0x4F, 0x54, 0x4C, // Sub-protocol ID
@@ -70,6 +58,9 @@ class HotlineClient {
   var connectionStatus: HotlineClientStatus = .disconnected
   var connectCallback: ((Bool) -> Void)?
   
+  private var serverAddress: String? = nil
+  private var serverPort: UInt16? = nil
+  
   private var connection: NWConnection?
   private var transactionLog: [UInt32:(HotlineTransactionType, ((HotlineTransaction, HotlineTransactionError?) -> Void)?)] = [:]
   
@@ -80,7 +71,7 @@ class HotlineClient {
   
   // MARK: -
   
-  func login(_ address: String, port: UInt16, login: String, password: String, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) -> Bool {
+  func login(_ address: String, port: UInt16, login: String, password: String, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) {
     print("AWAITING CONNECT")
     self.connect(address: address, port: port) { [weak self] success in
       guard success else {
@@ -100,33 +91,31 @@ class HotlineClient {
         }
         
         print("AWAITING LOGIN")
-        self?.sendLogin(login: login, password: password, username: username, iconID: iconID) { [weak self] err, serverName, serverVersion in
-          guard err == nil else {
-            DispatchQueue.main.async {
-              callback?(err, nil, nil)
-            }
-            return
-          }
+        self?.sendLogin(login: login, password: password, username: username, iconID: iconID) { err, serverName, serverVersion in
+//          guard err == nil else {
+//            DispatchQueue.main.async {
+//              callback?(err, nil, nil)
+//            }
+//            return
+//          }
           
           print("LOGGED INTO SERVER: \(String(describing: serverName?.debugDescription)) \(serverVersion.debugDescription)")
           
-          self?.sendSetClientUserInfo(username: username, iconID: iconID)
-          self?.sendGetUserList()
-          
           DispatchQueue.main.async {
-            callback?(nil, serverName, serverVersion)
+            callback?(err, serverName, serverVersion)
           }
           
         }
       }
     }
-    
-    return false
   }
   
   private func connect(address: String, port: UInt16, callback: ((Bool) -> Void)?) {
-    let serverAddress = NWEndpoint.Host(address)
-    let serverPort = NWEndpoint.Port(rawValue: port)!
+    self.serverAddress = address
+    self.serverPort = port
+    
+//    let serverAddress = NWEndpoint.Host(address)
+//    let serverPort = NWEndpoint.Port(rawValue: port)!
     
     let tcpOptions = NWProtocolTCP.Options()
     tcpOptions.enableKeepalive = true
@@ -136,7 +125,7 @@ class HotlineClient {
     
     self.connectCallback = callback
     
-    self.connection = NWConnection(host: serverAddress, port: serverPort, using: connectionParameters)
+    self.connection = NWConnection(host: NWEndpoint.Host(address), port: NWEndpoint.Port(rawValue: port)!, using: connectionParameters)
     self.connection?.stateUpdateHandler = { [weak self] (newState: NWConnection.State) in
       guard let self = self else {
         return
@@ -429,7 +418,7 @@ class HotlineClient {
     t.setFieldEncodedString(type: .userPassword, val: password)
     t.setFieldUInt16(type: .userIconID, val: iconID)
     t.setFieldString(type: .userName, val: username)
-    t.setFieldUInt32(type: .versionNumber, val: 123)
+    t.setFieldUInt32(type: .versionNumber, val: 150)
       
     self.sendTransaction(t) { success in
       if !success {
@@ -464,18 +453,23 @@ class HotlineClient {
     }
   }
   
-  func sendSetClientUserInfo(username: String, iconID: UInt16, sent: ((Bool) -> Void)? = nil) {
+  func sendSetClientUserInfo(username: String, iconID: UInt16, options: HotlineUserOptions = [], autoresponse: String? = nil, sent: ((Bool) -> Void)? = nil) {
     var t = HotlineTransaction(type: .setClientUserInfo)
     t.setFieldString(type: .userName, val: username)
     t.setFieldUInt16(type: .userIconID, val: iconID)
+    t.setFieldUInt16(type: .options, val: options.rawValue)
+    if let text = autoresponse {
+      t.setFieldString(type: .automaticResponse, val: text)
+    }
+    
     self.sendTransaction(t, sent: sent)
   }
   
-  func sendAgree(sent: ((Bool) -> Void)? = nil) {
-    var t = HotlineTransaction(type: .agreed)
-//    t.setFieldString(type: .userName, val: self.userName)
-//    t.setFieldUInt16(type: .userIconID, val: self.userIconID)
-    t.setFieldUInt32(type: .options, val: 0)
+  func sendAgree(username: String, iconID: UInt16, options: HotlineUserOptions, sent: ((Bool) -> Void)? = nil) {
+    let t = HotlineTransaction(type: .agreed)
+//    t.setFieldString(type: .userName, val: username)
+//    t.setFieldUInt16(type: .userIconID, val: iconID)
+//    t.setFieldUInt8(type: .options, val: options.rawValue)
     self.sendTransaction(t, sent: sent)
   }
   
@@ -651,6 +645,34 @@ class HotlineClient {
     })
   }
   
+  func sendDownloadBanner(sent: ((Bool) -> Void)? = nil, reply: ((UInt32?, Int?) -> Void)? = nil) {
+    let t = HotlineTransaction(type: .downloadBanner)
+    
+    self.sendTransaction(t, sent: sent, reply: { r, err in
+      if err != nil {
+        reply?(nil, nil)
+        return
+      }
+      
+      if let transferSizeField = r.getField(type: .transferSize),
+         let transferSize = transferSizeField.getInteger(),
+         let transferReferenceField = r.getField(type: .referenceNumber),
+         let referenceNumber = transferReferenceField.getUInt32() {
+        
+        print("TRANSFER SIZE", transferSize)
+        
+        DispatchQueue.main.async {
+          reply?(referenceNumber, transferSize)
+        }
+      }
+      else {
+        DispatchQueue.main.async {
+          reply?(nil, nil)
+        }
+      }
+    })
+  }
+  
   //  func sendGetNews(callback: (() -> Void)? = nil) {
   //    let t = HotlineTransaction(type: .getNewsFile)
   //    self.sendTransaction(t, callback: callback)
@@ -659,6 +681,11 @@ class HotlineClient {
   // MARK: - Incoming
   
   private func processReply(_ transaction: HotlineTransaction) {
+    if transaction.errorCode != 0 {
+      let errorField: HotlineTransactionField? = transaction.getField(type: .errorText)
+      print("HotlineClient 😵 \(transaction.errorCode): \(errorField?.getString() ?? "")")
+    }
+    
     guard let replyCallbackInfo = self.transactionLog[transaction.id] else {
       return
     }

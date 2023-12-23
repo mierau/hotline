@@ -9,7 +9,7 @@ struct TrackerConnectView: View {
   @State private var address = ""
   @State private var login = ""
   @State private var password = ""
-  @State private var connecting = false
+//  @State private var connecting = false
   
   func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
     switch status {
@@ -28,7 +28,7 @@ struct TrackerConnectView: View {
   
   var body: some View {
       VStack(alignment: .leading) {
-        if !connecting {
+        if self.model.status == .disconnected {
           TextField("Server Address", text: $address)
             .keyboardType(.URL)
             .disableAutocorrection(true)
@@ -88,17 +88,19 @@ struct TrackerConnectView: View {
           Button {
             let s = Server(name: nil, description: nil, address: address, port: Server.defaultPort, users: 0)
             server = s
-            connecting = true
-            Task {
-              let loggedIn = await model.login(server: s, login: login, password: password, username: "bolt", iconID: 128)
-              if !loggedIn {
-                connecting = false
+            self.model.login(server: s, login: login, password: password, username: "bolt", iconID: 128) { success in
+              if !success {
+                print("FAILED LOGIN??")
+              }
+              else {
+                self.model.sendUserInfo(username: "bolt", iconID: 128)
+                self.model.getUserList()
               }
             }
           } label: {
             Text("Connect")
           }
-          .disabled(connecting)
+          .disabled(self.model.status != .disconnected)
           .bold()
           .padding(EdgeInsets(top: 16, leading: 24, bottom: 16, trailing: 24))
           .frame(maxWidth: .infinity)
@@ -123,9 +125,9 @@ struct TrackerConnectView: View {
           if model.status == .loggedIn {
             dismiss()
           }
-          else {
-            connecting = (model.status != .disconnected)
-          }
+//          else {
+//            connecting = (model.status != .disconnected)
+//          }
         }
       }
       .toolbar {
@@ -290,8 +292,14 @@ struct TrackerView: View {
                 }
                 else {
                   Button("Connect") {
-                    Task {
-                      await model.login(server: server, login: "", password: "", username: "bolt", iconID: 128)
+                    self.model.login(server: server, login: "", password: "", username: "bolt", iconID: 128) { success in
+                      if !success {
+                        print("FAILED LOGIN??")
+                      }
+                      else {
+                        self.model.sendUserInfo(username: "bolt", iconID: 128)
+                        self.model.getUserList()
+                      }
                     }
                   }
                   .bold()
@@ -380,9 +388,17 @@ struct TrackerView: View {
         let password = url.password(percentEncoded: false) ?? ""
         let port = url.port ?? Server.defaultPort
         
-        Task {
-          model.disconnect()
-          let _ = await model.login(server: Server(name: nil, description: nil, address: address, port: port, users: 0), login: login, password: password, username: "bolt", iconID: 128)
+        self.model.disconnect()
+        
+        let tempServer = Server(name: nil, description: nil, address: address, port: port, users: 0)
+        self.model.login(server: tempServer, login: "", password: "", username: "bolt", iconID: 128) { success in
+          if !success {
+            print("FAILED LOGIN??")
+          }
+          else {
+            self.model.sendUserInfo(username: "bolt", iconID: 128)
+            self.model.getUserList()
+          }
         }
         
         // TODO: Find a better way to show login status when trying to connect outside of the Tracker server list. Perhaps this opens the connect sheet prefilled.

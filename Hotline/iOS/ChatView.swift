@@ -24,14 +24,28 @@ struct ChatView: View {
             LazyVStack(alignment: .leading) {
               ForEach(model.chat) { msg in
                 if msg.type == .agreement {
-                  VStack(alignment: .leading) {
-                    Text(msg.text)
-                      .textSelection(.enabled)
-                      .padding()
-                      .opacity(0.75)
+                  
+                  VStack(alignment: .center) {
+                    FileImageView()
+                      .environment(self.model)
+                      .frame(maxWidth: 468.0)
+                      .clipShape(RoundedRectangle(cornerRadius: 5))
+                    
+                      VStack(alignment: .leading) {
+                        HStack {
+                          Text(msg.text)
+                            .textSelection(.enabled)
+                            .font(.system(size: 12))
+                            .fontDesign(.monospaced)
+                            .lineSpacing(2)
+                            .padding()
+                          Spacer()
+                        }
+                      }
+                      .background(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.96))
+                      .frame(maxWidth: .infinity)
+                      .cornerRadius(5)
                   }
-                  .background(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.96))
-                  .cornerRadius(16)
                   .frame(maxWidth: .infinity)
                   .padding()
                 }

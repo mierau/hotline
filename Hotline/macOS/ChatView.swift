@@ -7,6 +7,7 @@ enum FocusedField: Int, Hashable {
 struct ChatView: View {
   @Environment(Hotline.self) private var model: Hotline
   @Environment(\.colorScheme) var colorScheme
+  @Environment(\.dismiss) var dismiss
   
   @State var input: String = ""
   @State private var scrollPos: Int?
@@ -26,26 +27,56 @@ struct ChatView: View {
           GeometryReader { gm in
             ScrollView(.vertical) {
               LazyVStack(alignment: .leading) {
+                  
                 ForEach(model.chat) { msg in
                   
                   // MARK: Agreement
                   if msg.type == .agreement {
-                    if !msg.text.isEmpty {
-                      HStack {
-                        VStack(alignment: .leading) {
-                          Text(msg.text)
-                            .textSelection(.enabled)
-                            .lineSpacing(4)
-                            .padding(32)
-                            .opacity(0.75)
+                    VStack(alignment: .center) {
+                      
+                      FileImageView()
+                        .environment(self.model)
+                        .frame(maxWidth: 468.0)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                      
+                      VStack(spacing: 0) {
+                        ScrollView(.vertical) {
+                          HStack {
+                            Text(msg.text)
+                              .font(.system(size: 12))
+                              .fontDesign(.monospaced)
+                              .textSelection(.enabled)
+                            Spacer()
+                          }
+                          .padding(16)
                         }
-                        .frame(minWidth: 150, maxWidth: 450, alignment: .center)
-                        .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow).cornerRadius(24))
-                        .padding()
+                        .scrollBounceBehavior(.basedOnSize)
+                        .frame(maxHeight: 325)
+                        
+//                        Divider()
+//                        
+//                        HStack {
+//                          Button("Disagree") {
+//                            dismiss()
+//                          }
+//                          .controlSize(.large)
+//                          
+//                          Spacer()
+//                          
+//                          Button("Agree") {
+//                            model.sendAgree()
+//                          }
+//                          .controlSize(.large)
+//                          .keyboardShortcut(.defaultAction)
+//                        }
+//                        .padding(16)
                       }
-                      .frame(maxWidth: .infinity)
-                      .padding()
+                      .background(Color(white: colorScheme == .light ? 0.0 : 1.0).opacity(0.05))
+                      .frame(maxWidth: 468.0)
+                      .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding()
                   }
                   // MARK: Status
                   else if msg.type == .status {
@@ -105,7 +136,7 @@ struct ChatView: View {
         
         // MARK: Input Divider
         Divider()
-          .padding(.bottom, 0)
+          .padding([.top, .bottom], 0)
         
         // MARK: Input Bar
         HStack(alignment: .lastTextBaseline, spacing: 0) {
@@ -141,52 +172,11 @@ struct ChatView: View {
         .onTapGesture {
           focusedField = .chatInput
         }
-        
-        
-//        .overlay(alignment: .bottom) {
-//          // MARK: Input Bar
-//          VStack(alignment: .leading, spacing: 0) {
-//            
-//          }
-//        }
-        //      }
-        
-        //        VStack(alignment: .center) {
-        //          Spacer()
-        
-        
-        //            .onKeyPress(keys: [.return]) { event in
-        //              print(event)
-        //              guard
-        //                event.phase == .down,
-        //                event.key == .return else {
-        //                return .ignored
-        //              }
-        //
-        //              if event.modifiers.contains(.shift) {
-        //                print("TRYING TO ADD NEW LINE")
-        //                self.input += "\n"
-        //                return .handled
-        //              }
-        //
-        //              if !self.input.isEmpty {
-        //                model.sendChat(self.input)
-        //              }
-        //              self.input = ""
-        //
-        //              return .handled
-        //            }
-        //            .onSubmit {
-        //              if !self.input.isEmpty {
-        //                model.sendChat(self.input)
-        //              }
-        //              self.input = ""
-        //            }
-        
       }
     }
+    .navigationTitle(self.model.serverTitle)
+    .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
     .background(Color(nsColor: .textBackgroundColor))
-    //    }
   }
 }
 

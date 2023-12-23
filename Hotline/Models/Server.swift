@@ -1,6 +1,6 @@
 import SwiftUI
 
-@Observable final class Server: Identifiable, Equatable, Hashable, Codable {
+struct Server: Identifiable, Equatable, Hashable, Codable {
   static let defaultPort: Int = 5500
   
   let id: UUID

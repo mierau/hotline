@@ -47,9 +47,51 @@ struct ListItemView: View {
           .scaledToFit()
           .frame(width: 18, height: 18)
         Text(title)
-//        Spacer()
       }
-      //.tag(item.tag)
+  }
+}
+
+struct AgreementView: View {
+  @Environment(\.dismiss) var dismiss
+  
+  let text: String
+  let disagree: (() -> Void)?
+  let agree: (() -> Void)?
+  
+  var body: some View {
+    VStack(spacing: 0) {
+      ScrollView(.vertical) {
+        Text(text)
+          .padding()
+          .font(.system(size: 13))
+          .fontDesign(.monospaced)
+          .textSelection(.enabled)
+          .lineSpacing(3)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .frame(maxWidth: .infinity)
+      Divider()
+      HStack(spacing: 8) {
+        Button("Disagree", action: {
+          dismiss()
+          disagree?()
+        })
+        .controlSize(.large)
+        .frame(width: 80)
+        .keyboardShortcut(.cancelAction)
+        
+        Button("Agree", action: {
+          dismiss()
+          agree?()
+        })
+        .controlSize(.large)
+        .frame(width: 80)
+        .keyboardShortcut(.defaultAction)
+      }
+      .frame(maxWidth: .infinity)
+      .padding(16)
+    }
+    .frame(width: 500, height: 500)
   }
 }
 
@@ -70,45 +112,51 @@ private func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
 
 struct ServerView: View {
   @Environment(Hotline.self) private var model: Hotline
-  @State private var selectedCategoryId: MenuItem.ID?
   @Environment(\.dismiss) var dismiss
   
-  let server: Server
-  
+  @State private var agreementShown: Bool = false
   @State private var selection: MenuItem? = ServerView.menuItems.first
+  
+  
+  let server: Server
   
   static var menuItems = [
     MenuItem(name: "Chat", image: "bubble", type: .chat),
     MenuItem(name: "News", image: "newspaper", type: .news, serverVersion: 150),
     MenuItem(name: "Board", image: "note.text", type: .messageBoard),
     MenuItem(name: "Files", image: "folder", type: .files),
-    MenuItem(name: "Tasks", image: "arrow.up.circle", type: .tasks),
+//    MenuItem(name: "Tasks", image: "arrow.up.circle", type: .tasks),
   ]
-  
-  
-  
-//  @State private var selection: String?
   
   var body: some View {
     NavigationSplitView {
       List(selection: $selection) {
-        
-        HStack {
-          Text(server.name ?? "")
-            .fontWeight(.medium)
-            .lineLimit(2)
-            .font(.title3)
-            .multilineTextAlignment(.center)
-            .padding()
-        }
-        .selectionDisabled()
-        .frame(maxWidth: .infinity, minHeight: 60)
-        .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow).cornerRadius(16))
-//        .background(.white.opacity(0.2))
-        .cornerRadius(10)
-//        .shadow(color: .black.opacity(0.1), radius: 3, y: 2)
-        .tag(MenuItem(name: "title", image: "", type: .banner))
-        .padding(.bottom, 16)
+                
+//           VStack(spacing: 0) {
+//             bannerImage
+//               .resizable()
+//               .aspectRatio(contentMode: .fit)
+//               .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
+//               .clipped()
+//           }
+//           .frame(maxWidth: .infinity)
+//         }
+//         else {
+//           HStack {
+//             Text(server.name ?? "")
+//               .fontWeight(.medium)
+//               .lineLimit(2)
+//               .font(.title3)
+//               .multilineTextAlignment(.center)
+//               .padding()
+//           }
+//           .selectionDisabled()
+//           .frame(maxWidth: .infinity, minHeight: 60)
+//           .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow).cornerRadius(16))
+//           .cornerRadius(10)
+//           .tag(MenuItem(name: "title", image: "", type: .banner))
+//           .padding(.bottom, 16)
+//         }
         
         if model.status != .loggedIn {
           HStack {
@@ -121,16 +169,18 @@ struct ServerView: View {
         }
         
         if model.status == .loggedIn {
-          ForEach(ServerView.menuItems) { menuItem in
-            if let minServerVersion = menuItem.serverVersion {
-              if let v = model.serverVersion, v >= minServerVersion {
+          Section(model.serverTitle) {
+            ForEach(ServerView.menuItems) { menuItem in
+              if let minServerVersion = menuItem.serverVersion {
+                if let v = model.serverVersion, v >= minServerVersion {
+                  ListItemView(icon: menuItem.image, title: menuItem.name)
+                    .tag(menuItem)
+                }
+              }
+              else {
                 ListItemView(icon: menuItem.image, title: menuItem.name)
                   .tag(menuItem)
               }
-            }
-            else {
-              ListItemView(icon: menuItem.image, title: menuItem.name)
-                .tag(menuItem)
             }
           }
           
@@ -171,42 +221,76 @@ struct ServerView: View {
         switch selection.type {
         case .banner:
           EmptyView()
-        case .progress
-          :
+        case .progress:
           EmptyView()
         case .chat:
           ChatView()
+            .navigationTitle(self.model.serverTitle)
+            .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
         case .news:
           NewsView()
+            .navigationTitle(self.model.serverTitle)
+            .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
         case .messageBoard:
           MessageBoardView()
+            .navigationTitle(self.model.serverTitle)
+            .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
         case .files:
           FilesView()
+            .navigationTitle(self.model.serverTitle)
+            .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
         case .tasks:
           EmptyView()
         case .user:
           if let selectionUserID = selection.userID {
             MessageView(userID: selectionUserID)
+              .navigationTitle(self.model.serverTitle)
+              .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
           }
         }
       }
     }
     .navigationTitle("")
     .onAppear {
-      Task {
-        await model.login(server: self.server, login: "", password: "", username: "bolt", iconID: 128)
+      self.model.login(server: self.server, login: "", password: "", username: "bolt", iconID: 128) { success in
+        if !success {
+          print("FAILED LOGIN??")
+        }
+        else {
+          self.model.sendUserInfo(username: "bolt", iconID: 128)
+          print("GETTING USER LIST????!")
+          self.model.getUserList()
+        }
       }
     }
     .onDisappear {
-      Task {
-        model.disconnect()
-      }
+      self.model.disconnect()
     }
     .onChange(of: model.status) {
       if model.status == .disconnected {
         dismiss()
       }
     }
+//    .onChange(of: model.agreement) {
+//      if model.agreement != nil {
+//        agreementShown = true
+//      }
+//    }
+//    .sheet(isPresented: $agreementShown, onDismiss: {
+//      if model.status == .disconnected {
+//        dismiss()
+//      }
+//    }, content: {
+//      if let text = model.agreement {
+//        AgreementView(text: text, disagree: {
+//          self.model.disconnect()
+//          print("DISAGREE")
+//        }, agree: {
+//          print("AGREE?")
+//        })
+////        .frame(minWidth: 300, maxWidth: 500, minHeight: 300)
+//      }
+//    })
   }
 }
 

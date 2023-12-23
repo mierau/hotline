@@ -220,7 +220,7 @@ struct NewsView: View {
       .background(Color(nsColor: .textBackgroundColor))
     }
     .toolbar {
-      ToolbarItem(placement:.primaryAction) {
+      ToolbarItem(placement: .primaryAction) {
         Button {
           
         } label: {
@@ -228,13 +228,39 @@ struct NewsView: View {
         }
       }
       
-      ToolbarItem(placement:.primaryAction) {
+      ToolbarItem(placement: .primaryAction) {
         Button {
           
         } label: {
           Image(systemName: "arrowshape.turn.up.left")
         }
       }
+      
+//      if let bannerImage = model.bannerImage {
+//        ToolbarItem(placement: .primaryAction) {
+////          HStack {
+//            bannerImage
+//              .resizable()
+//              .aspectRatio(contentMode: .fit)
+//              .clipped()
+//              .frame(minHeight: 60, alignment: .topLeading
+//              )
+//              .clipped()
+//          }
+//          .frame(maxWidth: .infinity)
+//          .tag(MenuItem(name: "title", image: "", type: .banner))
+//          .padding(.bottom, 16)
+          
+          //           VStack(spacing: 0) {
+          //             bannerImage
+          //               .resizable()
+          //               .aspectRatio(contentMode: .fit)
+          //               .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
+          //               .clipped()
+          //           }
+          //           .frame(maxWidth: .infinity)
+//        }
+//      }
     }
   }
 }

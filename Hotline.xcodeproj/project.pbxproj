@@ -17,6 +17,8 @@
 		DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43205D2B1D615600FC8843 /* ServerView.swift */; platformFilter = ios; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
+		DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */; };
+		DA57536A2B34A60D00FAC277 /* FileImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5753692B34A60D00FAC277 /* FileImageView.swift */; };
 		DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineClient.swift */; };
 		DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA77253E2B21176D006C5ABB /* NewsView.swift */; platformFilter = ios; };
 		DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7725402B21435B006C5ABB /* ObservableScrollView.swift */; };
@@ -53,6 +55,8 @@
 		DA43205D2B1D615600FC8843 /* ServerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerView.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineFileClient.swift; sourceTree = "<group>"; };
+		DA5753692B34A60D00FAC277 /* FileImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileImageView.swift; sourceTree = "<group>"; };
 		DA6300962B24036B0034CBFD /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
 		DA77253E2B21176D006C5ABB /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
 		DA7725402B21435B006C5ABB /* ObservableScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservableScrollView.swift; sourceTree = "<group>"; };
@@ -148,6 +152,7 @@
 			children = (
 				DA6300962B24036B0034CBFD /* HotlineClient.swift */,
 				DA9CAFCA2B126E3300CDA197 /* HotlineTrackerClient.swift */,
+				DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */,
 				DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */,
 			);
 			path = Hotline;
@@ -189,6 +194,7 @@
 				DAE735022B30C0BB000C56F6 /* MessageView.swift */,
 				DAE734FC2B2E65E9000C56F6 /* MessageBoardView.swift */,
 				DAE735002B2E71F2000C56F6 /* FilesView.swift */,
+				DA5753692B34A60D00FAC277 /* FileImageView.swift */,
 			);
 			path = macOS;
 			sourceTree = "<group>";
@@ -275,6 +281,7 @@
 				DADDB28D2B22B5920024040D /* Server.swift in Sources */,
 				DAE734FB2B2E41F9000C56F6 /* TrackerView.swift in Sources */,
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
+				DA57536A2B34A60D00FAC277 /* FileImageView.swift in Sources */,
 				DAE735032B30C0BB000C56F6 /* MessageView.swift in Sources */,
 				DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */,
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,
@@ -286,6 +293,7 @@
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
 				DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */,
+				DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */,
 				DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */,
 				DAE735052B3218D8000C56F6 /* NewsView.swift in Sources */,
 				DAE734F92B2E4185000C56F6 /* ServerView.swift in Sources */,
