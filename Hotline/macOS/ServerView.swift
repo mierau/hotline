@@ -113,6 +113,7 @@ private func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
 struct ServerView: View {
   @Environment(Hotline.self) private var model: Hotline
   @Environment(\.dismiss) var dismiss
+  @Environment(\.controlActiveState) private var controlActiveState
   
   @State private var agreementShown: Bool = false
   @State private var selection: MenuItem? = ServerView.menuItems.first
@@ -162,22 +163,26 @@ struct ServerView: View {
                 HStack {
                   Text("🙂")
                     .font(.headline)
+                    .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
                   if user.status.contains(.admin) {
                     if user.status.contains(.idle) {
                       Text(user.name)
-                        .foregroundStyle(.red.opacity(0.5))
+                        .foregroundStyle(.red)
+                        .opacity(controlActiveState == .inactive ? 0.3 : 0.5)
                     }
                     else {
                       Text(user.name)
                         .foregroundStyle(.red)
+                        .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
                     }
                   }
                   else if user.status.contains(.idle) {
                     Text(user.name)
-                      .opacity(0.5)
+                      .opacity(controlActiveState == .inactive ? 0.3 : 0.5)
                   }
                   else {
                     Text(user.name)
+//                      .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
                   }
                   Spacer()
                 }
