@@ -217,7 +217,7 @@ struct TrackerView: View {
   var bookmarks: [TrackerBookmark] = [
     TrackerBookmark(type: .server, name: "RetroMac", address: "82.32.130.173"),
     TrackerBookmark(type: .server, name: "System 7 Today", address: "158.174.146.146"),
-    TrackerBookmark(type: .server, name: "Bob Kiwi's House", address: "73.132.92.104"),
+//    TrackerBookmark(type: .server, name: "Bob Kiwi's House", address: "73.132.92.104"),
     TrackerBookmark(type: .tracker, name: "Featured Servers", address: "hltracker.com"),
     TrackerBookmark(type: .tracker, name: "Agent79", address: "tracked.agent79.org"),
     TrackerBookmark(type: .tracker, name: "Preterhuman", address: "tracker.preterhuman.net"),
@@ -349,13 +349,13 @@ struct TrackerView: View {
         } label: {
           Label("Refresh", systemImage: "arrow.clockwise")
         }
-        .help("Refresh")
+        .help("Refresh Trackers")
       }
       
       ToolbarItem(placement: .primaryAction) {
         Button {
         } label: {
-          Label("Add Tracker", systemImage: "point.3.filled.connected.trianglepath.dotted")
+          Label("Add Tracker...", systemImage: "point.3.filled.connected.trianglepath.dotted")
         }
         .help("Add Tracker")
       }
@@ -363,9 +363,9 @@ struct TrackerView: View {
       ToolbarItem(placement: .primaryAction) {
         Button {
         } label: {
-          Label("Add Server", systemImage: "plus")
+          Label("Add Server Bookmark...", systemImage: "plus")
         }
-        .help("Add Server")
+        .help("Add Server Bookmark")
       }
     }
     .onAppear {

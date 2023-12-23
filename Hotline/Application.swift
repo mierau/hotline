@@ -14,9 +14,19 @@ struct Application: App {
         .environment(model)
     }
     #elseif os(macOS)
-    WindowGroup {
+    Window("Servers", id: "servers") {
       TrackerView()
         .frame(minWidth: 250, minHeight: 250)
+        .toolbar {
+          ToolbarItem(placement: .navigation) {
+            Image("Hotline")
+              .resizable()
+              .renderingMode(.template)
+              .scaledToFit()
+              .foregroundColor(Color(hex: 0xE10000))
+              .frame(width: 9)
+          }
+        }
     }
     .defaultSize(width: 700, height: 600)
     .defaultPosition(.center)

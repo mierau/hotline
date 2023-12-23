@@ -245,6 +245,7 @@ class HotlineTrackerClient {
         
         if let name = serverName,
            let desc = serverDescription {
+          // Ignore servers that are just used as dividers in the tracker listing.
           let validName = try? trackerSeparatorRegex.prefixMatch(in: name)
           if validName == nil {
             let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
