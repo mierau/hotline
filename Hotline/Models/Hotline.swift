@@ -151,7 +151,6 @@ import SwiftUI
           }
           else if path.isEmpty {
             self?.filesLoaded = true
-            
             self?.files = newFiles
           }
           

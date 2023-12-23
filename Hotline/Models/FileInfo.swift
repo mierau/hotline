@@ -11,6 +11,7 @@ import SwiftUI
   let fileSize: UInt
   
   let isFolder: Bool
+  let isUnavailable: Bool
   var expanded: Bool = false
   var children: [FileInfo]? = nil
   
@@ -22,6 +23,9 @@ import SwiftUI
     self.creator = hotlineFile.creator
     self.fileSize = UInt(hotlineFile.fileSize)
     self.isFolder = hotlineFile.isFolder
+    self.isUnavailable = (!self.isFolder && (self.fileSize == 0))
+    
+    print(self.name, self.type, self.creator, self.isUnavailable)
     if self.isFolder {
       self.children = []
     }

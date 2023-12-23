@@ -34,7 +34,10 @@ struct FileView: View {
           .padding(.leading, 4)
       }
       HStack(alignment: .center) {
-        if file.isFolder {
+        if file.isUnavailable {
+          Image(systemName: "questionmark.app.fill").opacity(0.5)
+        }
+        else if file.isFolder {
           Image(systemName: "folder.fill")
         }
         else {
@@ -46,18 +49,21 @@ struct FileView: View {
         }
       }
       .frame(width: 15)
-      Text(file.name).lineLimit(1).truncationMode(.tail)
+      Text(file.name).lineLimit(1).truncationMode(.tail).opacity(file.isUnavailable ? 0.5 : 1.0)
+      
       if file.isFolder && loading {
         ProgressView().controlSize(.small).padding([.leading, .trailing], 1)
       }
       Spacer()
-      if file.isFolder {
-        Text("^[\(file.fileSize) file](inflect: true)")
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
-      else {
-        Text(formattedFileSize(file.fileSize)).foregroundStyle(.secondary).lineLimit(1)
+      if !file.isUnavailable {
+        if file.isFolder {
+          Text("^[\(file.fileSize) file](inflect: true)")
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+        else {
+          Text(formattedFileSize(file.fileSize)).foregroundStyle(.secondary).lineLimit(1)
+        }
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
