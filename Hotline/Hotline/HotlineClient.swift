@@ -764,7 +764,7 @@ class HotlineClient {
          let userIconID = userIconIDField.getUInt16(),
          let userFlagsField = transaction.getField(type: .userFlags),
          let userFlags = userFlagsField.getUInt16() {
-        print("HotlineClient: User changed \(username)")
+        print("HotlineClient: User changed \(username) icon: \(userIconID)")
         
         let user = HotlineUser(id: userID, iconID: userIconID, status: userFlags, name: username)
 

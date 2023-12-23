@@ -161,9 +161,17 @@ struct ServerView: View {
             Section("Users") {
               ForEach(model.users) { user in
                 HStack {
-                  Text("🙂")
-                    .font(.headline)
-                    .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+                  if let iconString = Hotline.defaultIconSet[Int(user.iconID)] {
+                    Text(iconString)
+                      .font(.headline)
+                      .frame(width: 18)
+                      .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+                  }
+                  else {
+                    Text("")
+                      .frame(width: 18)
+                  }
+                  
                   if user.status.contains(.admin) {
                     if user.status.contains(.idle) {
                       Text(user.name)
