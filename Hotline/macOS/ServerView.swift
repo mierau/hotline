@@ -252,13 +252,14 @@ struct ServerView: View {
     }
     .navigationTitle("")
     .onAppear {
+      print(" YAYY")
       self.model.login(server: self.server, login: "", password: "", username: "bolt", iconID: 128) { success in
         if !success {
           print("FAILED LOGIN??")
         }
         else {
-          self.model.sendUserInfo(username: "bolt", iconID: 128)
           print("GETTING USER LIST????!")
+          self.model.sendUserInfo(username: "bolt", iconID: 128)
           self.model.getUserList()
         }
       }

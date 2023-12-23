@@ -51,7 +51,7 @@ struct ChatView: View {
                           .padding(16)
                         }
                         .scrollBounceBehavior(.basedOnSize)
-                        .frame(maxHeight: 325)
+                        .frame(maxHeight: 375)
                         
 //                        Divider()
 //                        

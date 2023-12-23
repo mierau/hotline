@@ -418,7 +418,7 @@ class HotlineClient {
     t.setFieldEncodedString(type: .userPassword, val: password)
     t.setFieldUInt16(type: .userIconID, val: iconID)
     t.setFieldString(type: .userName, val: username)
-    t.setFieldUInt32(type: .versionNumber, val: 150)
+    t.setFieldUInt32(type: .versionNumber, val: 123)
       
     self.sendTransaction(t) { success in
       if !success {
@@ -722,7 +722,7 @@ class HotlineClient {
   }
     
   private func processTransaction(_ transaction: HotlineTransaction) {
-    if transaction.type == .reply || self.transactionLog[transaction.id] != nil {
+    if transaction.type == .reply || transaction.isReply == 1 {
       print("HotlineClient <= \(transaction.type) to \(transaction.id):")
       print(transaction)
     }
@@ -730,10 +730,14 @@ class HotlineClient {
       print("HotlineClient <= \(transaction.type) \(transaction.id)")
     }
     
-    if self.transactionLog[transaction.id] != nil {
+    if transaction.isReply == 1 {
       self.processReply(transaction)
       return
     }
+//    if self.transactionLog[transaction.id] != nil {
+//      self.processReply(transaction)
+//      return
+//    }
     
     switch(transaction.type) {
     case .reply:

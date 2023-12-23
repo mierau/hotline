@@ -163,21 +163,7 @@ struct FilesView: View {
         }
       }
       .toolbar {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-          } label: {
-            Label("Download File", systemImage: "square.and.arrow.down")
-          }
-          .help("Download")
-        }
         
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-          } label: {
-            Label("Preview File", systemImage: "eye")
-          }
-          .help("Preview")
-        }
         
         ToolbarItem(placement: .primaryAction) {
           Button {
@@ -185,6 +171,30 @@ struct FilesView: View {
             Label("Delete File", systemImage: "trash")
           }
           .help("Delete")
+        }
+        
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+          } label: {
+            Label("Preview File", systemImage: "eye")
+          }
+          .help("Preview File")
+        }
+        
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+          } label: {
+            Label("Get File Info", systemImage: "info.circle")
+          }
+          .help("Get File Info")
+        }
+        
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+          } label: {
+            Label("Download File", systemImage: "square.and.arrow.down")
+          }
+          .help("Download")
         }
       }
     }
