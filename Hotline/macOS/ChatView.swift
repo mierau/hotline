@@ -16,6 +16,10 @@ struct ChatView: View {
   @FocusState private var focusedField: FocusedField?
   
   @Namespace var bottomID
+  
+  @State private var showingExporter: Bool = false
+  
+  @State private var chatDocument: TextFile = TextFile()
     
   var body: some View {
     NavigationStack {
@@ -32,13 +36,13 @@ struct ChatView: View {
                   
                   // MARK: Agreement
                   if msg.type == .agreement {
-                    VStack(alignment: .center) {
+                    VStack(alignment: .center, spacing: 16) {
                       
                       FileImageView()
                         .environment(self.model)
                         .frame(maxWidth: 468.0)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                      
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                                            
                       VStack(spacing: 0) {
                         ScrollView(.vertical) {
                           HStack {
@@ -52,28 +56,10 @@ struct ChatView: View {
                         }
                         .scrollBounceBehavior(.basedOnSize)
                         .frame(maxHeight: 375)
-                        
-//                        Divider()
-//                        
-//                        HStack {
-//                          Button("Disagree") {
-//                            dismiss()
-//                          }
-//                          .controlSize(.large)
-//                          
-//                          Spacer()
-//                          
-//                          Button("Agree") {
-//                            model.sendAgree()
-//                          }
-//                          .controlSize(.large)
-//                          .keyboardShortcut(.defaultAction)
-//                        }
-//                        .padding(16)
                       }
                       .background(Color(white: colorScheme == .light ? 0.0 : 1.0).opacity(0.05))
                       .frame(maxWidth: 468.0)
-                      .clipShape(RoundedRectangle(cornerRadius: 8))
+                      .clipShape(RoundedRectangle(cornerRadius: 3))
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -177,6 +163,61 @@ struct ChatView: View {
     .navigationTitle(self.model.serverTitle)
     .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
     .background(Color(nsColor: .textBackgroundColor))
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          if prepareChatDocument() {
+            showingExporter = true
+          }
+        } label: {
+          Image(systemName: "square.and.arrow.up")
+        }.help("Save Chat")
+      }
+    }
+    .fileExporter(isPresented: $showingExporter, document: chatDocument, contentType: .utf8PlainText, defaultFilename: "\(model.serverTitle) Chat") { result in
+//      switch result {
+//      case .success(let url):
+//        print("Saved to \(url)")
+//        
+//      case .failure(let error):
+//        print(error.localizedDescription)
+//      }
+      self.chatDocument.text = ""
+    }
+  }
+  
+  private func prepareChatDocument() -> Bool {
+    var text: String = String()
+    
+    self.chatDocument.text = ""
+    
+    for msg in model.chat {
+      if msg.type == .agreement {
+        text.append(msg.text)
+        text.append("\n\n")
+      }
+      else if msg.type == .message {
+        if let username = msg.username {
+          text.append("\(username): \(msg.text)")
+        }
+        else {
+          text.append(msg.text)
+        }
+        text.append("\n")
+      }
+      else if msg.type == .status {
+        text.append(msg.text)
+        text.append("\n")
+      }
+    }
+    
+    if text.isEmpty {
+      return false
+    }
+    
+    self.chatDocument.text = text
+    
+    return true
   }
 }
 

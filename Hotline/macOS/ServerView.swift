@@ -131,32 +131,6 @@ struct ServerView: View {
   var body: some View {
     NavigationSplitView {
       List(selection: $selection) {
-                
-//           VStack(spacing: 0) {
-//             bannerImage
-//               .resizable()
-//               .aspectRatio(contentMode: .fit)
-//               .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
-//               .clipped()
-//           }
-//           .frame(maxWidth: .infinity)
-//         }
-//         else {
-//           HStack {
-//             Text(server.name ?? "")
-//               .fontWeight(.medium)
-//               .lineLimit(2)
-//               .font(.title3)
-//               .multilineTextAlignment(.center)
-//               .padding()
-//           }
-//           .selectionDisabled()
-//           .frame(maxWidth: .infinity, minHeight: 60)
-//           .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow).cornerRadius(16))
-//           .cornerRadius(10)
-//           .tag(MenuItem(name: "title", image: "", type: .banner))
-//           .padding(.bottom, 16)
-//         }
         
         if model.status != .loggedIn {
           HStack {
@@ -169,18 +143,16 @@ struct ServerView: View {
         }
         
         if model.status == .loggedIn {
-          Section(model.serverTitle) {
-            ForEach(ServerView.menuItems) { menuItem in
-              if let minServerVersion = menuItem.serverVersion {
-                if let v = model.serverVersion, v >= minServerVersion {
-                  ListItemView(icon: menuItem.image, title: menuItem.name)
-                    .tag(menuItem)
-                }
-              }
-              else {
+          ForEach(ServerView.menuItems) { menuItem in
+            if let minServerVersion = menuItem.serverVersion {
+              if let v = model.serverVersion, v >= minServerVersion {
                 ListItemView(icon: menuItem.image, title: menuItem.name)
                   .tag(menuItem)
               }
+            }
+            else {
+              ListItemView(icon: menuItem.image, title: menuItem.name)
+                .tag(menuItem)
             }
           }
           

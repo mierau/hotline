@@ -36,6 +36,18 @@ struct Application: App {
         ServerView(server: s)
           .frame(minWidth: 400, minHeight: 300)
           .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
+          .toolbar {
+            ToolbarItem(placement: .navigation) {
+              Image(systemName: "globe.americas.fill")
+                .resizable()
+                .scaledToFit()
+//                .foregroundColor(.secondary)
+                .frame(width: 22)
+//                .fontWeight(.light)
+//              Text("􀵲")
+//                .font(.system(size: 22, weight: .ultraLight))
+            }
+          }
       }
     }
     .defaultSize(width: 700, height: 800)
