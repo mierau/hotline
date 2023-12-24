@@ -112,12 +112,12 @@ private func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
 
 struct ServerView: View {
   @Environment(Hotline.self) private var model: Hotline
+  @Environment(Prefs.self) private var preferences: Prefs
   @Environment(\.dismiss) var dismiss
   @Environment(\.controlActiveState) private var controlActiveState
   
   @State private var agreementShown: Bool = false
   @State private var selection: MenuItem? = ServerView.menuItems.first
-  
   
   let server: Server
   
@@ -128,6 +128,28 @@ struct ServerView: View {
     MenuItem(name: "Files", image: "folder", type: .files),
 //    MenuItem(name: "Tasks", image: "arrow.up.circle", type: .tasks),
   ]
+  
+  @MainActor func sendPreferences() {
+    if self.model.status == .loggedIn {
+      var options: HotlineUserOptions = HotlineUserOptions()
+      
+      if preferences.refusePrivateMessages {
+        options.update(with: .refusePrivateMessages)
+      }
+      
+      if preferences.refusePrivateChat {
+        options.update(with: .refusePrivateChat)
+      }
+      
+      if preferences.enableAutomaticMessage {
+        options.update(with: .automaticResponse)
+      }
+      
+      print("Updating preferences with server")
+      
+      self.model.sendUserInfo(username: preferences.username, iconID: preferences.userIconID, options: options, autoresponse: preferences.automaticMessage)
+    }
+  }
   
   var body: some View {
     NavigationSplitView {
@@ -238,13 +260,13 @@ struct ServerView: View {
     .navigationTitle("")
     .onAppear {
       print(" YAYY")
-      self.model.login(server: self.server, login: "", password: "", username: "bolt", iconID: 128) { success in
+      self.model.login(server: self.server, login: "", password: "", username: preferences.username, iconID: preferences.userIconID) { success in
         if !success {
           print("FAILED LOGIN??")
         }
         else {
           print("GETTING USER LIST????!")
-          self.model.sendUserInfo(username: "bolt", iconID: 128)
+          self.sendPreferences()
           self.model.getUserList()
         }
       }
@@ -257,26 +279,12 @@ struct ServerView: View {
         dismiss()
       }
     }
-//    .onChange(of: model.agreement) {
-//      if model.agreement != nil {
-//        agreementShown = true
-//      }
-//    }
-//    .sheet(isPresented: $agreementShown, onDismiss: {
-//      if model.status == .disconnected {
-//        dismiss()
-//      }
-//    }, content: {
-//      if let text = model.agreement {
-//        AgreementView(text: text, disagree: {
-//          self.model.disconnect()
-//          print("DISAGREE")
-//        }, agree: {
-//          print("AGREE?")
-//        })
-////        .frame(minWidth: 300, maxWidth: 500, minHeight: 300)
-//      }
-//    })
+    .onChange(of: preferences.userIconID) { self.sendPreferences() }
+    .onChange(of: preferences.username) { self.sendPreferences() }
+    .onChange(of: preferences.refusePrivateMessages) { self.sendPreferences() }
+    .onChange(of: preferences.refusePrivateChat) { self.sendPreferences() }
+    .onChange(of: preferences.enableAutomaticMessage) { self.sendPreferences() }
+    .onChange(of: preferences.automaticMessage) { self.sendPreferences() }
   }
 }
 

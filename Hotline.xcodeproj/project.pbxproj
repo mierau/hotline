@@ -10,6 +10,8 @@
 		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; platformFilter = ios; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; platformFilter = ios; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; platformFilter = ios; };
+		DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2863D72B37AD1C00A7D050 /* SettingsView.swift */; };
+		DA2863DA2B37BF6E00A7D050 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2863D92B37BF6E00A7D050 /* Preferences.swift */; };
 		DA32CD492B2931640053B98B /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD482B2931640053B98B /* User.swift */; };
 		DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD4A2B29318E0053B98B /* FileInfo.swift */; };
 		DA32CD4D2B2931B50053B98B /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD4C2B2931B50053B98B /* ChatMessage.swift */; };
@@ -48,6 +50,9 @@
 		DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersView.swift; sourceTree = "<group>"; };
 		DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardView.swift; sourceTree = "<group>"; };
 		DA0D69902B1E894800C71DF5 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
+		DA2863D72B37AD1C00A7D050 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		DA2863D92B37BF6E00A7D050 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+		DA2863DB2B37DBE000A7D050 /* Hotline.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Hotline.entitlements; sourceTree = "<group>"; };
 		DA32CD472B28EE640053B98B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DA32CD482B2931640053B98B /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		DA32CD4A2B29318E0053B98B /* FileInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileInfo.swift; sourceTree = "<group>"; };
@@ -136,6 +141,7 @@
 				DABFCC272B1530BE009F40D2 /* Utility */,
 				DA9CAFC02B126D5800CDA197 /* Assets.xcassets */,
 				DA32CD472B28EE640053B98B /* Info.plist */,
+				DA2863DB2B37DBE000A7D050 /* Hotline.entitlements */,
 				DA9CAFC22B126D5800CDA197 /* Preview Content */,
 			);
 			path = Hotline;
@@ -177,6 +183,7 @@
 			isa = PBXGroup;
 			children = (
 				DADDB28A2B22B31F0024040D /* Tracker.swift */,
+				DA2863D92B37BF6E00A7D050 /* Preferences.swift */,
 				DADDB28E2B238D850024040D /* Hotline.swift */,
 				DADDB28C2B22B5920024040D /* Server.swift */,
 				DA32CD482B2931640053B98B /* User.swift */,
@@ -198,6 +205,7 @@
 				DAE734FC2B2E65E9000C56F6 /* MessageBoardView.swift */,
 				DAE735002B2E71F2000C56F6 /* FilesView.swift */,
 				DA5753692B34A60D00FAC277 /* FileImageView.swift */,
+				DA2863D72B37AD1C00A7D050 /* SettingsView.swift */,
 			);
 			path = macOS;
 			sourceTree = "<group>";
@@ -277,6 +285,7 @@
 				DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */,
 				DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */,
 				DAE735092B329810000C56F6 /* VisualEffectView.swift in Sources */,
+				DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */,
 				DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */,
 				DAE734FF2B2E6750000C56F6 /* ChatView.swift in Sources */,
 				DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */,
@@ -288,6 +297,7 @@
 				DAE735032B30C0BB000C56F6 /* MessageView.swift in Sources */,
 				DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */,
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,
+				DA2863DA2B37BF6E00A7D050 /* Preferences.swift in Sources */,
 				DA32CD4F2B2931CC0053B98B /* NewsInfo.swift in Sources */,
 				DA9CAFBB2B126D5700CDA197 /* Application.swift in Sources */,
 				DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */,
@@ -435,11 +445,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				DEVELOPMENT_TEAM = 5AEEV7QB2U;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Hotline/Info.plist;
@@ -469,11 +481,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				DEVELOPMENT_TEAM = 5AEEV7QB2U;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Hotline/Info.plist;

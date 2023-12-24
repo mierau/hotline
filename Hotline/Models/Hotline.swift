@@ -71,6 +71,12 @@ import SwiftUI
     2561: "🇸🇪",
   ]
   
+//  @AppStorage("username") private var username: String = "guest"
+//  @AppStorage("refuse private messages") private var refusePrivateMessages = false
+//  @AppStorage("refuse private chat") private var refusePrivateChat = false
+//  @AppStorage("enable automatic response") private var enableAutomaticResponse = false
+//  @AppStorage("automatic response") private var automaticResponse = ""
+  
   var status: HotlineClientStatus = .disconnected
   
   var server: Server?  {
@@ -89,8 +95,8 @@ import SwiftUI
     }
   }
   var serverTitle: String = "Server"
-  var username: String = "bolt"
-  var iconID: UInt = 414
+  var username: String = "guest"
+  var iconID: Int = 414
   var access: HotlineUserAccessOptions?
   var agreed: Bool = false
   
@@ -141,7 +147,7 @@ import SwiftUI
     self.trackerClient.disconnect()
   }
   
-  @MainActor func login(server: Server, login: String, password: String, username: String, iconID: UInt, callback: ((Bool) -> Void)? = nil) {
+  @MainActor func login(server: Server, login: String, password: String, username: String, iconID: Int, callback: ((Bool) -> Void)? = nil) {
     self.server = server
     self.serverName = server.name
     self.username = username
@@ -157,7 +163,7 @@ import SwiftUI
     }
   }
   
-  @MainActor func sendUserInfo(username: String, iconID: UInt, options: HotlineUserOptions = [], autoresponse: String? = nil, callback: ((Bool) -> Void)? = nil) {
+  @MainActor func sendUserInfo(username: String, iconID: Int, options: HotlineUserOptions = [], autoresponse: String? = nil, callback: ((Bool) -> Void)? = nil) {
     self.username = username
     self.iconID = iconID
     

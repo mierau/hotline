@@ -7,6 +7,8 @@ struct Application: App {
   private var model = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
   #endif
   
+  private var preferences = Prefs()
+  
   var body: some Scene {
     #if os(iOS)
     WindowGroup {
@@ -36,6 +38,7 @@ struct Application: App {
         ServerView(server: s)
           .frame(minWidth: 400, minHeight: 300)
           .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
+          .environment(preferences)
           .toolbar {
             ToolbarItem(placement: .navigation) {
               Image(systemName: "globe.americas.fill")
@@ -52,6 +55,13 @@ struct Application: App {
     }
     .defaultSize(width: 700, height: 800)
     .defaultPosition(.center)
+    
+#if os(macOS)
+    Settings {
+      SettingsView()
+        .environment(preferences)
+    }
+#endif
 
     #endif
   }
