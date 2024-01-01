@@ -28,6 +28,7 @@ Written in Swift and SwiftUI.
 - News Browsing & Reading
 - Message Board Reading
 - File Browsing
+- File Downloading
 
 # Todo
 - Username and icon changing
@@ -37,7 +38,12 @@ Written in Swift and SwiftUI.
 - Private messaging
 - Display server messages
 - File transfer UI
-- File downloading
+- File downloading on iOS
 - File uploading
 - Saving server bookmarks
 - Multiple trackers on iOS
+
+# Goals
+- Keep the HotlineClient, HotlineTrackerClient, and HotlineFileClient classes reusable so people can use it in other Swift Hotline projects.
+- Bring a modern Hotline client to iOS, iPadOS, and macOS using one codebase.
+- Have fun. :)
