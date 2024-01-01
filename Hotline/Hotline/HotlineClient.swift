@@ -388,7 +388,7 @@ class HotlineClient {
         }
         
         let protocolID = data.readUInt32(at: 0)!
-        if protocolID != 0x54525450 { // 'TRTP'
+        if protocolID != "TRTP".fourCharCode() {
           print("HotlineClient: invalid handshake protocol ID \(protocolID)")
           self.disconnect()
           callback?(false)
@@ -645,12 +645,54 @@ class HotlineClient {
     })
   }
   
-  func sendDownloadBanner(sent: ((Bool) -> Void)? = nil, reply: ((UInt32?, Int?) -> Void)? = nil) {
+  func sendDownloadFile(name fileName: String, path filePath: [String], preview: Bool = false, sent: ((Bool) -> Void)? = nil, reply: ((Bool, UInt32?, Int?, Int?, Int?) -> Void)? = nil) {
+    var t = HotlineTransaction(type: .downloadFile)
+    t.setFieldString(type: .fileName, val: fileName)
+    t.setFieldPath(type: .filePath, val: filePath)
+    if preview {
+      t.setFieldUInt32(type: .fileTransferOptions, val: 2)
+    }
+    
+    print("DOWNLOAD \(fileName) AT PATH \(filePath)")
+    
+    self.sendTransaction(t, sent: sent, reply: { r, err in
+      if err != nil {
+        DispatchQueue.main.async {
+          reply?(false, nil, nil, nil, nil)
+        }
+        return
+      }
+      
+      if let transferSizeField = r.getField(type: .transferSize),
+         let transferSize = transferSizeField.getInteger(),
+         let transferReferenceField = r.getField(type: .referenceNumber),
+         let referenceNumber = transferReferenceField.getUInt32(),
+         let transferFileSizeField = r.getField(type: .fileSize),
+         let transferFileSize = transferFileSizeField.getInteger() {
+        
+        let transferWaitingCountField = r.getField(type: .waitingCount)
+        let transferWaitingCount = transferWaitingCountField?.getInteger()
+        
+        DispatchQueue.main.async {
+          reply?(true, referenceNumber, transferSize, transferFileSize, transferWaitingCount)
+        }
+      }
+      else {
+        DispatchQueue.main.async {
+          reply?(false, nil, nil, nil, nil)
+        }
+      }
+    })
+  }
+  
+  func sendDownloadBanner(sent: ((Bool) -> Void)? = nil, reply: ((Bool, UInt32?, Int?) -> Void)? = nil) {
     let t = HotlineTransaction(type: .downloadBanner)
     
     self.sendTransaction(t, sent: sent, reply: { r, err in
       if err != nil {
-        reply?(nil, nil)
+        DispatchQueue.main.async {
+          reply?(false, nil, nil)
+        }
         return
       }
       
@@ -659,15 +701,13 @@ class HotlineClient {
          let transferReferenceField = r.getField(type: .referenceNumber),
          let referenceNumber = transferReferenceField.getUInt32() {
         
-        print("TRANSFER SIZE", transferSize)
-        
         DispatchQueue.main.async {
-          reply?(referenceNumber, transferSize)
+          reply?(true, referenceNumber, transferSize)
         }
       }
       else {
         DispatchQueue.main.async {
-          reply?(nil, nil)
+          reply?(false, nil, nil)
         }
       }
     })

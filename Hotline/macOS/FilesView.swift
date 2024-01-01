@@ -138,6 +138,10 @@ struct FilesView: View {
         if clickedFile.isFolder {
           clickedFile.expanded.toggle()
         }
+        else {
+          print("DOWNLOAD FILE", clickedFile.name, clickedFile.path)
+          model.downloadFile(clickedFile.name, path: clickedFile.path)
+        }
       }
       .onKeyPress(.rightArrow) {
         if let s = selection, s.isFolder {
@@ -175,6 +179,12 @@ struct FilesView: View {
         
         ToolbarItem(placement: .primaryAction) {
           Button {
+            if let s = selection, !s.isFolder {
+              print("DOWNLOAD FILE", s.name, s.path)
+              model.previewFile(s.name, path: s.path, addTransfer: true) { transfer, fileData in
+                print("FILE PREVIEWED?", fileData.count)
+              }
+            }
           } label: {
             Label("Preview File", systemImage: "eye")
           }
@@ -191,6 +201,10 @@ struct FilesView: View {
         
         ToolbarItem(placement: .primaryAction) {
           Button {
+            if let s = selection, !s.isFolder {
+              print("DOWNLOAD FILE", s.name, s.path)
+              model.downloadFile(s.name, path: s.path)
+            }
           } label: {
             Label("Download File", systemImage: "square.and.arrow.down")
           }

@@ -114,7 +114,8 @@ struct HotlineNewsList: Identifiable {
       let articleID = data.readUInt32(at: baseIndex)!
       baseIndex += 4
       
-      let timestampData = data.readData(at: baseIndex, length: 8)!
+      let date = data.readDate(at: baseIndex)!
+//      let timestampData = data.readData(at: baseIndex, length: 8)!
       baseIndex += 8
       
       let parentID = data.readUInt32(at: baseIndex)!
@@ -139,11 +140,11 @@ struct HotlineNewsList: Identifiable {
       baseIndex += Int(posterLength)
       
       // Parse date info
-      let yearData = timestampData.readUInt16(at: 0)!
-      let millisecondData = timestampData.readUInt16(at: 2)!
-      let secondsData = timestampData.readUInt32(at: 4)!
-      let articleData = convertHotlineDate(year: yearData, seconds: secondsData, milliseconds: millisecondData)
-      var newArticle = HotlineNewsArticle(id: articleID, parentID: parentID, flags: flags, title: title, username: poster, date: articleData)
+//      let yearData = timestampData.readUInt16(at: 0)!
+//      let millisecondData = timestampData.readUInt16(at: 2)!
+//      let secondsData = timestampData.readUInt32(at: 4)!
+//      let articleData = convertHotlineDate(year: yearData, seconds: secondsData, milliseconds: millisecondData)
+      var newArticle = HotlineNewsArticle(id: articleID, parentID: parentID, flags: flags, title: title, username: poster, date: date)
       
       print("ARTICLE ID: \(articleID)")
       print("PARENT ID: \(parentID)")
@@ -269,8 +270,8 @@ class HotlineFile: Identifiable, Hashable {
     let typeRaw = data.readUInt32(at: 0)!
     let creatorRaw = data.readUInt32(at: 4)!
     
-    self.type = typeRaw.toStringLiteral()
-    self.creator = creatorRaw.toStringLiteral()
+    self.type = typeRaw.fourCharCode()
+    self.creator = creatorRaw.fourCharCode()
     self.fileSize = data.readUInt32(at: 8)!
     
     self.isFolder = (self.type == "fldr")
@@ -612,7 +613,10 @@ enum HotlineTransactionFieldType: UInt16 {
   case communityBannerID = 161 // Integer
   case serverName = 162 // String
   case fileNameWithInfo = 200 // Data { type: 4, creator: 4, file size: 4, reserved: 4, name script: 2, name size: 2, name data: size }
+  case fileName = 201 // String
   case filePath = 202 // Path
+  case fileTransferOptions = 204 // Integer
+  case fileSize = 207 // Integer
   // TODO: Add file field types
   case quotingMessage = 214 // String?
   case automaticResponse = 215 // String
@@ -703,15 +707,14 @@ enum HotlineTransactionType: UInt16 {
 
 // MARK: - Utilities
 
-private func convertHotlineDate(year: UInt16, seconds: UInt32, milliseconds: UInt16) -> Date? {
-  let days = round((Double(seconds) + (Double(milliseconds) * 1000.0)) / 86400.0)
-  
+func convertHotlineDate(year:UInt16, seconds: UInt32, milliseconds: UInt16) -> Date? {
   var components = DateComponents()
   components.timeZone = .gmt
   components.year = Int(year)
   components.month = 1
-  components.day = 1 + Int(days)
-  components.second = Int(seconds) - Int(days * 86400.0)
-    
-  return Calendar.current.date(from: components)
+  components.day = 1
+  components.second = 0
+  
+  let baseDate = Calendar.current.date(from: components)
+  return baseDate?.advanced(by: TimeInterval(seconds))
 }

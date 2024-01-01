@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum MenuItemType {
   case banner
@@ -51,47 +52,108 @@ struct ListItemView: View {
   }
 }
 
-struct AgreementView: View {
-  @Environment(\.dismiss) var dismiss
+struct TransferItemView: View {
+  let transfer: TransferInfo
   
-  let text: String
-  let disagree: (() -> Void)?
-  let agree: (() -> Void)?
+  private func fileIcon(name: String) -> Image {
+    let fileExtension = (name as NSString).pathExtension
+    return Image(nsImage: NSWorkspace.shared.icon(for: UTType(filenameExtension: fileExtension) ?? UTType.content))
+  }
+  
+  @Environment(Hotline.self) private var model: Hotline
+  @State private var hovered: Bool = false
+  @State private var buttonHovered: Bool = false
+  
+  private func formattedProgressHelp() -> String {
+    if self.transfer.completed {
+      return "File transfer complete"
+    }
+    else if self.transfer.failed {
+      return "File transfer failed"
+    }
+    else if self.transfer.progress > 0.0 {
+      if self.transfer.timeRemaining > 0.0 {
+        return "\(round(self.transfer.progress * 100.0))% – \(self.transfer.timeRemaining) seconds left"
+      }
+      else {
+        return "\(round(self.transfer.progress * 100.0))% complete"
+      }
+    }
+    return ""
+  }
   
   var body: some View {
-    VStack(spacing: 0) {
-      ScrollView(.vertical) {
-        Text(text)
-          .padding()
-          .font(.system(size: 13))
-          .fontDesign(.monospaced)
-          .textSelection(.enabled)
-          .lineSpacing(3)
-          .frame(maxWidth: .infinity, alignment: .leading)
+    HStack(alignment: .center) {
+      HStack(spacing: 0) {
+        Spacer()
+        fileIcon(name: transfer.title)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 16, height: 16)
+        Spacer()
       }
-      .frame(maxWidth: .infinity)
-      Divider()
-      HStack(spacing: 8) {
-        Button("Disagree", action: {
-          dismiss()
-          disagree?()
-        })
-        .controlSize(.large)
-        .frame(width: 80)
-        .keyboardShortcut(.cancelAction)
-        
-        Button("Agree", action: {
-          dismiss()
-          agree?()
-        })
-        .controlSize(.large)
-        .frame(width: 80)
-        .keyboardShortcut(.defaultAction)
+      .frame(width: 18)
+      
+      Text(transfer.title)
+        .lineLimit(1)
+        .truncationMode(.middle)
+      
+      Spacer()
+      
+      if self.hovered {
+        Button {
+          model.deleteTransfer(id: transfer.id)
+        } label: {
+          if transfer.completed {
+            Image(systemName: self.buttonHovered ? "xmark.circle.fill" : "xmark.circle")
+              .resizable()
+              .aspectRatio(contentMode: .fit)
+              .frame(width: 16, height: 16)
+              .opacity(self.buttonHovered ? 1.0 : 0.5)
+          }
+          else {
+            Image(systemName: self.buttonHovered ? "trash.circle.fill" : "trash.circle")
+              .resizable()
+              .aspectRatio(contentMode: .fit)
+              .frame(width: 16, height: 16)
+              .opacity(self.buttonHovered ? 1.0 : 0.5)
+          }
+        }
+        .buttonStyle(.plain)
+        .padding(0)
+        .frame(width: 16, height: 16)
+        .help(transfer.completed || transfer.failed ? "Remove" : "Cancel Transfer")
+        .onHover { hovered in
+          self.buttonHovered = hovered
+        }
       }
-      .frame(maxWidth: .infinity)
-      .padding(16)
+      else if transfer.failed {
+        Image(systemName: "exclamationmark.triangle")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 16, height: 16)
+      }
+      else if transfer.completed {
+        Image(systemName: "checkmark.circle.fill")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 16, height: 16)
+      }
+      else if transfer.progress == 0.0 {
+        ProgressView()
+          .progressViewStyle(.circular)
+          .controlSize(.small)
+      }
+      else {
+        ProgressView(value: transfer.progress, total: 1.0)
+          .progressViewStyle(.circular)
+          .controlSize(.small)
+      }
     }
-    .frame(width: 500, height: 500)
+    .onHover { hovered in
+      self.hovered = hovered
+    }
+    .help(formattedProgressHelp())
   }
 }
 
@@ -126,7 +188,6 @@ struct ServerView: View {
     MenuItem(name: "News", image: "newspaper", type: .news, serverVersion: 150),
     MenuItem(name: "Board", image: "note.text", type: .messageBoard),
     MenuItem(name: "Files", image: "folder", type: .files),
-//    MenuItem(name: "Tasks", image: "arrow.up.circle", type: .tasks),
   ]
   
   @MainActor func sendPreferences() {
@@ -151,78 +212,118 @@ struct ServerView: View {
     }
   }
   
-  var body: some View {
-    NavigationSplitView {
-      List(selection: $selection) {
-        
-        if model.status != .loggedIn {
-          HStack {
-            ProgressView(value: connectionStatusToProgress(status: model.status))
-              .padding()
-          }
-          .tag(MenuItem(name: "progress", image: "", type: .progress))
-          .frame(maxWidth: .infinity, minHeight: 60)
-          .selectionDisabled()
+  var navigationList: some View {
+    List(selection: $selection) {
+      
+      if model.status != .loggedIn {
+        HStack {
+          ProgressView(value: connectionStatusToProgress(status: model.status))
+            .padding()
         }
-        
-        if model.status == .loggedIn {
-          ForEach(ServerView.menuItems) { menuItem in
-            if let minServerVersion = menuItem.serverVersion {
-              if let v = model.serverVersion, v >= minServerVersion {
-                ListItemView(icon: menuItem.image, title: menuItem.name)
-                  .tag(menuItem)
-              }
-            }
-            else {
+        .tag(MenuItem(name: "progress", image: "", type: .progress))
+        .frame(maxWidth: .infinity, minHeight: 60)
+        .selectionDisabled()
+      }
+      
+      if model.status == .loggedIn {
+        ForEach(ServerView.menuItems) { menuItem in
+          if let minServerVersion = menuItem.serverVersion {
+            if let v = model.serverVersion, v >= minServerVersion {
               ListItemView(icon: menuItem.image, title: menuItem.name)
                 .tag(menuItem)
             }
           }
-          
-          if model.users.count > 0 {
-            Section("Users") {
-              ForEach(model.users) { user in
-                HStack {
-                  if let iconString = Hotline.defaultIconSet[Int(user.iconID)] {
-                    Text(iconString)
-                      .font(.headline)
-                      .frame(width: 18)
-                      .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-                  }
-                  else {
-                    Text("")
-                      .frame(width: 18)
-                  }
-                  
-                  if user.status.contains(.admin) {
-                    if user.status.contains(.idle) {
-                      Text(user.name)
-                        .foregroundStyle(.red)
-                        .opacity(controlActiveState == .inactive ? 0.3 : 0.5)
-                    }
-                    else {
-                      Text(user.name)
-                        .foregroundStyle(.red)
-                        .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-                    }
-                  }
-                  else if user.status.contains(.idle) {
-                    Text(user.name)
-                      .opacity(controlActiveState == .inactive ? 0.3 : 0.5)
-                  }
-                  else {
-                    Text(user.name)
-//                      .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-                  }
-                  Spacer()
-                }
-                .tag(MenuItem(name: user.name, image: "", type: .user, userID: user.id))
-              }
-            }
+          else {
+            ListItemView(icon: menuItem.image, title: menuItem.name)
+              .tag(menuItem)
           }
         }
+        
+        if model.transfers.count > 0 {
+          self.transfersSection
+        }
+        
+        if model.users.count > 0 {
+          self.usersSection
+        }
       }
-      .frame(minWidth: 200, idealWidth: 200)
+    }
+  }
+  
+  var transfersSection: some View {
+    Section("Transfers") {
+      ForEach(model.transfers) { transfer in
+        TransferItemView(transfer: transfer)
+      }
+    }
+  }
+  
+  var usersSection: some View {
+    Section("Users") {
+      ForEach(model.users) { user in
+        HStack {
+          if let iconString = Hotline.defaultIconSet[Int(user.iconID)] {
+            Text(iconString)
+              .font(.headline)
+              .frame(width: 18)
+              .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+          }
+          else {
+            Text("")
+              .frame(width: 18)
+          }
+          
+          if user.isAdmin {
+            if user.isIdle {
+              Text(user.name)
+                .foregroundStyle(.red)
+                .opacity(controlActiveState == .inactive ? 0.3 : 0.5)
+            }
+            else {
+              Text(user.name)
+                .foregroundStyle(.red)
+                .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+            }
+          }
+          else if user.isIdle {
+            Text(user.name)
+              .opacity(controlActiveState == .inactive ? 0.3 : 0.5)
+          }
+          else {
+            Text(user.name)
+//                      .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+          }
+          Spacer()
+        }
+        .tag(MenuItem(name: user.name, image: "", type: .user, userID: user.id))
+      }
+    }
+  }
+  
+  var body: some View {
+    NavigationSplitView {
+      
+      self.navigationList
+        .frame(maxWidth: .infinity)
+        .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 500)
+      
+//      VSplitView {
+//        
+//        self.navigationList
+//        
+//        ScrollView {
+//          VStack(alignment: .leading) {
+//  //          ForEach(model.downloads) {
+//  //          }
+//          }
+//          .frame(maxWidth: .infinity)
+//        }
+//        
+//      }
+//      .frame(maxWidth: .infinity)
+//      .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 500)
+      
+      
     } detail: {
       if let selection = self.selection {
         switch selection.type {
@@ -234,18 +335,22 @@ struct ServerView: View {
           ChatView()
             .navigationTitle(self.model.serverTitle)
             .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
+            .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .news:
           NewsView()
             .navigationTitle(self.model.serverTitle)
             .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
+            .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .messageBoard:
           MessageBoardView()
             .navigationTitle(self.model.serverTitle)
             .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
+            .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .files:
           FilesView()
             .navigationTitle(self.model.serverTitle)
             .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
+            .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .tasks:
           EmptyView()
         case .user:
@@ -253,13 +358,13 @@ struct ServerView: View {
             MessageView(userID: selectionUserID)
               .navigationTitle(self.model.serverTitle)
               .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
+              .navigationSplitViewColumnWidth(min: 250, ideal: 500)
           }
         }
       }
     }
     .navigationTitle("")
     .onAppear {
-      print(" YAYY")
       self.model.login(server: self.server, login: "", password: "", username: preferences.username, iconID: preferences.userIconID) { success in
         if !success {
           print("FAILED LOGIN??")

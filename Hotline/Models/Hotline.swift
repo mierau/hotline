@@ -1,6 +1,6 @@
 import SwiftUI
 
-@Observable final class Hotline: HotlineClientDelegate {
+@Observable final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   let trackerClient: HotlineTrackerClient
   let client: HotlineClient
   
@@ -71,12 +71,6 @@ import SwiftUI
     2561: "🇸🇪",
   ]
   
-//  @AppStorage("username") private var username: String = "guest"
-//  @AppStorage("refuse private messages") private var refusePrivateMessages = false
-//  @AppStorage("refuse private chat") private var refusePrivateChat = false
-//  @AppStorage("enable automatic response") private var enableAutomaticResponse = false
-//  @AppStorage("automatic response") private var automaticResponse = ""
-  
   var status: HotlineClientStatus = .disconnected
   
   var server: Server?  {
@@ -109,6 +103,7 @@ import SwiftUI
   var news: [NewsInfo] = []
   var newsLoaded: Bool = false
   
+  var transfers: [TransferInfo] = []
   var downloads: [HotlineFileClient] = []
   
   @ObservationIgnored var bannerClient: HotlineFileClient?
@@ -180,7 +175,7 @@ import SwiftUI
   
   @MainActor func disconnect() {
     self.client.disconnect()
-    self.bannerClient?.disconnect()
+    self.bannerClient?.cancel()
   }
   
   @MainActor func sendAgree() {
@@ -391,18 +386,130 @@ import SwiftUI
     }
   }
   
-  func downloadFile(path: [String], callback: ((Bool) -> Void)?) {
+  @MainActor func downloadFile(_ fileName: String, path: [String], complete callback: ((TransferInfo, URL) -> Void)? = nil) {
+    var fullPath: [String] = []
+    if path.count > 1 {
+      fullPath = Array(path[0..<path.count-1])
+    }
     
+    self.client.sendDownloadFile(name: fileName, path: fullPath, sent: { _ in
+    }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
+      print("GOT DOWNLOAD REPLY:")
+      print("\tSUCCESS?", success)
+      print("\tTRANSFER SIZE: \(downloadTransferSize.debugDescription)")
+      print("\tFILE SIZE: \(downloadFileSize.debugDescription)")
+      print("\tREFERENCE NUM: \(downloadReferenceNumber.debugDescription)")
+      print("\tWAITING COUNT: \(downloadWaitingCount.debugDescription)")
+      
+      if
+        let self = self,
+        let address = self.server?.address,
+        let port = self.server?.port,
+        let referenceNumber = downloadReferenceNumber,
+        let transferSize = downloadTransferSize {
+        
+        print("DOWNLOADING TO MEMORY")
+        let fileClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .file)
+        fileClient.delegate = self
+        self.downloads.append(fileClient)
+        
+        let transfer = TransferInfo(id: referenceNumber, title: fileName, size: UInt(transferSize))
+        transfer.downloadCallback = callback
+        self.transfers.append(transfer)
+        
+        fileClient.downloadToFile()
+      }
+    })
+  }
+  
+  @MainActor func previewFile(_ fileName: String, path: [String], addTransfer: Bool = false, complete callback: ((TransferInfo, Data) -> Void)? = nil) {
+    var fullPath: [String] = []
+    if path.count > 1 {
+      fullPath = Array(path[0..<path.count-1])
+    }
+    
+    self.client.sendDownloadFile(name: fileName, path: fullPath, preview: true, sent: { _ in
+      
+    }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
+      guard success else {
+        return
+      }
+      
+      print("GOT DOWNLOAD REPLY:")
+      print("SUCCESS?", success)
+      print("TRANSFER SIZE: \(downloadTransferSize.debugDescription)")
+      print("FILE SIZE: \(downloadFileSize.debugDescription)")
+      print("REFERENCE NUM: \(downloadReferenceNumber.debugDescription)")
+      print("WAITING COUNT: \(downloadWaitingCount.debugDescription)")
+      
+      if
+        let self = self,
+        let address = self.server?.address,
+        let port = self.server?.port,
+        let referenceNumber = downloadReferenceNumber,
+        let transferSize = downloadTransferSize {
+        
+        let fileClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .preview)
+        fileClient.delegate = self
+        self.downloads.append(fileClient)
+        
+        if addTransfer {
+          let transfer = TransferInfo(id: referenceNumber, title: fileName, size: UInt(transferSize))
+          transfer.previewCallback = callback
+          self.transfers.append(transfer)
+        }
+        
+        fileClient.downloadToMemory()
+        
+        print("DOWNLOADING TO MEMORY")
+//        fileClient.downloadToMemory({ [weak self] fileData in
+//          print("DOWNLOADED PREVIEW DATA", fileData?.count)
+//          self?.downloads.removeAll { $0.referenceNumber == referenceNumber }
+//          callback?(fileData != nil, fileData)
+//        })
+        
+//        self.downloads.append(fileClient)
+      }
+    })
+  }
+  
+  @MainActor func deleteTransfer(id: UInt32) {
+    if let b = self.bannerClient, b.referenceNumber == id {
+      b.cancel()
+      self.bannerClient = nil
+      return
+    }
+    
+    if let i = self.transfers.firstIndex(where: { $0.id == id }) {
+      self.transfers.remove(at: i)
+    }
+    
+    if let i = self.downloads.firstIndex(where: { $0.referenceNumber == id }) {
+      let fileClient = self.downloads.remove(at: i)
+      fileClient.cancel(deleteIncompleteFile: true)
+    }
+  }
+  
+  @MainActor func deleteAllTransfers() {
+    self.transfers = []
+    
+    let downloads = self.downloads
+    self.downloads = []
+    
+    for fileClient in downloads {
+      fileClient.cancel(deleteIncompleteFile: true)
+    }
   }
   
   @MainActor func downloadBanner(force: Bool = false, callback: ((Bool) -> Void)?) {
-    if let b = self.bannerClient {
-      b.disconnect()
+    if self.bannerClient != nil || force {
+      self.bannerClient?.delegate = nil
+      self.bannerClient?.cancel()
       self.bannerClient = nil
-    }
-    
-    if force {
-      self.bannerImage = nil
+      
+      if force {
+        self.bannerImage = nil
+      }
     }
     
     if self.bannerImage != nil {
@@ -416,37 +523,44 @@ import SwiftUI
         callback?(false)
         return
       }
-    }, reply: { [weak self] downloadReferenceNumber, downloadTransferSize in
+    }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize in
+      if !success {
+        callback?(false)
+        return
+      }
+      
       if
         let self = self,
         let address = self.server?.address,
         let port = self.server?.port,
         let referenceNumber = downloadReferenceNumber,
         let transferSize = downloadTransferSize {
-        self.bannerClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .banner)
-        self.bannerClient?.downloadToMemory({ [weak self] data in
-          if let b = self?.bannerClient {
-            b.disconnect()
-            self?.bannerClient = nil
-          }
-          
-          if data != nil {
-            #if os(macOS)
-            self?.bannerImage = NSImage(data: data!)
-            #elseif os(iOS)
-            self?.bannerImage = UIImage(data: data!)
-            #endif
-          }
-          
-          callback?(data != nil)
-        })
+        self.bannerClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .preview)
+        self.bannerClient?.downloadToMemory()
+        
+//        self.bannerClient?.downloadToMemory({ [weak self] data in
+//          if let b = self?.bannerClient {
+//            b.disconnect()
+//            self?.bannerClient = nil
+//          }
+//          
+//          if data != nil {
+//            #if os(macOS)
+//            self?.bannerImage = NSImage(data: data!)
+//            #elseif os(iOS)
+//            self?.bannerImage = UIImage(data: data!)
+//            #endif
+//          }
+//          
+//          callback?(data != nil)
+//        })
       }
     })
   }
   
   // MARK: - Hotline Delegate
   
-  func hotlineStatusChanged(status: HotlineClientStatus) {
+  @MainActor func hotlineStatusChanged(status: HotlineClientStatus) {
     print("Hotline: Connection status changed to: \(status)")
     
     if status == .disconnected {
@@ -464,11 +578,12 @@ import SwiftUI
       self.newsLoaded = false
       
       self.bannerImage = nil
-      
       if let b = self.bannerClient {
-        b.disconnect()
+        b.cancel()
         self.bannerClient = nil
       }
+      
+      self.deleteAllTransfers()
     }
     
     self.status = status
@@ -537,6 +652,80 @@ import SwiftUI
   
   func hotlineReceivedError(message: String) {
     
+  }
+  
+  // MARK: - Hotline File Delegate
+  
+  func hotlineFileStatusChanged(client: HotlineFileClient, reference: UInt32, status: HotlineFileClientStatus, timeRemaining: TimeInterval) {
+    switch status {
+    case .unconnected:
+      break
+    case .connecting:
+      break
+    case .connected:
+      break
+    case .progress(let progress):
+      if let transfer = self.transfers.first(where: { $0.id == reference }) {
+        transfer.progress = progress
+        transfer.timeRemaining = timeRemaining
+      }
+    case .failed(_):
+      if let i = self.downloads.firstIndex(where: { $0.referenceNumber == reference }) {
+        self.downloads.remove(at: i)
+      }
+      if let transfer = self.transfers.first(where: { $0.id == reference }) {
+        transfer.failed = true
+        transfer.timeRemaining = 0.0
+      }
+      if let b = self.bannerClient, reference == b.referenceNumber {
+        b.delegate = nil
+        self.bannerClient = nil
+      }
+    case .completed:
+      if let transfer = self.transfers.first(where: { $0.id == reference }) {
+        transfer.completed = true
+        transfer.timeRemaining = 0.0
+      }
+      break
+    }
+  }
+  
+  func hotlineFileReceivedInfo(client: HotlineFileClient, reference: UInt32, info: HotlineFileInfoFork) {
+    if let transfer = self.transfers.first(where: { $0.id == reference }) {
+      transfer.title = info.name
+    }
+  }
+  
+  func hotlineFileDownloadedData(client: HotlineFileClient, reference: UInt32, data: Data) {
+    if let b = self.bannerClient, reference == b.referenceNumber {
+      #if os(macOS)
+      self.bannerImage = NSImage(data: data)
+      #elseif os(iOS)
+      self.bannerImage = UIImage(data: data)
+      #endif
+    }
+    else
+    if let i = self.transfers.firstIndex(where: { $0.id == reference }) {
+      let transfer = self.transfers[i]
+      transfer.previewCallback?(transfer, data)
+      self.transfers.remove(at: i)
+    }
+    
+    if let i = self.downloads.firstIndex(where: { $0.referenceNumber == reference }) {
+      self.downloads.remove(at: i)
+    }
+  }
+  
+  func hotlineFileDownloadedFile(client: HotlineFileClient, reference: UInt32, at: URL) {
+    if let i = self.transfers.firstIndex(where: { $0.id == reference }) {
+      let transfer = self.transfers[i]
+      transfer.fileURL = at
+      transfer.downloadCallback?(transfer, at)
+    }
+    
+    if let i = self.downloads.firstIndex(where: { $0.referenceNumber == reference }) {
+      self.downloads.remove(at: i)
+    }
   }
   
   // MARK: - Utilities

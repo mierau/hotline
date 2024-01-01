@@ -8,10 +8,13 @@ struct UserStatus: OptionSet {
 }
 
 struct User: Identifiable {
-  let id: UInt
+  var id: UInt
   var name: String
   var iconID: UInt
   var status: UserStatus
+  
+  var isAdmin: Bool { self.status.contains(.admin) }
+  var isIdle: Bool { self.status.contains(.idle) }
   
   init(hotlineUser: HotlineUser) {
     var status: UserStatus = UserStatus()

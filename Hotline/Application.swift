@@ -55,6 +55,14 @@ struct Application: App {
     }
     .defaultSize(width: 700, height: 800)
     .defaultPosition(.center)
+    .commandsRemoved()
+    .commands {
+      CommandGroup(before: CommandGroupPlacement.newItem) {
+        Button("before item") {
+          print("before item")
+        }
+      }
+    }
     
 #if os(macOS)
     Settings {

@@ -50,12 +50,23 @@ extension Data {
     }
     
     return withUnsafeBytes { $0.load(as: UInt64.self ) }
-    
-//    return 0
-    
-//    return (UInt64(self[offset]) << 56) + (UInt64(self[offset + 1]) << 48) + (UInt64(self[offset + 2]) << 40) + (UInt64(self[offset + 3]) << 32) + (UInt64(self[offset + 4]) << 24) + (UInt64(self[offset + 5]) << 16) + (UInt64(self[offset + 6]) << 8) + UInt64(self[offset + 7])
   }
   
+  func readDate(at offset: Int) -> Date? {
+    guard offset >= 0, offset + 2 + 2 + 4 <= self.count else {
+      return nil
+    }
+    
+    if
+      let year = self.readUInt16(at: offset),
+      let ms = self.readUInt16(at: offset + 2),
+      let secs = self.readUInt32(at: offset + 2 + 2) {
+      return convertHotlineDate(year: year, seconds: secs, milliseconds: ms)
+    }
+    
+    return nil
+  }
+    
   func readData(at offset: Int, length: Int) -> Data? {
     guard offset >= 0, offset + length <= self.count else {
       return nil
@@ -96,13 +107,28 @@ extension Data {
   }
   
   func readPString(at offset: Int) -> (String?, Int) {
+    guard offset >= 0, offset + 1 <= self.count else {
+      return (nil, 0)
+    }
     let len = Int(self.readUInt8(at: offset)!)
+    guard offset + 1 + len <= self.count else {
+      return (nil, 0)
+    }
     return (self.readString(at: offset+1, length: len), 1 + len)
   }
   
   func readLongPString(at offset: Int) -> (String?, Int) {
+    guard offset >= 0, offset + 2 <= self.count else {
+      return (nil, 0)
+    }
     let len = Int(self.readUInt16(at: offset)!)
-    return (self.readString(at: offset+2, length: len), 2 + len)
+    guard len > 0 else {
+      return ("", 0)
+    }
+    guard offset + 2 + len <= self.count else {
+      return (nil, 0)
+    }
+    return (self.readString(at: offset+2, length: len), len)
   }
   
   
@@ -128,14 +154,24 @@ extension Data {
   }
 }
 
-extension UInt32 {
-  func toStringLiteral() -> String {
+extension String {
+  func fourCharCode() -> FourCharCode {
+    guard self.count == 4 else {
+      return 0
+    }
+    
+    return self.utf16.reduce(0, {$0 << 8 + FourCharCode($1)})
+  }
+}
+
+extension FourCharCode {
+  func fourCharCode() -> String {
     let bytes = [
       UInt8((self >> 24) & 0xFF),
       UInt8((self >> 16) & 0xFF),
       UInt8((self >> 8) & 0xFF),
       UInt8(self & 0xFF)
     ]
-    return String(bytes: bytes, encoding: .utf8) ?? ""
+    return String(bytes: bytes, encoding: .ascii) ?? ""
   }
 }

@@ -110,7 +110,6 @@ struct ChatView: View {
               print("SCROLLED TO BOTTOM")
             }
             .onAppear {
-              print("SCROLLED TO BOTTOM ON APPEAR")
               reader.scrollTo(bottomID, anchor: .bottom)
 //              focusedField = .chatInput
             }

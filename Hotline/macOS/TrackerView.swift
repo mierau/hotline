@@ -13,7 +13,7 @@ struct TrackerBookmark {
 
 @Observable
 class TrackerItem: Identifiable, Hashable {
-  @ObservationIgnored let id: UUID = UUID()
+  let id: UUID = UUID()
   let bookmark: TrackerBookmark?
   let server: Server?
   
@@ -86,8 +86,6 @@ class TrackerItem: Identifiable, Hashable {
 }
 
 struct TrackerItemView: View {
-//  @Environment(Hotline.self) private var model: Hotline
-  
   @State var expanded = false
   @State var loading = false
   
