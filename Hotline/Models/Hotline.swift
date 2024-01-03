@@ -6,16 +6,18 @@ import SwiftUI
   
   #if os(macOS)
   static func getClassicIcon(_ index: Int) -> NSImage? {
-    if let icon = NSImage(named: "Classic/\(index)") {
-      return icon
-    }
-    return nil
+    return NSImage(named: "Classic/\(index)")
   }
+  #elseif os(iOS)
+  static func getClassicIcon(_ index: Int) -> UIImage? {
+    return UIImage(named: "Classic/\(index)")
+  }
+  #endif
   
   // The icon ordering here was painsakenly pulled manually
   // from the original Hotline client to display the classic icons
   // in the same order as the original client.
-  static let classicIcons: [Int] = [
+  static let classicIconSet: [Int] = [
     141, 149, 150, 151, 172, 184, 204,
     2013, 2036, 2037, 2055, 2400, 2505, 2534,
     2578, 2592, 4004, 4015, 4022, 4104, 4131,
@@ -98,7 +100,6 @@ import SwiftUI
     6017, 6018, 6023, 6025, 6026, 6027, 6028,
     6029, 6030, 6031, 6032, 6033, 6034, 6035
   ]
-  #endif
   
   static let defaultIconSet: [Int: String] = [
     414: "🙂",

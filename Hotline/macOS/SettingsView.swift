@@ -47,7 +47,7 @@ struct IconSettingsView: View {
             GridItem(.fixed(4+64+4)),
             GridItem(.fixed(4+64+4))
           ], spacing: 0) {
-            ForEach(Hotline.classicIcons, id: \.self) { iconID in
+            ForEach(Hotline.classicIconSet, id: \.self) { iconID in
               HStack {
                 Image("Classic/\(iconID)")
                   .resizable()

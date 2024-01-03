@@ -10,7 +10,7 @@
 		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; platformFilter = ios; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; platformFilter = ios; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; platformFilter = ios; };
-		DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2863D72B37AD1C00A7D050 /* SettingsView.swift */; };
+		DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2863D72B37AD1C00A7D050 /* SettingsView.swift */; platformFilters = (macos, ); };
 		DA2863DA2B37BF6E00A7D050 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2863D92B37BF6E00A7D050 /* Preferences.swift */; };
 		DA2863DD2B3E8B7000A7D050 /* FilePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2863DC2B3E8B7000A7D050 /* FilePreview.swift */; };
 		DA32CD492B2931640053B98B /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD482B2931640053B98B /* User.swift */; };
@@ -456,7 +456,7 @@
 				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				DEVELOPMENT_TEAM = 5AEEV7QB2U;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
@@ -495,7 +495,7 @@
 				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				DEVELOPMENT_TEAM = 5AEEV7QB2U;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
