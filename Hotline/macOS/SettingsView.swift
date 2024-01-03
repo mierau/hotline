@@ -28,43 +28,60 @@ struct GeneralSettingsView: View {
 struct IconSettingsView: View {
   @Environment(Prefs.self) private var preferences: Prefs
   
+  @State private var hoveredUserIconID: Int = -1
+  
 //  @AppStorage(Prefs.userIconID) private var userIconID: Int = Prefs.defaultIconID
   
   var body: some View {
     @Bindable var preferences = preferences
     
     Form {
-      ScrollView {
-        LazyVGrid(columns: [
-          GridItem(.flexible(minimum: 20, maximum: 50)),
-          GridItem(.flexible(minimum: 20, maximum: 50)),
-          GridItem(.flexible(minimum: 20, maximum: 50)),
-          GridItem(.flexible(minimum: 20, maximum: 50)),
-          GridItem(.flexible(minimum: 20, maximum: 50)),
-          GridItem(.flexible(minimum: 20, maximum: 50)),
-          GridItem(.flexible(minimum: 20, maximum: 50))
-        ]) {
-          ForEach(Hotline.classicIcons, id: \.self) { iconID in
-            Image("Classic/\(iconID)")
-              .font(.largeTitle)
-              .frame(maxWidth: .infinity)
+      ScrollViewReader { scrollProxy in
+        ScrollView {
+          LazyVGrid(columns: [
+            GridItem(.fixed(4+64+4)),
+            GridItem(.fixed(4+64+4)),
+            GridItem(.fixed(4+64+4)),
+            GridItem(.fixed(4+64+4)),
+            GridItem(.fixed(4+64+4)),
+            GridItem(.fixed(4+64+4)),
+            GridItem(.fixed(4+64+4))
+          ], spacing: 0) {
+            ForEach(Hotline.classicIcons, id: \.self) { iconID in
+              HStack {
+                Image("Classic/\(iconID)")
+                  .resizable()
+                  .interpolation(.none)
+                  .scaledToFit()
+                  .frame(width: 64, height: 32)
+              }
+              .tag(iconID)
+              .frame(width: 64, height: 64)
               .padding(4)
-              .background(iconID == preferences.userIconID ? .blue : .clear)
+              .background(iconID == preferences.userIconID ? Color.accentColor : (iconID == hoveredUserIconID ? Color.accentColor.opacity(0.1) : Color(nsColor: .textBackgroundColor)))
               .clipShape(RoundedRectangle(cornerRadius: 5))
               .onTapGesture {
                 preferences.userIconID = iconID
               }
+              .onHover { hovered in
+                if hovered {
+                  self.hoveredUserIconID = iconID
+                }
+              }
+            }
           }
+          .padding()
         }
-        .padding()
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
+        .onAppear {
+          scrollProxy.scrollTo(preferences.userIconID, anchor: .center)
+        }
+        .frame(height: 415)
       }
-//      for (iconID, iconText) in Hotline.defaultIconSet {
-        
-//        Text(iconText)
-//      }
     }
-    .frame(width: 350, height: 300)
-    
+    .padding()
   }
 }
 
@@ -82,7 +99,7 @@ struct SettingsView: View {
         .tag(Tabs.general)
       IconSettingsView()
         .tabItem {
-          Label("Icon", systemImage: "person.crop.circle")
+          Label("Icon", systemImage: "person")
         }
         .tag(Tabs.icon)
     }
