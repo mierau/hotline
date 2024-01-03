@@ -265,36 +265,19 @@ struct ServerView: View {
           if let iconImage = Hotline.getClassicIcon(Int(user.iconID)) {
             Image(nsImage: iconImage)
               .frame(width: 18)
-              .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-              .opacity(user.isIdle ? 0.5 : 1.0)
           }
           else {
             Text("")
               .frame(width: 18)
           }
           
-          if user.isAdmin {
-            if user.isIdle {
-              Text(user.name)
-                .foregroundStyle(.red)
-                .opacity(controlActiveState == .inactive ? 0.3 : 0.5)
-            }
-            else {
-              Text(user.name)
-                .foregroundStyle(.red)
-                .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-            }
-          }
-          else if user.isIdle {
-            Text(user.name)
-              .opacity(controlActiveState == .inactive ? 0.3 : 0.5)
-          }
-          else {
-            Text(user.name)
-//                      .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-          }
+          Text(user.name)
+            .foregroundStyle(user.isAdmin ? Color(hex: 0xE10000) : .primary)
+          
           Spacer()
         }
+        .opacity(user.isIdle ? 0.6 : 1.0)
+        .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
         .tag(MenuItem(name: user.name, image: "", type: .user, userID: user.id))
       }
     }
