@@ -210,6 +210,7 @@ struct TrackerItemView: View {
 struct TrackerView: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.openWindow) private var openWindow
+  @Environment(\.controlActiveState) private var controlActiveState
   
   var bookmarks: [TrackerBookmark] = [
     TrackerBookmark(type: .server, name: "RetroMac", address: "82.32.130.173"),
@@ -333,6 +334,15 @@ struct TrackerView: View {
     }
     .navigationTitle("Servers")
     .toolbar {
+      ToolbarItem(placement: .navigation) {
+        Image("Hotline")
+          .resizable()
+          .renderingMode(.template)
+          .scaledToFit()
+          .foregroundColor(Color(hex: 0xE10000))
+          .frame(width: 9)
+          .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+      }
       ToolbarItem(placement: .primaryAction) {
         Button {
           Task {

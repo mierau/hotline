@@ -19,18 +19,8 @@ struct Application: App {
     Window("Servers", id: "servers") {
       TrackerView()
         .frame(minWidth: 250, minHeight: 250)
-        .toolbar {
-          ToolbarItem(placement: .navigation) {
-            Image("Hotline")
-              .resizable()
-              .renderingMode(.template)
-              .scaledToFit()
-              .foregroundColor(Color(hex: 0xE10000))
-              .frame(width: 9)
-          }
-        }
     }
-    .defaultSize(width: 700, height: 600)
+    .defaultSize(width: 700, height: 550)
     .defaultPosition(.center)
     
     WindowGroup(id: "server", for: Server.self) { $server in
