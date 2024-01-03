@@ -14,7 +14,7 @@ class Prefs {
   init() {
     UserDefaults.standard.register(defaults:[
       PrefsKeys.username.rawValue: "guest",
-      PrefsKeys.userIconID.rawValue: 137,
+      PrefsKeys.userIconID.rawValue: 191,
       PrefsKeys.refusePrivateMessages.rawValue: false,
       PrefsKeys.refusePrivateChat.rawValue: false,
       PrefsKeys.enableAutomaticMessage.rawValue: false,
