@@ -2,12 +2,17 @@ import SwiftUI
 
 struct GeneralSettingsView: View {
   @Environment(Prefs.self) private var preferences: Prefs
+  
+  @State private var username: String = ""
+  @State private var usernameChanged: Bool = false
+  
+  let saveTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
     
   var body: some View {
     @Bindable var preferences = preferences
     
     Form {
-      TextField("Your Name", text: $preferences.username, prompt: Text("guest"))
+      TextField("Your Name", text: $username, prompt: Text("guest"))
       Toggle("Refuse private messages", isOn: $preferences.refusePrivateMessages)
       Toggle("Refuse private chat", isOn: $preferences.refusePrivateChat)
       Toggle("Automatic Response", isOn: $preferences.enableAutomaticMessage)
@@ -15,13 +20,31 @@ struct GeneralSettingsView: View {
         TextField("", text: $preferences.automaticMessage, prompt: Text("Write a response message"))
           .lineLimit(2)
           .multilineTextAlignment(.leading)
-//          .fixedSize(horizontal: true, vertical: false)
           .frame(maxWidth: .infinity)
-//          .lineLimit(2, reservesSpace: true)
+          .onSubmit(of: .text) {
+            preferences.username = self.username
+          }
       }
     }
     .padding(20)
     .frame(width: 350)
+    .onAppear {
+      self.username = preferences.username
+      self.usernameChanged = false
+    }
+    .onDisappear {
+      preferences.username = self.username
+      self.usernameChanged = false
+    }
+    .onChange(of: username) { oldValue, newValue in
+      self.usernameChanged = true
+    }
+    .onReceive(saveTimer) { _ in
+      if self.usernameChanged {
+        self.usernameChanged = false
+        preferences.username = self.username
+      }
+    }
   }
 }
 
@@ -29,8 +52,6 @@ struct IconSettingsView: View {
   @Environment(Prefs.self) private var preferences: Prefs
   
   @State private var hoveredUserIconID: Int = -1
-  
-//  @AppStorage(Prefs.userIconID) private var userIconID: Int = Prefs.defaultIconID
   
   var body: some View {
     @Bindable var preferences = preferences
@@ -94,7 +115,7 @@ struct SettingsView: View {
     TabView {
       GeneralSettingsView()
         .tabItem {
-          Label("General", systemImage: "gear")
+          Label("General", systemImage: "person.text.rectangle")
         }
         .tag(Tabs.general)
       IconSettingsView()

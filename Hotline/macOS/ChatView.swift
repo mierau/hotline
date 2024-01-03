@@ -171,7 +171,6 @@ struct ChatView: View {
       }
     }
     .navigationTitle(self.model.serverTitle)
-    .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
     .background(Color(nsColor: .textBackgroundColor))
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
@@ -181,17 +180,17 @@ struct ChatView: View {
           }
         } label: {
           Image(systemName: "square.and.arrow.up")
-        }.help("Save Chat")
+        }.help("Save Chat...")
       }
     }
-    .fileExporter(isPresented: $showingExporter, document: chatDocument, contentType: .utf8PlainText, defaultFilename: "\(model.serverTitle) Chat") { result in
-//      switch result {
-//      case .success(let url):
-//        print("Saved to \(url)")
-//        
-//      case .failure(let error):
-//        print(error.localizedDescription)
-//      }
+    .fileExporter(isPresented: $showingExporter, document: self.chatDocument, contentType: .utf8PlainText, defaultFilename: "\(self.model.serverTitle) Chat.txt") { result in
+      switch result {
+      case .success(let url):
+        print("Saved to \(url)")
+        
+      case .failure(let error):
+        print(error.localizedDescription)
+      }
       self.chatDocument.text = ""
     }
   }
@@ -200,7 +199,6 @@ struct ChatView: View {
     var text: String = String()
     
     self.chatDocument.text = ""
-    
     for msg in model.chat {
       if msg.type == .agreement {
         text.append(msg.text)

@@ -181,7 +181,7 @@ struct ServerView: View {
   @State private var agreementShown: Bool = false
   @State private var selection: MenuItem? = ServerView.menuItems.first
   
-  let server: Server
+  let server: Server?
   
   static var menuItems = [
     MenuItem(name: "Chat", image: "bubble", type: .chat),
@@ -259,7 +259,7 @@ struct ServerView: View {
   }
   
   var usersSection: some View {
-    Section("Users") {
+    Section("\(model.users.count) Online") {
       ForEach(model.users) { user in
         HStack {
           if let iconImage = Hotline.getClassicIcon(Int(user.iconID)) {
@@ -302,28 +302,9 @@ struct ServerView: View {
   
   var body: some View {
     NavigationSplitView {
-      
       self.navigationList
         .frame(maxWidth: .infinity)
         .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 500)
-      
-//      VSplitView {
-//        
-//        self.navigationList
-//        
-//        ScrollView {
-//          VStack(alignment: .leading) {
-//  //          ForEach(model.downloads) {
-//  //          }
-//          }
-//          .frame(maxWidth: .infinity)
-//        }
-//        
-//      }
-//      .frame(maxWidth: .infinity)
-//      .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 500)
-      
-      
     } detail: {
       if let selection = self.selection {
         switch selection.type {
@@ -334,22 +315,18 @@ struct ServerView: View {
         case .chat:
           ChatView()
             .navigationTitle(self.model.serverTitle)
-            .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .news:
           NewsView()
             .navigationTitle(self.model.serverTitle)
-            .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .messageBoard:
           MessageBoardView()
             .navigationTitle(self.model.serverTitle)
-            .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .files:
           FilesView()
             .navigationTitle(self.model.serverTitle)
-            .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .tasks:
           EmptyView()
@@ -357,7 +334,6 @@ struct ServerView: View {
           if let selectionUserID = selection.userID {
             MessageView(userID: selectionUserID)
               .navigationTitle(self.model.serverTitle)
-              .navigationSubtitle(self.model.users.count > 0 ? "^[\(self.model.users.count) user](inflect: true) online" : "")
               .navigationSplitViewColumnWidth(min: 250, ideal: 500)
           }
         }
@@ -365,15 +341,17 @@ struct ServerView: View {
     }
     .navigationTitle("")
     .onAppear {
-      self.model.login(server: self.server, login: "", password: "", username: preferences.username, iconID: preferences.userIconID) { success in
-        if !success {
-          print("FAILED LOGIN??")
-        }
-        else {
-          print("GETTING USER LIST????!")
-          self.sendPreferences()
-          self.model.getUserList()
-          self.model.downloadBanner()
+      if let s = self.server {
+        self.model.login(server: s, login: "", password: "", username: preferences.username, iconID: preferences.userIconID) { success in
+          if !success {
+            print("FAILED LOGIN??")
+          }
+          else {
+            print("GETTING USER LIST????!")
+            self.sendPreferences()
+            self.model.getUserList()
+            self.model.downloadBanner()
+          }
         }
       }
     }

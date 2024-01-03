@@ -208,14 +208,12 @@ struct TrackerItemView: View {
 }
 
 struct TrackerView: View {
-  @Environment(\.colorScheme) var colorScheme
+  @Environment(\.colorScheme) private var colorScheme
   @Environment(\.openWindow) private var openWindow
   
-//  @AppStorage("servers", store: .standard)
   var bookmarks: [TrackerBookmark] = [
     TrackerBookmark(type: .server, name: "RetroMac", address: "82.32.130.173"),
     TrackerBookmark(type: .server, name: "System 7 Today", address: "158.174.146.146"),
-//    TrackerBookmark(type: .server, name: "Bob Kiwi's House", address: "73.132.92.104"),
     TrackerBookmark(type: .tracker, name: "Featured Servers", address: "hltracker.com"),
     TrackerBookmark(type: .tracker, name: "Agent79", address: "tracked.agent79.org"),
     TrackerBookmark(type: .tracker, name: "Preterhuman", address: "tracker.preterhuman.net"),
@@ -264,8 +262,6 @@ struct TrackerView: View {
   }
   
   @State private var servers: [TrackerItem] = []
-//  @State private var selectedServer: Server?
-  
   @State private var selection: TrackerItem? = nil
   
   @State private var scrollOffset: CGFloat = CGFloat.zero
@@ -360,10 +356,11 @@ struct TrackerView: View {
       
       ToolbarItem(placement: .primaryAction) {
         Button {
+          openWindow(id: "server")
         } label: {
-          Label("Add Server Bookmark...", systemImage: "plus")
+          Label("Add Server Bookmark...", systemImage: "globe.americas.fill")
         }
-        .help("Add Server Bookmark")
+        .help("Connect to Server...")
       }
     }
     .onAppear {
