@@ -38,10 +38,21 @@ struct ChatView: View {
                   if msg.type == .agreement {
                     VStack(alignment: .center, spacing: 16) {
                       
-                      FileImageView()
-                        .environment(self.model)
-                        .frame(maxWidth: 468.0)
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                      if let bannerImage = self.model.bannerImage {
+                        #if os(macOS)
+                        Image(nsImage: bannerImage)
+                          .resizable()
+                          .scaledToFit()
+                          .frame(maxWidth: 468.0)
+                          .clipShape(RoundedRectangle(cornerRadius: 3))
+                        #elseif os(iOS)
+                        Image(uiImage: bannerImage)
+                          .resizable()
+                          .scaledToFit()
+                          .frame(maxWidth: 468.0)
+                          .clipShape(RoundedRectangle(cornerRadius: 3))
+                        #endif
+                      }
                                             
                       VStack(spacing: 0) {
                         ScrollView(.vertical) {

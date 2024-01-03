@@ -4,6 +4,67 @@ import SwiftUI
   let trackerClient: HotlineTrackerClient
   let client: HotlineClient
   
+  #if os(macOS)
+  static func getClassicIcon(_ index: Int) -> NSImage? {
+    if let icon = NSImage(named: "Classic/\(index)") {
+      return icon
+    }
+    return nil
+  }
+  
+  // The icon ordering here was painsakenly pulled manually
+  // from the original Hotline client to display the classic icons
+  // in the same order as the original client.
+  static let classicIcons: [Int] = [
+    141, 149, 150, 151, 172, 184, 204,
+    2013, 2036, 2037, 2055, 2400, 2505, 2534,
+    2578, 2592, 4004, 4015, 4022, 4104, 4131,
+    4134, 4136, 4169, 4183, 4197, 4240, 4247,
+    128, 129, 130, 131, 132, 133, 134,
+    135, 136, 137, 138, 139, 140, 142,
+    143, 144, 145, 146, 147, 148, 152,
+    153, 154, 155, 156, 157, 158, 159,
+    160, 161, 162, 163, 164, 165, 166,
+    167, 168, 169, 170, 171, 173, 174,
+    175, 176, 177, 178, 179, 180, 181,
+    182, 183, 185, 186, 187, 188, 189,
+    190, 191, 192, 193, 194, 195, 196,
+    197, 198, 199, 200, 201, 202, 203,
+    205, 206, 207, 208, 209, 212, 214,
+    215, 220, 233, 236, 237, 243, 244,
+    277, 410, 414, 500, 666, 1250, 1251,
+    1968, 1969, 2000, 2001, 2002, 2003, 2004,
+    2006, 2007, 2008, 2009, 2010, 2011, 2012,
+    2014, 2015, 2016, 2017, 2018, 2019, 2020,
+    2021, 2022, 2023, 2024, 2025, 2026, 2027,
+    2028, 2029, 2030, 2031, 2032, 2033, 2034,
+    2035, 2038, 2040, 2041, 2042, 2043, 2044,
+    2045, 2046, 2047, 2048, 2049, 2050, 2051,
+    2052, 2053, 2054, 2056, 2057, 2058, 2059,
+    2060, 2061, 2062, 2063, 2064, 2065, 2066,
+    2067, 2070, 2071, 2072, 2073, 2075, 2079,
+    2098, 2100, 2101, 2102, 2103, 2104, 2105,
+    2106, 2107, 2108, 2109, 2110, 2112, 2113,
+    2115, 2116, 2117, 2118, 2119, 2120, 2121,
+    2122, 2123, 2124, 2125, 2126, 4150, 2223,
+    2401, 2402, 2403, 2404, 2500, 2501, 2502,
+    2503, 2504, 2506, 2507, 2528, 2529, 2530,
+    2531, 2532, 2533, 2535, 2536, 2537, 2538,
+    2539, 2540, 2541, 2542, 2543, 2544, 2645,
+    2546, 2547, 2548, 2548, 2550, 2551, 2552,
+    2553, 2554, 2555, 2556, 2557, 2558, 2559,
+    2560, 2561, 2562, 2563, 2564, 2565, 2566,
+    2567, 2568, 2569, 2570, 2571, 2572, 2573,
+    2574, 2575, 2576, 2577, 2579, 2580, 2581,
+    2582, 2583, 2584, 2585, 2586, 2587, 2588,
+    2589, 2590, 2591, 2593, 2594, 2595, 2596,
+    2597, 2598, 2599, 2600, 4000, 4001, 4002,
+    4003, 4005, 4006, 4007, 4008, 4009, 4010,
+    4011, 4012, 4013, 4014, 4016, 4017, 4018,
+    4019, 4020, 4021, 4023, 4024, 4025, 4026,
+  ]
+  #endif
+  
   static let defaultIconSet: [Int: String] = [
     414: "🙂",
     2000: "📟",
@@ -124,7 +185,7 @@ import SwiftUI
   
   // MARK: -
   
-  @MainActor func getServerList(tracker: String, port: Int = Tracker.defaultPort) async -> [Server] {
+  @MainActor func getServerList(tracker: String, port: Int = HotlinePorts.DefaultTrackerPort) async -> [Server] {
     let fetchedServers: [HotlineServer] = await self.trackerClient.fetchServers(address: tracker, port: port)
     
     var servers: [Server] = []
@@ -501,7 +562,7 @@ import SwiftUI
     }
   }
   
-  @MainActor func downloadBanner(force: Bool = false, callback: ((Bool) -> Void)?) {
+  @MainActor func downloadBanner(force: Bool = false) {
     if self.bannerClient != nil || force {
       self.bannerClient?.delegate = nil
       self.bannerClient?.cancel()
@@ -513,19 +574,16 @@ import SwiftUI
     }
     
     if self.bannerImage != nil {
-      callback?(true)
       return
     }
     
     self.client.sendDownloadBanner(sent: { success in
       if !success {
         print("FAIL BANNER")
-        callback?(false)
         return
       }
     }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize in
       if !success {
-        callback?(false)
         return
       }
       
@@ -536,24 +594,8 @@ import SwiftUI
         let referenceNumber = downloadReferenceNumber,
         let transferSize = downloadTransferSize {
         self.bannerClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .preview)
+        self.bannerClient?.delegate = self
         self.bannerClient?.downloadToMemory()
-        
-//        self.bannerClient?.downloadToMemory({ [weak self] data in
-//          if let b = self?.bannerClient {
-//            b.disconnect()
-//            self?.bannerClient = nil
-//          }
-//          
-//          if data != nil {
-//            #if os(macOS)
-//            self?.bannerImage = NSImage(data: data!)
-//            #elseif os(iOS)
-//            self?.bannerImage = UIImage(data: data!)
-//            #endif
-//          }
-//          
-//          callback?(data != nil)
-//        })
       }
     })
   }
@@ -697,12 +739,15 @@ import SwiftUI
   }
   
   func hotlineFileDownloadedData(client: HotlineFileClient, reference: UInt32, data: Data) {
-    if let b = self.bannerClient, reference == b.referenceNumber {
+    print("DOWNLOADED DATA?", reference)
+    if let b = self.bannerClient, b.referenceNumber == reference {
       #if os(macOS)
       self.bannerImage = NSImage(data: data)
       #elseif os(iOS)
       self.bannerImage = UIImage(data: data)
       #endif
+      
+      print("DOWNLOADED BANNER!")
     }
     else
     if let i = self.transfers.firstIndex(where: { $0.id == reference }) {

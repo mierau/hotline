@@ -1,12 +1,10 @@
 import SwiftUI
 
 @Observable final class Tracker {
-  static let defaultPort: Int = 5498
-  
   let address: String
   let port: Int
   
-  init(address: String, port: Int = defaultPort) {
+  init(address: String, port: Int = HotlinePorts.DefaultTrackerPort) {
     self.address = address
     self.port = port
   }

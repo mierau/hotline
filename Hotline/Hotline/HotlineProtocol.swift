@@ -1,5 +1,10 @@
 import Foundation
 
+struct HotlinePorts {
+  static let DefaultServerPort: Int = 5500
+  static let DefaultTrackerPort: Int = 5498
+}
+
 struct HotlineUserOptions: OptionSet {
   let rawValue: UInt16
   
@@ -169,7 +174,6 @@ struct HotlineNewsList: Identifiable {
         
         newArticle.flavors.append((flavorText, articleSize))
         
-        
 //        let articleString = data.readString(at: baseIndex + i + 4 + 8 + 4 + 4 + 2 + 1 + Int(titleLength) + 1 + Int(posterLength) + 1 + Int(flavorLength) + 2, length: Int(articleSize))!
         
         print("FLAVOR: \(flavorText)")
@@ -178,8 +182,6 @@ struct HotlineNewsList: Identifiable {
       }
       
       self.articles.append(newArticle)
-      
-//      break
     }
   }
 }

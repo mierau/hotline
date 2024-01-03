@@ -1,15 +1,13 @@
 import SwiftUI
 
 struct Server: Codable {
-  static let defaultPort: Int = 5500
-  
   var name: String?
   var description: String?
   var users: Int
   var address: String
   var port: Int
   
-  init(name: String?, description: String?, address: String, port: Int, users: Int = 0) {
+  init(name: String?, description: String?, address: String, port: Int = HotlinePorts.DefaultServerPort, users: Int = 0) {
     self.name = name
     self.description = description
     self.address = address.lowercased()

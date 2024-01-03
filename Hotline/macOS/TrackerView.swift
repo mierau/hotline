@@ -62,7 +62,7 @@ class TrackerItem: Identifiable, Hashable {
     self.loading = true
 //    self.servers = []
 
-    let fetchedServers: [HotlineServer] = await client.fetchServers(address: bookmark.address, port: Tracker.defaultPort)
+    let fetchedServers: [HotlineServer] = await client.fetchServers(address: bookmark.address, port: HotlinePorts.DefaultTrackerPort)
     
     client.disconnect()
 
@@ -311,7 +311,7 @@ struct TrackerView: View {
       else if
         let bookmark = clickedItem.bookmark,
         bookmark.type == .server {
-        let server = Server(name: bookmark.name, description: nil, address: bookmark.address, port: Server.defaultPort)
+        let server = Server(name: bookmark.name, description: nil, address: bookmark.address, port: HotlinePorts.DefaultServerPort)
         openWindow(value: server)
       }
     }

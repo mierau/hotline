@@ -21,14 +21,7 @@ struct FileImageView: View {
     }
     
     self.status = .loading
-    self.model.downloadBanner { success in
-      if success {
-        self.status = .loaded
-      }
-      else {
-        self.status = .notloaded
-      }
-    }
+    self.model.downloadBanner()
   }
   
   var body: some View {

@@ -44,8 +44,8 @@ struct IconSettingsView: View {
           GridItem(.flexible(minimum: 20, maximum: 50)),
           GridItem(.flexible(minimum: 20, maximum: 50))
         ]) {
-          ForEach(Hotline.defaultIconSet.sorted(by: >), id: \.key) { iconID, iconText in
-            Text(iconText)
+          ForEach(Hotline.classicIcons, id: \.self) { iconID in
+            Image("Classic/\(iconID)")
               .font(.largeTitle)
               .frame(maxWidth: .infinity)
               .padding(4)

@@ -371,10 +371,7 @@ class HotlineFileClient {
         case .fileHeader:
           if let header = HotlineFileHeader(from: self.fileBytes) {
             self.fileBytes.removeSubrange(0..<HotlineFileHeader.DataSize)
-            
             self.fileHeader = header
-            print("FILE HEADER", self.fileHeader)
-            
             self.transferStage = .fileForkHeader
             keepProcessing = true
           }
@@ -385,7 +382,6 @@ class HotlineFileClient {
             self.fileCurrentForkHeader = forkHeader
             self.fileCurrentForkBytesLeft = Int(forkHeader.dataSize)
             
-            print("FILE FORK HEADER", forkHeader, forkHeader.forkType.fourCharCode())
             if forkHeader.forkType == "INFO".fourCharCode() {
               print("INFO FORK!")
               self.transferStage = .fileInfoFork
@@ -433,7 +429,6 @@ class HotlineFileClient {
           }
         case .fileDataFork:
           if self.fileBytes.count > 0 {
-            print("DOWNLOADING DATA FORK")
             if let f = self.fileHandle {
               do {
                 var dataToWrite = self.fileBytes
@@ -453,8 +448,6 @@ class HotlineFileClient {
                   self.fileBytes = Data()
                 }
                 
-                print("WRITING \(dataToWrite.count) BYTES TO DISK")
-                
                 try f.write(contentsOf: dataToWrite)
               }
               catch {
@@ -464,7 +457,6 @@ class HotlineFileClient {
           }
         case .fileUnsupportedFork:
           if self.fileBytes.count > 0 {
-            print("SKIPPING UNSUPPORTED FORK DATA")
             var dataToWrite = self.fileBytes
             
             if dataToWrite.count >= self.fileCurrentForkBytesLeft {

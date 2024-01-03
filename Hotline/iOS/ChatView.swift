@@ -26,25 +26,28 @@ struct ChatView: View {
                 if msg.type == .agreement {
                   
                   VStack(alignment: .center) {
-                    FileImageView()
-                      .environment(self.model)
-                      .frame(maxWidth: 468.0)
-                      .clipShape(RoundedRectangle(cornerRadius: 5))
+                    if let bannerImage = self.model.bannerImage {
+                      Image(uiImage: bannerImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 468.0)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    }
                     
-                      VStack(alignment: .leading) {
-                        HStack {
-                          Text(msg.text)
-                            .textSelection(.enabled)
-                            .font(.system(size: 12))
-                            .fontDesign(.monospaced)
-                            .lineSpacing(2)
-                            .padding()
-                          Spacer()
-                        }
+                    VStack(alignment: .leading) {
+                      HStack {
+                        Text(msg.text)
+                          .textSelection(.enabled)
+                          .font(.system(size: 12))
+                          .fontDesign(.monospaced)
+                          .lineSpacing(2)
+                          .padding()
+                        Spacer()
                       }
-                      .background(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.96))
-                      .frame(maxWidth: .infinity)
-                      .cornerRadius(5)
+                    }
+                    .background(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.96))
+                    .frame(maxWidth: .infinity)
+                    .cornerRadius(5)
                   }
                   .frame(maxWidth: .infinity)
                   .padding()

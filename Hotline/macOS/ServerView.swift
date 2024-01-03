@@ -262,11 +262,11 @@ struct ServerView: View {
     Section("Users") {
       ForEach(model.users) { user in
         HStack {
-          if let iconString = Hotline.defaultIconSet[Int(user.iconID)] {
-            Text(iconString)
-              .font(.headline)
+          if let iconImage = Hotline.getClassicIcon(Int(user.iconID)) {
+            Image(nsImage: iconImage)
               .frame(width: 18)
               .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+              .opacity(user.isIdle ? 0.5 : 1.0)
           }
           else {
             Text("")
@@ -373,6 +373,7 @@ struct ServerView: View {
           print("GETTING USER LIST????!")
           self.sendPreferences()
           self.model.getUserList()
+          self.model.downloadBanner()
         }
       }
     }

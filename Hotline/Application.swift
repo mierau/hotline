@@ -44,25 +44,21 @@ struct Application: App {
               Image(systemName: "globe.americas.fill")
                 .resizable()
                 .scaledToFit()
-//                .foregroundColor(.secondary)
-                .frame(width: 22)
-//                .fontWeight(.light)
-//              Text("􀵲")
-//                .font(.system(size: 22, weight: .ultraLight))
+                .frame(width: 18)
             }
           }
       }
     }
     .defaultSize(width: 700, height: 800)
     .defaultPosition(.center)
-    .commandsRemoved()
-    .commands {
-      CommandGroup(before: CommandGroupPlacement.newItem) {
-        Button("before item") {
-          print("before item")
-        }
-      }
-    }
+//    .commandsRemoved()
+//    .commands {
+//      CommandGroup(before: CommandGroupPlacement.newItem) {
+//        Button("before item") {
+//          print("before item")
+//        }
+//      }
+//    }
     
 #if os(macOS)
     Settings {
