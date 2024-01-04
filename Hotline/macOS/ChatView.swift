@@ -170,7 +170,6 @@ struct ChatView: View {
         }
       }
     }
-    .navigationTitle(self.model.serverTitle)
     .background(Color(nsColor: .textBackgroundColor))
     .toolbar {
       ToolbarItem(placement: .primaryAction) {

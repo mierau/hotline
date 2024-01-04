@@ -119,7 +119,9 @@ class HotlineClient {
     
     let tcpOptions = NWProtocolTCP.Options()
     tcpOptions.enableKeepalive = true
+    tcpOptions.enableFastOpen = true
     tcpOptions.keepaliveInterval = 30
+    tcpOptions.connectionTimeout = 30
     let connectionParameters: NWParameters
     connectionParameters = NWParameters(tls: nil, tcp: tcpOptions)
     
@@ -140,20 +142,25 @@ class HotlineClient {
         print("HotlineClient: connection waiting \(err)...")
         switch err {
         case .posix(let errCode):
-          switch errCode {
-          case .ETIMEDOUT:
-            self.disconnect()
-          case .ECONNREFUSED:
-            self.disconnect()
-          default:
-            self.disconnect()
-            break
-          }
-          
           print("HotlineClient: posix error code \(errCode)")
+          self.disconnect()
+//          switch errCode {
+//          case .ETIMEDOUT:
+//            self.disconnect()
+//          case .ECONNREFUSED:
+//            self.disconnect()
+//          default:
+//            self.disconnect()
+//            break
+//          }
+        case .tls(let errStatus):
+          print("HotlineClient: tls error code \(errStatus)")
+          self.disconnect()
+        case .dns(let errType):
+          print("HotlineClient: DNS Error code \(errType)")
+          self.disconnect()
         default:
           print("HotlineClient: error code \(err)")
-          
         }
       case .ready:
         print("HotlineClient: connection ready!")

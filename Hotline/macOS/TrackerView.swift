@@ -303,13 +303,11 @@ struct TrackerView: View {
         clickedItem.expanded.toggle()
       }
       else if let server = clickedItem.server {
-        openWindow(value: server)
+        openWindow(id: "server", value: server)
       }
-      else if
-        let bookmark = clickedItem.bookmark,
-        bookmark.type == .server {
+      else if let bookmark = clickedItem.bookmark, bookmark.type == .server {
         let server = Server(name: bookmark.name, description: nil, address: bookmark.address, port: HotlinePorts.DefaultServerPort)
-        openWindow(value: server)
+        openWindow(id: "server", value: server)
       }
     }
     .onKeyPress(.rightArrow) {

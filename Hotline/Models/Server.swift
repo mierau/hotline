@@ -14,6 +14,13 @@ struct Server: Codable {
     self.port = port
     self.users = users
   }
+  
+  static func parseServerAddressAndPort(_ address: String) -> (String, Int) {
+    let url = URL(string: "hotline://\(address)")
+    let port = url?.port ?? HotlinePorts.DefaultServerPort
+    let host = url?.host(percentEncoded: false) ?? address
+    return (host, port)
+  }
 }
 
 extension Server: Identifiable {

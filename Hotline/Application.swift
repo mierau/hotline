@@ -1,13 +1,18 @@
 import SwiftUI
 import SwiftData
 
+enum ServerWindowDestination: Hashable, Codable {
+  case server(server: Server)
+  case none
+}
+
 @main
 struct Application: App {
   #if os(iOS)
   private var model = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
   #endif
   
-  private var preferences = Prefs()
+  @State private var preferences = Prefs()
   
   var body: some Scene {
     #if os(iOS)
@@ -24,20 +29,9 @@ struct Application: App {
     .defaultPosition(.center)
     
     WindowGroup(id: "server", for: Server.self) { $server in
-      if let s = server {
-        ServerView(server: s)
-          .frame(minWidth: 400, minHeight: 300)
-          .environment(Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient()))
-          .environment(preferences)
-          .toolbar {
-            ToolbarItem(placement: .navigation) {
-              Image(systemName: "globe.americas.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 18)
-            }
-          }
-      }
+      ServerView(server: $server)
+        .frame(minWidth: 400, minHeight: 300)
+        .environment(preferences)
     }
     .defaultSize(width: 700, height: 800)
     .defaultPosition(.center)
@@ -50,12 +44,10 @@ struct Application: App {
 //      }
 //    }
     
-#if os(macOS)
     Settings {
       SettingsView()
         .environment(preferences)
     }
-#endif
 
     #endif
   }

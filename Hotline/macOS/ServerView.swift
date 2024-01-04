@@ -157,32 +157,22 @@ struct TransferItemView: View {
   }
 }
 
-private func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
-  switch status {
-  case .disconnected:
-    return 0.0
-  case .connecting:
-    return 0.1
-  case .connected:
-    return 0.25
-  case .loggingIn:
-    return 0.5
-  case .loggedIn:
-    return 1.0
-  }
-}
-
 struct ServerView: View {
-  @Environment(Hotline.self) private var model: Hotline
   @Environment(Prefs.self) private var preferences: Prefs
   @Environment(\.dismiss) var dismiss
+  @Environment(\.colorScheme) private var colorScheme
   @Environment(\.controlActiveState) private var controlActiveState
   
+  @State private var model: Hotline = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
   @State private var agreementShown: Bool = false
   @State private var selection: MenuItem? = ServerView.menuItems.first
   
-  let server: Server?
+  @State private var connectAddress: String = ""
+  @State private var connectLogin: String = ""
+  @State private var connectPassword: String = ""
   
+  @Binding var server: Server?
+    
   static var menuItems = [
     MenuItem(name: "Chat", image: "bubble", type: .chat),
     MenuItem(name: "News", image: "newspaper", type: .news, serverVersion: 150),
@@ -190,26 +180,64 @@ struct ServerView: View {
     MenuItem(name: "Files", image: "folder", type: .files),
   ]
   
-  @MainActor func sendPreferences() {
-    if self.model.status == .loggedIn {
-      var options: HotlineUserOptions = HotlineUserOptions()
-      
-      if preferences.refusePrivateMessages {
-        options.update(with: .refusePrivateMessages)
+  var connectForm: some View {
+    GroupBox {
+      Form {
+        Group {
+          TextField(text: $connectAddress) {
+            Text("Address:")
+          }
+          TextField(text: $connectLogin, prompt: Text("optional")) {
+            Text("Login:")
+          }
+          SecureField(text: $connectPassword, prompt: Text("optional")) {
+            Text("Password:")
+          }
+        }
+        .textFieldStyle(.roundedBorder)
+        .controlSize(.regular)
+        
+        HStack {
+          Button {
+            print("SAVE BOOKMARK... SOMEHOW")
+          } label: {
+            Text("Save...")
+          }
+          .controlSize(.regular)
+          .buttonStyle(.automatic)
+          .help("Save server as bookmark")
+          
+          Spacer()
+          
+          Button {
+            dismiss()
+          } label: {
+            Text("Cancel")
+          }
+          .controlSize(.regular)
+          .buttonStyle(.automatic)
+          .keyboardShortcut(.cancelAction)
+          
+          Button {
+            let (a, p) = Server.parseServerAddressAndPort(connectAddress)
+            server = Server(name: nil, description: nil, address: a, port: p, users: 0)
+            Task {
+              await connectToServer()
+            }
+          } label: {
+            Text("Connect")
+          }
+          .controlSize(.regular)
+          .buttonStyle(.automatic)
+          .keyboardShortcut(.defaultAction)
+        }
+        .padding(.top, 8)
+        
       }
-      
-      if preferences.refusePrivateChat {
-        options.update(with: .refusePrivateChat)
-      }
-      
-      if preferences.enableAutomaticMessage {
-        options.update(with: .automaticResponse)
-      }
-      
-      print("Updating preferences with server")
-      
-      self.model.sendUserInfo(username: preferences.username, iconID: preferences.userIconID, options: options, autoresponse: preferences.automaticMessage)
+      .padding()
     }
+    .frame(maxWidth: 350)
+    .padding()
   }
   
   var navigationList: some View {
@@ -283,13 +311,13 @@ struct ServerView: View {
     }
   }
   
-  var body: some View {
+  var serverView: some View {
     NavigationSplitView {
       self.navigationList
         .frame(maxWidth: .infinity)
         .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 500)
     } detail: {
-      if let selection = self.selection {
+      if let selection = selection {
         switch selection.type {
         case .banner:
           EmptyView()
@@ -297,61 +325,171 @@ struct ServerView: View {
           EmptyView()
         case .chat:
           ChatView()
-            .navigationTitle(self.model.serverTitle)
+            .navigationTitle(model.serverTitle)
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .news:
           NewsView()
-            .navigationTitle(self.model.serverTitle)
+            .navigationTitle(model.serverTitle)
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .messageBoard:
           MessageBoardView()
-            .navigationTitle(self.model.serverTitle)
+            .navigationTitle(model.serverTitle)
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .files:
           FilesView()
-            .navigationTitle(self.model.serverTitle)
+            .navigationTitle(model.serverTitle)
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .tasks:
           EmptyView()
         case .user:
           if let selectionUserID = selection.userID {
             MessageView(userID: selectionUserID)
-              .navigationTitle(self.model.serverTitle)
+              .navigationTitle(model.serverTitle)
               .navigationSplitViewColumnWidth(min: 250, ideal: 500)
           }
         }
       }
     }
-    .navigationTitle("")
-    .onAppear {
-      if let s = self.server {
-        self.model.login(server: s, login: "", password: "", username: preferences.username, iconID: preferences.userIconID) { success in
-          if !success {
-            print("FAILED LOGIN??")
+  }
+  
+  var body: some View {
+    Group {
+      if model.status == .disconnected {
+        connectForm
+          .navigationTitle("Connect to Server")
+      }
+      else if model.status != .loggedIn {
+        HStack {
+          Image("Hotline")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundColor(Color(hex: 0xE10000))
+            .frame(width: 18)
+            .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+            .padding(.trailing, 4)
+          
+          ProgressView(value: connectionStatusToProgress(status: model.status)) {
+            Text(connectionStatusToLabel(status: model.status))
           }
-          else {
-            print("GETTING USER LIST????!")
-            self.sendPreferences()
-            self.model.getUserList()
-            self.model.downloadBanner()
-          }
+          .accentColor(colorScheme == .dark ? .white : .black)
         }
+        .frame(maxWidth: 300)
+        .padding()
+        .navigationTitle("Connecting to Server")
+      }
+      else {
+        serverView
+          .environment(model)
+          .onChange(of: preferences.userIconID) { sendPreferences() }
+          .onChange(of: preferences.username) { sendPreferences() }
+          .onChange(of: preferences.refusePrivateMessages) { sendPreferences() }
+          .onChange(of: preferences.refusePrivateChat) { sendPreferences() }
+          .onChange(of: preferences.enableAutomaticMessage) { sendPreferences() }
+          .onChange(of: preferences.automaticMessage) { sendPreferences() }
+          .toolbar {
+            ToolbarItem(placement: .navigation) {
+              Image(systemName: "globe.americas.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18)
+            }
+          }
       }
     }
     .onDisappear {
-      self.model.disconnect()
+      model.disconnect()
     }
-    .onChange(of: model.status) {
-      if model.status == .disconnected {
-        dismiss()
+    .task {
+      if server != nil {
+        connectToServer()
       }
     }
-    .onChange(of: preferences.userIconID) { self.sendPreferences() }
-    .onChange(of: preferences.username) { self.sendPreferences() }
-    .onChange(of: preferences.refusePrivateMessages) { self.sendPreferences() }
-    .onChange(of: preferences.refusePrivateChat) { self.sendPreferences() }
-    .onChange(of: preferences.enableAutomaticMessage) { self.sendPreferences() }
-    .onChange(of: preferences.automaticMessage) { self.sendPreferences() }
+  }
+  
+  // MARK: -
+  
+  @MainActor func connectToServer(login: String = "", password: String = "") {
+    model.login(server: server!, login: login, password: password, username: preferences.username, iconID: preferences.userIconID) { success in
+      if !success {
+        print("FAILED LOGIN??")
+      }
+      else {
+        print("GETTING USER LIST????!")
+        sendPreferences()
+        model.getUserList()
+        model.downloadBanner()
+      }
+    }
+  }
+  
+  private func connectionStatusToProgress(status: HotlineClientStatus) -> Double {
+    switch status {
+    case .disconnected:
+      return 0.0
+    case .connecting:
+      return 0.4
+    case .connected:
+      return 0.75
+    case .loggingIn:
+      return 0.9
+    case .loggedIn:
+      return 1.0
+    }
+  }
+  
+  private func connectionStatusToLabel(status: HotlineClientStatus) -> String {
+    if let s = self.server {
+      let n = s.name ?? s.address
+      switch status {
+      case .disconnected:
+        return "Disconnected"
+      case .connecting:
+        return "Connecting to \(n)..."
+      case .connected:
+        return "Connected to \(n)"
+      case .loggingIn:
+        return "Logging in to \(n)..."
+      case .loggedIn:
+        return "Logged in to \(n)"
+      }
+    }
+    else {
+      switch status {
+      case .disconnected:
+        return "Disconnected"
+      case .connecting:
+        return "Connecting..."
+      case .connected:
+        return "Connected"
+      case .loggingIn:
+        return "Logging in..."
+      case .loggedIn:
+        return "Logged in"
+      }
+    }
+  }
+  
+  @MainActor func sendPreferences() {
+    if self.model.status == .loggedIn {
+      var options: HotlineUserOptions = HotlineUserOptions()
+      
+      if preferences.refusePrivateMessages {
+        options.update(with: .refusePrivateMessages)
+      }
+      
+      if preferences.refusePrivateChat {
+        options.update(with: .refusePrivateChat)
+      }
+      
+      if preferences.enableAutomaticMessage {
+        options.update(with: .automaticResponse)
+      }
+      
+      print("Updating preferences with server")
+      
+      self.model.sendUserInfo(username: preferences.username, iconID: preferences.userIconID, options: options, autoresponse: preferences.automaticMessage)
+    }
   }
 }
 
