@@ -390,9 +390,12 @@ struct ServerView: View {
           .toolbar {
             ToolbarItem(placement: .navigation) {
               Image(systemName: "globe.americas.fill")
+                .renderingMode(.template)
+              
                 .resizable()
                 .scaledToFit()
                 .frame(width: 18)
+                .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
             }
           }
       }

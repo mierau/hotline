@@ -1,15 +1,14 @@
 import SwiftUI
 import SwiftData
 
-enum ServerWindowDestination: Hashable, Codable {
-  case server(server: Server)
-  case none
-}
-
 @main
 struct Application: App {
   #if os(iOS)
   private var model = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
+  #endif
+  
+  #if os(macOS)
+  @Environment(\.openWindow) private var openWindow
   #endif
   
   @State private var preferences = Prefs()
@@ -33,16 +32,16 @@ struct Application: App {
         .frame(minWidth: 400, minHeight: 300)
         .environment(preferences)
     }
-    .defaultSize(width: 700, height: 800)
+    .defaultSize(width: 750, height: 700)
     .defaultPosition(.center)
-//    .commandsRemoved()
-//    .commands {
-//      CommandGroup(before: CommandGroupPlacement.newItem) {
-//        Button("before item") {
-//          print("before item")
-//        }
-//      }
-//    }
+    .commands {
+      CommandGroup(replacing: CommandGroupPlacement.newItem) {
+        Button("Connect to Server...") {
+          openWindow(id: "server")
+        }
+        .keyboardShortcut(.init("K"), modifiers: .command)
+      }
+    }
     
     Settings {
       SettingsView()
