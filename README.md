@@ -5,7 +5,7 @@ An attempt to ressurect Hotline for modern Apple systems (iOS, macOS, etc) by co
 
 [Download the Latest](https://github.com/mierau/hotline/releases/latest)
 
-**Note:** This project so far does not server software. It is a client for connecting to and participating in Hotline servers. If you would like to host your own Hotline server (you should!), please checkout the very capable Mobius project: https://github.com/jhalter/mobius
+**Note:** This project (so far) does not include server software. This is a client for connecting to and participating on Hotline servers. If you would like to host your own Hotline server (and you should!), please checkout the very capable Mobius project: https://github.com/jhalter/mobius
 
 # Requirements
 
