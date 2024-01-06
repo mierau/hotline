@@ -2,8 +2,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum MenuItemType {
-  case banner
-  case progress
   case chat
   case news
   case messageBoard
@@ -171,8 +169,8 @@ struct ServerView: View {
   @State private var connectLogin: String = ""
   @State private var connectPassword: String = ""
   
-  @Binding var server: Server?
-    
+  @Binding var server: Server
+  
   static var menuItems = [
     MenuItem(name: "Chat", image: "bubble", type: .chat),
     MenuItem(name: "News", image: "newspaper", type: .news, serverVersion: 150),
@@ -196,6 +194,20 @@ struct ServerView: View {
         }
         .textFieldStyle(.roundedBorder)
         .controlSize(.regular)
+        .onChange(of: connectAddress) {
+          let (a, p) = Server.parseServerAddressAndPort(connectAddress)
+          server.address = a
+          server.port = p
+          print("ADDRESS CHANGED: '\(connectAddress)' \(a) \(p)")
+        }
+        .onChange(of: connectLogin) {
+          server.login = connectLogin.trimmingCharacters(in: .whitespacesAndNewlines)
+          print("LOGIN CHANGED: '\(connectLogin)'" + $server.wrappedValue.login)
+        }
+        .onChange(of: connectPassword) {
+          server.password = connectPassword
+          print("PASS CHANGED: '\(connectPassword)'" + server.password)
+        }
         
         HStack {
           Button {
@@ -219,8 +231,21 @@ struct ServerView: View {
           .keyboardShortcut(.cancelAction)
           
           Button {
-            let (a, p) = Server.parseServerAddressAndPort(connectAddress)
-            server = Server(name: nil, description: nil, address: a, port: p, users: 0)
+            
+//            if var s = server {
+//              print("CHANGING EXISTING SERVER")
+//              s.name = newServer.name
+//              s.description = newServer.description
+//              s.users = newServer.users
+//              s.address = newServer.address
+//              s.port = newServer.port
+//              s.login = newServer.login
+//              s.password = newServer.password
+//            }
+//            else {
+//              server = newServer
+//            }
+            
             Task {
               await connectToServer()
             }
@@ -242,38 +267,25 @@ struct ServerView: View {
   
   var navigationList: some View {
     List(selection: $selection) {
-      
-      if model.status != .loggedIn {
-        HStack {
-          ProgressView(value: connectionStatusToProgress(status: model.status))
-            .padding()
-        }
-        .tag(MenuItem(name: "progress", image: "", type: .progress))
-        .frame(maxWidth: .infinity, minHeight: 60)
-        .selectionDisabled()
-      }
-      
-      if model.status == .loggedIn {
-        ForEach(ServerView.menuItems) { menuItem in
-          if let minServerVersion = menuItem.serverVersion {
-            if let v = model.serverVersion, v >= minServerVersion {
-              ListItemView(icon: menuItem.image, title: menuItem.name)
-                .tag(menuItem)
-            }
-          }
-          else {
+      ForEach(ServerView.menuItems) { menuItem in
+        if let minServerVersion = menuItem.serverVersion {
+          if let v = model.serverVersion, v >= minServerVersion {
             ListItemView(icon: menuItem.image, title: menuItem.name)
               .tag(menuItem)
           }
         }
-        
-        if model.transfers.count > 0 {
-          self.transfersSection
+        else {
+          ListItemView(icon: menuItem.image, title: menuItem.name)
+            .tag(menuItem)
         }
-        
-        if model.users.count > 0 {
-          self.usersSection
-        }
+      }
+      
+      if model.transfers.count > 0 {
+        self.transfersSection
+      }
+      
+      if model.users.count > 0 {
+        self.usersSection
       }
     }
   }
@@ -319,10 +331,6 @@ struct ServerView: View {
     } detail: {
       if let selection = selection {
         switch selection.type {
-        case .banner:
-          EmptyView()
-        case .progress:
-          EmptyView()
         case .chat:
           ChatView()
             .navigationTitle(model.serverTitle)
@@ -404,18 +412,28 @@ struct ServerView: View {
       model.disconnect()
     }
     .task {
-      if server != nil {
-        connectToServer()
+      var address = server.address
+      if server.port != HotlinePorts.DefaultServerPort {
+        address += ":\(server.port)"
       }
+      connectAddress = server.address
+      connectLogin = server.login
+      connectPassword = server.password
+      connectToServer()
     }
   }
   
   // MARK: -
   
-  @MainActor func connectToServer(login: String = "", password: String = "") {
-    model.login(server: server!, login: login, password: password, username: preferences.username, iconID: preferences.userIconID) { success in
+  @MainActor func connectToServer() {
+    guard !server.address.isEmpty else {
+      return
+    }
+    
+    model.login(server: server, username: preferences.username, iconID: preferences.userIconID) { success in
       if !success {
         print("FAILED LOGIN??")
+        model.disconnect()
       }
       else {
         print("GETTING USER LIST????!")
@@ -442,35 +460,35 @@ struct ServerView: View {
   }
   
   private func connectionStatusToLabel(status: HotlineClientStatus) -> String {
-    if let s = self.server {
-      let n = s.name ?? s.address
-      switch status {
-      case .disconnected:
-        return "Disconnected"
-      case .connecting:
-        return "Connecting to \(n)..."
-      case .connected:
-        return "Connected to \(n)"
-      case .loggingIn:
-        return "Logging in to \(n)..."
-      case .loggedIn:
-        return "Logged in to \(n)"
-      }
+//    if let s = self.server {
+    let n = server.name ?? server.address
+    switch status {
+    case .disconnected:
+      return "Disconnected"
+    case .connecting:
+      return "Connecting to \(n)..."
+    case .connected:
+      return "Connected to \(n)"
+    case .loggingIn:
+      return "Logging in to \(n)..."
+    case .loggedIn:
+      return "Logged in to \(n)"
     }
-    else {
-      switch status {
-      case .disconnected:
-        return "Disconnected"
-      case .connecting:
-        return "Connecting..."
-      case .connected:
-        return "Connected"
-      case .loggingIn:
-        return "Logging in..."
-      case .loggedIn:
-        return "Logged in"
-      }
-    }
+//    }
+//    else {
+//      switch status {
+//      case .disconnected:
+//        return "Disconnected"
+//      case .connecting:
+//        return "Connecting..."
+//      case .connected:
+//        return "Connected"
+//      case .loggingIn:
+//        return "Logging in..."
+//      case .loggedIn:
+//        return "Logged in"
+//      }
+//    }
   }
   
   @MainActor func sendPreferences() {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 @Observable class FileInfo: Identifiable, Hashable {
   let id: UUID
@@ -14,6 +15,16 @@ import SwiftUI
   let isUnavailable: Bool
   var expanded: Bool = false
   var children: [FileInfo]? = nil
+  
+  var isImage: Bool {
+    let fileExtension = (self.name as NSString).pathExtension
+    if let fileType = UTType(filenameExtension: fileExtension) {
+      if fileType.isSubtype(of: .image) {
+        return true
+      }
+    }
+    return false
+  }
   
   init(hotlineFile: HotlineFile) {
     self.id = UUID()

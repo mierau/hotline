@@ -70,8 +70,7 @@ struct FileView: View {
     .padding(.leading, CGFloat(depth * (12 + 10)))
     .onChange(of: file.expanded) {
       loading = false
-      if file.isFolder {
-        print("EXPANDED \(file.name)? \(expanded)")
+      if file.isFolder && file.fileSize > 0 {
         if file.expanded {
           Task {
             loading = true
@@ -108,8 +107,13 @@ struct FileView: View {
 
 struct FilesView: View {
   @Environment(Hotline.self) private var model: Hotline
+  @Environment(\.openWindow) private var openWindow
   
   @State private var selection: FileInfo?
+  
+  private func openPreviewWindow(_ previewInfo: PreviewFileInfo) {
+    let _ = FilePreviewWindowController(info: previewInfo)
+  }
   
   var body: some View {
     NavigationStack {
@@ -129,7 +133,6 @@ struct FilesView: View {
       .contextMenu(forSelectionType: FileInfo.self) { items in
           // ...
       } primaryAction: { items in
-        print("ITEMS?", items)
         guard let clickedFile = items.first else {
           return
         }
@@ -139,7 +142,6 @@ struct FilesView: View {
           clickedFile.expanded.toggle()
         }
         else {
-          print("DOWNLOAD FILE", clickedFile.name, clickedFile.path)
           model.downloadFile(clickedFile.name, path: clickedFile.path)
         }
       }
@@ -157,6 +159,17 @@ struct FilesView: View {
         }
         return .ignored
       }
+      .onKeyPress(.space) {
+        if let s = selection, s.isImage {
+          model.previewFile(s.name, path: s.path) { info in
+            if let info = info {
+              openPreviewWindow(info)
+            }
+          }
+          return .handled
+        }
+        return .ignored
+      }
       .overlay {
         if !model.filesLoaded {
           VStack {
@@ -167,8 +180,6 @@ struct FilesView: View {
         }
       }
       .toolbar {
-        
-        
         ToolbarItem(placement: .primaryAction) {
           Button {
           } label: {
@@ -180,15 +191,17 @@ struct FilesView: View {
         ToolbarItem(placement: .primaryAction) {
           Button {
             if let s = selection, !s.isFolder {
-              print("DOWNLOAD FILE", s.name, s.path)
-              model.previewFile(s.name, path: s.path, addTransfer: true) { transfer, fileData in
-                print("FILE PREVIEWED?", fileData.count)
+              model.previewFile(s.name, path: s.path) { info in
+                if let info = info {
+                  openPreviewWindow(info)
+                }
               }
             }
           } label: {
             Label("Preview File", systemImage: "eye")
           }
           .help("Preview File")
+          .disabled(selection?.isImage == false)
         }
         
         ToolbarItem(placement: .primaryAction) {

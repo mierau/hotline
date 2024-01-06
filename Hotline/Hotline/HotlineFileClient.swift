@@ -533,12 +533,9 @@ class HotlineFileClient {
       if let newData = data, !newData.isEmpty {
         self.fileBytesDownloaded += newData.count
         self.fileBytes.append(newData)
-        self.fileProgress?.completedUnitCount = Int64(self.fileBytesDownloaded)
         self.status = .progress(Double(self.fileBytesDownloaded) / Double(self.referenceDataSize))
         
-        
-        
-        print("DOWNLOAD PROGRESS", self.fileProgress.debugDescription)
+        print("DOWNLOAD PROGRESS", self.fileBytesDownloaded, self.referenceDataSize, isComplete)
       }
       
       if self.fileBytesDownloaded < Int(self.referenceDataSize) {

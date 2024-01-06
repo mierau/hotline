@@ -86,9 +86,9 @@ struct TrackerConnectView: View {
           )
           .cornerRadius(10.0)
           Button {
-            let s = Server(name: nil, description: nil, address: address, port: HotlinePorts.DefaultServerPort, users: 0)
+            let s = Server(name: nil, description: nil, address: address, port: HotlinePorts.DefaultServerPort, users: 0, login: login, password: password)
             server = s
-            self.model.login(server: s, login: login, password: password, username: "bolt", iconID: 128) { success in
+            self.model.login(server: s, username: "bolt", iconID: 128) { success in
               if !success {
                 print("FAILED LOGIN??")
               }
@@ -392,7 +392,7 @@ struct TrackerView: View {
         self.model.disconnect()
         
         let tempServer = Server(name: nil, description: nil, address: address, port: port, users: 0)
-        self.model.login(server: tempServer, login: login, password: password, username: "bolt", iconID: 128) { success in
+        self.model.login(server: tempServer, username: "bolt", iconID: 128) { success in
           if !success {
             print("FAILED LOGIN??")
           }

@@ -31,6 +31,11 @@ struct FileView: View {
           return
         }
         
+        // Some servers don't reply when asking for the contents of an empty folder.
+        if file.isFolder && file.fileSize == 0 {
+          return
+        }
+        
         Task {
           await model.getFileList(path: file.path)
         }

@@ -9,6 +9,7 @@ struct TrackerBookmark {
   let type: TrackerBookmarkType
   let name: String
   let address: String
+  let port: Int = HotlinePorts.DefaultServerPort
 }
 
 @Observable
@@ -21,6 +22,27 @@ class TrackerItem: Identifiable, Hashable {
   
   var expanded: Bool = false
   var loading: Bool = false
+  
+  var displayAddress: String? {
+    if let s = server {
+      if s.port == HotlinePorts.DefaultServerPort {
+        return s.address
+      }
+      else {
+        return "\(s.address):\(s.port)"
+      }
+    }
+    else if let b = bookmark {
+      if b.port == HotlinePorts.DefaultServerPort {
+        return b.address
+      }
+      else {
+        return "\(b.address):\(b.port)"
+      }
+    }
+    
+    return nil
+  }
   
   init(bookmark: TrackerBookmark) {
     self.bookmark = bookmark
@@ -45,6 +67,7 @@ class TrackerItem: Identifiable, Hashable {
   func hash(into hasher: inout Hasher) {
     hasher.combine(self.id)
   }
+  
   
   @MainActor
   func loadServers() async {
@@ -283,10 +306,10 @@ struct TrackerView: View {
     .alternatingRowBackgrounds(.enabled)
     .contextMenu(forSelectionType: TrackerItem.self) { items in
       if let item = items.first {
-        if let server = item.server {
+        if let address = item.displayAddress {
           Button {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(server.address, forType: .string)
+            NSPasteboard.general.setString(address, forType: .string)
           } label: {
             Label("Copy Server Address", systemImage: "doc.on.doc")
           }
@@ -371,7 +394,7 @@ struct TrackerView: View {
         .help("Connect to Server...")
       }
     }
-    .onAppear {
+    .task {
       // Add initial items to tracker list.
       var items: [TrackerItem] = []
       for bookmark in self.bookmarks {
@@ -379,6 +402,11 @@ struct TrackerView: View {
       }
       self.servers = items
     }
+    .onOpenURL(perform: { url in
+      if let s = Server(url: url) {
+        openWindow(id: "server", value: s)
+      }
+    })
   }
 }
 

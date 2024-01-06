@@ -71,7 +71,7 @@ class HotlineClient {
   
   // MARK: -
   
-  func login(_ address: String, port: UInt16, login: String, password: String, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) {
+  func login(_ address: String, port: UInt16, login: String?, password: String?, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) {
     print("AWAITING CONNECT")
     self.connect(address: address, port: port) { [weak self] success in
       guard success else {
@@ -90,8 +90,8 @@ class HotlineClient {
           return
         }
         
-        print("AWAITING LOGIN")
-        self?.sendLogin(login: login, password: password, username: username, iconID: iconID) { err, serverName, serverVersion in
+        print("AWAITING LOGIN \(login ?? "empty login")  \(password ?? "empty pass")")
+        self?.sendLogin(login: login ?? "", password: password ?? "", username: username, iconID: iconID) { err, serverName, serverVersion in
 //          guard err == nil else {
 //            DispatchQueue.main.async {
 //              callback?(err, nil, nil)

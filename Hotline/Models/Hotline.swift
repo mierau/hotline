@@ -1,6 +1,7 @@
 import SwiftUI
 
-@Observable final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
+@Observable
+final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   let trackerClient: HotlineTrackerClient
   let client: HotlineClient
   
@@ -239,13 +240,15 @@ import SwiftUI
     self.trackerClient.disconnect()
   }
   
-  @MainActor func login(server: Server, login: String, password: String, username: String, iconID: Int, callback: ((Bool) -> Void)? = nil) {
+  @MainActor func login(server: Server, username: String, iconID: Int, callback: ((Bool) -> Void)? = nil) {
     self.server = server
     self.serverName = server.name
     self.username = username
     self.iconID = iconID
     
-    self.client.login(server.address, port: UInt16(server.port), login: login, password: password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
+    print("CLIENT LOGIN: '\(server.login)' '\(server.password == nil)'")
+    
+    self.client.login(server.address, port: UInt16(server.port), login: server.login, password: server.password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
       self?.serverVersion = serverVersion
       if serverName != nil {
         self?.serverName = serverName
@@ -519,16 +522,21 @@ import SwiftUI
     })
   }
   
-  @MainActor func previewFile(_ fileName: String, path: [String], addTransfer: Bool = false, complete callback: ((TransferInfo, Data) -> Void)? = nil) {
+  @MainActor func previewFile(_ fileName: String, path: [String], complete callback: ((PreviewFileInfo?) -> Void)? = nil) {
     var fullPath: [String] = []
     if path.count > 1 {
       fullPath = Array(path[0..<path.count-1])
     }
     
-    self.client.sendDownloadFile(name: fileName, path: fullPath, preview: true, sent: { _ in
+    self.client.sendDownloadFile(name: fileName, path: fullPath, preview: true, sent: { success in
+      if !success {
+        callback?(nil)
+        return
+      }
       
     }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
       guard success else {
+        callback?(nil)
         return
       }
       
@@ -539,24 +547,27 @@ import SwiftUI
       print("REFERENCE NUM: \(downloadReferenceNumber.debugDescription)")
       print("WAITING COUNT: \(downloadWaitingCount.debugDescription)")
       
+      var info: PreviewFileInfo? = nil
+      
       if
-        let self = self,
-        let address = self.server?.address,
-        let port = self.server?.port,
+        let address = self?.server?.address,
+        let port = self?.server?.port,
         let referenceNumber = downloadReferenceNumber,
         let transferSize = downloadTransferSize {
         
-        let fileClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .preview)
-        fileClient.delegate = self
-        self.downloads.append(fileClient)
+        info = PreviewFileInfo(id: referenceNumber, address: address, port: port, size: transferSize, name: fileName)
         
-        if addTransfer {
-          let transfer = TransferInfo(id: referenceNumber, title: fileName, size: UInt(transferSize))
-          transfer.previewCallback = callback
-          self.transfers.append(transfer)
-        }
+//        let fileClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .preview)
+//        fileClient.delegate = self
+//        self.downloads.append(fileClient)
         
-        fileClient.downloadToMemory()
+//        if addTransfer {
+//          let transfer = TransferInfo(id: referenceNumber, title: fileName, size: UInt(transferSize))
+//          transfer.previewCallback = callback
+//          self.transfers.append(transfer)
+//        }
+        
+//        fileClient.downloadToMemory()
         
         print("DOWNLOADING TO MEMORY")
 //        fileClient.downloadToMemory({ [weak self] fileData in
@@ -567,8 +578,61 @@ import SwiftUI
         
 //        self.downloads.append(fileClient)
       }
+      
+      callback?(info)
     })
   }
+  
+//  @MainActor func previewFile(_ fileName: String, path: [String], addTransfer: Bool = false, complete callback: ((TransferInfo, Data) -> Void)? = nil) {
+//    var fullPath: [String] = []
+//    if path.count > 1 {
+//      fullPath = Array(path[0..<path.count-1])
+//    }
+//    
+//    self.client.sendDownloadFile(name: fileName, path: fullPath, preview: true, sent: { _ in
+//      
+//    }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
+//      guard success else {
+//        return
+//      }
+//      
+//      print("GOT DOWNLOAD REPLY:")
+//      print("SUCCESS?", success)
+//      print("TRANSFER SIZE: \(downloadTransferSize.debugDescription)")
+//      print("FILE SIZE: \(downloadFileSize.debugDescription)")
+//      print("REFERENCE NUM: \(downloadReferenceNumber.debugDescription)")
+//      print("WAITING COUNT: \(downloadWaitingCount.debugDescription)")
+//      
+//      if
+//        let self = self,
+//        let address = self.server?.address,
+//        let port = self.server?.port,
+//        let referenceNumber = downloadReferenceNumber,
+//        let transferSize = downloadTransferSize {
+//        
+//        let fileClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .preview)
+//        fileClient.delegate = self
+//        self.downloads.append(fileClient)
+//        
+//        if addTransfer {
+//          let transfer = TransferInfo(id: referenceNumber, title: fileName, size: UInt(transferSize))
+//          transfer.previewCallback = callback
+//          self.transfers.append(transfer)
+//        }
+//        
+//        fileClient.downloadToMemory()
+//        
+//        print("DOWNLOADING TO MEMORY")
+////        fileClient.downloadToMemory({ [weak self] fileData in
+////          print("DOWNLOADED PREVIEW DATA", fileData?.count)
+////          self?.downloads.removeAll { $0.referenceNumber == referenceNumber }
+////          callback?(fileData != nil, fileData)
+////        })
+//        
+////        self.downloads.append(fileClient)
+//      }
+//    })
+//  }
   
   @MainActor func deleteTransfer(id: UInt32) {
     if let b = self.bannerClient, b.referenceNumber == id {

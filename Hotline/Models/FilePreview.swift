@@ -1,41 +1,73 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-//struct FilePreview: Identifiable, Hashable {
-//  let id: UUID
-//  
-//  let path: [String]
-//  let name: String
-//  
-//  let type: String
-//  let creator: String
-//  let fileSize: UInt
-//  
-//  let isFolder: Bool
-//  let isUnavailable: Bool
-//  var expanded: Bool = false
-//  var children: [FileInfo]? = nil
-//  
-//  init(hotlineFile: HotlineFile) {
-//    self.id = UUID()
-//    self.path = hotlineFile.path
-//    self.name = hotlineFile.name
-//    self.type = hotlineFile.type
-//    self.creator = hotlineFile.creator
-//    self.fileSize = UInt(hotlineFile.fileSize)
-//    self.isFolder = hotlineFile.isFolder
-//    self.isUnavailable = (!self.isFolder && (self.fileSize == 0))
-//    
-//    print(self.name, self.type, self.creator, self.isUnavailable)
-//    if self.isFolder {
-//      self.children = []
-//    }
-//  }
-//  
-//  static func == (lhs: FileInfo, rhs: FileInfo) -> Bool {
-//    return lhs.id == rhs.id
-//  }
-//  
-//  func hash(into hasher: inout Hasher) {
-//    hasher.combine(self.id)
-//  }
-//}
+enum FilePreviewState: Equatable {
+  case unloaded
+  case loading
+  case loaded
+  case failed
+}
+
+@Observable
+final class FilePreview: HotlineFileClientDelegate {
+  @ObservationIgnored let info: PreviewFileInfo
+  @ObservationIgnored var client: HotlineFileClient? = nil
+  
+  var state: FilePreviewState = .unloaded
+  var progress: Double = 0.0
+  
+  #if os(macOS)
+  var image: NSImage?
+  #endif
+  
+  init(info: PreviewFileInfo) {
+    self.info = info
+    
+    self.client = HotlineFileClient(address: info.address, port: UInt16(info.port), reference: info.id, size: UInt32(info.size), type: .preview)
+    self.client?.delegate = self
+  }
+  
+  func download() {
+    self.client?.downloadToMemory()
+  }
+  
+  func cancel() {
+    self.client?.cancel(deleteIncompleteFile: true)
+  }
+  
+  func hotlineFileStatusChanged(client: HotlineFileClient, reference: UInt32, status: HotlineFileClientStatus, timeRemaining: TimeInterval) {
+    print("FILE STATUS CHANGED", status)
+    
+    switch status {
+    case .unconnected:
+      state = .unloaded
+      progress = 0.0
+    case .connecting:
+      state = .loading
+      progress = 0.0
+    case .connected:
+      state = .loading
+      progress = 0.0
+    case .progress(let p):
+      state = .loading
+      progress = p
+    case .failed(_):
+      state = .failed
+      progress = 0.0
+    case .completed:
+      state = .loaded
+      progress = 1.0
+    }
+  }
+  
+  func hotlineFileDownloadedData(client: HotlineFileClient, reference: UInt32, data: Data) {
+    self.state = .loaded
+    
+    let fileExtension = (info.name as NSString).pathExtension
+    if let fileType = UTType(filenameExtension: fileExtension) {
+      if fileType.isSubtype(of: .image) {
+        self.image = NSImage(data: data)
+      }
+    }
+  }
+}
