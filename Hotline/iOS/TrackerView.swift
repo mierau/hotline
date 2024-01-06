@@ -292,7 +292,7 @@ struct TrackerView: View {
                 }
                 else {
                   Button("Connect") {
-                    self.model.login(server: server, login: "", password: "", username: "bolt", iconID: 128) { success in
+                    self.model.login(server: server, username: "bolt", iconID: 128) { success in
                       if !success {
                         print("FAILED LOGIN??")
                       }
@@ -391,7 +391,7 @@ struct TrackerView: View {
         
         self.model.disconnect()
         
-        let tempServer = Server(name: nil, description: nil, address: address, port: port, users: 0)
+        let tempServer = Server(name: nil, description: nil, address: address, port: port, users: 0, login: login, password: password)
         self.model.login(server: tempServer, username: "bolt", iconID: 128) { success in
           if !success {
             print("FAILED LOGIN??")

@@ -114,12 +114,9 @@ class HotlineClient {
     self.serverAddress = address
     self.serverPort = port
     
-//    let serverAddress = NWEndpoint.Host(address)
-//    let serverPort = NWEndpoint.Port(rawValue: port)!
-    
     let tcpOptions = NWProtocolTCP.Options()
     tcpOptions.enableKeepalive = true
-    tcpOptions.enableFastOpen = true
+//    tcpOptions.enableFastOpen = true
     tcpOptions.keepaliveInterval = 30
     tcpOptions.connectionTimeout = 30
     let connectionParameters: NWParameters

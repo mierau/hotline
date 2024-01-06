@@ -66,7 +66,11 @@ final class FilePreview: HotlineFileClientDelegate {
     let fileExtension = (info.name as NSString).pathExtension
     if let fileType = UTType(filenameExtension: fileExtension) {
       if fileType.isSubtype(of: .image) {
+        #if os(iOS)
+//        self.image = UIImage(data: data)
+        #elseif os(macOS)
         self.image = NSImage(data: data)
+        #endif
       }
     }
   }
