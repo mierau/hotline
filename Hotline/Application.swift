@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 @main
 struct Application: App {
@@ -30,8 +31,8 @@ struct Application: App {
     .defaultPosition(.center)
         
     // MARK: Server Window
-    WindowGroup(id: "server", for: Server.self) { $server in
-      ServerView(server: $server)
+    WindowGroup(id: "server", for: Server.self) { server in
+      ServerView(server: server)
         .frame(minWidth: 400, minHeight: 300)
         .environment(preferences)
     } defaultValue: {
@@ -48,19 +49,31 @@ struct Application: App {
       }
     }
     
-//    WindowGroup(id: "preview", for: PreviewFileInfo.self) { info in
-//      FilePreviewView(info: info)
-//        .frame(minWidth: 400, minHeight: 300)
-//    }
-//    .defaultSize(width: 750, height: 700)
-//    .windowStyle(.hiddenTitleBar)
-//    .aspectRatio(nil, contentMode: .fit)
-    
     // MARK: Settings Window
     Settings {
       SettingsView()
         .environment(preferences)
     }
+    
+    // MARK: Image Preview Window
+    WindowGroup(id: "preview-image", for: PreviewFileInfo.self) { $info in
+      FilePreviewImageView(info: $info)
+    }
+    .windowResizability(.contentSize)
+    .windowStyle(.titleBar)
+    .windowToolbarStyle(.unifiedCompact(showsTitle: true))
+    .defaultSize(width: 350, height: 150)
+    .defaultPosition(.center)
+    
+    // MARK: Text Preview Window
+    WindowGroup(id: "preview-text", for: PreviewFileInfo.self) { $info in
+      FilePreviewTextView(info: $info)
+    }
+    .windowResizability(.automatic)
+    .windowStyle(.titleBar)
+    .windowToolbarStyle(.unifiedCompact(showsTitle: true))
+    .defaultSize(width: 450, height: 550)
+    .defaultPosition(.center)
 
     #endif
   }

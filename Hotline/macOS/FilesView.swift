@@ -41,9 +41,9 @@ struct FileView: View {
           Image(systemName: "folder.fill")
         }
         else {
-          fileIcon(name: file.name)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
+          FileIconView(filename: file.name)
+//            .resizable()
+//            .aspectRatio(contentMode: .fit)
 //            .scaledToFill()
             .frame(width: 16, height: 16)
         }
@@ -98,11 +98,6 @@ struct FileView: View {
     FileView.byteFormatter.countStyle = .file
     return FileView.byteFormatter.string(fromByteCount: Int64(fileSize))
   }
-  
-  private func fileIcon(name: String) -> Image {
-    let fileExtension = (name as NSString).pathExtension
-    return Image(nsImage: NSWorkspace.shared.icon(for: UTType(filenameExtension: fileExtension) ?? UTType.content))
-  }
 }
 
 struct FilesView: View {
@@ -112,7 +107,15 @@ struct FilesView: View {
   @State private var selection: FileInfo?
   
   private func openPreviewWindow(_ previewInfo: PreviewFileInfo) {
-    let _ = FilePreviewWindowController(info: previewInfo)
+    switch previewInfo.previewType {
+    case .image:
+      openWindow(id: "preview-image", value: previewInfo)
+    case .text:
+      openWindow(id: "preview-text", value: previewInfo)
+    default:
+      return
+    }
+//    let _ = FilePreviewWindowController(info: previewInfo)
   }
   
   var body: some View {
@@ -160,7 +163,7 @@ struct FilesView: View {
         return .ignored
       }
       .onKeyPress(.space) {
-        if let s = selection, s.isImage {
+        if let s = selection, s.isPreviewable {
           model.previewFile(s.name, path: s.path) { info in
             if let info = info {
               openPreviewWindow(info)
@@ -201,7 +204,7 @@ struct FilesView: View {
             Label("Preview File", systemImage: "eye")
           }
           .help("Preview File")
-          .disabled(selection?.isImage == false)
+          .disabled(selection?.isPreviewable == false)
         }
         
         ToolbarItem(placement: .primaryAction) {

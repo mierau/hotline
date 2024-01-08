@@ -1,3 +1,10 @@
+import UniformTypeIdentifiers
+
+enum PreviewFileType: Equatable {
+  case unknown
+  case image
+  case text
+}
 
 struct PreviewFileInfo: Identifiable, Codable {
   var id: UInt32
@@ -5,6 +12,19 @@ struct PreviewFileInfo: Identifiable, Codable {
   var port: Int
   var size: Int
   var name: String
+  
+  var previewType: FilePreviewType {
+    let fileExtension = (self.name as NSString).pathExtension
+    if let fileType = UTType(filenameExtension: fileExtension) {
+      if fileType.isSubtype(of: .image) {
+        return .image
+      }
+      else if fileType.isSubtype(of: .text) {
+        return .text
+      }
+    }
+    return .unknown
+  }
 }
 
 extension PreviewFileInfo: Equatable {

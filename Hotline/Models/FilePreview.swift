@@ -8,6 +8,12 @@ enum FilePreviewState: Equatable {
   case failed
 }
 
+enum FilePreviewType: Equatable {
+  case unknown
+  case image
+  case text
+}
+
 @Observable
 final class FilePreview: HotlineFileClientDelegate {
   @ObservationIgnored let info: PreviewFileInfo
@@ -16,9 +22,29 @@ final class FilePreview: HotlineFileClientDelegate {
   var state: FilePreviewState = .unloaded
   var progress: Double = 0.0
   
-  #if os(macOS)
-  var image: NSImage?
+  var data: Data? = nil
+  
+  #if os(iOS)
+  var image: UIImage? = nil
+  #elseif os(macOS)
+  var image: NSImage? = nil
   #endif
+  
+  var text: String? = nil
+  var styledText: NSAttributedString? = nil
+  
+  var previewType: FilePreviewType {
+    let fileExtension = (info.name as NSString).pathExtension
+    if let fileType = UTType(filenameExtension: fileExtension) {
+      if fileType.isSubtype(of: .image) {
+        return .image
+      }
+      else if fileType.isSubtype(of: .text) {
+        return .text
+      }
+    }
+    return .unknown
+  }
   
   init(info: PreviewFileInfo) {
     self.info = info
@@ -62,16 +88,25 @@ final class FilePreview: HotlineFileClientDelegate {
   
   func hotlineFileDownloadedData(client: HotlineFileClient, reference: UInt32, data: Data) {
     self.state = .loaded
+    self.data = data
     
-    let fileExtension = (info.name as NSString).pathExtension
-    if let fileType = UTType(filenameExtension: fileExtension) {
-      if fileType.isSubtype(of: .image) {
-        #if os(iOS)
-//        self.image = UIImage(data: data)
-        #elseif os(macOS)
-        self.image = NSImage(data: data)
-        #endif
+    switch self.previewType {
+    case .image:
+      #if os(iOS)
+      self.image = UIImage(data: data)
+      #elseif os(macOS)
+      self.image = NSImage(data: data)
+      #endif
+    case .text:
+      let encoding: UInt = NSString.stringEncoding(for: data, convertedString: nil, usedLossyConversion: nil)
+      if encoding != 0 {
+        self.text = String(data: data, encoding: String.Encoding(rawValue: encoding))
       }
+      else {
+        self.text = String(data: data, encoding: .utf8)
+      }
+    case .unknown:
+      return
     }
   }
 }

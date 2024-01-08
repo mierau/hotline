@@ -32,7 +32,12 @@
 		DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFCA2B126E3300CDA197 /* HotlineTrackerClient.swift */; };
 		DAAEE66B2B3FBC2100A5BA07 /* TransferInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66A2B3FBC2100A5BA07 /* TransferInfo.swift */; };
 		DAAEE66D2B475F1400A5BA07 /* PreviewFileInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66C2B475F1400A5BA07 /* PreviewFileInfo.swift */; };
-		DAAEE66F2B47625600A5BA07 /* FilePreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66E2B47625600A5BA07 /* FilePreviewView.swift */; platformFilters = (macos, ); };
+		DAAEE66F2B47625600A5BA07 /* FilePreviewImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */; platformFilters = (macos, ); };
+		DAB4D87B2B4B78310048A05C /* AnimatedImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87A2B4B78310048A05C /* AnimatedImageView.swift */; platformFilters = (macos, ); };
+		DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */; platformFilters = (macos, ); };
+		DAB4D8802B4C8E9A0048A05C /* URLAdditions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87F2B4C8E9A0048A05C /* URLAdditions.swift */; };
+		DAB4D8822B4C8FED0048A05C /* FileIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D8812B4C8FED0048A05C /* FileIconView.swift */; };
+		DAB4D8842B4CABEF0048A05C /* DataAdditions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D8832B4CABEF0048A05C /* DataAdditions.swift */; };
 		DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DABFCC282B1530DC009F40D2 /* FoundationExtensions.swift */; };
 		DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */; };
 		DADDB28B2B22B31F0024040D /* Tracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28A2B22B31F0024040D /* Tracker.swift */; };
@@ -78,7 +83,12 @@
 		DA9CAFCA2B126E3300CDA197 /* HotlineTrackerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineTrackerClient.swift; sourceTree = "<group>"; };
 		DAAEE66A2B3FBC2100A5BA07 /* TransferInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferInfo.swift; sourceTree = "<group>"; };
 		DAAEE66C2B475F1400A5BA07 /* PreviewFileInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFileInfo.swift; sourceTree = "<group>"; };
-		DAAEE66E2B47625600A5BA07 /* FilePreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewView.swift; sourceTree = "<group>"; };
+		DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewImageView.swift; sourceTree = "<group>"; };
+		DAB4D87A2B4B78310048A05C /* AnimatedImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedImageView.swift; sourceTree = "<group>"; };
+		DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewTextView.swift; sourceTree = "<group>"; };
+		DAB4D87F2B4C8E9A0048A05C /* URLAdditions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLAdditions.swift; sourceTree = "<group>"; };
+		DAB4D8812B4C8FED0048A05C /* FileIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileIconView.swift; sourceTree = "<group>"; };
+		DAB4D8832B4CABEF0048A05C /* DataAdditions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataAdditions.swift; sourceTree = "<group>"; };
 		DABFCC282B1530DC009F40D2 /* FoundationExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationExtensions.swift; sourceTree = "<group>"; };
 		DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUIExtensions.swift; sourceTree = "<group>"; };
 		DADDB28A2B22B31F0024040D /* Tracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tracker.swift; sourceTree = "<group>"; };
@@ -144,6 +154,7 @@
 				DAE734F72B2E4126000C56F6 /* macOS */,
 				DADDB2892B22B2C60024040D /* Models */,
 				DABFCC262B1530AE009F40D2 /* Hotline */,
+				DAB4D87C2B4B783A0048A05C /* Shared */,
 				DABFCC272B1530BE009F40D2 /* Utility */,
 				DA9CAFC02B126D5800CDA197 /* Assets.xcassets */,
 				DA32CD472B28EE640053B98B /* Info.plist */,
@@ -159,6 +170,17 @@
 				DA9CAFC32B126D5800CDA197 /* Preview Assets.xcassets */,
 			);
 			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		DAB4D87C2B4B783A0048A05C /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				DAB4D87A2B4B78310048A05C /* AnimatedImageView.swift */,
+				DAB4D8812B4C8FED0048A05C /* FileIconView.swift */,
+				DAB4D8832B4CABEF0048A05C /* DataAdditions.swift */,
+				DAB4D87F2B4C8E9A0048A05C /* URLAdditions.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 		DABFCC262B1530AE009F40D2 /* Hotline */ = {
@@ -213,7 +235,8 @@
 				DAE735022B30C0BB000C56F6 /* MessageView.swift */,
 				DAE734FC2B2E65E9000C56F6 /* MessageBoardView.swift */,
 				DAE735002B2E71F2000C56F6 /* FilesView.swift */,
-				DAAEE66E2B47625600A5BA07 /* FilePreviewView.swift */,
+				DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */,
+				DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */,
 				DA2863D72B37AD1C00A7D050 /* SettingsView.swift */,
 			);
 			path = macOS;
@@ -294,6 +317,7 @@
 				DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */,
 				DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */,
 				DAE735092B329810000C56F6 /* VisualEffectView.swift in Sources */,
+				DAB4D8802B4C8E9A0048A05C /* URLAdditions.swift in Sources */,
 				DA2863DD2B3E8B7000A7D050 /* FilePreview.swift in Sources */,
 				DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */,
 				DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */,
@@ -303,6 +327,7 @@
 				DADDB28D2B22B5920024040D /* Server.swift in Sources */,
 				DAE734FB2B2E41F9000C56F6 /* TrackerView.swift in Sources */,
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
+				DAB4D87B2B4B78310048A05C /* AnimatedImageView.swift in Sources */,
 				DAE735032B30C0BB000C56F6 /* MessageView.swift in Sources */,
 				DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */,
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,
@@ -318,13 +343,16 @@
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
 				DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */,
 				DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */,
-				DAAEE66F2B47625600A5BA07 /* FilePreviewView.swift in Sources */,
+				DAB4D8822B4C8FED0048A05C /* FileIconView.swift in Sources */,
+				DAAEE66F2B47625600A5BA07 /* FilePreviewImageView.swift in Sources */,
 				DAAEE66D2B475F1400A5BA07 /* PreviewFileInfo.swift in Sources */,
+				DAB4D8842B4CABEF0048A05C /* DataAdditions.swift in Sources */,
 				DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */,
 				DAE735052B3218D8000C56F6 /* NewsView.swift in Sources */,
 				DAE734F92B2E4185000C56F6 /* ServerView.swift in Sources */,
 				DADDB28B2B22B31F0024040D /* Tracker.swift in Sources */,
 				DAE734FD2B2E65E9000C56F6 /* MessageBoardView.swift in Sources */,
+				DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */,
 				DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */,
 				DA32CD492B2931640053B98B /* User.swift in Sources */,
 			);

@@ -263,10 +263,13 @@ class HotlineFileClient {
       case .ready:
         self?.status = .connected
         self?.sendMagic()
+      case .waiting(let err):
+        print("HotlineFileClient: Waiting", err)
       case .cancelled:
+        print("HotlineFileClient: Cancelled")
         self?.invalidate()
       case .failed(let err):
-        print("HotlineTrackerClient: Connection error \(err)")
+        print("HotlineFileClient: Connection error \(err)")
         switch self?.status {
         case .connecting:
           print("FAILED TO CONNECT")
@@ -344,7 +347,7 @@ class HotlineFileClient {
       return
     }
     
-    c.receive(minimumIncompleteLength: 1024, maximumLength: Int(UInt16.max)) { [weak self] (data, context, isComplete, error) in
+    c.receive(minimumIncompleteLength: 1, maximumLength: Int(UInt16.max)) { [weak self] (data, context, isComplete, error) in
       guard let self = self else {
         return
       }
@@ -516,10 +519,11 @@ class HotlineFileClient {
   
   private func receivePreviewData() {
     guard let c = self.connection else {
+      print("UH OH!")
       return
     }
             
-    c.receive(minimumIncompleteLength: 1024, maximumLength: Int(UInt16.max)) { [weak self] (data, context, isComplete, error) in
+    c.receive(minimumIncompleteLength: 1, maximumLength: Int(UInt16.max)) { [weak self] (data, context, isComplete, error) in
       guard let self = self else {
         return
       }
@@ -534,14 +538,14 @@ class HotlineFileClient {
         self.fileBytesDownloaded += newData.count
         self.fileBytes.append(newData)
         self.status = .progress(Double(self.fileBytesDownloaded) / Double(self.referenceDataSize))
-        
-        print("DOWNLOAD PROGRESS", self.fileBytesDownloaded, self.referenceDataSize, isComplete)
+        print("HotlineFileClient: Download progress", self.fileBytesDownloaded, self.referenceDataSize, isComplete)
       }
       
       if self.fileBytesDownloaded < Int(self.referenceDataSize) {
         self.receivePreviewData()
       }
       else {
+        print("HotlineFileClient: Complete")
         let reference = self.referenceNumber
         let data = self.fileBytes
         
@@ -557,32 +561,9 @@ class HotlineFileClient {
   
   // MARK: - Utility
   
-  private func findUniqueFilePath(base: String, at folderURL: URL) -> String {
-    let fileManager = FileManager.default
-    var finalName = base
-    var counter = 2
-    
-    // Helper function to generate a new filename with a counter
-    func makeFileName() -> String {
-      let baseName = (base as NSString).deletingPathExtension
-      let extensionName = (base as NSString).pathExtension
-      return extensionName.isEmpty ? "\(baseName) \(counter)" : "\(baseName) \(counter).\(extensionName)"
-    }
-    
-    // Check if file exists and append counter until a unique name is found
-    var filePath = folderURL.appending(component: finalName).path(percentEncoded: false)
-    while fileManager.fileExists(atPath: filePath) {
-      finalName = makeFileName()
-      filePath = folderURL.appending(component: finalName).path(percentEncoded: false)
-      counter += 1
-    }
-    
-    return filePath
-  }
-  
   private func prepareDownloadFile(name: String) -> Bool {
     let folderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-    let filePath = findUniqueFilePath(base: name, at: folderURL)
+    let filePath = folderURL.generateUniqueFilePath(filename: name)
     
     if FileManager.default.createFile(atPath: filePath, contents: nil) {
       if let h = FileHandle(forWritingAtPath: filePath) {

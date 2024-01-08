@@ -52,12 +52,7 @@ struct ListItemView: View {
 
 struct TransferItemView: View {
   let transfer: TransferInfo
-  
-  private func fileIcon(name: String) -> Image {
-    let fileExtension = (name as NSString).pathExtension
-    return Image(nsImage: NSWorkspace.shared.icon(for: UTType(filenameExtension: fileExtension) ?? UTType.content))
-  }
-  
+    
   @Environment(Hotline.self) private var model: Hotline
   @State private var hovered: Bool = false
   @State private var buttonHovered: Bool = false
@@ -84,9 +79,7 @@ struct TransferItemView: View {
     HStack(alignment: .center) {
       HStack(spacing: 0) {
         Spacer()
-        fileIcon(name: transfer.title)
-          .resizable()
-          .aspectRatio(contentMode: .fit)
+        FileIconView(filename: transfer.title)
           .frame(width: 16, height: 16)
         Spacer()
       }

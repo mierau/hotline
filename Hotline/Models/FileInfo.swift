@@ -16,6 +16,19 @@ import UniformTypeIdentifiers
   var expanded: Bool = false
   var children: [FileInfo]? = nil
   
+  var isPreviewable: Bool {
+    let fileExtension = (self.name as NSString).pathExtension
+    if let fileType = UTType(filenameExtension: fileExtension) {
+      if fileType.isSubtype(of: .image) {
+        return true
+      }
+      else if fileType.isSubtype(of: .text) {
+        return true
+      }
+    }
+    return false
+  }
+  
   var isImage: Bool {
     let fileExtension = (self.name as NSString).pathExtension
     if let fileType = UTType(filenameExtension: fileExtension) {
