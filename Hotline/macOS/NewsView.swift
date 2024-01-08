@@ -1,5 +1,5 @@
 import SwiftUI
-import UniformTypeIdentifiers
+import MarkdownUI
 
 struct NewsItemView: View {
   @Environment(Hotline.self) private var model: Hotline
@@ -24,7 +24,7 @@ struct NewsItemView: View {
   }()
   
   var body: some View {
-    HStack {
+    HStack(alignment: .center, spacing: 6) {
       if news.type == .bundle || news.type == .category {
         Button {
           news.expanded.toggle()
@@ -40,15 +40,14 @@ struct NewsItemView: View {
         .padding(.leading, 4)
       }
       else if news.type == .article {
-//        HStack(alignment: .center) {
-//          Text(Image(systemName: "quote.opening"))
-//            .font(.system(size: 12))
-//            .opacity(0.5)
-//            .frame(alignment: .centerFirstTextBaseline)
-          
-//          Image(systemName: "quote.opening")
-//        }
-//        .frame(width: 14)
+        if news.parentID != nil {
+          Image(systemName: "arrowshape.turn.up.left.fill")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .frame(width: 10)
+            .foregroundStyle(.secondary)
+        }
       }
       Text(news.name)
         .fontWeight((news.type == .bundle || news.type == .category) ? .bold : .regular)
@@ -203,7 +202,8 @@ struct NewsView: View {
                 Divider()
                 
                 if let newsText = self.articleText {
-                  Text(newsText)
+                  Markdown(newsText)
+//                  Text(newsText)
                     .textSelection(.enabled)
                     .lineSpacing(4)
                     .padding(.top, 16)

@@ -15,6 +15,7 @@ enum NewsInfoType {
   
   let categoryID: UUID?
   let articleID: UInt?
+  let parentID: UInt?
   
   let path: [String]
   var expanded: Bool = false
@@ -27,6 +28,7 @@ enum NewsInfoType {
   init(hotlineNewsCategory: HotlineNewsCategory) {
     self.categoryID = hotlineNewsCategory.id
     self.articleID = nil
+    self.parentID = nil
     self.name = hotlineNewsCategory.name
     self.count = UInt(hotlineNewsCategory.count)
     self.path = hotlineNewsCategory.path
@@ -41,6 +43,8 @@ enum NewsInfoType {
   
   init(hotlineNewsArticle: HotlineNewsArticle) {
     self.articleID = UInt(hotlineNewsArticle.id)
+    self.parentID = hotlineNewsArticle.parentID == 0 ? nil : UInt(hotlineNewsArticle.parentID)
+    print(hotlineNewsArticle.parentID)
     self.categoryID = nil
     self.name = hotlineNewsArticle.title
     self.count = 0
