@@ -117,8 +117,8 @@ class HotlineClient {
     let tcpOptions = NWProtocolTCP.Options()
     tcpOptions.enableKeepalive = true
 //    tcpOptions.enableFastOpen = true
-    tcpOptions.keepaliveInterval = 30
-    tcpOptions.connectionTimeout = 30
+//    tcpOptions.keepaliveInterval = 30
+//    tcpOptions.connectionTimeout = 30
     let connectionParameters: NWParameters
     connectionParameters = NWParameters(tls: nil, tcp: tcpOptions)
     
