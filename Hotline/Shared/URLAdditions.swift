@@ -23,20 +23,4 @@ extension URL {
     
     return filePath
   }
-  
-//  private func prepareDownloadFile(name: String) -> Bool {
-//    let folderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-//    let filePath = findUniqueFilePath(base: name, at: folderURL)
-//    
-//    if FileManager.default.createFile(atPath: filePath, contents: nil) {
-//      if let h = FileHandle(forWritingAtPath: filePath) {
-//        self.filePath = filePath
-//        self.fileHandle = h
-//        self.fileProgress?.fileURL = URL(filePath: filePath).resolvingSymlinksInPath()
-//        return true
-//      }
-//    }
-//    
-//    return false
-//  }
 }

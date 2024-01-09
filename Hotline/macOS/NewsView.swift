@@ -1,5 +1,190 @@
 import SwiftUI
 import MarkdownUI
+import SplitView
+
+struct NewsView: View {
+  @Environment(Hotline.self) private var model: Hotline
+  @Environment(\.openWindow) private var openWindow
+  
+  @State private var selection: NewsInfo?
+  @State private var articleText: String?
+  @State private var splitHidden = SideHolder(.bottom)
+  @State private var splitFraction = FractionHolder.usingUserDefaults(0.25, key: "News Split Fraction")
+  @State private var editorOpen: Bool = false
+  
+  var body: some View {
+    NavigationStack {
+      VSplit(
+        top: {
+          newsBrowser
+        },
+        bottom: {
+          articleViewer
+        }
+      )
+      .fraction(splitFraction)
+      .constraints(minPFraction: 0.1, minSFraction: 0.3)
+      .hide(splitHidden)
+      .styling(inset: 0, visibleThickness: 0.5, invisibleThickness: 5, hideSplitter: true)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(Color(nsColor: .textBackgroundColor))
+    }
+//    .sheet(isPresented: $editorOpen) {
+//      print("Sheet dismissed!")
+//    } content: {
+//      NewsEditorView()
+//    }
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          
+        } label: {
+          Image(systemName: "trash")
+        }
+      }
+      
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+//          if let selection = selection {
+//            editorOpen = true
+////            openWindow(id: "news-editor", value: NewsArticle(parentID: nil, path: selection.path, title: "", body: ""))
+//          }
+        } label: {
+          Image(systemName: "square.and.pencil")
+        }
+      }
+      
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          
+        } label: {
+          Image(systemName: "arrowshape.turn.up.left")
+        }
+      }
+    }
+  }
+  
+  var newsBrowser: some View {
+    List(model.news, id: \.self, selection: $selection) { newsItem in
+      NewsItemView(news: newsItem, depth: 0).tag(newsItem.id)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .environment(\.defaultMinListRowHeight, 34)
+    .listStyle(.inset)
+    .alternatingRowBackgrounds(.enabled)
+    .task {
+      if !model.newsLoaded {
+        let _ = await model.getNewsList()
+      }
+    }
+    .contextMenu(forSelectionType: NewsInfo.self) { items in
+        // ...
+    } primaryAction: { items in
+      guard let clickedNews = items.first else {
+        return
+      }
+      
+      self.selection = clickedNews
+      if clickedNews.type == .bundle || clickedNews.type == .category {
+        clickedNews.expanded.toggle()
+      }
+    }
+    .onChange(of: selection) {
+      self.articleText = nil
+      if let article = selection, article.type == .article {
+        if let articleFlavor = article.articleFlavors?.first,
+           let articleID = article.articleID {
+          Task {
+            if let articleText = await self.model.getNewsArticle(id: articleID, at: article.path, flavor: articleFlavor) {
+              self.articleText = articleText
+            }
+          }
+          if self.splitHidden.side != nil {
+            withAnimation(.easeOut(duration: 0.15)) {
+              self.splitHidden.side = nil
+            }
+          }
+          
+        }
+      }
+      else {
+        if self.splitHidden.side != .bottom {
+          withAnimation(.easeOut(duration: 0.25)) {
+            self.splitHidden.side = .bottom
+          }
+        }
+      }
+    }
+    .onKeyPress(.rightArrow) {
+      if let s = selection, s.type == .bundle || s.type == .category {
+        s.expanded = true
+        return .handled
+      }
+      return .ignored
+    }
+    .onKeyPress(.leftArrow) {
+      if let s = selection, s.type == .bundle || s.type == .category {
+        s.expanded = false
+        return .handled
+      }
+      return .ignored
+    }
+    .overlay {
+      if !model.newsLoaded {
+        VStack {
+          ProgressView()
+            .controlSize(.regular)
+        }
+        .frame(maxWidth: .infinity)
+      }
+    }
+  }
+  
+  var articleViewer: some View {
+    ScrollView {
+      if let selection = selection {
+        VStack(alignment: .leading, spacing: 0) {
+          if let poster = selection.articleUsername, let postDate = selection.articleDate {
+            HStack(alignment: .firstTextBaseline) {
+              Text(poster)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .textSelection(.enabled)
+                .padding(.bottom, 16)
+              Spacer()
+              Text("\(NewsItemView.dateFormatter.string(from: postDate))")
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .textSelection(.enabled)
+                .padding(.bottom, 16)
+            }
+          }
+          
+          Divider()
+          
+          Text(selection.name).font(.title)
+            .textSelection(.enabled)
+            .padding(.bottom, 8)
+            .padding(.top, 16)
+          
+          if let newsText = self.articleText {
+            Markdown(newsText)
+              .markdownTheme(.basic)
+              .textSelection(.enabled)
+              .lineSpacing(6)
+              .padding(.top, 16)
+          }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding()
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .transition(.move(edge: .bottom))
+  }
+}
 
 struct NewsItemView: View {
   @Environment(Hotline.self) private var model: Hotline
@@ -47,6 +232,7 @@ struct NewsItemView: View {
             .scaledToFit()
             .frame(width: 10)
             .foregroundStyle(.secondary)
+            .opacity(0.5)
         }
       }
       Text(news.name)
@@ -89,178 +275,6 @@ struct NewsItemView: View {
       ForEach(news.children.reversed(), id: \.self) { childNews in
         NewsItemView(news: childNews, depth: self.depth + 1).tag(childNews.id)
       }
-    }
-  }
-}
-
-struct NewsView: View {
-  @Environment(Hotline.self) private var model: Hotline
-  
-  @State private var selection: NewsInfo?
-  @State private var articleText: String?
-  
-  var body: some View {
-    NavigationStack {
-      VSplitView {
-        
-        // MARK: News Browser
-        List(model.news, id: \.self, selection: $selection) { newsItem in
-          NewsItemView(news: newsItem, depth: 0).tag(newsItem.id)
-        }
-
-        .frame(maxWidth: .infinity, minHeight: 100, idealHeight: 100)
-        .environment(\.defaultMinListRowHeight, 34)
-        .listStyle(.inset)
-        .alternatingRowBackgrounds(.enabled)
-        .task {
-          if !model.newsLoaded {
-            let _ = await model.getNewsList()
-          }
-        }
-        .contextMenu(forSelectionType: NewsInfo.self) { items in
-            // ...
-        } primaryAction: { items in
-          print("ITEMS?", items)
-          guard let clickedNews = items.first else {
-            return
-          }
-          
-          self.selection = clickedNews
-          if clickedNews.type == .bundle || clickedNews.type == .category {
-            clickedNews.expanded.toggle()
-          }
-        }
-        .onChange(of: selection) {
-          if
-            let article = selection,
-            article.type == .article {
-            self.articleText = nil
-            if
-//              let article = self.articleSelection.selectedArticle,
-              let articleFlavor = article.articleFlavors?.first,
-              let articleID = article.articleID {
-              Task {
-                if let articleText = await self.model.getNewsArticle(id: articleID, at: article.path, flavor: articleFlavor) {
-                  self.articleText = articleText
-                }
-              }
-            }
-          }
-        }
-        .onKeyPress(.rightArrow) {
-          if let s = selection, s.type == .bundle || s.type == .category {
-            s.expanded = true
-            return .handled
-          }
-          return .ignored
-        }
-        .onKeyPress(.leftArrow) {
-          if let s = selection, s.type == .bundle || s.type == .category {
-            s.expanded = false
-            return .handled
-          }
-          return .ignored
-        }
-        .overlay {
-          if !model.newsLoaded {
-            VStack {
-              ProgressView()
-                .controlSize(.large)
-            }
-            .frame(maxWidth: .infinity)
-          }
-        }
-        
-        // MARK: Article Viewer
-        ScrollView {
-          VStack(alignment: .leading, spacing: 0) {
-            if let news = selection {
-              if news.type == .article {
-                
-//                Text(news.name).font(.title)
-//                  .textSelection(.enabled)
-//                  .padding(.bottom, 8)
-                
-                if let poster = news.articleUsername, let postDate = news.articleDate {
-                  HStack(alignment: .firstTextBaseline) {
-                    Text(poster)
-                      .foregroundStyle(.secondary)
-                      .lineLimit(1)
-                      .truncationMode(.tail)
-                      .textSelection(.enabled)
-                      .padding(.bottom, 16)
-                    Spacer()
-                    Text("\(NewsItemView.dateFormatter.string(from: postDate))")
-                      .foregroundStyle(.secondary)
-                      .lineLimit(1)
-                      .truncationMode(.tail)
-                      .textSelection(.enabled)
-                      .padding(.bottom, 16)
-                  }
-                }
-                
-                Divider()
-                
-                if let newsText = self.articleText {
-                  Markdown(newsText)
-//                  Text(newsText)
-                    .textSelection(.enabled)
-                    .lineSpacing(4)
-                    .padding(.top, 16)
-                }
-              }
-            }
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding()
-        }
-        .frame(maxWidth: .infinity, minHeight: 200)
-      }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(Color(nsColor: .textBackgroundColor))
-    }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          
-        } label: {
-          Image(systemName: "square.and.pencil")
-        }
-      }
-      
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          
-        } label: {
-          Image(systemName: "arrowshape.turn.up.left")
-        }
-      }
-      
-//      if let bannerImage = model.bannerImage {
-//        ToolbarItem(placement: .primaryAction) {
-////          HStack {
-//            bannerImage
-//              .resizable()
-//              .aspectRatio(contentMode: .fit)
-//              .clipped()
-//              .frame(minHeight: 60, alignment: .topLeading
-//              )
-//              .clipped()
-//          }
-//          .frame(maxWidth: .infinity)
-//          .tag(MenuItem(name: "title", image: "", type: .banner))
-//          .padding(.bottom, 16)
-          
-          //           VStack(spacing: 0) {
-          //             bannerImage
-          //               .resizable()
-          //               .aspectRatio(contentMode: .fit)
-          //               .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
-          //               .clipped()
-          //           }
-          //           .frame(maxWidth: .infinity)
-//        }
-//      }
     }
   }
 }

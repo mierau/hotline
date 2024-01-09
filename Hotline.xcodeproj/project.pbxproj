@@ -23,6 +23,9 @@
 		DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */; };
 		DA57536C2B36BA1D00FAC277 /* TextDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57536B2B36BA1D00FAC277 /* TextDocument.swift */; };
 		DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineClient.swift */; };
+		DA72A0DD2B4CD0BF00A0F48A /* NewsEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */; };
+		DA72A0E02B4DA8CA00A0F48A /* SplitView in Frameworks */ = {isa = PBXBuildFile; productRef = DA72A0DF2B4DA8CA00A0F48A /* SplitView */; };
+		DA72A0E22B4DAA4000A0F48A /* NewsArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA72A0E12B4DAA4000A0F48A /* NewsArticle.swift */; };
 		DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA77253E2B21176D006C5ABB /* NewsView.swift */; platformFilter = ios; };
 		DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7725402B21435B006C5ABB /* ObservableScrollView.swift */; };
 		DA9CAFBB2B126D5700CDA197 /* Application.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBA2B126D5700CDA197 /* Application.swift */; };
@@ -74,6 +77,8 @@
 		DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineFileClient.swift; sourceTree = "<group>"; };
 		DA57536B2B36BA1D00FAC277 /* TextDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDocument.swift; sourceTree = "<group>"; };
 		DA6300962B24036B0034CBFD /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
+		DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsEditorView.swift; sourceTree = "<group>"; };
+		DA72A0E12B4DAA4000A0F48A /* NewsArticle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsArticle.swift; sourceTree = "<group>"; };
 		DA77253E2B21176D006C5ABB /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
 		DA7725402B21435B006C5ABB /* ObservableScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservableScrollView.swift; sourceTree = "<group>"; };
 		DA9CAFB72B126D5700CDA197 /* Hotline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hotline.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -111,6 +116,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA72A0E02B4DA8CA00A0F48A /* SplitView in Frameworks */,
 				DAB4D8872B4CB3610048A05C /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -222,6 +228,7 @@
 				DA2863DC2B3E8B7000A7D050 /* FilePreview.swift */,
 				DA32CD4C2B2931B50053B98B /* ChatMessage.swift */,
 				DA32CD4E2B2931CC0053B98B /* NewsInfo.swift */,
+				DA72A0E12B4DAA4000A0F48A /* NewsArticle.swift */,
 				DAAEE66C2B475F1400A5BA07 /* PreviewFileInfo.swift */,
 			);
 			path = Models;
@@ -239,6 +246,7 @@
 				DAE735002B2E71F2000C56F6 /* FilesView.swift */,
 				DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */,
 				DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */,
+				DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */,
 				DA2863D72B37AD1C00A7D050 /* SettingsView.swift */,
 			);
 			path = macOS;
@@ -262,6 +270,7 @@
 			name = Hotline;
 			packageProductDependencies = (
 				DAB4D8862B4CB3610048A05C /* MarkdownUI */,
+				DA72A0DF2B4DA8CA00A0F48A /* SplitView */,
 			);
 			productName = Hotline;
 			productReference = DA9CAFB72B126D5700CDA197 /* Hotline.app */;
@@ -293,6 +302,7 @@
 			mainGroup = DA9CAFAE2B126D5700CDA197;
 			packageReferences = (
 				DAB4D8852B4CB3610048A05C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+				DA72A0DE2B4DA8CA00A0F48A /* XCRemoteSwiftPackageReference "SplitView" */,
 			);
 			productRefGroup = DA9CAFB82B126D5700CDA197 /* Products */;
 			projectDirPath = "";
@@ -333,6 +343,7 @@
 				DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */,
 				DADDB28F2B238D850024040D /* Hotline.swift in Sources */,
 				DADDB28D2B22B5920024040D /* Server.swift in Sources */,
+				DA72A0E22B4DAA4000A0F48A /* NewsArticle.swift in Sources */,
 				DAE734FB2B2E41F9000C56F6 /* TrackerView.swift in Sources */,
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
 				DAB4D87B2B4B78310048A05C /* AnimatedImageView.swift in Sources */,
@@ -346,6 +357,7 @@
 				DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */,
 				DAE735072B3251B3000C56F6 /* Utilities.swift in Sources */,
 				DAE735012B2E71F2000C56F6 /* FilesView.swift in Sources */,
+				DA72A0DD2B4CD0BF00A0F48A /* NewsEditorView.swift in Sources */,
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,
 				DA57536C2B36BA1D00FAC277 /* TextDocument.swift in Sources */,
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
@@ -590,6 +602,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		DA72A0DE2B4DA8CA00A0F48A /* XCRemoteSwiftPackageReference "SplitView" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stevengharris/SplitView";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.5.0;
+			};
+		};
 		DAB4D8852B4CB3610048A05C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
@@ -601,6 +621,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		DA72A0DF2B4DA8CA00A0F48A /* SplitView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DA72A0DE2B4DA8CA00A0F48A /* XCRemoteSwiftPackageReference "SplitView" */;
+			productName = SplitView;
+		};
 		DAB4D8862B4CB3610048A05C /* MarkdownUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DAB4D8852B4CB3610048A05C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;

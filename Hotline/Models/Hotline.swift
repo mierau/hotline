@@ -246,7 +246,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     self.username = username
     self.iconID = iconID
     
-    print("CLIENT LOGIN: '\(server.login)' '\(server.password == nil)'")
+    print("CLIENT LOGIN: '\(server.login)' '\(server.password)'")
     
     self.client.login(server.address, port: UInt16(server.port), login: server.login, password: server.password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
       self?.serverVersion = serverVersion

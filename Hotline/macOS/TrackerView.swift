@@ -237,7 +237,7 @@ struct TrackerView: View {
   
   var bookmarks: [TrackerBookmark] = [
     TrackerBookmark(type: .server, name: "RetroMac", address: "82.32.130.173"),
-    TrackerBookmark(type: .server, name: "System 7 Today", address: "158.174.146.146"),
+    TrackerBookmark(type: .server, name: "System 7 Today", address: "62.116.228.147"),
     TrackerBookmark(type: .tracker, name: "Featured Servers", address: "hltracker.com"),
     TrackerBookmark(type: .tracker, name: "Agent79", address: "tracked.agent79.org"),
     TrackerBookmark(type: .tracker, name: "Preterhuman", address: "tracker.preterhuman.net"),

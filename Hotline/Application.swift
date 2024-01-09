@@ -55,6 +55,16 @@ struct Application: App {
         .environment(preferences)
     }
     
+    // MARK: News Editor Window
+//    WindowGroup(id: "news-editor", for: NewsArticle.self) { $article in
+//      NewsEditorView(article: $article)
+//    }
+//    .windowResizability(.contentSize)
+//    .windowStyle(.titleBar)
+//    .windowToolbarStyle(.unifiedCompact(showsTitle: true))
+//    .defaultSize(width: 450, height: 550)
+//    .defaultPosition(.center)
+    
     // MARK: Image Preview Window
     WindowGroup(id: "preview-image", for: PreviewFileInfo.self) { $info in
       FilePreviewImageView(info: $info)
