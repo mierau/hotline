@@ -246,8 +246,6 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     self.username = username
     self.iconID = iconID
     
-    print("CLIENT LOGIN: '\(server.login)' '\(server.password)'")
-    
     self.client.login(server.address, port: UInt16(server.port), login: server.login, password: server.password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
       self?.serverVersion = serverVersion
       if serverName != nil {
@@ -335,8 +333,6 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
           continuation.resume(returning: nil)
           return
         }
-        
-        print("GET NEWS CATS FROM \(path)")
       }, reply: { articleText in
 //          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
         
@@ -376,8 +372,6 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
             continuation.resume(returning: [])
             return
           }
-          
-          print("GET NEWS CATS FROM \(path)")
         }, reply: { [weak self] categories in
 //          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
           
@@ -445,8 +439,6 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
           }
           return
         }
-        
-        print("GET NEWS CATS FROM \(path)")
       }, reply: { [weak self] categories in
         let parentNews = self?.findNews(in: self?.news ?? [], at: path)
         

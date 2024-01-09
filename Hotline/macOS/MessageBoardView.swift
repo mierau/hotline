@@ -22,8 +22,6 @@ struct MessageBoardView: View {
       .task {
         if !model.messageBoardLoaded {
           let _ = await model.getMessageBoard()
-//          self.initialLoadComplete = true
-          print("INITIAL LOAD?")
         }
       }
       .overlay {

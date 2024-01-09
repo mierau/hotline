@@ -13,7 +13,6 @@ struct FilePreviewImageView: View {
   @Binding var info: PreviewFileInfo?
   
   @State var preview: FilePreview? = nil
-  @Namespace var mainNamespace
   @FocusState private var focusField: FilePreviewFocus?
   
   var body: some View {

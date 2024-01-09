@@ -178,7 +178,6 @@ class HotlineClient {
   }
   
   func disconnect() {
-    print("DISCONNECT?")
     for (_, replyInfo) in self.transactionLog {
       let replyCallback = replyInfo.1
       replyCallback?(HotlineTransaction(type: replyInfo.0), .networkFailure)
@@ -193,7 +192,6 @@ class HotlineClient {
   
   private func sendTransaction(_ t: HotlineTransaction, sent sentCallback: ((Bool) -> Void)? = nil, reply replyCallback: ((HotlineTransaction, HotlineTransactionError?) -> Void)? = nil) {
     guard let c = connection else {
-      print("NO CONNECTION?????")
       sentCallback?(false)
       return
     }
