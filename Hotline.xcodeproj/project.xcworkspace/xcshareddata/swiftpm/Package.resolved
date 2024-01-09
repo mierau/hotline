@@ -10,6 +10,15 @@
       }
     },
     {
+      "identity" : "splitview",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/stevengharris/SplitView",
+      "state" : {
+        "revision" : "13ff85ae02a01ae257c0a5cf8b6eb1c2a9fff597",
+        "version" : "3.5.0"
+      }
+    },
+    {
       "identity" : "swift-markdown-ui",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/gonzalezreal/swift-markdown-ui",

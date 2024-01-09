@@ -218,7 +218,6 @@ struct FilesView: View {
         ToolbarItem(placement: .primaryAction) {
           Button {
             if let s = selection, !s.isFolder {
-              print("DOWNLOAD FILE", s.name, s.path)
               model.downloadFile(s.name, path: s.path)
             }
           } label: {

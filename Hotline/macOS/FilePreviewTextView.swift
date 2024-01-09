@@ -12,7 +12,6 @@ struct FilePreviewTextView: View {
   
   @Binding var info: PreviewFileInfo?
   @State var preview: FilePreview? = nil
-  @Namespace var mainNamespace
   @FocusState private var focusField: FilePreviewFocus?
   
   var body: some View {
@@ -43,8 +42,8 @@ struct FilePreviewTextView: View {
             .contentMargins(.top, -16.0, for: .scrollIndicators)
             .contentMargins(.bottom, -16.0, for: .scrollIndicators)
             .contentMargins(.trailing, -16.0, for: .scrollIndicators)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scrollClipDisabled()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         else {
           VStack(alignment: .center, spacing: 0) {

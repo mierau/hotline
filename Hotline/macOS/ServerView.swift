@@ -171,88 +171,107 @@ struct ServerView: View {
     MenuItem(name: "Files", image: "folder", type: .files),
   ]
   
+  enum FocusFields {
+    case address
+    case login
+    case password
+  }
+  
+  @FocusState private var focusedField: FocusFields?
+  
   var connectForm: some View {
-    GroupBox {
-      Form {
-        Group {
-          TextField(text: $connectAddress) {
-            Text("Address:")
+    VStack(alignment: .center) {
+      GroupBox {
+        Form {
+          Group {
+            TextField(text: $connectAddress) {
+              Text("Address:")
+            }
+            .focused($focusedField, equals: .address)
+            
+            Text("Type the address of the Hotline server you would like to connect to. If you have an account on that server, type your login and password too.")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            
+            TextField(text: $connectLogin, prompt: Text("optional")) {
+              Text("Login:")
+            }
+            .focused($focusedField, equals: .login)
+            SecureField(text: $connectPassword, prompt: Text("optional")) {
+              Text("Password:")
+            }
+            .focused($focusedField, equals: .password)
           }
-          TextField(text: $connectLogin, prompt: Text("optional")) {
-            Text("Login:")
+          .textFieldStyle(.roundedBorder)
+          .controlSize(.regular)
+          
+          HStack {
+            Button {
+              print("SAVE BOOKMARK... SOMEHOW")
+            } label: {
+              Text("Save...")
+            }
+            .controlSize(.regular)
+            .buttonStyle(.automatic)
+            .help("Save server as bookmark")
+            
+            Spacer()
+            
+            Button {
+              dismiss()
+            } label: {
+              Text("Cancel")
+            }
+            .controlSize(.regular)
+            .buttonStyle(.automatic)
+            .keyboardShortcut(.cancelAction)
+            
+            Button {
+              
+  //            if var s = server {
+  //              print("CHANGING EXISTING SERVER")
+  //              s.name = newServer.name
+  //              s.description = newServer.description
+  //              s.users = newServer.users
+  //              s.address = newServer.address
+  //              s.port = newServer.port
+  //              s.login = newServer.login
+  //              s.password = newServer.password
+  //            }
+  //            else {
+  //              server = newServer
+  //            }
+              
+              Task {
+                await connectToServer()
+              }
+            } label: {
+              Text("Connect")
+            }
+            .controlSize(.regular)
+            .buttonStyle(.automatic)
+            .keyboardShortcut(.defaultAction)
           }
-          SecureField(text: $connectPassword, prompt: Text("optional")) {
-            Text("Password:")
-          }
+          .padding(.top, 8)
+          
         }
-        .textFieldStyle(.roundedBorder)
-        .controlSize(.regular)
+        .padding()
         .onChange(of: connectAddress) {
           let (a, p) = Server.parseServerAddressAndPort(connectAddress)
           server.address = a
           server.port = p
-          print("ADDRESS CHANGED: '\(connectAddress)' \(a) \(p)")
         }
         .onChange(of: connectLogin) {
           server.login = connectLogin.trimmingCharacters(in: .whitespacesAndNewlines)
-          print("LOGIN CHANGED: '\(connectLogin)'" + $server.wrappedValue.login)
         }
         .onChange(of: connectPassword) {
           server.password = connectPassword
-          print("PASS CHANGED: '\(connectPassword)'" + server.password)
         }
-        
-        HStack {
-          Button {
-            print("SAVE BOOKMARK... SOMEHOW")
-          } label: {
-            Text("Save...")
-          }
-          .controlSize(.regular)
-          .buttonStyle(.automatic)
-          .help("Save server as bookmark")
-          
-          Spacer()
-          
-          Button {
-            dismiss()
-          } label: {
-            Text("Cancel")
-          }
-          .controlSize(.regular)
-          .buttonStyle(.automatic)
-          .keyboardShortcut(.cancelAction)
-          
-          Button {
-            
-//            if var s = server {
-//              print("CHANGING EXISTING SERVER")
-//              s.name = newServer.name
-//              s.description = newServer.description
-//              s.users = newServer.users
-//              s.address = newServer.address
-//              s.port = newServer.port
-//              s.login = newServer.login
-//              s.password = newServer.password
-//            }
-//            else {
-//              server = newServer
-//            }
-            
-            Task {
-              await connectToServer()
-            }
-          } label: {
-            Text("Connect")
-          }
-          .controlSize(.regular)
-          .buttonStyle(.automatic)
-          .keyboardShortcut(.defaultAction)
-        }
-        .padding(.top, 8)
-        
       }
-      .padding()
+//      .padding(.top, 8)
+      .onAppear {
+        focusedField = .address
+      }
     }
     .frame(maxWidth: 350)
     .padding()

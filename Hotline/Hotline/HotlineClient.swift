@@ -131,57 +131,25 @@ class HotlineClient {
       }
       
       switch newState {
-      case .preparing:
-        print("HotlineClient: connection preparing...")
-      case .setup:
-        print("HotlineClient: connection setup")
-      case .waiting(let err):
-        print("HotlineClient: connection waiting \(err)...")
-        switch err {
-        case .posix(let errCode):
-          print("HotlineClient: posix error code \(errCode)")
-          self.disconnect()
-//          switch errCode {
-//          case .ETIMEDOUT:
-//            self.disconnect()
-//          case .ECONNREFUSED:
-//            self.disconnect()
-//          default:
-//            self.disconnect()
-//            break
-//          }
-        case .tls(let errStatus):
-          print("HotlineClient: tls error code \(errStatus)")
-          self.disconnect()
-        case .dns(let errType):
-          print("HotlineClient: DNS Error code \(errType)")
-          self.disconnect()
-        default:
-          print("HotlineClient: error code \(err)")
-        }
       case .ready:
         print("HotlineClient: connection ready!")
         self.updateConnectionStatus(.connected)
         self.connectCallback?(true)
         self.connectCallback = nil
-//        if self.connectionContinuation != nil {
-//          let continuation = self.connectionContinuation!
-//          self.connectionContinuation = nil
-//          callback?(true)
-//          continuation.resume(returning: true)
-//        }
-//        callback?(true)
-      case .failed(let err):
-        print("HotlineClient: connection error \(err)")
-        self.updateConnectionStatus(.disconnected)
-        self.reset()
-        self.connectCallback?(false)
-        self.connectCallback = nil
-//        callback?(false)
-//        if self.connectionContinuation != nil {
-//          let continuation = self.connectionContinuation!
-//          self.connectionContinuation = nil
-//          continuation.resume(returning: false)
+//      case .waiting(let err):
+//        print("HotlineClient: connection waiting \(err)...")
+//        switch err {
+//        case .posix(let errCode):
+//          print("HotlineClient: posix error code \(errCode)")
+//          self.disconnect()
+//        case .tls(let errStatus):
+//          print("HotlineClient: tls error code \(errStatus)")
+//          self.disconnect()
+//        case .dns(let errType):
+//          print("HotlineClient: DNS Error code \(errType)")
+//          self.disconnect()
+//        default:
+//          print("HotlineClient: error code \(err)")
 //        }
       case .cancelled:
         print("HotlineClient: connection cancelled")
@@ -189,24 +157,20 @@ class HotlineClient {
         self.reset()
         self.connectCallback?(false)
         self.connectCallback = nil
-//        callback?(false)
-//        if self.connectionContinuation != nil {
-//          let continuation = self.connectionContinuation!
-//          self.connectionContinuation = nil
-//          continuation.resume(returning: false)
-//        }
+      case .failed(let err):
+        print("HotlineClient: connection error \(err)")
+        self.updateConnectionStatus(.disconnected)
+        self.reset()
+        self.connectCallback?(false)
+        self.connectCallback = nil
       default:
+        print("HotlineClient: hmm", newState)
         break
       }
     }
     
     self.updateConnectionStatus(.connecting)
     self.connection?.start(queue: .global())
-    
-//    return await withCheckedContinuation { [weak self] continuation in
-//      self?.connectionContinuation = continuation
-//      self?.connection?.start(queue: .global())
-//    }
   }
   
   private func reset() {
@@ -228,7 +192,6 @@ class HotlineClient {
   
   private func sendTransaction(_ t: HotlineTransaction, sent sentCallback: ((Bool) -> Void)? = nil, reply replyCallback: ((HotlineTransaction, HotlineTransactionError?) -> Void)? = nil) {
     guard let c = connection else {
-      print("NO CONNECTION?????")
       sentCallback?(false)
       return
     }
@@ -586,6 +549,47 @@ class HotlineClient {
       
       DispatchQueue.main.async {
         reply?(articleString)
+      }
+    })
+  }
+  
+  func postNewsArticle(title: String, text: String, path: [String] = [], parentID: UInt32? = nil, sent: ((Bool) -> Void)? = nil, reply: (([HotlineNewsArticle]) -> Void)? = nil) {
+    var t = HotlineTransaction(type: .postNewsArticle)
+    if !path.isEmpty {
+      t.setFieldPath(type: .newsPath, val: path)
+    }
+    if let parentID = parentID {
+      t.setFieldUInt32(type: .newsArticleID, val: parentID)
+    }
+    t.setFieldString(type: .newsArticleTitle, val: title)
+    t.setFieldString(type: .newsArticleDataFlavor, val: "text/plain")
+    t.setFieldUInt32(type: .newsArticleFlags, val: 0)
+    t.setFieldString(type: .newsArticleData, val: text)
+    
+    self.sendTransaction(t, sent: sent, reply: { r, err in
+      if err != nil {
+        reply?([])
+        return
+      }
+      
+      var articles: [HotlineNewsArticle] = []
+//      let articleData = r.getField(type: .newsArticleListData)
+      
+//      print("ARTICLE DATA?", articleData)
+      
+      if let articleData = r.getField(type: .newsArticleListData) {
+        let newsList = articleData.getNewsList()
+        for art in newsList.articles {
+          var blah = art
+          blah.path = path
+          articles.append(blah)
+          
+          print(blah.title)
+        }
+      }
+      
+      DispatchQueue.main.async {
+        reply?(articles)
       }
     })
   }

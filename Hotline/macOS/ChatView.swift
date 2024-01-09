@@ -118,7 +118,6 @@ struct ChatView: View {
 //              withAnimation {
               reader.scrollTo(bottomID, anchor: .bottom)
 //              }
-              print("SCROLLED TO BOTTOM")
             }
             .onAppear {
               reader.scrollTo(bottomID, anchor: .bottom)
