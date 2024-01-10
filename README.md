@@ -13,6 +13,20 @@ An attempt to ressurect Hotline for modern Apple systems (iOS, macOS, etc) by co
 |----------------------------|-----------------------|
 | Sonoma 14.2 or greater     | iOS 17.2 or greater   |
 
+# What is Hotline?
+
+Hotline was released in 1997 for Mac OS. A suite of three (free) applications that allowed people to join or host online communities directly from their Macs. No subscriptions. No ads.
+
+When connected to a Hotline server you could chat with other users like IRC, message others privately like AIM, read or write threaded news like a forum, post to the server’s message board like BBS, and browse, upload, or download files like FTP. And as someone operating a Hotline server you had full control over all of it.
+
+Hotline also included Trackers. Trackers tracked servers. If you ran a Hotline server, you could list it on one or more Trackers so people could find your server—and anyone could run a Tracker.
+
+At a time when people were chatting over email and file sharing was passing physical media between friends, Hotline was a kind of revelation. The promise of the Internet, in a way. Computers owned by individuals, connected and passing information between each other. No central server that could take the entire network offline.
+
+Perhaps that’s why you can still find Hotline servers and trackers running today 25 years later. Though the company who built Hotline is no longer around, and the software they made is only available through retro Mac software archives, these communities are still operating.
+
+And this project is an attempt to create a modern open source version of Hotline for modern Apple systems. Join in. Contribute. Run your own server! Perhaps Hotline can live on for another 25 years. :)
+
 # Status
 
 | Feature                    | macOS | iOS   |
