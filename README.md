@@ -9,9 +9,9 @@ An attempt to ressurect Hotline for modern Apple systems (iOS, macOS, etc) by co
 
 # Requirements
 
-| macOS                      | iOS                   |
-|----------------------------|-----------------------|
-| Sonoma 14.2 or greater     | iOS 17.2 or greater   |
+| macOS                      | iOS                   | iPadOS            | visionOS          |
+|----------------------------|-----------------------|-------------------|-------------------|
+| Sonoma 14.2 or greater     | iOS 17.2 or greater   | Not yet available | Not yet available |
 
 # What is Hotline?
 
@@ -29,34 +29,34 @@ And this project is an attempt to create a modern open source version of Hotline
 
 # Status
 
-| Feature                    | macOS | iOS   |
-|----------------------------|-------|-------|
-| Trackers listing           |   ✓   |   ✓   |
-| Multiple trackers          |   ✓   |       |
-| Connect to servers         |   ✓   |   ✓   |
-| Connect to multiple servers|   ✓   |       |
-| Server bookmarks           |       |       |
-| Change name & icon         |   ✓   |       |
-| Privacy settings           |   ✓   |       |
-| Autoresponse               |   ✓   |       |
-| Display server agreement   |   ✓   |   ✓   |
-| Display server banner      |   ✓   |   ✓   |
-| Public chat                |   ✓   |   ✓   |
-| Private messages           |       |       |
-| User list                  |   ✓   |   ✓   |
-| User icons                 |   ✓   |   ✓   |
-| User administration        |       |       |
-| News reading               |   ✓   |   ✓   |
-| News posting               |       |       |
-| Message board reading      |   ✓   |   ✓   |
-| Message board posting      |       |       |
-| File browsing              |   ✓   |   ✓   |
-| File downloading           |   ✓   |       |
-| File uploading             |       |       |
-| File info                  |       |       |
-| File management            |       |       |
-| Folder downloading         |       |       |
-| Folder uploading           |       |       |
+| Feature                    | macOS | iOS   | iPadOS | visionOS |
+|----------------------------|-------|-------|--------|----------|
+| Trackers listing           |   ✓   |   ✓   |        |          |
+| Multiple trackers          |   ✓   |       |        |          |
+| Connect to servers         |   ✓   |   ✓   |        |          |
+| Connect to multiple servers|   ✓   |       |        |          |
+| Server bookmarks           |       |       |        |          |
+| Change name & icon         |   ✓   |       |        |          |
+| Privacy settings           |   ✓   |       |        |          |
+| Autoresponse               |   ✓   |       |        |          |
+| Display server agreement   |   ✓   |   ✓   |        |          |
+| Display server banner      |   ✓   |   ✓   |        |          |
+| Public chat                |   ✓   |   ✓   |        |          |
+| Private messages           |       |       |        |          |
+| User list                  |   ✓   |   ✓   |        |          |
+| User icons                 |   ✓   |   ✓   |        |          |
+| User administration        |       |       |        |          |
+| News reading               |   ✓   |   ✓   |        |          |
+| News posting               |       |       |        |          |
+| Message board reading      |   ✓   |   ✓   |        |          |
+| Message board posting      |       |       |        |          |
+| File browsing              |   ✓   |   ✓   |        |          |
+| File downloading           |   ✓   |       |        |          |
+| File uploading             |       |       |        |          |
+| File info                  |       |       |        |          |
+| File management            |       |       |        |          |
+| Folder downloading         |       |       |        |          |
+| Folder uploading           |       |       |        |          |
 
 # Goals
 - Build a Hotline client for modern Apple systems.
