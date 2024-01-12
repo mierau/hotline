@@ -1,12 +1,6 @@
 import Foundation
 import Network
 
-enum HotlineTrackerStatus: Int {
-  case disconnected
-  case connecting
-  case connected
-}
-
 struct HotlineTracker: Identifiable, Equatable {
   let id: UUID = UUID()
   var address: String
@@ -22,197 +16,129 @@ struct HotlineTracker: Identifiable, Equatable {
   }
 }
 
+enum HotlineTrackerStatus: Int {
+  case disconnected
+  case connecting
+  case connected
+}
+
+private enum HotlineTrackerStage {
+  case magic
+  case header
+  case listing
+  case done
+}
+
 class HotlineTrackerClient {
-  static let magicPacket = Data([
+  static let MagicPacket: [UInt8] = [
     0x48, 0x54, 0x52, 0x4B, // 'HTRK'
     0x00, 0x01 // Version
-  ])
+  ]
   
   private var tracker: HotlineTracker
   private var connectionStatus: HotlineTrackerStatus = .disconnected
   private var servers: [HotlineServer] = []
+
+  private var socket: NetSocket = NetSocket()
+  private var stage: HotlineTrackerStage = .magic
   
-  private var serverAddress: NWEndpoint.Host
-  private var serverPort: NWEndpoint.Port
-  private var connection: NWConnection?
-  private var bytes = Data()
-  private var maxDataLength: Int = 0
+  private var serverAddress: String
+  private var serverPort: Int
+  private var expectedDataLength: Int = 0
   private var serverCount: Int = 0
+  
+  private var fetchContinuation: CheckedContinuation<[HotlineServer], any Error>?
   
   init() {
     let t = HotlineTracker("hltracker.com")
     self.tracker = t
-    self.serverAddress = NWEndpoint.Host(t.address)
-    self.serverPort = NWEndpoint.Port(rawValue: t.port)!
+    self.serverAddress = t.address
+    self.serverPort = Int(t.port)
+    self.socket.delegate = self
   }
   
   init(tracker: HotlineTracker) {
     self.tracker = tracker
-    self.serverAddress = NWEndpoint.Host(tracker.address)
-    self.serverPort = NWEndpoint.Port(rawValue: tracker.port)!
+    self.serverAddress = tracker.address
+    self.serverPort = Int(tracker.port)
+    self.socket.delegate = self
   }
     
-  func fetchServers(address: String, port: Int, callback: (([HotlineServer]) -> Void)? = nil) async -> [HotlineServer] {
-    self.serverAddress = NWEndpoint.Host(address)
-    self.serverPort = NWEndpoint.Port(rawValue: UInt16(port))!
+  @MainActor func fetchServers(address: String, port: Int) async throws -> [HotlineServer] {
+    self.serverAddress = address
+    self.serverPort = Int(port)
     
     self.reset()
     
-    return await withCheckedContinuation { [weak self] continuation in
-      self?.connect { [weak self] in
-        continuation.resume(returning: self?.servers ?? [])
-      }
+    return try await withCheckedThrowingContinuation { [weak self] continuation in
+      self?.fetchContinuation = continuation
+      self?.connect()
     }
   }
   
-  private func reset() {
-    self.maxDataLength = 0
+  @MainActor func close() {
+    self.socket.close()
+  }
+  
+  // MARK: -
+  
+  @MainActor private func reset() {
+    self.expectedDataLength = 0
     self.serverCount = 0
     self.servers = []
   }
   
-  private func connect(_ callback: (() -> Void)? = nil) {
-    self.connection = NWConnection(host: self.serverAddress, port: self.serverPort, using: .tcp)
-    self.connection?.stateUpdateHandler = { [weak self] (newState: NWConnection.State) in
-      switch newState {
-      case .ready:
-        self?.connectionStatus = .connected
-        self?.sendMagic()
-      case .cancelled:
-        self?.connectionStatus = .disconnected
-        DispatchQueue.main.async {
-          callback?()
-        }
-      case .failed(let err):
-        print("HotlineTrackerClient: Connection error \(err)")
-        self?.connectionStatus = .disconnected
-        DispatchQueue.main.async {
-          callback?()
-        }
-      default:
-        return
-      }
-    }
+  @MainActor private func connect() {
+    self.socket.close()
     
     self.connectionStatus = .connecting
-    self.connection?.start(queue: .global())
+    self.socket.connect(host: self.serverAddress, port: self.serverPort)
+    self.socket.write(HotlineTrackerClient.MagicPacket)
   }
   
-  func disconnect() {
-    self.connection?.cancel()
-    self.connection = nil
-  }
-  
-  private func sendMagic() {
-    guard let c = connection else {
-      print("HotlineTrackerClient: invalid connection to send magic.")
+  @MainActor private func receiveMagic() {
+    guard self.stage == .magic, self.socket.available >= HotlineTrackerClient.MagicPacket.count else {
       return
     }
     
-    //    let packet: [UInt8] = [0x48, 0x54, 0x52, 0x4B, 0x00, self.serverVersion]
+    let magic: [UInt8] = self.socket.read(count: HotlineTrackerClient.MagicPacket.count)
     
-    c.send(content: HotlineTrackerClient.magicPacket, completion: .contentProcessed { [weak self] (error) in
-      if let err = error {
-        print("HotlineTrackerClient: sending magic failed \(err)")
-        return
-      }
-      
-      self?.receiveMagic()
-    })
-  }
-  
-  private func receiveMagic() {
-    guard let c = connection else {
-      print("HotlineTrackerClient: invalid connection to receive magic.")
+    if magic != HotlineTrackerClient.MagicPacket {
+      self.socket.close()
       return
     }
     
-    c.receive(minimumIncompleteLength: 6, maximumLength: 6) { [weak self] (data, context, isComplete, error) in
-      guard let self = self, let data = data else {
-        return
-      }
-      
-      if data.isEmpty || !data.elementsEqual(HotlineTrackerClient.magicPacket) {
-        print("HotlineTrackerClient: invalid magic response")
-        self.disconnect()
-        return
-      }
-      
-      if let error = error {
-        print("HotlineTrackerClient: receive error \(error)")
-      }
-      else {
-        self.receiveHeader()
-      }
-    }
+    self.stage = .header
+    self.receiveHeader()
   }
   
-  private func receiveHeader() {
-    guard let c = connection else {
-      print("HotlineTrackerClient: invalid connection to receive header.")
+  @MainActor private func receiveHeader() {
+    guard self.stage == .header, self.socket.available >= 8 else {
       return
     }
     
-    c.receive(minimumIncompleteLength: 8, maximumLength: 8) { [weak self] (data, context, isComplete, error) in
-      guard let self = self else {
-        return
-      }
-      
-      if let error = error {
-        print("HotlineTrackerClient: receive error \(error)")
-        self.disconnect()
-        return
-      }
-      
-      if let data = data, !data.isEmpty {
-        self.maxDataLength = Int(data[2]) * 0xFF + Int(data[3])
-        self.maxDataLength -= 4
-        self.serverCount = Int(data[4]) * 256 + Int(data[5])
-      }
-      
-      if let error = error {
-        print("HotlineTrackerClient: receive error \(error)")
-      }
-      else {
-        self.receiveListing()
-      }
-    }
-  }
-  
-  private func receiveListing() {
-    guard let c = connection else {
-      print("HotlineTrackerClient: invalid connection to receive data.")
+    let header: [UInt8] = self.socket.read(count: 8)
+    if header.count != 8 {
       return
     }
     
-    c.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] (data, context, isComplete, error) in
-      guard let self = self else {
-        return
-      }
-      
-      if let data = data, !data.isEmpty {
-        self.bytes.append(contentsOf: data)
-        
-        if bytes.count >= maxDataLength {
-          self.parseListing()
-          print("HotlineTrackerClient: Found \(self.servers.count) servers on tracker \(self.serverAddress):\(self.serverPort)")
-          self.disconnect()
-          return
-        }
-      }
-      
-      if let error = error {
-        print("HotlineTrackerClient: receive error \(error)")
-        self.disconnect()
-      }
-      else {
-        print("HotlineTrackerClient: not complete")
-        self.receiveListing()
-      }
-    }
+    self.expectedDataLength = Int(header[2]) * 0xFF + Int(header[3])
+    self.expectedDataLength -= 4
+    self.serverCount = Int(header[4]) * 256 + Int(header[5])
+    
+    self.stage = .listing
+    self.receiveListing()
   }
   
-  private func parseListing() {
+  @MainActor private func receiveListing() {
+    guard self.stage == .listing, self.socket.available >= self.expectedDataLength else {
+      return
+    }
+    
+    self.parseListing(self.socket.read(count: self.expectedDataLength))
+  }
+  
+  @MainActor private func parseListing(_ listingBytes: [UInt8]) {
     // IP address (4 bytes)
     // Port number (2 bytes)
     // Number of users (2 bytes)
@@ -222,41 +148,77 @@ class HotlineTrackerClient {
     // Description size (1 byte)
     // Description (description size)
     
+    var bytes: [UInt8] = listingBytes
     let trackerSeparatorRegex = /^[-]+$/
     var foundServers: [HotlineServer] = []
     
-    var cursor = 0
     for _ in 1...self.serverCount {
-      if self.bytes.count < cursor + 12 {
+      if
+        let ip_1 = bytes.consumeUInt8(),
+        let ip_2 = bytes.consumeUInt8(),
+        let ip_3 = bytes.consumeUInt8(),
+        let ip_4 = bytes.consumeUInt8(),
+        let port = bytes.consumeUInt16(),
+        let _ = bytes.consumeBytes(2),
+        let userCount = bytes.consumeUInt16(),
+        let serverName = bytes.consumePString(),
+        let serverDescription = bytes.consumePString() {
+        
+        // Ignore servers that are just used as dividers in the tracker listing.
+        let validName = try? trackerSeparatorRegex.prefixMatch(in: serverName)
+        if validName == nil {
+          let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: serverName, description: serverDescription)
+          foundServers.append(server)
+        }
+      }
+      else {
         print("HotlineTrackerClient: Data isn't long enough for next server")
         break
-      }
-      
-      if
-        let ip_1 = self.bytes.readUInt8(at: cursor),
-        let ip_2 = self.bytes.readUInt8(at: cursor + 1),
-        let ip_3 = self.bytes.readUInt8(at: cursor + 2),
-        let ip_4 = self.bytes.readUInt8(at: cursor + 3),
-        let port = self.bytes.readUInt16(at: cursor + 4),
-        let userCount = self.bytes.readUInt16(at: cursor + 6) {
-        
-        let (serverName, nameByteCount) = self.bytes.readPString(at: cursor + 10)
-        let (serverDescription, descByteCount) = self.bytes.readPString(at: cursor + 10 + nameByteCount)
-        
-        if let name = serverName,
-           let desc = serverDescription {
-          // Ignore servers that are just used as dividers in the tracker listing.
-          let validName = try? trackerSeparatorRegex.prefixMatch(in: name)
-          if validName == nil {
-            let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: name, description: desc)
-            foundServers.append(server)
-          }
-        }
-        
-        cursor += 10 + nameByteCount + descByteCount
       }
     }
     
     self.servers = foundServers
+    
+    self.stage = .done
+    self.socket.close()
+  }
+}
+
+// MARK: -
+
+extension HotlineTrackerClient: NetSocketDelegate {
+  @MainActor func netsocketConnected(socket: NetSocket) {
+    self.connectionStatus = .connected
+  }
+  
+  @MainActor func netsocketDisconnected(socket: NetSocket, error: Error?) {
+    self.stage = .magic
+    self.connectionStatus = .disconnected
+    
+    let servers = self.servers
+    self.reset()
+    
+    if let continuation = self.fetchContinuation {
+      self.fetchContinuation = nil
+      if let err = error {
+        continuation.resume(throwing: err)
+      }
+      else {
+        continuation.resume(returning: servers)
+      }
+    }
+  }
+  
+  @MainActor func netsocketReceived(socket: NetSocket, bytes: [UInt8]) {
+    switch self.stage {
+    case .magic:
+      self.receiveMagic()
+    case .header:
+      self.receiveHeader()
+    case .listing:
+      self.receiveListing()
+    case .done:
+      break
+    }
   }
 }

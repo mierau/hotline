@@ -18,6 +18,7 @@
 		DA32CD4D2B2931B50053B98B /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD4C2B2931B50053B98B /* ChatMessage.swift */; };
 		DA32CD4F2B2931CC0053B98B /* NewsInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA32CD4E2B2931CC0053B98B /* NewsInfo.swift */; };
 		DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43205D2B1D615600FC8843 /* ServerView.swift */; platformFilter = ios; };
+		DA4930BD2B4F8DD700822D0B /* NetSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4930BC2B4F8DD700822D0B /* NetSocket.swift */; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
 		DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */; };
@@ -72,6 +73,7 @@
 		DA32CD4C2B2931B50053B98B /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		DA32CD4E2B2931CC0053B98B /* NewsInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsInfo.swift; sourceTree = "<group>"; };
 		DA43205D2B1D615600FC8843 /* ServerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerView.swift; sourceTree = "<group>"; };
+		DA4930BC2B4F8DD700822D0B /* NetSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetSocket.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineFileClient.swift; sourceTree = "<group>"; };
@@ -187,6 +189,7 @@
 				DAB4D8812B4C8FED0048A05C /* FileIconView.swift */,
 				DAB4D8832B4CABEF0048A05C /* DataAdditions.swift */,
 				DAB4D87F2B4C8E9A0048A05C /* URLAdditions.swift */,
+				DA4930BC2B4F8DD700822D0B /* NetSocket.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -340,6 +343,7 @@
 				DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */,
 				DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */,
 				DAE734FF2B2E6750000C56F6 /* ChatView.swift in Sources */,
+				DA4930BD2B4F8DD700822D0B /* NetSocket.swift in Sources */,
 				DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */,
 				DADDB28F2B238D850024040D /* Hotline.swift in Sources */,
 				DADDB28D2B22B5920024040D /* Server.swift in Sources */,

@@ -81,27 +81,20 @@ class TrackerItem: Identifiable, Hashable {
     
     let client = HotlineTrackerClient()
     
-    
     self.loading = true
-//    self.servers = []
 
-    let fetchedServers: [HotlineServer] = await client.fetchServers(address: bookmark.address, port: HotlinePorts.DefaultTrackerPort)
-    
-    client.disconnect()
+    if let fetchedServers: [HotlineServer] = try? await client.fetchServers(address: bookmark.address, port: HotlinePorts.DefaultTrackerPort) {
+      var newItems: [TrackerItem] = []
 
-    var newItems: [TrackerItem] = []
-
-    for s in fetchedServers {
-      if let serverName = s.name {
-        
-        let server = Server(name: serverName, description: s.description, address: s.address, port: Int(s.port), users: Int(s.users))
-//        let item = TrackerItem(server: server)
-        
-        newItems.append(TrackerItem(server: server))
+      for s in fetchedServers {
+        if let serverName = s.name {
+          let server = Server(name: serverName, description: s.description, address: s.address, port: Int(s.port), users: Int(s.users))
+          newItems.append(TrackerItem(server: server))
+        }
       }
-    }
 
-    self.servers = newItems
+      self.servers = newItems
+    }
     
     self.loading = false
   }

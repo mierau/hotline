@@ -223,13 +223,13 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   // MARK: -
   
   @MainActor func getServerList(tracker: String, port: Int = HotlinePorts.DefaultTrackerPort) async -> [Server] {
-    let fetchedServers: [HotlineServer] = await self.trackerClient.fetchServers(address: tracker, port: port)
-    
     var servers: [Server] = []
     
-    for s in fetchedServers {
-      if let serverName = s.name {
-        servers.append(Server(name: serverName, description: s.description, address: s.address, port: Int(s.port), users: Int(s.users)))
+    if let fetchedServers: [HotlineServer] = try? await self.trackerClient.fetchServers(address: tracker, port: port) {
+      for s in fetchedServers {
+        if let serverName = s.name {
+          servers.append(Server(name: serverName, description: s.description, address: s.address, port: Int(s.port), users: Int(s.users)))
+        }
       }
     }
     
@@ -237,7 +237,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   @MainActor func disconnectTracker() {
-    self.trackerClient.disconnect()
+    self.trackerClient.close()
   }
   
   @MainActor func login(server: Server, username: String, iconID: Int, callback: ((Bool) -> Void)? = nil) {
