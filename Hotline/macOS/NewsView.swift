@@ -5,6 +5,7 @@ import SplitView
 struct NewsView: View {
   @Environment(Hotline.self) private var model: Hotline
   @Environment(\.openWindow) private var openWindow
+  @Environment(\.colorScheme) private var colorScheme
   
   @State private var selection: NewsInfo?
   @State private var articleText: String?
@@ -25,7 +26,7 @@ struct NewsView: View {
       .fraction(splitFraction)
       .constraints(minPFraction: 0.1, minSFraction: 0.3)
       .hide(splitHidden)
-      .styling(inset: 0, visibleThickness: 0.5, invisibleThickness: 5, hideSplitter: true)
+      .styling(color: colorScheme == .dark ? .black : Splitter.defaultColor, inset: 0, visibleThickness: 0.5, invisibleThickness: 5, hideSplitter: true)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(Color(nsColor: .textBackgroundColor))
     }
