@@ -246,7 +246,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     self.username = username
     self.iconID = iconID
     
-    self.client.login(server.address, port: UInt16(server.port), login: server.login, password: server.password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
+    self.client.login(address: server.address, port: server.port, login: server.login, password: server.password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
       self?.serverVersion = serverVersion
       if serverName != nil {
         self?.serverName = serverName
@@ -256,19 +256,15 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     }
   }
   
-  @MainActor func sendUserInfo(username: String, iconID: Int, options: HotlineUserOptions = [], autoresponse: String? = nil, callback: ((Bool) -> Void)? = nil) {
+  @MainActor func sendUserInfo(username: String, iconID: Int, options: HotlineUserOptions = [], autoresponse: String? = nil) {
     self.username = username
     self.iconID = iconID
     
-    self.client.sendSetClientUserInfo(username: username, iconID: UInt16(iconID), options: options, autoresponse: autoresponse) { success in
-      callback?(success)
-    }
+    self.client.sendSetClientUserInfo(username: username, iconID: UInt16(iconID), options: options, autoresponse: autoresponse)
   }
   
-  @MainActor func getUserList(callback: ((Bool) -> Void)? = nil) {
-    self.client.sendGetUserList() { success in
-      callback?(success)
-    }
+  @MainActor func getUserList() {
+    self.client.sendGetUserList()
   }
   
   @MainActor func disconnect() {
@@ -281,7 +277,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   @MainActor func sendChat(_ text: String) {
-    self.client.sendChat(message: text, sent: nil)
+    self.client.sendChat(message: text)
   }
   
   @MainActor func getMessageBoard() async -> [String] {
@@ -298,12 +294,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   
   @MainActor func getFileList(path: [String] = []) async -> [FileInfo] {
     return await withCheckedContinuation { [weak self] continuation in
-      self?.client.sendGetFileList(path: path, sent: { success in
-        if !success {
-          continuation.resume(returning: [])
-          return
-        }
-      }, reply: { [weak self] files in
+      self?.client.sendGetFileList(path: path) { [weak self] files in
         let parentFile = self?.findFile(in: self?.files ?? [], at: path)
         
         var newFiles: [FileInfo] = []
@@ -322,18 +313,13 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
           
           continuation.resume(returning: newFiles)
         }
-      })
+      }
     }
   }
   
   @MainActor func getNewsArticle(id articleID: UInt, at path: [String], flavor: String) async -> String? {
     return await withCheckedContinuation { [weak self] continuation in
-      self?.client.sendGetNewsArticle(id: UInt32(articleID), path: path, flavor: flavor, sent: { success in
-        if !success {
-          continuation.resume(returning: nil)
-          return
-        }
-      }, reply: { articleText in
+      self?.client.sendGetNewsArticle(id: UInt32(articleID), path: path, flavor: flavor) { articleText in
 //          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
         
 //        var newCategories: [NewsInfo] = []
@@ -349,7 +335,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
 //        }
         
         continuation.resume(returning: articleText)
-      })
+      }
     }
     
   }
@@ -367,12 +353,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       }
       
       if requestCategories {
-        self?.client.sendGetNewsCategories(path: path, sent: { success in
-          if !success {
-            continuation.resume(returning: [])
-            return
-          }
-        }, reply: { [weak self] categories in
+        self?.client.sendGetNewsCategories(path: path) { [weak self] categories in
 //          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
           
           var newCategories: [NewsInfo] = []
@@ -391,19 +372,10 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
             
             continuation.resume(returning: newCategories)
           }
-        })
+        }
       }
       else {
-        self?.client.sendGetNewsArticles(path: path, sent: { success in
-          if !success {
-            DispatchQueue.main.async {
-              continuation.resume(returning: [])
-            }
-            return
-          }
-          
-          print("GET NEWS ARTICLES FROM \(path)")
-        }, reply: { [weak self] articles in
+        self?.client.sendGetNewsArticles(path: path) { [weak self] articles in
 //          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
           print("GENERATING NEWS")
           
@@ -425,21 +397,14 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
             
             continuation.resume(returning: newArticles)
           }
-        })
+        }
       }
     }
   }
   
   @MainActor func getNewsCategories(at path: [String] = []) async -> [NewsInfo] {
     return await withCheckedContinuation { [weak self] continuation in
-      self?.client.sendGetNewsCategories(path: path, sent: { success in
-        if !success {
-          DispatchQueue.main.async {
-            continuation.resume(returning: [])
-          }
-          return
-        }
-      }, reply: { [weak self] categories in
+      self?.client.sendGetNewsCategories(path: path) { [weak self] categories in
         let parentNews = self?.findNews(in: self?.news ?? [], at: path)
         
         var newCategories: [NewsInfo] = []
@@ -457,24 +422,15 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
           
           continuation.resume(returning: newCategories)
         }
-      })
+      }
     }
   }
   
   @MainActor func getArticles(at path: [String]) async -> [NewsInfo] {
     return await withCheckedContinuation { [weak self] continuation in
-      self?.client.sendGetNewsArticles(path: path, sent: { success in
-        if !success {
-          DispatchQueue.main.async {
-            continuation.resume(returning: [])
-          }
-          return
-        }
-      }, reply: { articles in
-        DispatchQueue.main.async {
-          continuation.resume(returning: [])
-        }
-      })
+      self?.client.sendGetNewsArticles(path: path) { articles in
+        continuation.resume(returning: [])
+      }
     }
   }
   
@@ -484,8 +440,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       fullPath = Array(path[0..<path.count-1])
     }
     
-    self.client.sendDownloadFile(name: fileName, path: fullPath, sent: { _ in
-    }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
+    self.client.sendDownloadFile(name: fileName, path: fullPath) { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
       print("GOT DOWNLOAD REPLY:")
       print("\tSUCCESS?", success)
       print("\tTRANSFER SIZE: \(downloadTransferSize.debugDescription)")
@@ -511,7 +466,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
         
         fileClient.downloadToFile()
       }
-    })
+    }
   }
   
   @MainActor func previewFile(_ fileName: String, path: [String], complete callback: ((PreviewFileInfo?) -> Void)? = nil) {
@@ -520,13 +475,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       fullPath = Array(path[0..<path.count-1])
     }
     
-    self.client.sendDownloadFile(name: fileName, path: fullPath, preview: true, sent: { success in
-      if !success {
-        callback?(nil)
-        return
-      }
-      
-    }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
+    self.client.sendDownloadFile(name: fileName, path: fullPath, preview: true) { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
       guard success else {
         callback?(nil)
         return
@@ -572,7 +521,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       }
       
       callback?(info)
-    })
+    }
   }
   
 //  @MainActor func previewFile(_ fileName: String, path: [String], addTransfer: Bool = false, complete callback: ((TransferInfo, Data) -> Void)? = nil) {
@@ -669,12 +618,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       return
     }
     
-    self.client.sendDownloadBanner(sent: { success in
-      if !success {
-        print("FAIL BANNER")
-        return
-      }
-    }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize in
+    self.client.sendDownloadBanner { [weak self] success, downloadReferenceNumber, downloadTransferSize in
       if !success {
         return
       }
@@ -689,7 +633,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
         self.bannerClient?.delegate = self
         self.bannerClient?.downloadToMemory()
       }
-    })
+    }
   }
   
   // MARK: - Hotline Delegate
@@ -743,8 +687,6 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   func hotlineReceivedUserList(users: [HotlineUser]) {
     var existingUserIDs: [UInt] = []
     var userList: [User] = []
-    
-    print("GOT USER LIST", users)
     
     for u in users {
       if let i = self.users.firstIndex(where: { $0.id == u.id }) {
@@ -831,15 +773,12 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   func hotlineFileDownloadedData(client: HotlineFileClient, reference: UInt32, data: Data) {
-    print("DOWNLOADED DATA?", reference)
     if let b = self.bannerClient, b.referenceNumber == reference {
       #if os(macOS)
       self.bannerImage = NSImage(data: data)
       #elseif os(iOS)
       self.bannerImage = UIImage(data: data)
       #endif
-      
-      print("DOWNLOADED BANNER!")
     }
     else
     if let i = self.transfers.firstIndex(where: { $0.id == reference }) {

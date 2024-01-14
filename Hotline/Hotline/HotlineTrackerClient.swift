@@ -153,27 +153,25 @@ class HotlineTrackerClient {
     var foundServers: [HotlineServer] = []
     
     for _ in 1...self.serverCount {
-      if
+      guard
         let ip_1 = bytes.consumeUInt8(),
         let ip_2 = bytes.consumeUInt8(),
         let ip_3 = bytes.consumeUInt8(),
         let ip_4 = bytes.consumeUInt8(),
         let port = bytes.consumeUInt16(),
-        let _ = bytes.consumeBytes(2),
+        bytes.consume(2),
         let userCount = bytes.consumeUInt16(),
         let serverName = bytes.consumePString(),
-        let serverDescription = bytes.consumePString() {
-        
-        // Ignore servers that are just used as dividers in the tracker listing.
-        let validName = try? trackerSeparatorRegex.prefixMatch(in: serverName)
-        if validName == nil {
-          let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: serverName, description: serverDescription)
-          foundServers.append(server)
-        }
-      }
-      else {
+        let serverDescription = bytes.consumePString() else {
         print("HotlineTrackerClient: Data isn't long enough for next server")
         break
+      }
+        
+      // Ignore servers that are just used as dividers in the tracker listing.
+      let validName = try? trackerSeparatorRegex.prefixMatch(in: serverName)
+      if validName == nil {
+        let server = HotlineServer(address: "\(ip_1).\(ip_2).\(ip_3).\(ip_4)", port: port, users: userCount, name: serverName, description: serverDescription)
+        foundServers.append(server)
       }
     }
     

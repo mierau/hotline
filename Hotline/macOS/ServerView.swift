@@ -448,7 +448,6 @@ struct ServerView: View {
         model.disconnect()
       }
       else {
-        print("GETTING USER LIST????!")
         sendPreferences()
         model.getUserList()
         model.downloadBanner()

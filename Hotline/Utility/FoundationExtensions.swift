@@ -62,8 +62,26 @@ extension Array where Element == UInt8 {
     return val
   }
   
+  mutating func consume(_ length: Int) -> Bool {
+    guard length <= self.count else {
+      return false
+    }
+    
+    self.removeFirst(length)
+    return true
+  }
+  
   mutating func consumeBytes(_ length: Int) -> Data? {
-    guard let val = self.readData(at: 0, length: length) else {
+    guard let val: Data = self.readData(at: 0, length: length) else {
+      return nil
+    }
+    
+    self.removeFirst(length)
+    return val
+  }
+  
+  mutating func consumeBytes(_ length: Int) -> [UInt8]? {
+    guard let val: [UInt8] = self.readData(at: 0, length: length) else {
       return nil
     }
     
@@ -130,17 +148,17 @@ extension Array where Element == UInt8 {
       return nil
     }
     
-    let leftSide: UInt64 = (UInt64(self[offset]) << 56) +
+    let a: UInt64 = (UInt64(self[offset]) << 56) +
       (UInt64(self[offset + 1]) << 48) +
       (UInt64(self[offset + 2]) << 40) +
       (UInt64(self[offset + 3]) << 32)
     
-    let rightSide: UInt64 = (UInt64(self[offset + 4]) << 24) +
+    let b: UInt64 = (UInt64(self[offset + 4]) << 24) +
       (UInt64(self[offset + 5]) << 16) +
       (UInt64(self[offset + 6]) << 8) +
        UInt64(self[offset + 7])
     
-    return leftSide + rightSide
+    return a + b
   }
   
   func readDate(at offset: Int) -> Date? {
@@ -165,8 +183,15 @@ extension Array where Element == UInt8 {
     return Data(self[offset..<(offset + length)])
   }
   
+  func readData(at offset: Int, length: Int) -> [UInt8]? {
+    guard offset >= 0, offset + length <= self.count else {
+      return nil
+    }
+    return Array(self[offset..<(offset + length)])
+  }
+  
   func readString(at offset: Int, length: Int) -> String? {
-    guard let subdata = self.readData(at: offset, length: length) else {
+    guard let subdata: Data = self.readData(at: offset, length: length) else {
       return nil
     }
     
@@ -233,8 +258,8 @@ extension Array where Element == UInt8 {
   mutating func appendUInt16(_ value: UInt16, endianness: Endianness = .big) {
     let val = endianness == .big ? value.bigEndian : value.littleEndian
     let bytes: [UInt8] = [
-      UInt8((val >> 8) & 0xFF),
-      UInt8(val & 0xFF)
+      UInt8(val & 0x00FF),
+      UInt8((val >> 8) & 0x00FF),
     ]
     self.append(contentsOf: bytes)
   }
@@ -242,10 +267,10 @@ extension Array where Element == UInt8 {
   mutating func appendUInt32(_ value: UInt32, endianness: Endianness = .big) {
     let val = endianness == .big ? value.bigEndian : value.littleEndian
     let bytes: [UInt8] = [
-      UInt8((val >> 24) & 0xFF),
-      UInt8((val >> 16) & 0xFF),
-      UInt8((val >> 8) & 0xFF),
-      UInt8(val & 0xFF)
+      UInt8(val & 0x000000FF),
+      UInt8((val >> 8) & 0x000000FF),
+      UInt8((val >> 16) & 0x000000FF),
+      UInt8((val >> 24) & 0x000000FF),
     ]
     self.append(contentsOf: bytes)
   }
@@ -253,16 +278,24 @@ extension Array where Element == UInt8 {
   mutating func appendUInt64(_ value: UInt64, endianness: Endianness = .big) {
     let val: UInt64 = endianness == .big ? value.bigEndian : value.littleEndian
     let bytes: [UInt8] = [
-      UInt8((val >> 56) & 0xFF),
-      UInt8((val >> 48) & 0xFF),
-      UInt8((val >> 40) & 0xFF),
-      UInt8((val >> 32) & 0xFF),
-      UInt8((val >> 24) & 0xFF),
-      UInt8((val >> 16) & 0xFF),
-      UInt8((val >> 8) & 0xFF),
-      UInt8(val & 0xFF)
+      UInt8(val & 0x00000000000000FF),
+      UInt8((val >> 8) & 0x00000000000000FF),
+      UInt8((val >> 16) & 0x00000000000000FF),
+      UInt8((val >> 24) & 0x00000000000000FF),
+      UInt8((val >> 32) & 0x00000000000000FF),
+      UInt8((val >> 40) & 0x00000000000000FF),
+      UInt8((val >> 48) & 0x00000000000000FF),
+      UInt8((val >> 56) & 0x00000000000000FF),
     ]
     self.append(contentsOf: bytes)
+  }
+  
+  mutating func appendData(_ data: Data) {
+    self.append(contentsOf: data)
+  }
+  
+  mutating func appendData(_ data: [UInt8]) {
+    self.append(contentsOf: data)
   }
 }
 

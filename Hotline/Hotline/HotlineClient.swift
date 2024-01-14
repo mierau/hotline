@@ -22,6 +22,14 @@ struct HotlineTransactionInfo {
   let reply: ((HotlineTransaction) -> Void)?
 }
 
+private struct HotlineLogin {
+  let login: String?
+  let password: String?
+  let username: String
+  let iconID: UInt16
+  let callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?
+}
+
 protocol HotlineClientDelegate: AnyObject {
   func hotlineGetUserInfo() -> (String, UInt16)
   func hotlineStatusChanged(status: HotlineClientStatus)
@@ -45,13 +53,26 @@ extension HotlineClientDelegate {
   func hotlineUserDisconnected(userID: UInt16) {}
 }
 
-class HotlineClient {
+enum HotlineClientStage {
+  case handshake
+  case packetHeader
+  case packetBody
+}
+
+class HotlineClient: NetSocketDelegate {
   static let handshakePacket = Data([
     0x54, 0x52, 0x54, 0x50, // 'TRTP' protocol ID
     0x48, 0x4F, 0x54, 0x4C, // Sub-protocol ID
     0x00, 0x01, // Version
     0x00, 0x02, // Sub-version
   ])
+  
+  static let HandshakePacket: [UInt8] = [
+    0x54, 0x52, 0x54, 0x50, // 'TRTP' protocol ID
+    0x48, 0x4F, 0x54, 0x4C, // Sub-protocol ID
+    0x00, 0x01, // Version
+    0x00, 0x02, // Sub-version
+  ]
   
   weak var delegate: HotlineClientDelegate?
   
@@ -61,325 +82,289 @@ class HotlineClient {
   private var serverAddress: String? = nil
   private var serverPort: UInt16? = nil
   
-  private var connection: NWConnection?
+//  private var connection: NWConnection?
   private var transactionLog: [UInt32:(HotlineTransactionType, ((HotlineTransaction, HotlineTransactionError?) -> Void)?)] = [:]
   
-  init() {
-    //    let downloadsPath = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)
-    //    print("DOWNLOAD TO: \(downloadsPath)")
+  private var socket: NetSocket?
+  private var stage: HotlineClientStage = .handshake
+  private var packet: HotlineTransaction? = nil
+  private var loginDetails: HotlineLogin? = nil
+    
+  init() {}
+  
+  // MARK: - NetSocket Delegate
+  
+  @MainActor func netsocketConnected(socket: NetSocket) {
+    self.updateConnectionStatus(.loggingIn)
+    self.stage = .handshake
   }
   
-  // MARK: -
+  @MainActor func netsocketDisconnected(socket: NetSocket, error: Error?) {
+    self.updateConnectionStatus(.disconnected)
+    self.stage = .handshake
+  }
   
-  func login(_ address: String, port: UInt16, login: String?, password: String?, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) {
-    print("AWAITING CONNECT")
-    self.connect(address: address, port: port) { [weak self] success in
-      guard success else {
-        DispatchQueue.main.async {
-          callback?(.networkFailure, nil, nil)
-        }
-        return
-      }
-      
-      print("AWAITING HANDSHAKE")
-      self?.sendHandshake() { [weak self] success in
-        guard success else {
-          DispatchQueue.main.async {
-            callback?(.networkFailure, nil, nil)
-          }
-          return
-        }
-        
-        print("AWAITING LOGIN \(login ?? "empty login")  \(password ?? "empty pass")")
-        self?.sendLogin(login: login ?? "", password: password ?? "", username: username, iconID: iconID) { err, serverName, serverVersion in
-//          guard err == nil else {
-//            DispatchQueue.main.async {
-//              callback?(err, nil, nil)
-//            }
-//            return
-//          }
-          
-          print("LOGGED INTO SERVER: \(String(describing: serverName?.debugDescription)) \(serverVersion.debugDescription)")
-          
-          DispatchQueue.main.async {
-            callback?(err, serverName, serverVersion)
-          }
-          
-        }
-      }
+  @MainActor func netsocketReceived(socket: NetSocket, bytes: [UInt8]) {
+    switch self.stage {
+    case .handshake:
+      self.receiveHandshake()
+    case .packetHeader:
+      self.receivePacket()
+    case .packetBody:
+      self.receivePacket()
     }
   }
   
-  private func connect(address: String, port: UInt16, callback: ((Bool) -> Void)?) {
-    self.serverAddress = address
-    self.serverPort = port
-    
-    let tcpOptions = NWProtocolTCP.Options()
-    tcpOptions.enableKeepalive = true
-//    tcpOptions.enableFastOpen = true
-//    tcpOptions.keepaliveInterval = 30
-//    tcpOptions.connectionTimeout = 30
-    let connectionParameters: NWParameters
-    connectionParameters = NWParameters(tls: nil, tcp: tcpOptions)
-    
-    self.connectCallback = callback
-    
-    self.connection = NWConnection(host: NWEndpoint.Host(address), port: NWEndpoint.Port(rawValue: port)!, using: connectionParameters)
-    self.connection?.stateUpdateHandler = { [weak self] (newState: NWConnection.State) in
-      guard let self = self else {
-        return
-      }
-      
-      switch newState {
-      case .ready:
-        print("HotlineClient: connection ready!")
-        self.updateConnectionStatus(.connected)
-        self.connectCallback?(true)
-        self.connectCallback = nil
-//      case .waiting(let err):
-//        print("HotlineClient: connection waiting \(err)...")
-//        switch err {
-//        case .posix(let errCode):
-//          print("HotlineClient: posix error code \(errCode)")
-//          self.disconnect()
-//        case .tls(let errStatus):
-//          print("HotlineClient: tls error code \(errStatus)")
-//          self.disconnect()
-//        case .dns(let errType):
-//          print("HotlineClient: DNS Error code \(errType)")
-//          self.disconnect()
-//        default:
-//          print("HotlineClient: error code \(err)")
-//        }
-      case .cancelled:
-        print("HotlineClient: connection cancelled")
-        self.updateConnectionStatus(.disconnected)
-        self.reset()
-        self.connectCallback?(false)
-        self.connectCallback = nil
-      case .failed(let err):
-        print("HotlineClient: connection error \(err)")
-        self.updateConnectionStatus(.disconnected)
-        self.reset()
-        self.connectCallback?(false)
-        self.connectCallback = nil
-      default:
-        print("HotlineClient: hmm", newState)
-        break
-      }
+  // MARK: - Connect
+  
+  @MainActor func login(address: String, port: Int, login: String?, password: String?, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) {
+    if self.socket != nil {
+      self.socket?.delegate = nil
+      self.socket?.close()
+      self.socket = nil
     }
+    self.packet = nil
+    
+    self.loginDetails = HotlineLogin(login: login, password: password, username: username, iconID: iconID, callback: callback)
+    
+    self.socket = NetSocket()
+    self.socket?.delegate = self
     
     self.updateConnectionStatus(.connecting)
-    self.connection?.start(queue: .global())
+    self.socket?.connect(host: address, port: port)
+    self.socket?.write(HotlineClient.HandshakePacket)
   }
   
-  private func reset() {
-    self.transactionLog = [:]
-  }
-  
-  func disconnect() {
-    for (_, replyInfo) in self.transactionLog {
-      let replyCallback = replyInfo.1
-      replyCallback?(HotlineTransaction(type: replyInfo.0), .networkFailure)
+  @MainActor func receiveHandshake() {
+    guard let socket = self.socket,
+          self.stage == .handshake,
+          socket.available >= 8 else {
+      return
     }
+    
+    var handshake: [UInt8] = socket.read(count: 8)
+    
+    // Verify handshake data
+    guard let protocolID = handshake.consumeUInt32(),
+          protocolID == "TRTP".fourCharCode() else {
+      // TODO: Close with appropriate error
+      socket.close()
+      return
+    }
+    
+    // Check for error code
+    guard let errorCode = handshake.consumeUInt32(),
+          errorCode == 0 else {
+      // TODO: Close with wrapped error
+      socket.close()
+      return
+    }
+    
+    self.stage = .packetHeader
+    
+    let session = self.loginDetails!
+    self.loginDetails = nil
+    self.sendLogin(login: session.login ?? "", password: session.password ?? "", username: session.username, iconID: session.iconID) { err, serverName, serverVersion in
+      session.callback?(err, serverName, serverVersion)
+    }
+    
+    self.receivePacket()
+  }
+  
+  @MainActor func disconnect() {
     self.transactionLog = [:]
     
-    self.connection?.cancel()
-    self.connection = nil
+    self.packet = nil
+    
+    self.socket?.close()
+    self.socket?.delegate = nil
+    self.socket = nil
   }
   
-  // MARK: -
+  // MARK: - Packets
   
-  private func sendTransaction(_ t: HotlineTransaction, sent sentCallback: ((Bool) -> Void)? = nil, reply replyCallback: ((HotlineTransaction, HotlineTransactionError?) -> Void)? = nil) {
-    guard let c = connection else {
-      sentCallback?(false)
+  @MainActor private func sendPacket(_ t: HotlineTransaction, callback: ((HotlineTransaction, HotlineTransactionError?) -> Void)? = nil) {
+    guard let socket = self.socket else {
       return
     }
     
     print("HotlineClient => \(t.id) \(t.type)")
     
-    if replyCallback != nil {
-      self.transactionLog[t.id] = (t.type, replyCallback)
+    if callback != nil {
+      self.transactionLog[t.id] = (t.type, callback)
     }
     
-    c.send(content: t.encoded(), completion: .contentProcessed { [weak self] (error) in
-      if error != nil {
-        sentCallback?(false)
-        self?.transactionLog[t.id] = nil
-        self?.disconnect()
-        return
-      }
-      
-      sentCallback?(true)
-    })
+    socket.write(t.encoded())
   }
   
-  private func sendTransaction(_ t: HotlineTransaction, sent sentCallback: ((Bool) -> Void)? = nil) {
-    self.sendTransaction(t, sent: sentCallback, reply: nil)
-  }
-  
-  private func receiveTransaction() {
-    guard let c = connection else {
-      print("HotlineClient: no connection for transaction.")
+  @MainActor private func receivePacket() {
+    guard let socket = self.socket else {
       return
     }
     
-    print("HotlineClient ⏳")
-    c.receive(minimumIncompleteLength: HotlineTransaction.headerSize, maximumLength: HotlineTransaction.headerSize) { [weak self] (headerData, context, isComplete, error) in
-      guard let self = self else {
-        return
-      }
-      
-      if let error = error {
-        print("HotlineClient: transaction error \(error)")
-        self.disconnect()
-        return
-      }
-      
-      guard let headerData = headerData, !headerData.isEmpty else {
-        self.receiveTransaction()
-        return
-      }
-      
-      //      print("HotlineClient: received \(headerData.count) header bytes")
-      
-      if var transaction = self.parseTransaction(data: headerData) {
-        // Receive additional data if the transaction has data attached to it.
-        print("DATA SIZE: \(transaction.dataSize)")
-        if transaction.dataSize > 0 {
-          c.receive(minimumIncompleteLength: Int(transaction.dataSize), maximumLength: Int(transaction.dataSize)) { [weak self] (fieldData, context, isComplete, error) in
-            guard let self = self else {
-              return
-            }
-            
-            guard let fieldData = fieldData, !fieldData.isEmpty else {
-              print("HotlineClient: transaction field data is empty!")
-              self.disconnect()
-              return
-            }
-            
-            let fieldCount = fieldData.readUInt16(at: 0)!
-            
-            if fieldCount > 0 {
-              var dataCursor = 2
-              for _ in 0..<fieldCount {
-                if
-                  let fieldID = fieldData.readUInt16(at: dataCursor),
-                  let fieldSize = fieldData.readUInt16(at: dataCursor + 2),
-                  let fieldRemainingData = fieldData.readData(at: dataCursor + 4, length: Int(fieldSize)) {
-                  
-                  if let fieldType = HotlineTransactionFieldType(rawValue: fieldID) {
-                    
-                    transaction.fields.append(HotlineTransactionField(type: fieldType, dataSize: fieldSize, data: fieldRemainingData))
-                    //                    transaction.parameters[fieldType] = HotlineTransactionField(type: fieldType, dataSize: fieldSize, data: fieldData)
-                  }
-                  else {
-                    print("HotlineClient: UNKNOWN FIELD TYPE!", fieldID, fieldSize)
-                  }
-                  
-                  dataCursor += 4 + Int(fieldSize)
-                }
-              }
-              
-              // Process the transaction if we have processed more than zero parameters here
-              // as we expect parameters at this point.
-              self.processTransaction(transaction)
-            }
-            
-            // Continue receiving transactions.
-            self.receiveTransaction()
-          }
+    var done: Bool = false
+    repeat {
+      switch self.stage {
+      case .packetHeader:
+        guard socket.has(HotlineTransaction.headerSize) else {
+          done = true
+          break
+        }
+        
+        let headerData: [UInt8] = socket.read(count: HotlineTransaction.headerSize)
+        guard let packet = HotlineTransaction(from: headerData) else {
+          done = true
+          break
+        }
+        
+        self.packet = packet
+        if packet.dataSize == 0 {
+          self.stage = .packetHeader
+          self.processPacket()
         }
         else {
-          // In this case we have no further data to receive so we simply
-          // process the transaction and then continue receiving.
-          self.processTransaction(transaction)
-          self.receiveTransaction()
+          self.stage = .packetBody
+        }
+        
+      case .packetBody:
+        guard let packet = self.packet, socket.has(Int(packet.dataSize)) else {
+          done = true
+          break
+        }
+        
+        let bodyData: [UInt8] = socket.read(count: Int(packet.dataSize))
+        self.packet?.decodeFields(from: bodyData)
+        self.stage = .packetHeader
+        self.processPacket()
+        
+      default:
+        done = true
+        break
+      }
+    } while !done
+  }
+  
+  @MainActor private func processPacket() {
+    guard let packet = self.packet else {
+      return
+    }
+    
+    if packet.type == .reply || packet.isReply == 1 {
+      print("HotlineClient <= \(packet.type) to \(packet.id):")
+    }
+    else {
+      print("HotlineClient <= \(packet.type) \(packet.id)")
+    }
+    
+    if packet.isReply == 1 || packet.type == .reply {
+      self.processReplyPacket()
+      return
+    }
+    
+    // Mark packet is processed
+    self.packet = nil
+    
+    switch(packet.type) {
+    case .chatMessage:
+      if
+        let chatTextParam = packet.getField(type: .data),
+        let chatText = chatTextParam.getString()
+      {
+        print("HotlineClient: \(chatText)")
+        self.delegate?.hotlineReceivedChatMessage(message: chatText)
+      }
+      
+    case .notifyOfUserChange:
+      if let usernameField = packet.getField(type: .userName),
+         let username = usernameField.getString(),
+         let userIDField = packet.getField(type: .userID),
+         let userID = userIDField.getUInt16(),
+         let userIconIDField = packet.getField(type: .userIconID),
+         let userIconID = userIconIDField.getUInt16(),
+         let userFlagsField = packet.getField(type: .userFlags),
+         let userFlags = userFlagsField.getUInt16() {
+        print("HotlineClient: User changed \(username) icon: \(userIconID)")
+        
+        let user = HotlineUser(id: userID, iconID: userIconID, status: userFlags, name: username)
+        self.delegate?.hotlineUserChanged(user: user)
+      }
+    case .notifyOfUserDelete:
+      if let userIDField = packet.getField(type: .userID),
+         let userID = userIDField.getUInt16() {
+        self.delegate?.hotlineUserDisconnected(userID: userID)
+      }
+      
+    case .disconnectMessage:
+      // Server disconnected us.
+      print("HotlineClient ❌")
+      self.disconnect()
+    
+    case .serverMessage:
+      if let messageField = packet.getField(type: .data),
+         let message = messageField.getString() {
+        self.delegate?.hotlineReceivedServerMessage(message: message)
+      }
+      
+    case .showAgreement:
+      if let _ = packet.getField(type: .noServerAgreement) {
+        // Server told us there is no agreement to show.
+        return
+      }
+      if let agreementParam = packet.getField(type: .data) {
+        if let agreementText = agreementParam.getString() {
+          self.delegate?.hotlineReceivedAgreement(text: agreementText)
         }
       }
-      else {
-        // Here we failed to parse the current transaction.
-        // We should consider disconnecting perhaps.
-        // But for now we'll continue receiving.
-        self.receiveTransaction()
+      
+    case .userAccess:
+      print("HotlineClient: user access info \(packet.getField(type: .userAccess).debugDescription)")
+      if let accessParam = packet.getField(type: .userAccess) {
+        if let accessValue = accessParam.getUInt64() {
+          let accessOptions = HotlineUserAccessOptions(rawValue: accessValue)
+          self.delegate?.hotlineReceivedUserAccess(options: accessOptions)
+        }
       }
+      
+    default:
+      print("HotlineClient: UNKNOWN transaction \(packet.type) with \(packet.fields.count) parameters")
+      print(packet.fields)
     }
   }
   
-  private func parseTransaction(data: Data) -> HotlineTransaction? {
-    if
-      let flags = data.readUInt8(at: 0),
-      let isReply = data.readUInt8(at: 1),
-      let type = data.readUInt16(at: 2),
-      let id = data.readUInt32(at: 4),
-      let errorCode = data.readUInt32(at: 8),
-      let transactionSize = data.readUInt32(at: 12),
-      let dataSize = data.readUInt32(at: 16) {
-      
-      if let transactionType = HotlineTransactionType(rawValue: type) {
-        return HotlineTransaction(type: transactionType, flags: flags, isReply: isReply, id: id, errorCode: errorCode, totalSize: transactionSize, dataSize: dataSize)
-      }
-      else {
-        print("HotlineClient: Unknown type \(type) parsing with \(dataSize) bytes")
-      }
+  @MainActor private func processReplyPacket() {
+    guard let packet = self.packet else {
+      return
     }
     
-    return nil
+    if packet.errorCode != 0 {
+      let errorField: HotlineTransactionField? = packet.getField(type: .errorText)
+      print("HotlineClient 😵 \(packet.errorCode): \(errorField?.getString() ?? "")")
+    }
+    
+    guard let replyCallbackInfo = self.transactionLog[packet.id] else {
+      print("Hmm, no reply waiting though")
+      return
+    }
+    
+    self.transactionLog[packet.id] = nil
+    
+    print("HotlineClient reply in response to \(replyCallbackInfo.0)")
+    
+    let replyCallback = replyCallbackInfo.1
+    
+    guard packet.errorCode == 0 else {
+      let errorField: HotlineTransactionField? = packet.getField(type: .errorText)
+      print("HotlineClient 😵 \(packet.errorCode): \(errorField?.getString() ?? "")")
+      replyCallback?(packet, .error(packet.errorCode, errorField?.getString()))
+      return
+    }
+    
+    replyCallback?(packet, nil)
   }
   
   // MARK: - Messages
   
-  private func sendHandshake(callback: ((Bool) -> Void)?) {
-    guard let c = self.connection else {
-      print("HotlineClient: invalid connection to send handshake.")
-      return
-    }
-    
-    c.send(content: HotlineClient.handshakePacket, completion: .contentProcessed { [weak self] (error) in
-      if let err = error {
-        print("HotlineClient: sending handshake failed \(err)")
-        callback?(false)
-        return
-      }
-      print("HotlineClient: receiving handshake...")
-      c.receive(minimumIncompleteLength: 8, maximumLength: 8) { [weak self] (data, context, isComplete, error) in
-        guard let self = self, let data = data else {
-          return
-        }
-        
-        if data.isEmpty {
-          print("HotlineClient: empty handshake response")
-          self.disconnect()
-          callback?(false)
-          return
-        }
-        
-        let protocolID = data.readUInt32(at: 0)!
-        if protocolID != "TRTP".fourCharCode() {
-          print("HotlineClient: invalid handshake protocol ID \(protocolID)")
-          self.disconnect()
-          callback?(false)
-          return
-        }
-        
-        let errorCode = data.readUInt32(at: 4)!
-        if errorCode != 0 { // 0 == no error
-          print("HotlineClient: handshake error", errorCode)
-          self.disconnect()
-          callback?(false)
-          return
-        }
-        
-        callback?(true)
-        print("HotlineClient 🤝")
-        self.receiveTransaction()
-      }
-    })
-  }
-  
-  func sendLogin(login: String, password: String, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) {
-    self.updateConnectionStatus(.loggingIn)
-    
+  @MainActor func sendLogin(login: String, password: String, username: String, iconID: UInt16, callback: ((HotlineTransactionError?, String?, UInt16?) -> Void)?) {
     var t = HotlineTransaction(type: .login)
     t.setFieldEncodedString(type: .userLogin, val: login)
     t.setFieldEncodedString(type: .userPassword, val: password)
@@ -387,40 +372,31 @@ class HotlineClient {
     t.setFieldString(type: .userName, val: username)
     t.setFieldUInt32(type: .versionNumber, val: 123)
       
-    self.sendTransaction(t) { success in
-      if !success {
-        DispatchQueue.main.async {
-          callback?(.networkFailure, nil, nil)
-        }
-      }
-    } reply: { [weak self] replyTransaction, err in
-      print("GOT LOGIN REPLY")
+    self.sendPacket(t) { [weak self] reply, err in
       self?.updateConnectionStatus(.loggedIn)
       
       var serverVersion: UInt16?
       var serverName: String?
       
       if
-        let serverVersionField = replyTransaction.getField(type: .versionNumber),
+        let serverVersionField = reply.getField(type: .versionNumber),
         let serverVersionValue = serverVersionField.getUInt16() {
         serverVersion = serverVersionValue
         print("SERVER VERSION: \(serverVersionValue)")
       }
       
       if
-        let serverNameField = replyTransaction.getField(type: .serverName),
+        let serverNameField = reply.getField(type: .serverName),
         let serverNameValue = serverNameField.getString() {
         serverName = serverNameValue
         print("SERVER NAME: \(serverNameValue)")
       }
       
-      DispatchQueue.main.async {
-        callback?(err, serverName, serverVersion)
-      }
+      callback?(err, serverName, serverVersion)
     }
   }
   
-  func sendSetClientUserInfo(username: String, iconID: UInt16, options: HotlineUserOptions = [], autoresponse: String? = nil, sent: ((Bool) -> Void)? = nil) {
+  @MainActor func sendSetClientUserInfo(username: String, iconID: UInt16, options: HotlineUserOptions = [], autoresponse: String? = nil) {
     var t = HotlineTransaction(type: .setClientUserInfo)
     t.setFieldString(type: .userName, val: username)
     t.setFieldUInt16(type: .userIconID, val: iconID)
@@ -429,131 +405,103 @@ class HotlineClient {
       t.setFieldString(type: .automaticResponse, val: text)
     }
     
-    self.sendTransaction(t, sent: sent)
+    self.sendPacket(t)
   }
   
-  func sendAgree(username: String, iconID: UInt16, options: HotlineUserOptions, sent: ((Bool) -> Void)? = nil) {
+  @MainActor func sendAgree(username: String, iconID: UInt16, options: HotlineUserOptions) {
     let t = HotlineTransaction(type: .agreed)
 //    t.setFieldString(type: .userName, val: username)
 //    t.setFieldUInt16(type: .userIconID, val: iconID)
 //    t.setFieldUInt8(type: .options, val: options.rawValue)
-    self.sendTransaction(t, sent: sent)
+    self.sendPacket(t)
   }
   
-  func sendChat(message: String, encoding: String.Encoding = .utf8, sent sentCallback: ((Bool) -> Void)?) {
+  @MainActor func sendChat(message: String, encoding: String.Encoding = .utf8) {
     var t = HotlineTransaction(type: .sendChat)
     t.setFieldString(type: .data, val: message, encoding: encoding)
-    self.sendTransaction(t, sent: sentCallback)
+    self.sendPacket(t)
   }
   
-  func sendGetUserList(sent sentCallback: ((Bool) -> Void)? = nil) {
-    print("SENDING GET USER LIST")
+  @MainActor func sendGetUserList() {
     let t = HotlineTransaction(type: .getUserNameList)
-    self.sendTransaction(t, sent: sentCallback) { [weak self] replyTransaction, err in
-      print("GOT USER LIST")
+    self.sendPacket(t) { [weak self] reply, err in
       var newUsers: [UInt16:HotlineUser] = [:]
       var newUserList: [HotlineUser] = []
-      for u in replyTransaction.getFieldList(type: .userNameWithInfo) {
+      for u in reply.getFieldList(type: .userNameWithInfo) {
         let user = u.getUser()
         newUsers[user.id] = user
         newUserList.append(user)
       }
-      DispatchQueue.main.async { [weak self] in
-        self?.delegate?.hotlineReceivedUserList(users: newUserList)
-      }
+      self?.delegate?.hotlineReceivedUserList(users: newUserList)
     }
   }
   
-  func sendGetMessageBoard(callback: ((HotlineTransactionError?, [String]) -> Void)?) {
+  @MainActor func sendGetMessageBoard(callback: ((HotlineTransactionError?, [String]) -> Void)?) {
     let t = HotlineTransaction(type: .getMessageBoard)
-    self.sendTransaction(t) { success in
-      if !success {
-        DispatchQueue.main.async {
-          callback?(.networkFailure, [])
-        }
-      }
-    } reply: { replyTransaction, err in
-      if err != nil {
-        DispatchQueue.main.async {
-          callback?(err, [])
-        }
+    self.sendPacket(t) { reply, err in
+      guard err == nil,
+            let textField = reply.getField(type: .data),
+            let text = textField.getString() else {
+        callback?(err, [])
         return
       }
-            
-      if let textField = replyTransaction.getField(type: .data),
-         let text = textField.getString() {
-        var messages: [String] = []
-        let messageBoardRegex = /([\s\r\n]*[_\-]+[\s\r\n]+)/
-        let matches = text.matches(of: messageBoardRegex)
-        var start = text.startIndex
-        
-        if matches.count > 0 {
-          for match in matches {
-            let range = match.range
-            messages.append(String(text[start..<range.lowerBound]))
-            start = range.upperBound
-          }
+      
+      var messages: [String] = []
+      let messageBoardRegex = /([\s\r\n]*[_\-]+[\s\r\n]+)/
+      let matches = text.matches(of: messageBoardRegex)
+      var start = text.startIndex
+      
+      if matches.count > 0 {
+        for match in matches {
+          let range = match.range
+          messages.append(String(text[start..<range.lowerBound]))
+          start = range.upperBound
         }
-        else {
-          messages.append(text)
-        }
-        
-        DispatchQueue.main.async {
-          callback?(err, messages)
-        }
-        
-        
-        
-//          continuation.resume(returning: messages)
-//          DispatchQueue.main.async {
-//            self.messageBoardMessages = messages
-//          }
       }
+      else {
+        messages.append(text)
+      }
+      
+      callback?(err, messages)
     }
   }
   
-  func sendGetNewsCategories(path: [String] = [], sent: ((Bool) -> Void)? = nil, reply: (([HotlineNewsCategory]) -> Void)?) {
+  @MainActor func sendGetNewsCategories(path: [String] = [], callback: (([HotlineNewsCategory]) -> Void)?) {
     var t = HotlineTransaction(type: .getNewsCategoryNameList)
     if !path.isEmpty {
       t.setFieldPath(type: .newsPath, val: path)
     }
     
-    self.sendTransaction(t, sent: sent, reply: { rt, err in
+    self.sendPacket(t) { reply, err in
       var categories: [HotlineNewsCategory] = []
-      for categoryListItem in rt.getFieldList(type: .newsCategoryListData15) {
+      for categoryListItem in reply.getFieldList(type: .newsCategoryListData15) {
         var c = categoryListItem.getNewsCategory()
         c.path = path + [c.name]
         categories.append(c)
-        print("CATEGORY: \(c)")
       }
-      DispatchQueue.main.async {
-        reply?(categories)
-      }
-    })
+      callback?(categories)
+    }
   }
   
-  func sendGetNewsArticle(id articleID: UInt32, path: [String], flavor: String, sent: ((Bool) -> Void)? = nil, reply: ((String?) -> Void)? = nil) {
+  @MainActor func sendGetNewsArticle(id articleID: UInt32, path: [String], flavor: String, callback: ((String?) -> Void)? = nil) {
     var t = HotlineTransaction(type: .getNewsArticleData)
     t.setFieldPath(type: .newsPath, val: path)
     t.setFieldUInt32(type: .newsArticleID, val: articleID)
     t.setFieldString(type: .newsArticleDataFlavor, val: flavor, encoding: .ascii)
     
-    self.sendTransaction(t, sent: sent, reply: { r, err in
-      if err != nil {
-        reply?(nil)
+    self.sendPacket(t) { reply, err in
+      guard err == nil,
+            let articleData = reply.getField(type: .newsArticleData),
+            let articleString = articleData.getString() else {
+        callback?(nil)
         return
       }
       
-      let articleData = r.getField(type: .newsArticleData)
-      let articleString = articleData?.getString()
-      
-      DispatchQueue.main.async {
-        reply?(articleString)
-      }
-    })
+      callback?(articleString)
+    }
   }
   
-  func postNewsArticle(title: String, text: String, path: [String] = [], parentID: UInt32? = nil, sent: ((Bool) -> Void)? = nil, reply: (([HotlineNewsArticle]) -> Void)? = nil) {
+  @MainActor func postNewsArticle(title: String, text: String, path: [String] = [], parentID: UInt32? = nil, callback: (([HotlineNewsArticle]) -> Void)? = nil) {
     var t = HotlineTransaction(type: .postNewsArticle)
     if !path.isEmpty {
       t.setFieldPath(type: .newsPath, val: path)
@@ -566,94 +514,73 @@ class HotlineClient {
     t.setFieldUInt32(type: .newsArticleFlags, val: 0)
     t.setFieldString(type: .newsArticleData, val: text)
     
-    self.sendTransaction(t, sent: sent, reply: { r, err in
-      if err != nil {
-        reply?([])
+    self.sendPacket(t) { reply, err in
+      guard err == nil,
+            let articleData = reply.getField(type: .newsArticleListData) else {
+        callback?([])
         return
       }
       
       var articles: [HotlineNewsArticle] = []
-//      let articleData = r.getField(type: .newsArticleListData)
-      
-//      print("ARTICLE DATA?", articleData)
-      
-      if let articleData = r.getField(type: .newsArticleListData) {
-        let newsList = articleData.getNewsList()
-        for art in newsList.articles {
-          var blah = art
-          blah.path = path
-          articles.append(blah)
-          
-          print(blah.title)
-        }
+      let newsList = articleData.getNewsList()
+      for art in newsList.articles {
+        var blah = art
+        blah.path = path
+        articles.append(blah)
       }
       
-      DispatchQueue.main.async {
-        reply?(articles)
-      }
-    })
+      callback?(articles)
+    }
   }
   
-  func sendGetNewsArticles(path: [String] = [], sent: ((Bool) -> Void)? = nil, reply: (([HotlineNewsArticle]) -> Void)? = nil) {
+  @MainActor func sendGetNewsArticles(path: [String] = [], callback: (([HotlineNewsArticle]) -> Void)? = nil) {
     var t = HotlineTransaction(type: .getNewsArticleNameList)
     if !path.isEmpty {
       t.setFieldPath(type: .newsPath, val: path)
     }
-    self.sendTransaction(t, sent: sent, reply: { r, err in
-      if err != nil {
-        reply?([])
+    self.sendPacket(t) { reply, err in
+      guard err == nil,
+            let articleData = reply.getField(type: .newsArticleListData) else {
+        callback?([])
         return
       }
       
       var articles: [HotlineNewsArticle] = []
-//      let articleData = r.getField(type: .newsArticleListData)
-      
-//      print("ARTICLE DATA?", articleData)
-      
-      if let articleData = r.getField(type: .newsArticleListData) {
-        let newsList = articleData.getNewsList()
-        for art in newsList.articles {
-          var blah = art
-          blah.path = path
-          articles.append(blah)
-          
-          print(blah.title)
-        }
+      let newsList = articleData.getNewsList()
+      for art in newsList.articles {
+        var blah = art
+        blah.path = path
+        articles.append(blah)
       }
-      
-      DispatchQueue.main.async {
-        reply?(articles)
-      }
-    })
+
+      callback?(articles)
+    }
   }
   
-  func sendGetFileList(path: [String] = [], sent: ((Bool) -> Void)? = nil, reply: (([HotlineFile]) -> Void)? = nil) {
+  @MainActor func sendGetFileList(path: [String] = [], callback: (([HotlineFile]) -> Void)? = nil) {
     var t = HotlineTransaction(type: .getFileNameList)
-    
     if !path.isEmpty {
       t.setFieldPath(type: .filePath, val: path)
     }
     
-    self.sendTransaction(t, sent: sent, reply: { r, err in
-      if err != nil {
-        reply?([])
+    self.sendPacket(t) { reply, err in
+      guard err == nil else {
+        callback?([])
         return
       }
       
       var files: [HotlineFile] = []
-      for fi in r.getFieldList(type: .fileNameWithInfo) {
+      for fi in reply.getFieldList(type: .fileNameWithInfo) {
         let file = fi.getFile()
         file.path = path + [file.name]
         files.append(file)
       }
       
-      DispatchQueue.main.async {
-        reply?(files)
-      }
-    })
+      callback?(files)
+    }
   }
   
-  func sendDownloadFile(name fileName: String, path filePath: [String], preview: Bool = false, sent: ((Bool) -> Void)? = nil, reply: ((Bool, UInt32?, Int?, Int?, Int?) -> Void)? = nil) {
+  @MainActor func sendDownloadFile(name fileName: String, path filePath: [String], preview: Bool = false, callback: ((Bool, UInt32?, Int?, Int?, Int?) -> Void)? = nil) {
     var t = HotlineTransaction(type: .downloadFile)
     t.setFieldString(type: .fileName, val: fileName)
     t.setFieldPath(type: .filePath, val: filePath)
@@ -661,223 +588,48 @@ class HotlineClient {
       t.setFieldUInt32(type: .fileTransferOptions, val: 2)
     }
     
-    print("DOWNLOAD \(fileName) AT PATH \(filePath)")
-    
-    self.sendTransaction(t, sent: sent, reply: { r, err in
-      if err != nil {
-        DispatchQueue.main.async {
-          reply?(false, nil, nil, nil, nil)
-        }
+    self.sendPacket(t) { reply, err in
+      guard err == nil,
+            let transferSizeField = reply.getField(type: .transferSize),
+            let transferSize = transferSizeField.getInteger(),
+            let transferReferenceField = reply.getField(type: .referenceNumber),
+            let referenceNumber = transferReferenceField.getUInt32(),
+            let transferFileSizeField = reply.getField(type: .fileSize),
+            let transferFileSize = transferFileSizeField.getInteger() else {
+        callback?(false, nil, nil, nil, nil)
         return
       }
+    
+      let transferWaitingCountField = reply.getField(type: .waitingCount)
+      let transferWaitingCount = transferWaitingCountField?.getInteger()
       
-      if let transferSizeField = r.getField(type: .transferSize),
-         let transferSize = transferSizeField.getInteger(),
-         let transferReferenceField = r.getField(type: .referenceNumber),
-         let referenceNumber = transferReferenceField.getUInt32(),
-         let transferFileSizeField = r.getField(type: .fileSize),
-         let transferFileSize = transferFileSizeField.getInteger() {
-        
-        let transferWaitingCountField = r.getField(type: .waitingCount)
-        let transferWaitingCount = transferWaitingCountField?.getInteger()
-        
-        DispatchQueue.main.async {
-          reply?(true, referenceNumber, transferSize, transferFileSize, transferWaitingCount)
-        }
-      }
-      else {
-        DispatchQueue.main.async {
-          reply?(false, nil, nil, nil, nil)
-        }
-      }
-    })
+      callback?(true, referenceNumber, transferSize, transferFileSize, transferWaitingCount)
+    }
   }
   
-  func sendDownloadBanner(sent: ((Bool) -> Void)? = nil, reply: ((Bool, UInt32?, Int?) -> Void)? = nil) {
+  @MainActor func sendDownloadBanner(callback: ((Bool, UInt32?, Int?) -> Void)? = nil) {
     let t = HotlineTransaction(type: .downloadBanner)
     
-    self.sendTransaction(t, sent: sent, reply: { r, err in
-      if err != nil {
-        DispatchQueue.main.async {
-          reply?(false, nil, nil)
-        }
+    self.sendPacket(t) { reply, err in
+      guard err == nil,
+            let transferSizeField = reply.getField(type: .transferSize),
+            let transferSize = transferSizeField.getInteger(),
+            let transferReferenceField = reply.getField(type: .referenceNumber),
+            let referenceNumber = transferReferenceField.getUInt32() else {
+        callback?(false, nil, nil)
         return
       }
-      
-      if let transferSizeField = r.getField(type: .transferSize),
-         let transferSize = transferSizeField.getInteger(),
-         let transferReferenceField = r.getField(type: .referenceNumber),
-         let referenceNumber = transferReferenceField.getUInt32() {
-        
-        DispatchQueue.main.async {
-          reply?(true, referenceNumber, transferSize)
-        }
-      }
-      else {
-        DispatchQueue.main.async {
-          reply?(false, nil, nil)
-        }
-      }
-    })
-  }
-  
-  //  func sendGetNews(callback: (() -> Void)? = nil) {
-  //    let t = HotlineTransaction(type: .getNewsFile)
-  //    self.sendTransaction(t, callback: callback)
-  //  }
-  
-  // MARK: - Incoming
-  
-  private func processReply(_ transaction: HotlineTransaction) {
-    if transaction.errorCode != 0 {
-      let errorField: HotlineTransactionField? = transaction.getField(type: .errorText)
-      print("HotlineClient 😵 \(transaction.errorCode): \(errorField?.getString() ?? "")")
-    }
-    
-    guard let replyCallbackInfo = self.transactionLog[transaction.id] else {
-      return
-    }
-    
-    self.transactionLog[transaction.id] = nil
-    
-    print("HotlineClient reply in response to \(replyCallbackInfo.0)")
-    
-//    var replyError: HotlineTransactionError? = nil
-    
-//    defer {
-//      let replyCallback = replyCallbackInfo.1
-//      DispatchQueue.main.async {
-//        replyCallback?(transaction, replyError)
-//      }
-//    }
-    
-    let replyCallback = replyCallbackInfo.1
-    
-    guard transaction.errorCode == 0 else {
-      let errorField: HotlineTransactionField? = transaction.getField(type: .errorText)
-      
-      print("HotlineClient 😵 \(transaction.errorCode): \(errorField?.getString() ?? "")")
-      
-      DispatchQueue.main.async {
-        replyCallback?(transaction, .error(transaction.errorCode, errorField?.getString()))
-      }
-      return
-    }
-    
-    DispatchQueue.main.async {
-      replyCallback?(transaction, nil)
-    }
-  }
-    
-  private func processTransaction(_ transaction: HotlineTransaction) {
-    if transaction.type == .reply || transaction.isReply == 1 {
-      print("HotlineClient <= \(transaction.type) to \(transaction.id):")
-      print(transaction)
-    }
-    else {
-      print("HotlineClient <= \(transaction.type) \(transaction.id)")
-    }
-    
-    if transaction.isReply == 1 {
-      self.processReply(transaction)
-      return
-    }
-//    if self.transactionLog[transaction.id] != nil {
-//      self.processReply(transaction)
-//      return
-//    }
-    
-    switch(transaction.type) {
-    case .reply:
-      self.processReply(transaction)
-      
-    case .chatMessage:
-      print("HotlineClient: chat \(transaction)")
-      if
-        let chatTextParam = transaction.getField(type: .data),
-        let chatText = chatTextParam.getString()
-      {
-        print("HotlineClient: \(chatText)")
-        DispatchQueue.main.async { [weak self] in
-          self?.delegate?.hotlineReceivedChatMessage(message: chatText)
-        }
-      }
-      
-    case .notifyOfUserChange:
-      if let usernameField = transaction.getField(type: .userName),
-         let username = usernameField.getString(),
-         let userIDField = transaction.getField(type: .userID),
-         let userID = userIDField.getUInt16(),
-         let userIconIDField = transaction.getField(type: .userIconID),
-         let userIconID = userIconIDField.getUInt16(),
-         let userFlagsField = transaction.getField(type: .userFlags),
-         let userFlags = userFlagsField.getUInt16() {
-        print("HotlineClient: User changed \(username) icon: \(userIconID)")
-        
-        let user = HotlineUser(id: userID, iconID: userIconID, status: userFlags, name: username)
 
-        DispatchQueue.main.async { [weak self] in
-          self?.delegate?.hotlineUserChanged(user: user)
-        }
-      }
-    case .notifyOfUserDelete:
-      if let userIDField = transaction.getField(type: .userID),
-         let userID = userIDField.getUInt16() {
-        DispatchQueue.main.async { [weak self] in
-          self?.delegate?.hotlineUserDisconnected(userID: userID)
-        }
-      }
-      
-    case .disconnectMessage:
-      // Server disconnected us.
-      print("HotlineClient ❌")
-      self.disconnect()
-    
-    case .serverMessage:
-      if let messageField = transaction.getField(type: .data),
-         let message = messageField.getString() {
-        DispatchQueue.main.async { [weak self] in
-          self?.delegate?.hotlineReceivedServerMessage(message: message)
-        }
-      }
-      
-    case .showAgreement:
-      if let _ = transaction.getField(type: .noServerAgreement) {
-        // Server told us there is no agreement to show.
-        return
-      }
-      if let agreementParam = transaction.getField(type: .data) {
-        if let agreementText = agreementParam.getString() {
-          DispatchQueue.main.async { [weak self] in
-            self?.delegate?.hotlineReceivedAgreement(text: agreementText)
-          }
-        }
-      }
-      
-    case .userAccess:
-      print("HotlineClient: user access info \(transaction.getField(type: .userAccess).debugDescription)")
-      if let accessParam = transaction.getField(type: .userAccess) {
-        if let accessValue = accessParam.getUInt64() {
-          let accessOptions = HotlineUserAccessOptions(rawValue: accessValue)
-          DispatchQueue.main.async { [weak self] in
-            self?.delegate?.hotlineReceivedUserAccess(options: accessOptions)
-          }
-        }
-      }
-      
-    default:
-      print("HotlineClient: UNKNOWN transaction \(transaction.type) with \(transaction.fields.count) parameters")
-      print(transaction.fields)
+      callback?(true, referenceNumber, transferSize)
     }
   }
+  
   
   // MARK: - Utility
 
-  private func updateConnectionStatus(_ status: HotlineClientStatus) {
+  @MainActor private func updateConnectionStatus(_ status: HotlineClientStatus) {
     self.connectionStatus = status
-    DispatchQueue.main.async { [weak self] in
-      self?.delegate?.hotlineStatusChanged(status: status)
-    }
+    self.delegate?.hotlineStatusChanged(status: status)
   }
 
 }

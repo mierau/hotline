@@ -41,6 +41,10 @@ final class NetSocket: NSObject, StreamDelegate {
   
   private var status: NetSocketStatus = .disconnected
   
+  @MainActor public func has(_ length: Int) -> Bool {
+    return (self.available >= length)
+  }
+  
   override init() {}
   
   @MainActor public func connect(host: String, port: Int) {
@@ -59,14 +63,16 @@ final class NetSocket: NSObject, StreamDelegate {
     inputStream?.delegate = self
     outputStream?.delegate = self
     
-    inputStream?.schedule(in: .current, forMode: .common)
-    outputStream?.schedule(in: .current, forMode: .common)
+    inputStream?.schedule(in: .current, forMode: .default)
+    outputStream?.schedule(in: .current, forMode: .default)
     
     inputStream?.open()
     outputStream?.open()
   }
   
   @MainActor public func close(_ err: Error? = nil) {
+    print("NetSocket: Closed")
+    
     let disconnected = (self.status != .disconnected)
     
     self.status = .disconnected
@@ -75,8 +81,8 @@ final class NetSocket: NSObject, StreamDelegate {
     self.output?.delegate = nil
     self.input?.close()
     self.output?.close()
-    self.input?.remove(from: .current, forMode: .common)
-    self.output?.remove(from: .current, forMode: .common)
+    self.input?.remove(from: .current, forMode: .default)
+    self.output?.remove(from: .current, forMode: .default)
     self.input = nil
     self.output = nil
     self.inputBuffer = []
@@ -85,8 +91,6 @@ final class NetSocket: NSObject, StreamDelegate {
     if disconnected {
       self.delegate?.netsocketDisconnected(socket: self, error: err)
     }
-    
-    print("NetSocket: Closed")
   }
   
   @MainActor public func write(_ data: Data) {
@@ -166,6 +170,7 @@ final class NetSocket: NSObject, StreamDelegate {
     }
     
     let bytesWritten = output.write(self.outputBuffer, maxLength: self.outputBuffer.count)
+    print("NetSocket => \(bytesWritten) bytes")
     if bytesWritten > 0 {
       self.outputBuffer.removeFirst(bytesWritten)
       self.delegate?.netsocketSent(socket: self, count: bytesWritten)
@@ -180,9 +185,10 @@ final class NetSocket: NSObject, StreamDelegate {
       return
     }
     
-    let bytesRead = input.read(&self.readBuffer, maxLength: self.readBuffer.capacity)
+    let bytesRead = input.read(&self.readBuffer, maxLength: 4 * 1024)
+    print("NetSocket <= \(bytesRead) bytes")
     if bytesRead > 0 {
-      self.inputBuffer.append(contentsOf: readBuffer[0..<bytesRead])
+      self.inputBuffer.append(contentsOf: self.readBuffer[0..<bytesRead])
       self.delegate?.netsocketReceived(socket: self, bytes: self.inputBuffer)
     }
     else if bytesRead == -1 {
@@ -199,6 +205,9 @@ final class NetSocket: NSObject, StreamDelegate {
     
     switch eventCode {
     case .openCompleted:
+      if aStream == input {
+        self.setupStreamOptions()
+      }
       if input.streamStatus == .open && output.streamStatus == .open {
         if self.status == .connecting {
           print("NetSocket: Connected")
@@ -222,6 +231,39 @@ final class NetSocket: NSObject, StreamDelegate {
       self.close(err)
     default:
       break
+    }
+  }
+  
+  // MARK: -
+  
+  private func setupStreamOptions() {
+    if let input = self.input {
+      let socketData: Data = CFReadStreamCopyProperty(input as CFReadStream, CFStreamPropertyKey.socketNativeHandle) as! Data;
+      var socketHandle: CFSocketNativeHandle = 0;
+      (socketData as NSData).getBytes(&socketHandle, length: MemoryLayout.size(ofValue: socketHandle));
+      
+      var value: Int = 0;
+      let size = UInt32(MemoryLayout.size(ofValue: value));
+      
+      value = 1;
+      if setsockopt(socketHandle, IPPROTO_TCP, TCP_NODELAY, &value, size) != 0 {
+        print("NetSocket: failed to set TCP_NODELAY");
+      }
+      // Enable keepalive
+      value = 1;
+      if setsockopt(socketHandle, SOL_SOCKET, SO_KEEPALIVE, &value, size) != 0 {
+        print("NetSocket: failed to set SO_KEEPALIVE");
+      }
+      // Number of keepalives before close (including first keepalive packet)
+      value = 5
+      if setsockopt(socketHandle, IPPROTO_TCP, TCP_KEEPCNT, &value, size) != 0 {
+        print("NetSocket: failed to set TCP_KEEPCNT");
+      }
+      // Idle time used when SO_KEEPALIVE is enabled. Sets how long connection must be idle before keepalive is sent.
+      value = 60
+      if setsockopt(socketHandle, IPPROTO_TCP, TCP_KEEPALIVE, &value, size) != 0 {
+        print("NetSocket: failed to set TCP_KEEPALIVE")
+      }
     }
   }
 }

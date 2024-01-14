@@ -102,7 +102,7 @@ struct HotlineNewsList: Identifiable {
   
   var articles: [HotlineNewsArticle] = []
   
-  init(from data: Data) {
+  init(from data: [UInt8]) {
     self.id = data.readUInt32(at: 0)!
     
     self.count = data.readUInt32(at: 4)!
@@ -207,7 +207,7 @@ struct HotlineNewsCategory: Identifiable, Hashable {
     self.name = name
   }
   
-  init(from data: Data) {
+  init(from data: [UInt8]) {
     self.type = data.readUInt16(at: 0)!
     
     if self.type == 2 {
@@ -268,7 +268,7 @@ class HotlineFile: Identifiable, Hashable {
     }
   }
   
-  init(from data: Data) {
+  init(from data: [UInt8]) {
     let typeRaw = data.readUInt32(at: 0)!
     let creatorRaw = data.readUInt32(at: 4)!
     
@@ -315,7 +315,7 @@ struct HotlineUser: Identifiable, Hashable {
     self.name = name
   }
   
-  init(from data: Data) {
+  init(from data: [UInt8]) {
     self.id = data.readUInt16(at: 0)!
     self.iconID = data.readUInt16(at: 2)!
     self.status = data.readUInt16(at: 4)!
@@ -328,13 +328,8 @@ struct HotlineUser: Identifiable, Hashable {
     hasher.combine(self.id)
   }
   
-  func encoded() -> Data {
-    var data = Data()
-    self.encode(to: &data)
-    return data
-  }
-  
-  func encode(to data: inout Data) {
+  func encoded() -> [UInt8] {
+    var data: [UInt8] = []
     data.appendUInt16(self.id)
     data.appendUInt16(self.iconID)
     data.appendUInt16(self.status)
@@ -342,31 +337,52 @@ struct HotlineUser: Identifiable, Hashable {
     let userNameData = name.data(using: .ascii, allowLossyConversion: true)!
     
     data.appendUInt16(UInt16(userNameData.count))
-    data.append(userNameData)
+    data.appendData(userNameData)
+    
+    return data
+    
+//    var data = Data()
+//    self.encode(to: &data)
+//    return data
   }
+  
+//  func encode(to data: inout Data) {
+//    data.appendUInt16(self.id)
+//    data.appendUInt16(self.iconID)
+//    data.appendUInt16(self.status)
+//    
+//    let userNameData = name.data(using: .ascii, allowLossyConversion: true)!
+//    
+//    data.appendUInt16(UInt16(userNameData.count))
+//    data.append(userNameData)
+//  }
 }
 
 struct HotlineTransactionField {
   let type: HotlineTransactionFieldType
   let dataSize: UInt16
-  let data: Data
+  let data: [UInt8]
   
-  init(type: HotlineTransactionFieldType, dataSize: UInt16, data: Data) {
+  init(type: HotlineTransactionFieldType, dataSize: UInt16, data: [UInt8]) {
     self.type = type
     self.dataSize = dataSize
     self.data = data
   }
   
   init(type: HotlineTransactionFieldType, val: UInt8) {
-    self.init(type: type, dataSize: UInt16(MemoryLayout<UInt8>.size), data: Data(val))
+    self.init(type: type, dataSize: UInt16(1), data: [val])
   }
   
   init(type: HotlineTransactionFieldType, val: UInt16) {
-    self.init(type: type, dataSize: UInt16(MemoryLayout<UInt16>.size), data: Data(val))
+    self.init(type: type, dataSize: UInt16(2), data: [UInt8](val))
   }
   
   init(type: HotlineTransactionFieldType, val: UInt32) {
-    self.init(type: type, dataSize: UInt16(MemoryLayout<UInt32>.size), data: Data(val))
+    self.init(type: type, dataSize: UInt16(4), data: [UInt8](val))
+  }
+  
+  init(type: HotlineTransactionFieldType, val: UInt64) {
+    self.init(type: type, dataSize: UInt16(8), data: [UInt8](val))
   }
   
   init(type: HotlineTransactionFieldType, string: String, encoding: String.Encoding = .ascii, encrypt: Bool = false) {
@@ -384,7 +400,7 @@ struct HotlineTransactionField {
       stringData = Data()
     }
     
-    self.init(type: type, dataSize: UInt16(stringData!.count), data: stringData!)
+    self.init(type: type, dataSize: UInt16(stringData!.count), data: [UInt8](stringData!))
   }
   
   init(type: HotlineTransactionFieldType, string: String, encrypt: Bool) {
@@ -404,7 +420,7 @@ struct HotlineTransactionField {
   }
   
   init(type: HotlineTransactionFieldType, pathComponents: [String]) {
-    var pathData = Data()
+    var pathData: [UInt8] = []
     
     pathData.appendUInt16(UInt16(pathComponents.count))
     for name in pathComponents {
@@ -416,7 +432,7 @@ struct HotlineTransactionField {
       }
       
       pathData.appendUInt8(UInt8(nameData!.count))
-      pathData.append(nameData!)
+      pathData.appendData(nameData!)
     }
     
     self.init(type: type, dataSize: UInt16(pathData.count), data: pathData)
@@ -508,6 +524,47 @@ struct HotlineTransaction {
     self.id = HotlineTransaction.nextID()
   }
   
+  init?(from data: [UInt8]) {
+    guard
+      let flags = data.readUInt8(at: 0),
+      let isReply = data.readUInt8(at: 1),
+      let type = data.readUInt16(at: 2),
+      let id = data.readUInt32(at: 4),
+      let errorCode = data.readUInt32(at: 8),
+      let totalSize = data.readUInt32(at: 12),
+      let dataSize = data.readUInt32(at: 16) else {
+      
+      return nil
+    }
+    
+    self.init(type: HotlineTransactionType(rawValue: type) ?? .unknown, flags: flags, isReply: isReply, id: id, errorCode: errorCode, totalSize: totalSize, dataSize: dataSize)
+  }
+  
+  mutating func decodeFields(from data: [UInt8]) {
+    var fieldData = data
+    
+    guard fieldData.count > 0,
+          let fieldCount = fieldData.consumeUInt16(),
+          fieldCount > 0 else {
+      return
+    }
+    
+    for _ in 0..<fieldCount {
+      if
+        let fieldID = fieldData.consumeUInt16(),
+        let fieldSize = fieldData.consumeUInt16(),
+        let fieldRemainingData: [UInt8] = fieldData.consumeBytes(Int(fieldSize)) {
+        
+        if let fieldType = HotlineTransactionFieldType(rawValue: fieldID) {
+          self.fields.append(HotlineTransactionField(type: fieldType, dataSize: fieldSize, data: fieldRemainingData))
+        }
+        else {
+          print("HotlineClient: UNKNOWN FIELD TYPE!", fieldID, fieldSize)
+        }
+      }
+    }
+  }
+  
   init(type: HotlineTransactionType, flags: UInt8, isReply: UInt8, id: UInt32, errorCode: UInt32, totalSize: UInt32, dataSize: UInt32) {
     self.type = type
     self.flags = flags
@@ -554,37 +611,33 @@ struct HotlineTransaction {
     }
   }
   
-  func encoded() -> Data {
-    var data = Data()
-    self.encode(to: &data)
-    return data
-  }
-  
-  func encode(to data: inout Data) {
-    data.appendUInt8(self.flags)
+  func encoded() -> [UInt8] {
+    var data: [UInt8] = []
+    data.appendUInt8(0)
     data.appendUInt8(self.isReply)
-    data.appendUInt16(self.type.rawValue)
+    data.appendUInt16(self.isReply == 1 ? HotlineTransactionType.reply.rawValue : self.type.rawValue)
     data.appendUInt32(self.id)
     data.appendUInt32(self.errorCode)
     
     if self.fields.count > 0 {
-      var fieldData = Data()
+      var fieldData: [UInt8] = []
       fieldData.appendUInt16(UInt16(self.fields.count))
       for f in self.fields {
         fieldData.appendUInt16(f.type.rawValue)
         fieldData.appendUInt16(f.dataSize)
-        fieldData.append(f.data)
+        fieldData.appendData(f.data)
       }
       
       data.appendUInt32(UInt32(fieldData.count))
       data.appendUInt32(UInt32(fieldData.count))
-      data.append(fieldData)
+      data.appendData(fieldData)
     }
     else {
       data.appendUInt32(2)
       data.appendUInt32(2)
       data.appendUInt16(0)
     }
+    return data
   }
 }
 
@@ -705,6 +758,8 @@ enum HotlineTransactionType: UInt16 {
   case postNewsArticle = 410
   case deleteNewsArticle = 411
   case connectionKeepAlive = 500
+  
+  case unknown = 15000
 }
 
 // MARK: - Utilities
