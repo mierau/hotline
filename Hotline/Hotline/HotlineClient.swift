@@ -466,6 +466,16 @@ class HotlineClient: NetSocketDelegate {
     }
   }
   
+  @MainActor func sendPostMessageBoard(text: String) {
+    guard text.count > 0 else {
+      return
+    }
+    
+    var t = HotlineTransaction(type: .oldPostNews)
+    t.setFieldString(type: .data, val: text)
+    self.sendPacket(t)
+  }
+  
   @MainActor func sendGetNewsCategories(path: [String] = [], callback: (([HotlineNewsCategory]) -> Void)?) {
     var t = HotlineTransaction(type: .getNewsCategoryNameList)
     if !path.isEmpty {

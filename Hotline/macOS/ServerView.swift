@@ -167,7 +167,7 @@ struct ServerView: View {
   static var menuItems = [
     MenuItem(name: "Chat", image: "bubble", type: .chat),
     MenuItem(name: "News", image: "newspaper", type: .news, serverVersion: 150),
-    MenuItem(name: "Board", image: "note.text", type: .messageBoard),
+    MenuItem(name: "Board", image: "pin", type: .messageBoard),
     MenuItem(name: "Files", image: "folder", type: .files),
   ]
   

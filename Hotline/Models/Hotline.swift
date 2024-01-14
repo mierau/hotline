@@ -292,6 +292,10 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     return self.messageBoard
   }
   
+  @MainActor func postToMessageBoard(text: String) {
+    self.client.sendPostMessageBoard(text: text)
+  }
+  
   @MainActor func getFileList(path: [String] = []) async -> [FileInfo] {
     return await withCheckedContinuation { [weak self] continuation in
       self?.client.sendGetFileList(path: path) { [weak self] files in
