@@ -35,6 +35,7 @@ And this project is an attempt to create a modern open source version of Hotline
 | Multiple trackers          |   ✓   |       |        |          |
 | Connect to servers         |   ✓   |   ✓   |        |          |
 | Connect to multiple servers|   ✓   |       |        |          |
+| Server accounts            |   ✓   |       |        |          |
 | Server bookmarks           |       |       |        |          |
 | Change name & icon         |   ✓   |       |        |          |
 | Privacy settings           |   ✓   |       |        |          |
@@ -49,7 +50,7 @@ And this project is an attempt to create a modern open source version of Hotline
 | News reading               |   ✓   |   ✓   |        |          |
 | News posting               |       |       |        |          |
 | Message board reading      |   ✓   |   ✓   |        |          |
-| Message board posting      |       |       |        |          |
+| Message board posting      |   ✓   |       |        |          |
 | File browsing              |   ✓   |   ✓   |        |          |
 | File downloading           |   ✓   |       |        |          |
 | File uploading             |       |       |        |          |
@@ -57,6 +58,7 @@ And this project is an attempt to create a modern open source version of Hotline
 | File management            |       |       |        |          |
 | Folder downloading         |       |       |        |          |
 | Folder uploading           |       |       |        |          |
+| Custom icon sets           |       |       |        |          |
 
 # Goals
 - Build a Hotline client for modern Apple systems.
