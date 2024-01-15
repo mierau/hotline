@@ -14,6 +14,7 @@ class TransferInfo: Identifiable, Equatable, Hashable {
   // For file based transfers (i.e. not previews)
   var fileURL: URL? = nil
   
+  var progressCallback: ((TransferInfo, Double) -> Void)? = nil
   var downloadCallback: ((TransferInfo, URL) -> Void)? = nil
   var previewCallback: ((TransferInfo, Data) -> Void)? = nil
   

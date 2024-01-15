@@ -473,6 +473,42 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     }
   }
   
+  @MainActor func downloadFileTo(url fileURL: URL, fileName: String, path: [String], progress progressCallback: ((TransferInfo, Double) -> Void)? = nil, complete callback: ((TransferInfo, URL) -> Void)? = nil) {
+    var fullPath: [String] = []
+    if path.count > 1 {
+      fullPath = Array(path[0..<path.count-1])
+    }
+    
+    self.client.sendDownloadFile(name: fileName, path: fullPath) { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
+      print("GOT DOWNLOAD REPLY:")
+      print("\tSUCCESS?", success)
+      print("\tTRANSFER SIZE: \(downloadTransferSize.debugDescription)")
+      print("\tFILE SIZE: \(downloadFileSize.debugDescription)")
+      print("\tREFERENCE NUM: \(downloadReferenceNumber.debugDescription)")
+      print("\tWAITING COUNT: \(downloadWaitingCount.debugDescription)")
+      
+      if
+        let self = self,
+        let address = self.server?.address,
+        let port = self.server?.port,
+        let referenceNumber = downloadReferenceNumber,
+        let transferSize = downloadTransferSize {
+        
+        print("DOWNLOADING TO MEMORY")
+        let fileClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .file)
+        fileClient.delegate = self
+        self.downloads.append(fileClient)
+        
+        let transfer = TransferInfo(id: referenceNumber, title: fileName, size: UInt(transferSize))
+        transfer.downloadCallback = callback
+        transfer.progressCallback = progressCallback
+        self.transfers.append(transfer)
+        
+        fileClient.downloadToFile(to: fileURL)
+      }
+    }
+  }
+  
   @MainActor func previewFile(_ fileName: String, path: [String], complete callback: ((PreviewFileInfo?) -> Void)? = nil) {
     var fullPath: [String] = []
     if path.count > 1 {
@@ -748,6 +784,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       if let transfer = self.transfers.first(where: { $0.id == reference }) {
         transfer.progress = progress
         transfer.timeRemaining = timeRemaining
+        transfer.progressCallback?(transfer, progress)
       }
     case .failed(_):
       if let i = self.downloads.firstIndex(where: { $0.referenceNumber == reference }) {

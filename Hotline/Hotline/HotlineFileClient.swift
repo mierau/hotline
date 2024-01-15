@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import UniformTypeIdentifiers
 
 enum HotlineFileClientError: Error {
   case failedToConnect
@@ -39,7 +40,8 @@ enum HotlineFileTransferStage: Int {
   case fileForkHeader = 2
   case fileInfoFork = 3
   case fileDataFork = 4
-  case fileUnsupportedFork = 5
+  case fileResourceFork = 5
+  case fileUnsupportedFork = 6
 }
 
 struct HotlineFileHeader {
@@ -186,6 +188,7 @@ class HotlineFileClient {
   private var transferStage: HotlineFileTransferStage = .fileHeader
   
   private var fileBytes = Data()
+  private var fileResourceBytes = Data()
   
   private var fileHeader: HotlineFileHeader? = nil
   private var fileCurrentForkHeader: HotlineFileForkHeader? = nil
@@ -225,6 +228,16 @@ class HotlineFileClient {
       return
     }
 
+    self.filePath = nil
+    self.connect()
+  }
+  
+  func downloadToFile(to fileURL: URL) {
+    guard self.status == .unconnected else {
+      return
+    }
+    
+    self.filePath = fileURL.path
     self.connect()
   }
   
@@ -395,7 +408,11 @@ class HotlineFileClient {
             }
             else if forkHeader.forkType == "MACR".fourCharCode() {
               print("RESOURCE FORK!")
-              self.transferStage = .fileUnsupportedFork
+              self.fileResourceBytes = Data()
+//              if self.prepareResourceFile() {
+//                print("BOOYAH")
+//              }
+              self.transferStage = .fileResourceFork
             }
             else {
               print("UNKNOWN FORK??")
@@ -418,6 +435,7 @@ class HotlineFileClient {
               
               print("INFO FORK STUFF:", infoFork)
               
+              // Create file in Downloads folder if we don't have a destination already.
               if !self.prepareDownloadFile(name: infoFork.name) {
                 print("FAILED TO CREATE FILE ON DISK")
               }
@@ -458,6 +476,37 @@ class HotlineFileClient {
               }
             }
           }
+        case .fileResourceFork:
+          if self.fileBytes.count > 0 {
+//            if let f = self.fileResourceHandle {
+//              do {
+                var dataToWrite = self.fileBytes
+                
+                if dataToWrite.count >= self.fileCurrentForkBytesLeft {
+                  dataToWrite = self.fileBytes.subdata(in: 0..<self.fileCurrentForkBytesLeft)
+                  self.fileBytes.removeSubrange(0..<self.fileCurrentForkBytesLeft)
+                  
+                  self.transferStage = .fileForkHeader
+                  self.fileCurrentForkBytesLeft = 0
+                  self.fileCurrentForkHeader = nil
+                  
+                  keepProcessing = true
+                }
+                else {
+                  self.fileCurrentForkBytesLeft -= dataToWrite.count
+                  self.fileBytes = Data()
+                }
+                
+                print("WRITING TO RESOURCE FORK", dataToWrite.count)
+                
+                self.fileResourceBytes.append(dataToWrite)
+//                try f.write(contentsOf: dataToWrite)
+//              }
+//              catch {
+//                print("DOWNLOAD WRITE ERROR", error)
+//              }
+//            }
+          }
         case .fileUnsupportedFork:
           if self.fileBytes.count > 0 {
             var dataToWrite = self.fileBytes
@@ -486,15 +535,14 @@ class HotlineFileClient {
         return
       }
       else {
-        print("FILE COMPLETE")
-        if let h = self.fileHandle {
-          try? h.close()
-          self.fileHandle = nil
+        self.invalidate()
+        
+        if self.fileResourceBytes.count > 0 {
+          let _ = self.writeResourceFork()
+          self.fileResourceBytes = Data()
         }
-        self.fileBytes = Data()
         
         self.status = .completed
-        self.invalidate()
         
         if let downloadPath = self.filePath {
           DispatchQueue.main.sync {
@@ -561,16 +609,54 @@ class HotlineFileClient {
   
   // MARK: - Utility
   
-  private func prepareDownloadFile(name: String) -> Bool {
-    let folderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-    let filePath = folderURL.generateUniqueFilePath(filename: name)
+  private func writeResourceFork() -> Bool {
+    guard let filePath = self.filePath else {
+      return false
+    }
     
-    if FileManager.default.createFile(atPath: filePath, contents: nil) {
+    var resolvedFileURL = URL(filePath: filePath)
+    resolvedFileURL.resolveSymlinksInPath()
+    
+    let resourceFilePath = resolvedFileURL.appendingPathComponent("..namedfork/rsrc")
+    
+    do {
+      try self.fileResourceBytes.write(to: resourceFilePath)
+    }
+    catch {
+      return false
+    }
+    
+    return true
+  }
+  
+  private func prepareDownloadFile(name: String) -> Bool {
+    if let filePath = self.filePath {
       if let h = FileHandle(forWritingAtPath: filePath) {
         self.filePath = filePath
         self.fileHandle = h
         self.fileProgress?.fileURL = URL(filePath: filePath).resolvingSymlinksInPath()
         return true
+      }
+    }
+    else {
+      let folderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+      let filePath = folderURL.generateUniqueFilePath(filename: name)
+      
+      var fileAttributes: [FileAttributeKey : Any] = [:]
+      if let creatorCode = self.fileInfoFork?.creator {
+        fileAttributes[.hfsCreatorCode] = creatorCode as NSNumber
+      }
+      if let typeCode = self.fileInfoFork?.type {
+        fileAttributes[.hfsTypeCode] = typeCode as NSNumber
+      }
+      
+      if FileManager.default.createFile(atPath: filePath, contents: nil, attributes: fileAttributes) {
+        if let h = FileHandle(forWritingAtPath: filePath) {
+          self.filePath = filePath
+          self.fileHandle = h
+          self.fileProgress?.fileURL = URL(filePath: filePath).resolvingSymlinksInPath()
+          return true
+        }
       }
     }
     

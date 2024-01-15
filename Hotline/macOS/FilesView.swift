@@ -42,9 +42,6 @@ struct FileView: View {
         }
         else {
           FileIconView(filename: file.name)
-//            .resizable()
-//            .aspectRatio(contentMode: .fit)
-//            .scaledToFill()
             .frame(width: 16, height: 16)
         }
       }
