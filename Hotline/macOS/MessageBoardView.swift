@@ -9,34 +9,51 @@ struct MessageBoardView: View {
   
   var body: some View {
     NavigationStack {
-      ScrollView {
-        LazyVStack(alignment: .leading) {
-          ForEach(model.messageBoard, id: \.self) {
-            Text($0)
-              .lineLimit(100)
-              .lineSpacing(4)
-              .padding()
-              .textSelection(.enabled)
-            Divider()
+      if model.access?.contains(.canReadMessageBoard) != false {
+        ScrollView {
+          LazyVStack(alignment: .leading) {
+            ForEach(model.messageBoard, id: \.self) {
+              Text($0)
+                .lineLimit(100)
+                .lineSpacing(4)
+                .padding()
+                .textSelection(.enabled)
+              Divider()
+            }
+          }
+          Spacer()
+        }
+        .task {
+          if !model.messageBoardLoaded {
+            let _ = await model.getMessageBoard()
           }
         }
-        Spacer()
-      }
-      .task {
-        if !model.messageBoardLoaded {
-          let _ = await model.getMessageBoard()
-        }
-      }
-      .overlay {
-        if !model.messageBoardLoaded {
-          VStack {
-            ProgressView()
-              .controlSize(.large)
+        .overlay {
+          if !model.messageBoardLoaded {
+            VStack {
+              ProgressView()
+                .controlSize(.large)
+            }
+            .frame(maxWidth: .infinity)
           }
-          .frame(maxWidth: .infinity)
         }
+        .background(Color(nsColor: .textBackgroundColor))
       }
-      .background(Color(nsColor: .textBackgroundColor))
+      else {
+        VStack {
+          Text("No Message Board")
+            .bold()
+            .foregroundStyle(.secondary)
+            .font(.title3)
+          Text("This server has the message board turned off.")
+            .foregroundStyle(.tertiary)
+            .font(.system(size: 13))
+        }
+        .padding()
+      }
+      
+      
+      
     }
     .sheet(isPresented: $composerDisplayed) {
       TextEditor(text: $composerText)
@@ -65,6 +82,11 @@ struct MessageBoardView: View {
           }
         }
     }
+//    .alert("Hello", isPresented: $showPermissionAlert) {
+//      Button("OK") {
+//        showPermissionAlert.toggle()
+//      }
+//    } message: { Text("WHAT") }
     .toolbar {
       ToolbarItem(placement:.primaryAction) {
         Button {
@@ -72,6 +94,8 @@ struct MessageBoardView: View {
         } label: {
           Image(systemName: "square.and.pencil")
         }
+        .disabled(model.access?.contains(.canPostMessageBoard) == false)
+        .help("Post to Message Board")
       }
     }
   }

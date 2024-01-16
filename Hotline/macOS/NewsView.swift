@@ -14,21 +14,59 @@ struct NewsView: View {
   @State private var editorOpen: Bool = false
   
   var body: some View {
-    NavigationStack {
-      VSplit(
-        top: {
-          newsBrowser
-        },
-        bottom: {
-          articleViewer
+    Group {
+      if model.serverVersion < 151 {
+        VStack {
+          Text("No News")
+            .bold()
+            .foregroundStyle(.secondary)
+            .font(.title3)
+          Text("This server has news turned off.")
+            .foregroundStyle(.tertiary)
+            .font(.system(size: 13))
         }
-      )
-      .fraction(splitFraction)
-      .constraints(minPFraction: 0.1, minSFraction: 0.3)
-      .hide(splitHidden)
-      .styling(color: colorScheme == .dark ? .black : Splitter.defaultColor, inset: 0, visibleThickness: 0.5, invisibleThickness: 5, hideSplitter: true)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(Color(nsColor: .textBackgroundColor))
+        .padding()
+      }
+      else {
+        NavigationStack {
+          VSplit(
+            top: {
+              if !model.newsLoaded {
+                loadingIndicator
+              }
+              else if model.news.isEmpty {
+                VStack {
+                  Text("No News")
+                    .bold()
+                    .foregroundStyle(.secondary)
+                    .font(.title3)
+                  Text("This server has no news available.")
+                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 13))
+                }
+                .padding()
+              }
+              else {
+                newsBrowser
+              }
+            },
+            bottom: {
+              articleViewer
+            }
+          )
+          .fraction(splitFraction)
+          .constraints(minPFraction: 0.1, minSFraction: 0.3)
+          .hide(splitHidden)
+          .styling(color: colorScheme == .dark ? .black : Splitter.defaultColor, inset: 0, visibleThickness: 0.5, invisibleThickness: 5, hideSplitter: true)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(Color(nsColor: .textBackgroundColor))
+        }
+        .task {
+          if !model.newsLoaded {
+            let _ = await model.getNewsList()
+          }
+        }
+      }
     }
 //    .sheet(isPresented: $editorOpen) {
 //      print("Sheet dismissed!")
@@ -73,11 +111,6 @@ struct NewsView: View {
     .environment(\.defaultMinListRowHeight, 34)
     .listStyle(.inset)
     .alternatingRowBackgrounds(.enabled)
-    .task {
-      if !model.newsLoaded {
-        let _ = await model.getNewsList()
-      }
-    }
     .contextMenu(forSelectionType: NewsInfo.self) { items in
         // ...
     } primaryAction: { items in
@@ -130,15 +163,18 @@ struct NewsView: View {
       }
       return .ignored
     }
-    .overlay {
-      if !model.newsLoaded {
-        VStack {
-          ProgressView()
-            .controlSize(.regular)
+  }
+  
+  var loadingIndicator: some View {
+    VStack {
+      HStack {
+        ProgressView {
+          Text("Loading News")
         }
-        .frame(maxWidth: .infinity)
+        .controlSize(.regular)
       }
     }
+    .frame(maxWidth: .infinity)
   }
   
   var articleViewer: some View {

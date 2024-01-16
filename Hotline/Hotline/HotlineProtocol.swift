@@ -18,47 +18,135 @@ struct HotlineUserOptions: OptionSet {
 struct HotlineUserAccessOptions: OptionSet {
   let rawValue: UInt64
   
-  static let canRenameFolders = HotlineUserAccessOptions(rawValue: 1 << 0)
-  static let canDeleteFolders = HotlineUserAccessOptions(rawValue: 1 << 1)
-  static let canCreateFolders = HotlineUserAccessOptions(rawValue: 1 << 2)
-  static let canMoveFiles = HotlineUserAccessOptions(rawValue: 1 << 3)
-  static let canRenameFiles = HotlineUserAccessOptions(rawValue: 1 << 4)
-  static let canDownloadFiles = HotlineUserAccessOptions(rawValue: 1 << 5)
-  static let canUploadFiles = HotlineUserAccessOptions(rawValue: 1 << 6)
-  static let canDeleteFiles = HotlineUserAccessOptions(rawValue: 1 << 7)
+  static func accessIndexToBit(_ index: Int) -> Int {
+    return 63 - index
+  }
   
-  static let canDeleteUsers = HotlineUserAccessOptions(rawValue: 1 << 8)
-  static let canCreateUsers = HotlineUserAccessOptions(rawValue: 1 << 9)
-  static let canSendChat = HotlineUserAccessOptions(rawValue: 1 << 13)
-  static let canReadChat = HotlineUserAccessOptions(rawValue: 1 << 14)
-  static let canMoveFolders = HotlineUserAccessOptions(rawValue: 1 << 15)
+  static func printAccessOptions(_ val: HotlineUserAccessOptions) {
+    func formatBinaryString(_ binaryString: String) -> String {
+        var formattedString = ""
+        for (index, char) in binaryString.reversed().enumerated() {
+            if index % 8 == 0 && index != 0 {
+                formattedString.append("_")
+            }
+            formattedString.append(char)
+        }
+        return String(formattedString.reversed())
+    }
+
+    var formattedBits = String(val.rawValue, radix: 2)
+    if formattedBits.count < 64 {
+      formattedBits = String(repeating: "0", count: 64 - formattedBits.count) + formattedBits
+    }
+    formattedBits = formatBinaryString(formattedBits)
+    
+    print("Access Options for \(formattedBits):")
+    print("")
+    print("File System Maintenance")
+    print("Can download files: \(val.contains(.canDownloadFiles))")
+    print("Can download folders: \(val.contains(.canDownloadFolders))")
+    print("Can upload files: \(val.contains(.canUploadFiles))")
+    print("Can upload folders: \(val.contains(.canUploadFolders))")
+    print("Can upload anywhere: \(val.contains(.canUploadAnywhere))")
+    print("Can delete files: \(val.contains(.canDeleteFiles))")
+    print("Can rename files: \(val.contains(.canRenameFiles))")
+    print("Can move files: \(val.contains(.canMoveFiles))")
+    print("Can comment files: \(val.contains(.canSetFileComment))")
+    print("Can create folders: \(val.contains(.canCreateFolders))")
+    print("Can delete folders: \(val.contains(.canDeleteFolders))")
+    print("Can rename folders: \(val.contains(.canRenameFolders))")
+    print("Can move folders: \(val.contains(.canMoveFolders))")
+    print("Can comment folders: \(val.contains(.canSetFolderComment))")
+    print("Can view dropboxes: \(val.contains(.canViewDropBoxes))")
+    print("Can make aliases: \(val.contains(.canMakeAliases))")
+    
+    print("")
+    print("User Maintenance")
+    print("Can create accounts: \(val.contains(.canCreateUsers))")
+    print("Can delete accounts: \(val.contains(.canDeleteUsers))")
+    print("Can read accounts: \(val.contains(.canOpenUsers))")
+    print("Can modify accounts: \(val.contains(.canModifyUsers))")
+    print("Can get user info: \(val.contains(.canGetClientInfo))")
+    print("Can disconnect users: \(val.contains(.canDisconnectUsers))")
+    print("Cannot be disconnected: \(val.contains(.cantBeDisconnected))")
+    
+    print("")
+    print("Messaging")
+    print("Can send private messages: \(val.contains(.canSendPrivateMessages))")
+    print("Can broadcast: \(val.contains(.canBroadcast))")
+    
+    print("")
+    print("News")
+    print("Can read message board: \(val.contains(.canReadMessageBoard))")
+    print("Can post message board: \(val.contains(.canPostMessageBoard))")
+    print("Can delete news articles: \(val.contains(.canDeleteNewsArticles))")
+    print("Can create news categories: \(val.contains(.canCreateNewsCategories))")
+    print("Can delete news categories: \(val.contains(.canDeleteNewsCategories))")
+    print("Can create news bundles: \(val.contains(.canCreateNewsFolders))")
+    print("Can delete news bundles: \(val.contains(.canDeleteNewsFolders))")
+    
+    print("")
+    print("Chat")
+    print("Can initiate private chat: \(val.contains(.canCreateChat))")
+    print("Can read chat: \(val.contains(.canReadChat))")
+    print("Can send chat: \(val.contains(.canSendChat))")
+    
+    print("")
+    print("Miscellaneous")
+    print("Can use any name: \(val.contains(.canUseAnyName))")
+    print("Don't show agreement: \(val.contains(.canSkipAgreement))")
+    print("Can change own password: \(val.contains(.canChangeOwnPassword))")
+    
+    print("Can close chat: \(val.contains(.canCloseChat))")
+    print("Can shown in list: \(val.contains(.canShownInList))")
+    print("")
+  }
   
-  static let cannotBeDisconnected = HotlineUserAccessOptions(rawValue: 1 << 16)
-  static let canDisconnectUsers = HotlineUserAccessOptions(rawValue: 1 << 17)
-  static let canPostNews = HotlineUserAccessOptions(rawValue: 1 << 18)
-  static let canReadNews = HotlineUserAccessOptions(rawValue: 1 << 19)
-  static let canModifyUsers = HotlineUserAccessOptions(rawValue: 1 << 22)
-  static let canReadUsers = HotlineUserAccessOptions(rawValue: 1 << 23)
+  static let canDeleteFiles = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(0))
+  static let canUploadFiles = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(1))
+  static let canDownloadFiles = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(2))
+  static let canRenameFiles = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(3))
+  static let canMoveFiles = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(4))
+  static let canCreateFolders = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(5))
+  static let canDeleteFolders = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(6))
+  static let canRenameFolders = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(7))
   
-  static let canMakeAliases = HotlineUserAccessOptions(rawValue: 1 << 24)
-  static let canViewDropBoxes = HotlineUserAccessOptions(rawValue: 1 << 25)
-  static let canCommentFolders = HotlineUserAccessOptions(rawValue: 1 << 26)
-  static let canCommentFiles = HotlineUserAccessOptions(rawValue: 1 << 27)
-  static let dontShowAgreement = HotlineUserAccessOptions(rawValue: 1 << 28)
-  static let canUseAnyName = HotlineUserAccessOptions(rawValue: 1 << 29)
-  static let canUploadAnywhere = HotlineUserAccessOptions(rawValue: 1 << 30)
-  static let canGetUserInfo = HotlineUserAccessOptions(rawValue: 1 << 31)
+  static let canMoveFolders = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(8))
+  static let canReadChat = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(9))
+  static let canSendChat = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(10))
+  static let canCreateChat = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(11))
+  static let canCloseChat = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(12))
+  static let canShownInList = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(13))
+  static let canCreateUsers = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(14))
+  static let canDeleteUsers = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(15))
   
-  static let canDownloadFolders = HotlineUserAccessOptions(rawValue: 1 << 32)
-  static let canUploadFolders = HotlineUserAccessOptions(rawValue: 1 << 33)
-  static let canDeleteNewsFolders = HotlineUserAccessOptions(rawValue: 1 << 34)
-  static let canCreateNewsFolders = HotlineUserAccessOptions(rawValue: 1 << 35)
-  static let canDeleteNewsCategories = HotlineUserAccessOptions(rawValue: 1 << 36)
-  static let canCreateNewsCategories = HotlineUserAccessOptions(rawValue: 1 << 37)
-  static let canDeleteNewsArticles = HotlineUserAccessOptions(rawValue: 1 << 38)
-  static let canBroadcast = HotlineUserAccessOptions(rawValue: 1 << 39)
+  static let canOpenUsers = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(16))
+  static let canModifyUsers = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(17))
+  static let canChangeOwnPassword = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(18))
+  static let canSendPrivateMessages = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(19))
+  static let canReadMessageBoard = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(20))
+  static let canPostMessageBoard = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(21))
+  static let canDisconnectUsers = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(22))
+  static let cantBeDisconnected = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(23))
   
-  static let canSendMessages = HotlineUserAccessOptions(rawValue: 1 << 47)
+  static let canGetClientInfo = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(24))
+  static let canUploadAnywhere = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(25))
+  static let canUseAnyName = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(26))
+  static let canSkipAgreement = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(27))
+  static let canSetFileComment = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(28))
+  static let canSetFolderComment = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(29))
+  static let canViewDropBoxes = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(30))
+  static let canMakeAliases = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(31))
+  
+  static let canBroadcast = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(32))
+  static let canDeleteNewsArticles = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(33))
+  static let canCreateNewsCategories = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(34))
+  static let canDeleteNewsCategories = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(35))
+  static let canCreateNewsFolders = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(36))
+  static let canDeleteNewsFolders = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(37))
+  static let canUploadFolders = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(38))
+  static let canDownloadFolders = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(39))
+  static let canSendMessages = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(40))
 }
 
 struct HotlineServer: Identifiable, Hashable {

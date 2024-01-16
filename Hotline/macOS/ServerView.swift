@@ -1,6 +1,15 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+@Observable
+class ServerState {
+  var selection: ServerNavigationType
+  
+  init(selection: ServerNavigationType) {
+    self.selection = selection
+  }
+}
+
 enum MenuItemType {
   case chat
   case news
@@ -10,26 +19,38 @@ enum MenuItemType {
   case user
 }
 
-struct MenuItem: Identifiable, Hashable {
+struct ServerMenuItem: Identifiable, Hashable {
   let id: UUID
+  let type: ServerNavigationType
   let name: String
   let image: String
-  let type: MenuItemType
   let userID: UInt?
   let serverVersion: UInt?
   
-  init(name: String, image: String, type: MenuItemType, userID: UInt? = nil, serverVersion: UInt? = nil) {
+  init(type: ServerNavigationType, name: String, image: String, userID: UInt? = nil, serverVersion: UInt? = nil) {
     self.id = UUID()
+    self.type = type
     self.name = name
     self.image = image
-    self.type = type
     self.userID = userID
     self.serverVersion = serverVersion
   }
   
-  static func == (lhs: MenuItem, rhs: MenuItem) -> Bool {
-    if lhs.type == .user && rhs.type == .user {
-      return lhs.userID == rhs.userID
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(id)
+  }
+  
+  static func == (lhs: ServerMenuItem, rhs: ServerMenuItem) -> Bool {
+    switch lhs.type {
+    case .user(let lhsUID):
+      switch rhs.type {
+      case .user(let rhsUID):
+        return lhsUID == rhsUID
+      default:
+        break
+      }
+    default:
+      break
     }
     return lhs.id == rhs.id
   }
@@ -50,113 +71,61 @@ struct ListItemView: View {
   }
 }
 
-struct TransferItemView: View {
-  let transfer: TransferInfo
-    
-  @Environment(Hotline.self) private var model: Hotline
-  @State private var hovered: Bool = false
-  @State private var buttonHovered: Bool = false
-  
-  private func formattedProgressHelp() -> String {
-    if self.transfer.completed {
-      return "File transfer complete"
-    }
-    else if self.transfer.failed {
-      return "File transfer failed"
-    }
-    else if self.transfer.progress > 0.0 {
-      if self.transfer.timeRemaining > 0.0 {
-        return "\(round(self.transfer.progress * 100.0))% – \(self.transfer.timeRemaining) seconds left"
-      }
-      else {
-        return "\(round(self.transfer.progress * 100.0))% complete"
-      }
-    }
-    return ""
+struct ActiveHotlineModelFocusedValueKey: FocusedValueKey {
+  typealias Value = Hotline
+}
+
+struct ActiveServerStateFocusedValueKey: FocusedValueKey {
+  typealias Value = ServerState
+}
+
+extension FocusedValues {
+  var activeHotlineModel: Hotline? {
+    get { self[ActiveHotlineModelFocusedValueKey.self] }
+    set { self[ActiveHotlineModelFocusedValueKey.self] = newValue }
   }
   
-  var body: some View {
-    HStack(alignment: .center) {
-      HStack(spacing: 0) {
-        Spacer()
-        FileIconView(filename: transfer.title)
-          .frame(width: 16, height: 16)
-        Spacer()
-      }
-      .frame(width: 18)
-      
-      Text(transfer.title)
-        .lineLimit(1)
-        .truncationMode(.middle)
-      
-      Spacer()
-      
-      if self.hovered {
-        Button {
-          model.deleteTransfer(id: transfer.id)
-        } label: {
-          if transfer.completed {
-            Image(systemName: self.buttonHovered ? "xmark.circle.fill" : "xmark.circle")
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 16, height: 16)
-              .opacity(self.buttonHovered ? 1.0 : 0.5)
-          }
-          else {
-            Image(systemName: self.buttonHovered ? "trash.circle.fill" : "trash.circle")
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 16, height: 16)
-              .opacity(self.buttonHovered ? 1.0 : 0.5)
-          }
-        }
-        .buttonStyle(.plain)
-        .padding(0)
-        .frame(width: 16, height: 16)
-        .help(transfer.completed || transfer.failed ? "Remove" : "Cancel Transfer")
-        .onHover { hovered in
-          self.buttonHovered = hovered
-        }
-      }
-      else if transfer.failed {
-        Image(systemName: "exclamationmark.triangle")
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: 16, height: 16)
-      }
-      else if transfer.completed {
-        Image(systemName: "checkmark.circle.fill")
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: 16, height: 16)
-      }
-      else if transfer.progress == 0.0 {
-        ProgressView()
-          .progressViewStyle(.circular)
-          .controlSize(.small)
-      }
-      else {
-        ProgressView(value: transfer.progress, total: 1.0)
-          .progressViewStyle(.circular)
-          .controlSize(.small)
-      }
-    }
-    .onHover { hovered in
-      self.hovered = hovered
-    }
-    .help(formattedProgressHelp())
+  var activeServerState: ServerState? {
+    get { self[ActiveServerStateFocusedValueKey.self] }
+    set { self[ActiveServerStateFocusedValueKey.self] = newValue }
   }
+}
+
+enum ServerNavigationType: Identifiable, Hashable, Equatable {
+  var id: String {
+    switch self {
+    case .chat:
+      return "Chat"
+    case .news:
+      return "News"
+    case .board:
+      return "Board"
+    case .files:
+      return "Files"
+    case .user(let userID):
+      return String(userID)
+    }
+  }
+  
+  case chat
+  case news
+  case board
+  case files
+  case user(userID: UInt)
 }
 
 struct ServerView: View {
   @Environment(Prefs.self) private var preferences: Prefs
+  @Environment(SoundEffectPlayer.self) private var soundEffects: SoundEffectPlayer
   @Environment(\.dismiss) var dismiss
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.controlActiveState) private var controlActiveState
   
   @State private var model: Hotline = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
+  @State private var state: ServerState = ServerState(selection: .chat)
+  
   @State private var agreementShown: Bool = false
-  @State private var selection: MenuItem? = ServerView.menuItems.first
+//  @State private var selection: ServerMenuItem? = ServerView.menuItems.first
   
   @State private var connectAddress: String = ""
   @State private var connectLogin: String = ""
@@ -164,11 +133,11 @@ struct ServerView: View {
   
   @Binding var server: Server
   
-  static var menuItems = [
-    MenuItem(name: "Chat", image: "bubble", type: .chat),
-    MenuItem(name: "News", image: "newspaper", type: .news, serverVersion: 150),
-    MenuItem(name: "Board", image: "pin", type: .messageBoard),
-    MenuItem(name: "Files", image: "folder", type: .files),
+  static var menuItems: [ServerMenuItem] = [
+    ServerMenuItem(type: .chat, name: "Chat", image: "bubble"),
+    ServerMenuItem(type: .news, name: "News", image: "newspaper"),
+    ServerMenuItem(type: .board, name: "Board", image: "pin"),
+    ServerMenuItem(type: .files, name: "Files", image: "folder"),
   ]
   
   enum FocusFields {
@@ -278,18 +247,18 @@ struct ServerView: View {
   }
   
   var navigationList: some View {
-    List(selection: $selection) {
+    List(selection: $state.selection) {
       ForEach(ServerView.menuItems) { menuItem in
-        if let minServerVersion = menuItem.serverVersion {
-          if let v = model.serverVersion, v >= minServerVersion {
-            ListItemView(icon: menuItem.image, title: menuItem.name)
-              .tag(menuItem)
-          }
-        }
-        else {
+//        if let minServerVersion = menuItem.serverVersion {
+//          if let v = model.serverVersion, v >= minServerVersion {
+//            ListItemView(icon: menuItem.image, title: menuItem.name)
+//              .tag(menuItem.type)
+//          }
+//        }
+//        else {
           ListItemView(icon: menuItem.image, title: menuItem.name)
-            .tag(menuItem)
-        }
+            .tag(menuItem.type)
+//        }
       }
       
       if model.transfers.count > 0 {
@@ -330,7 +299,7 @@ struct ServerView: View {
         }
         .opacity(user.isIdle ? 0.6 : 1.0)
         .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
-        .tag(MenuItem(name: user.name, image: "", type: .user, userID: user.id))
+        .tag(ServerNavigationType.user(userID: user.id))
       }
     }
   }
@@ -341,8 +310,7 @@ struct ServerView: View {
         .frame(maxWidth: .infinity)
         .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 500)
     } detail: {
-      if let selection = selection {
-        switch selection.type {
+        switch state.selection {
         case .chat:
           ChatView()
             .navigationTitle(model.serverTitle)
@@ -351,7 +319,7 @@ struct ServerView: View {
           NewsView()
             .navigationTitle(model.serverTitle)
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
-        case .messageBoard:
+        case .board:
           MessageBoardView()
             .navigationTitle(model.serverTitle)
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
@@ -359,16 +327,11 @@ struct ServerView: View {
           FilesView()
             .navigationTitle(model.serverTitle)
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
-        case .tasks:
-          EmptyView()
-        case .user:
-          if let selectionUserID = selection.userID {
-            MessageView(userID: selectionUserID)
-              .navigationTitle(model.serverTitle)
-              .navigationSplitViewColumnWidth(min: 250, ideal: 500)
-          }
+        case .user(let userID):
+          MessageView(userID: userID)
+            .navigationTitle(model.serverTitle)
+            .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         }
-      }
     }
   }
   
@@ -433,6 +396,8 @@ struct ServerView: View {
       connectPassword = server.password
       connectToServer()
     }
+    .focusedSceneValue(\.activeHotlineModel, model)
+    .focusedSceneValue(\.activeServerState, state)
   }
   
   // MARK: -
@@ -528,3 +493,101 @@ struct ServerView: View {
 //#Preview {
 //  ServerView(server: Server(name: "", description: "", address: "", port: 0))
 //}
+
+struct TransferItemView: View {
+  let transfer: TransferInfo
+    
+  @Environment(Hotline.self) private var model: Hotline
+  @State private var hovered: Bool = false
+  @State private var buttonHovered: Bool = false
+  
+  private func formattedProgressHelp() -> String {
+    if self.transfer.completed {
+      return "File transfer complete"
+    }
+    else if self.transfer.failed {
+      return "File transfer failed"
+    }
+    else if self.transfer.progress > 0.0 {
+      if self.transfer.timeRemaining > 0.0 {
+        return "\(round(self.transfer.progress * 100.0))% – \(self.transfer.timeRemaining) seconds left"
+      }
+      else {
+        return "\(round(self.transfer.progress * 100.0))% complete"
+      }
+    }
+    return ""
+  }
+  
+  var body: some View {
+    HStack(alignment: .center) {
+      HStack(spacing: 0) {
+        Spacer()
+        FileIconView(filename: transfer.title)
+          .frame(width: 16, height: 16)
+        Spacer()
+      }
+      .frame(width: 18)
+      
+      Text(transfer.title)
+        .lineLimit(1)
+        .truncationMode(.middle)
+      
+      Spacer()
+      
+      if self.hovered {
+        Button {
+          model.deleteTransfer(id: transfer.id)
+        } label: {
+          if transfer.completed {
+            Image(systemName: self.buttonHovered ? "xmark.circle.fill" : "xmark.circle")
+              .resizable()
+              .aspectRatio(contentMode: .fit)
+              .frame(width: 16, height: 16)
+              .opacity(self.buttonHovered ? 1.0 : 0.5)
+          }
+          else {
+            Image(systemName: self.buttonHovered ? "trash.circle.fill" : "trash.circle")
+              .resizable()
+              .aspectRatio(contentMode: .fit)
+              .frame(width: 16, height: 16)
+              .opacity(self.buttonHovered ? 1.0 : 0.5)
+          }
+        }
+        .buttonStyle(.plain)
+        .padding(0)
+        .frame(width: 16, height: 16)
+        .help(transfer.completed || transfer.failed ? "Remove" : "Cancel Transfer")
+        .onHover { hovered in
+          self.buttonHovered = hovered
+        }
+      }
+      else if transfer.failed {
+        Image(systemName: "exclamationmark.triangle")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 16, height: 16)
+      }
+      else if transfer.completed {
+        Image(systemName: "checkmark.circle.fill")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 16, height: 16)
+      }
+      else if transfer.progress == 0.0 {
+        ProgressView()
+          .progressViewStyle(.circular)
+          .controlSize(.small)
+      }
+      else {
+        ProgressView(value: transfer.progress, total: 1.0)
+          .progressViewStyle(.circular)
+          .controlSize(.small)
+      }
+    }
+    .onHover { hovered in
+      self.hovered = hovered
+    }
+    .help(formattedProgressHelp())
+  }
+}

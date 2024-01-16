@@ -13,6 +13,10 @@ struct Application: App {
   #endif
   
   @State private var preferences = Prefs()
+  @State private var soundEffects = SoundEffectPlayer()
+  
+  @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
+  @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
   
   var body: some Scene {
     #if os(iOS)
@@ -35,6 +39,7 @@ struct Application: App {
       ServerView(server: server)
         .frame(minWidth: 400, minHeight: 300)
         .environment(preferences)
+        .environment(soundEffects)
     } defaultValue: {
       Server(name: nil, description: nil, address: "")
     }
@@ -46,6 +51,39 @@ struct Application: App {
           openWindow(id: "server")
         }
         .keyboardShortcut(.init("K"), modifiers: .command)
+      }
+      CommandMenu("Server") {
+        Button("Disconnect") {
+          activeHotline?.disconnect()
+        }
+        .disabled(activeHotline?.status == .disconnected)
+        Divider()
+        Button("Broadcast Message...") {
+          // TODO: Implement broadcast message when user is allowed.
+        }
+        .disabled(true)
+        .keyboardShortcut(.init("B"), modifiers: .command)
+        Divider()
+        Button("Show Chat") {
+          activeServerState?.selection = .chat
+        }
+        .disabled(activeHotline?.status != .loggedIn)
+        .keyboardShortcut(.init("1"), modifiers: .command)
+        Button("Show News") {
+          activeServerState?.selection = .news
+        }
+        .disabled(activeHotline?.status != .loggedIn)
+        .keyboardShortcut(.init("2"), modifiers: .command)
+        Button("Show Message Board") {
+          activeServerState?.selection = .board
+        }
+        .disabled(activeHotline?.status != .loggedIn)
+        .keyboardShortcut(.init("3"), modifiers: .command)
+        Button("Show Files") {
+          activeServerState?.selection = .files
+        }
+        .disabled(activeHotline?.status != .loggedIn)
+        .keyboardShortcut(.init("4"), modifiers: .command)
       }
     }
     

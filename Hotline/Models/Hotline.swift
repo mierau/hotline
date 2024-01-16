@@ -4,6 +4,7 @@ import SwiftUI
 final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   let trackerClient: HotlineTrackerClient
   let client: HotlineClient
+  let soundEffects: SoundEffectPlayer = SoundEffectPlayer()
   
   #if os(macOS)
   static func getClassicIcon(_ index: Int) -> NSImage? {
@@ -176,11 +177,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       self.updateServerTitle()
     }
   }
-  var serverVersion: UInt16?  {
-    didSet {
-      self.updateServerTitle()
-    }
-  }
+  var serverVersion: UInt16 = 123
   var serverName: String? {
     didSet {
       self.updateServerTitle()
@@ -192,6 +189,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   var access: HotlineUserAccessOptions?
   var agreed: Bool = false
   
+  var currentUser: User? = nil
   var users: [User] = []
   var chat: [ChatMessage] = []
   var messageBoard: [String] = []
@@ -247,7 +245,8 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     self.iconID = iconID
     
     self.client.login(address: server.address, port: server.port, login: server.login, password: server.password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
-      self?.serverVersion = serverVersion
+      print("Server info:", serverName, serverVersion)
+      self?.serverVersion = serverVersion ?? 123
       if serverName != nil {
         self?.serverName = serverName
       }
@@ -682,7 +681,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     print("Hotline: Connection status changed to: \(status)")
     
     if status == .disconnected {
-      self.serverVersion = nil
+      self.serverVersion = 123
       self.serverName = nil
       self.access = nil
       
@@ -703,6 +702,9 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       
       self.deleteAllTransfers()
     }
+    else if status == .loggedIn {
+      soundEffects.playSoundEffect(.loggedIn)
+    }
     
     self.status = status
   }
@@ -721,6 +723,7 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   func hotlineReceivedChatMessage(message: String) {
+    soundEffects.playSoundEffect(.chatMessage)
     self.chat.append(ChatMessage(text: message, type: .message, date: Date()))
   }
   
@@ -756,12 +759,14 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     if let existingUserIndex = self.users.firstIndex(where: { $0.id == UInt(userID) }) {
       let user = self.users.remove(at: existingUserIndex)
       self.chat.append(ChatMessage(text: "\(user.name) left", type: .status, date: Date()))
+      
+      soundEffects.playSoundEffect(.userLogout)
     }
   }
   
   func hotlineReceivedUserAccess(options: HotlineUserAccessOptions) {
     print("Hotline: got access options")
-    print(options, options.contains(.canSendChat), options.contains(.canBroadcast))
+    HotlineUserAccessOptions.printAccessOptions(options)
     
     self.access = options
   }
@@ -838,6 +843,8 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       let transfer = self.transfers[i]
       transfer.fileURL = at
       transfer.downloadCallback?(transfer, at)
+      
+      soundEffects.playSoundEffect(.transferComplete)
     }
     
     if let i = self.downloads.firstIndex(where: { $0.referenceNumber == reference }) {
@@ -857,6 +864,10 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       self.users[i] = User(hotlineUser: user)
     }
     else {
+      if !self.users.isEmpty {
+        soundEffects.playSoundEffect(.userLogin)
+      }
+      
       print("Hotline: added user: \(user.name)")
       self.users.append(User(hotlineUser: user))
       self.chat.append(ChatMessage(text: "\(user.name) joined", type: .status, date: Date()))

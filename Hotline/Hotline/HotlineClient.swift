@@ -82,13 +82,14 @@ class HotlineClient: NetSocketDelegate {
   private var serverAddress: String? = nil
   private var serverPort: UInt16? = nil
   
-//  private var connection: NWConnection?
   private var transactionLog: [UInt32:(HotlineTransactionType, ((HotlineTransaction, HotlineTransactionError?) -> Void)?)] = [:]
   
   private var socket: NetSocket?
   private var stage: HotlineClientStage = .handshake
   private var packet: HotlineTransaction? = nil
+  private var serverVersion: UInt16? = nil
   private var loginDetails: HotlineLogin? = nil
+  private var keepAliveTimer: Timer? = nil
     
   init() {}
   
@@ -100,6 +101,7 @@ class HotlineClient: NetSocketDelegate {
   }
   
   @MainActor func netsocketDisconnected(socket: NetSocket, error: Error?) {
+    self.reset()
     self.updateConnectionStatus(.disconnected)
     self.stage = .handshake
   }
@@ -135,6 +137,14 @@ class HotlineClient: NetSocketDelegate {
     self.socket?.write(HotlineClient.HandshakePacket)
   }
   
+  @MainActor private func startKeepAliveTimer() {
+    self.keepAliveTimer = Timer.scheduledTimer(withTimeInterval: 60 * 3, repeats: true) { [weak self] _ in
+      DispatchQueue.main.async { [weak self] in
+        self?.sendKeepAlive()
+      }
+    }
+  }
+  
   @MainActor func receiveHandshake() {
     guard let socket = self.socket,
           self.stage == .handshake,
@@ -164,21 +174,29 @@ class HotlineClient: NetSocketDelegate {
     
     let session = self.loginDetails!
     self.loginDetails = nil
-    self.sendLogin(login: session.login ?? "", password: session.password ?? "", username: session.username, iconID: session.iconID) { err, serverName, serverVersion in
+    self.sendLogin(login: session.login ?? "", password: session.password ?? "", username: session.username, iconID: session.iconID) { [weak self] err, serverName, serverVersion in
+      self?.serverVersion = serverVersion
+      self?.startKeepAliveTimer()
       session.callback?(err, serverName, serverVersion)
     }
     
     self.receivePacket()
   }
   
-  @MainActor func disconnect() {
+  @MainActor private func reset() {
     self.transactionLog = [:]
-    
     self.packet = nil
+    
+    self.keepAliveTimer?.invalidate()
+    self.keepAliveTimer = nil
     
     self.socket?.close()
     self.socket?.delegate = nil
     self.socket = nil
+  }
+  
+  @MainActor func disconnect() {
+    self.reset()
   }
   
   // MARK: - Packets
@@ -631,6 +649,18 @@ class HotlineClient: NetSocketDelegate {
       }
 
       callback?(true, referenceNumber, transferSize)
+    }
+  }
+  
+  @MainActor private func sendKeepAlive() {
+    print("HotlineClient: Sending keep alive")
+    if let v = self.serverVersion, v >= 185 {
+      let t = HotlineTransaction(type: .connectionKeepAlive)
+      self.sendPacket(t)
+    }
+    else {
+      let t = HotlineTransaction(type: .getUserNameList)
+      self.sendPacket(t)
     }
   }
   
