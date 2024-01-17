@@ -117,14 +117,21 @@ class HotlineTrackerClient {
       return
     }
     
-    let header: [UInt8] = self.socket.read(count: 8)
-    if header.count != 8 {
+    var header: [UInt8] = self.socket.read(count: 8)
+
+    guard let messageType = header.consumeUInt16(),
+       let dataLength = header.consumeUInt16(),
+       let numberOfServers = header.consumeUInt16(),
+       let numberOfServers2 = header.consumeUInt16() else {
+      self.socket.close()
       return
     }
     
-    self.expectedDataLength = Int(header[2]) * 0xFF + Int(header[3])
-    self.expectedDataLength -= 4
-    self.serverCount = Int(header[4]) * 256 + Int(header[5])
+    print("HotlineTrackerClient: Received response header ", messageType, dataLength, numberOfServers, numberOfServers2)
+    
+    self.expectedDataLength = Int(dataLength)
+    self.expectedDataLength -= 4 // Remove the size of the two server count fields
+    self.serverCount = Int(numberOfServers)
     
     self.stage = .listing
     self.receiveListing()
@@ -176,7 +183,6 @@ class HotlineTrackerClient {
     }
     
     self.servers = foundServers
-    
     self.stage = .done
     self.socket.close()
   }
