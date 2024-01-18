@@ -10,6 +10,7 @@ struct Application: App {
   
   #if os(macOS)
   @Environment(\.openWindow) private var openWindow
+  @Environment(\.openURL) private var openURL
   #endif
   
   @State private var preferences = Prefs()
@@ -54,6 +55,19 @@ struct Application: App {
           openWindow(id: "server")
         }
         .keyboardShortcut(.init("K"), modifiers: .command)
+      }
+      CommandGroup(after: .help) {
+        Divider()
+        Button("Request Feature...") {
+          if let url = URL(string: "https://github.com/mierau/hotline/issues/new?labels=enhancement") {
+            openURL(url)
+          }
+        }
+        Button("Report Bug...") {
+          if let url = URL(string: "https://github.com/mierau/hotline/issues/new?labels=bug") {
+            openURL(url)
+          }
+        }
       }
       CommandMenu("Server") {
         Button("Disconnect") {
