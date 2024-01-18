@@ -36,7 +36,7 @@ And this project is an attempt to create a modern open source version of Hotline
 | Connect to servers         |   ✓   |   ✓   |        |          |
 | Connect to multiple servers|   ✓   |       |        |          |
 | Server accounts            |   ✓   |       |        |          |
-| Server bookmarks           |       |       |        |          |
+| Server bookmarks           |   ✓   |       |        |          |
 | Change name & icon         |   ✓   |       |        |          |
 | Privacy settings           |   ✓   |       |        |          |
 | Autoresponse               |   ✓   |       |        |          |
