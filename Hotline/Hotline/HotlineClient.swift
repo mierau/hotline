@@ -490,7 +490,7 @@ class HotlineClient: NetSocketDelegate {
     }
     
     var t = HotlineTransaction(type: .oldPostNews)
-    t.setFieldString(type: .data, val: text)
+    t.setFieldString(type: .data, val: text, encoding: .macOSRoman)
     self.sendPacket(t)
   }
   
