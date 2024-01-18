@@ -117,6 +117,7 @@ enum ServerNavigationType: Identifiable, Hashable, Equatable {
 struct ServerView: View {
   @Environment(Prefs.self) private var preferences: Prefs
   @Environment(SoundEffectPlayer.self) private var soundEffects: SoundEffectPlayer
+  @Environment(Bookmarks.self) private var bookmarks: Bookmarks
   @Environment(\.dismiss) var dismiss
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.controlActiveState) private var controlActiveState
@@ -130,6 +131,8 @@ struct ServerView: View {
   @State private var connectAddress: String = ""
   @State private var connectLogin: String = ""
   @State private var connectPassword: String = ""
+  @State private var connectNameSheetPresented: Bool = false
+  @State private var connectName: String = ""
   
   @Binding var server: Server
   
@@ -161,62 +164,46 @@ struct ServerView: View {
             Text("Type the address of the Hotline server you would like to connect to. If you have an account on that server, type your login and password too.")
               .font(.caption)
               .foregroundStyle(.secondary)
+              .padding(.bottom, 4)
             
-            TextField(text: $connectLogin, prompt: Text("optional")) {
+            TextField(text: $connectLogin, prompt: Text("Optional")) {
               Text("Login:")
             }
             .focused($focusedField, equals: .login)
-            SecureField(text: $connectPassword, prompt: Text("optional")) {
+            SecureField(text: $connectPassword, prompt: Text("Optional")) {
               Text("Password:")
             }
             .focused($focusedField, equals: .password)
           }
           .textFieldStyle(.roundedBorder)
-          .controlSize(.regular)
+          .controlSize(.large)
           
           HStack {
-            Button {
-              print("SAVE BOOKMARK... SOMEHOW")
-            } label: {
-              Text("Save...")
+            Button("Save...") {
+              if !connectAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                connectNameSheetPresented = true
+              }
             }
+            .disabled(connectAddress.isEmpty)
             .controlSize(.regular)
             .buttonStyle(.automatic)
-            .help("Save server as bookmark")
+            .help("Bookmark server")
             
             Spacer()
             
-            Button {
+            Button("Cancel") {
               dismiss()
-            } label: {
-              Text("Cancel")
             }
             .controlSize(.regular)
             .buttonStyle(.automatic)
             .keyboardShortcut(.cancelAction)
             
-            Button {
-              
-  //            if var s = server {
-  //              print("CHANGING EXISTING SERVER")
-  //              s.name = newServer.name
-  //              s.description = newServer.description
-  //              s.users = newServer.users
-  //              s.address = newServer.address
-  //              s.port = newServer.port
-  //              s.login = newServer.login
-  //              s.password = newServer.password
-  //            }
-  //            else {
-  //              server = newServer
-  //            }
-              
+            Button("Connect") {
               Task {
                 await connectToServer()
               }
-            } label: {
-              Text("Connect")
             }
+            
             .controlSize(.regular)
             .buttonStyle(.automatic)
             .keyboardShortcut(.defaultAction)
@@ -237,13 +224,51 @@ struct ServerView: View {
           server.password = connectPassword
         }
       }
-//      .padding(.top, 8)
       .onAppear {
         focusedField = .address
       }
     }
-    .frame(maxWidth: 350)
+    .frame(maxWidth: 380)
     .padding()
+    .sheet(isPresented: $connectNameSheetPresented) {
+      VStack(alignment: .leading) {
+        Text("Name this server bookmark:")
+          .foregroundStyle(.secondary)
+          .padding(.bottom, 4)
+        TextField("Bookmark Name", text: $connectName)
+          .textFieldStyle(.roundedBorder)
+          .controlSize(.large)
+      }
+      .frame(width: 250)
+      .padding()
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            connectNameSheetPresented = false
+            connectName = ""
+          }
+        }
+        
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Save") {
+            let name = String(connectName.trimmingCharacters(in: .whitespacesAndNewlines))
+            if !name.isEmpty {
+              connectNameSheetPresented = false
+              connectName = ""
+              Task.detached {
+                let (host, port) = Server.parseServerAddressAndPort(connectAddress)
+                let login: String? = connectLogin.isEmpty ? nil : connectLogin
+                let password: String? = connectPassword.isEmpty ? nil : connectPassword
+                
+                if !host.isEmpty {
+                  let _ = bookmarks.add(Bookmark(type: .server, name: name, address: host, port: port, login: login, password: password))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
   
   var navigationList: some View {

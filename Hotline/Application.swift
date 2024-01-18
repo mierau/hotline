@@ -14,6 +14,7 @@ struct Application: App {
   
   @State private var preferences = Prefs()
   @State private var soundEffects = SoundEffectPlayer()
+  @State private var bookmarks = Bookmarks()
   
   @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
@@ -29,6 +30,7 @@ struct Application: App {
     Window("Servers", id: "servers") {
       TrackerView()
         .frame(minWidth: 250, minHeight: 250)
+        .environment(bookmarks)
     }
     .keyboardShortcut(.init(.init("R"), modifiers: .command))
     .defaultSize(width: 700, height: 550)
@@ -37,9 +39,10 @@ struct Application: App {
     // MARK: Server Window
     WindowGroup(id: "server", for: Server.self) { server in
       ServerView(server: server)
-        .frame(minWidth: 400, minHeight: 300)
+        .frame(minWidth: 430, minHeight: 300)
         .environment(preferences)
         .environment(soundEffects)
+        .environment(bookmarks)
     } defaultValue: {
       Server(name: nil, description: nil, address: "")
     }

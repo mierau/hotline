@@ -149,14 +149,8 @@ struct TrackerConnectView: View {
 }
 
 struct TrackerView: View {
-  
-  //  @Environment(\.modelContext) private var modelContext
-  //  @Query private var items: [Item]
-  
   @Environment(Hotline.self) private var model: Hotline
   @Environment(\.colorScheme) var colorScheme
-  
-  //  @State private var tracker = Tracker(address: "hltracker.com", service: trackerService)
   
   @State private var servers: [Server] = []
   @State private var selectedServer: Server?

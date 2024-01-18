@@ -8,4 +8,11 @@ import SwiftUI
     self.address = address
     self.port = port
   }
+  
+  static func parseTrackerAddressAndPort(_ address: String) -> (String, Int) {
+    let url = URL(string: "hotlinetracker://\(address)")
+    let port = url?.port ?? HotlinePorts.DefaultTrackerPort
+    let host = url?.host(percentEncoded: false) ?? ""
+    return (host.lowercased().trimmingCharacters(in: .whitespacesAndNewlines), port)
+  }
 }
