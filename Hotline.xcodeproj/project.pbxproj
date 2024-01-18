@@ -560,7 +560,7 @@
 				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				DEVELOPMENT_TEAM = 5AEEV7QB2U;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
@@ -599,7 +599,7 @@
 				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				DEVELOPMENT_TEAM = 5AEEV7QB2U;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
