@@ -1,4 +1,4 @@
-![IMG_0660](https://github.com/mierau/hotline/assets/55453/0382a669-4a95-4382-b476-60f9417092d4)
+![hotline-stuff](https://github.com/mierau/hotline/assets/55453/067722ff-2e48-48ba-85bd-5e3199a41ae0)
 
 # Hotline
 An attempt to ressurect Hotline for modern Apple systems (iOS, macOS, etc) by completely rebuilding it in Swift and SwiftUI.
