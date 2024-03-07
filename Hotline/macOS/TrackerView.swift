@@ -158,7 +158,7 @@ struct TrackerView: View {
         openWindow(id: "server", value: server)
       }
       else if let bookmark = clickedItem.bookmark, bookmark.type == .server {
-        let server = Server(name: bookmark.name, description: nil, address: bookmark.address, port: HotlinePorts.DefaultServerPort)
+        let server = Server(name: bookmark.name, description: nil, address: bookmark.address, port: bookmark.port, login: bookmark.login ?? "", password: bookmark.password ?? "")
         openWindow(id: "server", value: server)
       }
     }

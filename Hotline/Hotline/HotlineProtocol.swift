@@ -474,21 +474,14 @@ struct HotlineTransactionField {
   }
   
   init(type: HotlineTransactionFieldType, string: String, encoding: String.Encoding = .ascii, encrypt: Bool = false) {
-    var stringInput = string
-    
+    var bytes = [UInt8](string.utf8)
     if encrypt {
-      stringInput = String(string.utf8.map { char in
-        Character(UnicodeScalar(0xFF - char))
-      })
+        bytes = string.utf8.map { char in
+            return 0xFF - char
+        }
     }
-    
-    var stringData: Data?
-    stringData = stringInput.data(using: encoding, allowLossyConversion: true)
-    if stringData == nil {
-      stringData = Data()
-    }
-    
-    self.init(type: type, dataSize: UInt16(stringData!.count), data: [UInt8](stringData!))
+
+    self.init(type: type, dataSize: UInt16(bytes.count), data: [UInt8](bytes))
   }
   
   init(type: HotlineTransactionFieldType, string: String, encrypt: Bool) {
