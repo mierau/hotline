@@ -7,6 +7,7 @@ enum SoundEffects: String {
   case transferComplete = "transfer-complete"
   case userLogin = "user-login"
   case userLogout = "user-logout"
+  case newNews = "new-news"
 }
 
 @Observable
