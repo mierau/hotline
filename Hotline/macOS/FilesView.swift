@@ -102,7 +102,8 @@ struct FilesView: View {
   @Environment(\.openWindow) private var openWindow
   
   @State private var selection: FileInfo?
-  
+  @State private var fileDetails: FileDetails?
+    
   private func openPreviewWindow(_ previewInfo: PreviewFileInfo) {
     switch previewInfo.previewType {
     case .image:
@@ -206,6 +207,11 @@ struct FilesView: View {
         
         ToolbarItem(placement: .primaryAction) {
           Button {
+            if let s = selection {
+              model.fileDetails(s.name, path: s.path) { info in
+                fileDetails = info
+              }
+            }
           } label: {
             Label("Get File Info", systemImage: "info.circle")
           }
@@ -223,6 +229,9 @@ struct FilesView: View {
           .help("Download")
         }
       }
+    }
+    .sheet(item: $fileDetails ) { item in
+      FileDetailsView(fd: item)
     }
   }
 }
