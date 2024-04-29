@@ -617,16 +617,22 @@ class HotlineClient: NetSocketDelegate {
       guard err == nil,
             let fileName = reply.getField(type: .fileName)?.getString(),
             let fileCreator = reply.getField(type: .fileCreatorString)?.getString(),
-            let fileComment = reply.getField(type: .fileComment)?.getString(),
-            let fileType = reply.getField(type: .fileType)?.getString(),
+            let fileType = reply.getField(type: .fileTypeString)?.getString(),
+            let fileTypeString = reply.getField(type: .fileTypeString)?.getString(),
             let fileCreateDate = reply.getField(type: .fileCreateDate)?.data.readDate(at: 0),
-            let fileModifyDate = reply.getField(type: .fileModifyDate)?.data.readDate(at: 0),
-            let fileSizeField = reply.getField(type: .fileSize),
-            let fileSize = fileSizeField.getInteger() else {
+            let fileModifyDate = reply.getField(type: .fileModifyDate)?.data.readDate(at: 0)
+ else {
         callback?(nil)
         return
       }
       
+
+      // Size field is not included in server reply for folders
+      let fileSize = reply.getField(type: .fileSize)?.getInteger() ?? 0
+
+      // Comment field is not included for if no comment present
+      let fileComment = reply.getField(type: .fileComment)?.getString() ?? ""
+
       callback?(FileDetails(name: fileName, path: filePath, size: fileSize, comment: fileComment, type: fileType, creator: fileCreator,
                             created: fileCreateDate, modified: fileModifyDate))
     }
