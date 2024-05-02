@@ -68,7 +68,8 @@ struct ListItemView: View {
         Image(systemName: icon)
           .resizable()
           .scaledToFit()
-          .frame(width: 18, height: 18)
+          .frame(width: 16, height: 16)
+          .padding(.leading, 4)
         Text(title)
       }
   }
@@ -138,10 +139,10 @@ struct ServerView: View {
   @Binding var server: Server
   
   static var menuItems: [ServerMenuItem] = [
-    ServerMenuItem(type: .chat, name: "Chat", image: "bubble", selectedImage: "bubble.fill"),
-    ServerMenuItem(type: .board, name: "Board", image: "pin", selectedImage: "pin.fill"),
-    ServerMenuItem(type: .news, name: "News", image: "newspaper", selectedImage: "newspaper.fill"),
-    ServerMenuItem(type: .files, name: "Files", image: "folder", selectedImage: "folder.fill"),
+    ServerMenuItem(type: .chat, name: "Chat", image: "bubble.fill", selectedImage: "bubble.fill"),
+    ServerMenuItem(type: .board, name: "Board", image: "pin.fill", selectedImage: "pin.fill"),
+    ServerMenuItem(type: .news, name: "News", image: "newspaper.fill", selectedImage: "newspaper.fill"),
+    ServerMenuItem(type: .files, name: "Files", image: "folder.fill", selectedImage: "folder.fill"),
   ]
   
   enum FocusFields {
@@ -368,11 +369,13 @@ struct ServerView: View {
         HStack {
           if let iconImage = Hotline.getClassicIcon(Int(user.iconID)) {
             Image(nsImage: iconImage)
-              .frame(width: 18)
+              .frame(width: 16, height: 16)
+              .padding(.leading, 4)
           }
           else {
             Text("")
-              .frame(width: 18)
+              .frame(width: 16, height: 16)
+              .padding(.leading, 4)
           }
           
           Text(user.name)
@@ -544,9 +547,10 @@ struct TransferItemView: View {
         Spacer()
         FileIconView(filename: transfer.title)
           .frame(width: 16, height: 16)
+          .padding(.leading, 2)
         Spacer()
       }
-      .frame(width: 18)
+      .frame(width: 20)
       
       Text(transfer.title)
         .lineLimit(1)
@@ -558,20 +562,11 @@ struct TransferItemView: View {
         Button {
           model.deleteTransfer(id: transfer.id)
         } label: {
-          if transfer.completed {
-            Image(systemName: self.buttonHovered ? "xmark.circle.fill" : "xmark.circle")
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 16, height: 16)
-              .opacity(self.buttonHovered ? 1.0 : 0.5)
-          }
-          else {
-            Image(systemName: self.buttonHovered ? "trash.circle.fill" : "trash.circle")
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 16, height: 16)
-              .opacity(self.buttonHovered ? 1.0 : 0.5)
-          }
+          Image(systemName: self.buttonHovered ? "xmark.circle.fill" : "xmark.circle")
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 16, height: 16)
+            .opacity(self.buttonHovered ? 1.0 : 0.5)
         }
         .buttonStyle(.plain)
         .padding(0)
