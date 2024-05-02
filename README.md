@@ -54,7 +54,7 @@ And this project is an attempt to create a modern open source version of Hotline
 | File browsing              |   ✓   |   ✓   |        |          |
 | File downloading           |   ✓   |       |        |          |
 | File uploading             |       |       |        |          |
-| File info                  |       |       |        |          |
+| File info                  |   ✓   |       |        |          |
 | File management            |       |       |        |          |
 | Folder downloading         |       |       |        |          |
 | Folder uploading           |       |       |        |          |
