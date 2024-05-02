@@ -40,6 +40,7 @@ protocol HotlineClientDelegate: AnyObject {
   func hotlineReceivedUserAccess(options: HotlineUserAccessOptions)
   func hotlineUserChanged(user: HotlineUser)
   func hotlineUserDisconnected(userID: UInt16)
+  func hotlineReceivedNewsPost(message: String)
 }
 
 extension HotlineClientDelegate {
@@ -51,6 +52,7 @@ extension HotlineClientDelegate {
   func hotlineReceivedUserAccess(options: HotlineUserAccessOptions) {}
   func hotlineUserChanged(user: HotlineUser) {}
   func hotlineUserDisconnected(userID: UInt16) {}
+  func hotlineReceivedNewsPost(message: String) {}
 }
 
 enum HotlineClientStage {
@@ -342,6 +344,12 @@ class HotlineClient: NetSocketDelegate {
           self.delegate?.hotlineReceivedUserAccess(options: accessOptions)
         }
       }
+    
+    case .newMessage:
+       if let messageField = packet.getField(type: .data),
+          let message = messageField.getString() {
+          self.delegate?.hotlineReceivedNewsPost(message: message)
+       }
       
     default:
       print("HotlineClient: UNKNOWN transaction \(packet.type) with \(packet.fields.count) parameters")

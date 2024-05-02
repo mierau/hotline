@@ -649,6 +649,19 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   func hotlineReceivedAgreement(text: String) {
     self.chat.append(ChatMessage(text: text, type: .agreement, date: Date()))
   }
+    
+  func hotlineReceivedNewsPost(message: String) {
+    soundEffects.playSoundEffect(.newNews)
+    let messageBoardRegex = /([\s\r\n]*[_\-]+[\s\r\n]+)/
+    let matches = message.matches(of: messageBoardRegex)
+
+    if matches.count == 1 {
+      let range = matches[0].range
+      self.messageBoard.insert(String(message[message.startIndex..<range.lowerBound]), at: 0)
+    } else {
+      self.messageBoard.insert(message, at: 0)
+    }
+  }
   
   func hotlineReceivedServerMessage(message: String) {
 //    print("Hotline: received server message:\n\(message)")
