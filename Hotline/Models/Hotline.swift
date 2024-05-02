@@ -651,7 +651,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
     }
     else if status == .loggedIn {
       if Prefs().playSounds && Prefs().playLoggedInSound {
-        soundEffects.playSoundEffect(.loggedIn)
+        SoundEffectPlayer.shared.playSoundEffect(.loggedIn)
       }
     }
     
@@ -667,7 +667,6 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   }
     
   func hotlineReceivedNewsPost(message: String) {
-    soundEffects.playSoundEffect(.newNews)
     let messageBoardRegex = /([\s\r\n]*[_\-]+[\s\r\n]+)/
     let matches = message.matches(of: messageBoardRegex)
 
@@ -677,6 +676,8 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
     } else {
       self.messageBoard.insert(message, at: 0)
     }
+    
+    SoundEffectPlayer.shared.playSoundEffect(.newNews)
   }
   
   func hotlineReceivedServerMessage(message: String) {
@@ -686,7 +687,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   
   func hotlineReceivedChatMessage(message: String) {
     if Prefs().playSounds && Prefs().playChatSound {
-      soundEffects.playSoundEffect(.chatMessage)
+      SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
     }
     self.chat.append(ChatMessage(text: message, type: .message, date: Date()))
   }
@@ -725,7 +726,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       self.chat.append(ChatMessage(text: "\(user.name) left", type: .status, date: Date()))
       
       if Prefs().playSounds && Prefs().playLeaveSound {
-        soundEffects.playSoundEffect(.userLogout)
+        SoundEffectPlayer.shared.playSoundEffect(.userLogout)
       }
     }
   }
@@ -810,7 +811,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       transfer.fileURL = at
       transfer.downloadCallback?(transfer, at)
       if Prefs().playSounds && Prefs().playFileTransferCompleteSound {
-        soundEffects.playSoundEffect(.transferComplete)
+        SoundEffectPlayer.shared.playSoundEffect(.transferComplete)
       }
     }
     
@@ -833,7 +834,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
     else {
       if !self.users.isEmpty {
         if Prefs().playSounds && Prefs().playJoinSound {
-          soundEffects.playSoundEffect(.userLogin)
+          SoundEffectPlayer.shared.playSoundEffect(.userLogin)
         }
       }
       

@@ -1,4 +1,5 @@
 {
+  "originHash" : "e60904df125ffbce75adea70452a77ae65a068371a6b6c4cfe0e6c155c4bdcee",
   "pins" : [
     {
       "identity" : "networkimage",
@@ -14,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/stevengharris/SplitView",
       "state" : {
-        "revision" : "13ff85ae02a01ae257c0a5cf8b6eb1c2a9fff597",
-        "version" : "3.5.0"
+        "revision" : "b37d559fd334cd5403433a29a5da6fe78f80714a",
+        "version" : "3.5.2"
       }
     },
     {
@@ -28,5 +29,5 @@
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }
