@@ -29,16 +29,14 @@ struct ServerMenuItem: Identifiable, Hashable {
   let type: ServerNavigationType
   let name: String
   let image: String
-  let userID: UInt?
-  let serverVersion: UInt?
+  let selectedImage: String
   
-  init(type: ServerNavigationType, name: String, image: String, userID: UInt? = nil, serverVersion: UInt? = nil) {
+  init(type: ServerNavigationType, name: String, image: String, selectedImage: String) {
     self.id = UUID()
     self.type = type
     self.name = name
     self.image = image
-    self.userID = userID
-    self.serverVersion = serverVersion
+    self.selectedImage = selectedImage
   }
   
   func hash(into hasher: inout Hasher) {
@@ -130,23 +128,20 @@ struct ServerView: View {
   
   @State private var model: Hotline = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
   @State private var state: ServerState = ServerState(selection: .chat)
-  
   @State private var agreementShown: Bool = false
-//  @State private var selection: ServerMenuItem? = ServerView.menuItems.first
-  
   @State private var connectAddress: String = ""
   @State private var connectLogin: String = ""
   @State private var connectPassword: String = ""
   @State private var connectNameSheetPresented: Bool = false
   @State private var connectName: String = ""
-  
+
   @Binding var server: Server
   
   static var menuItems: [ServerMenuItem] = [
-    ServerMenuItem(type: .chat, name: "Chat", image: "bubble"),
-    ServerMenuItem(type: .news, name: "News", image: "newspaper"),
-    ServerMenuItem(type: .board, name: "Board", image: "pin"),
-    ServerMenuItem(type: .files, name: "Files", image: "folder"),
+    ServerMenuItem(type: .chat, name: "Chat", image: "bubble", selectedImage: "bubble.fill"),
+    ServerMenuItem(type: .board, name: "Board", image: "pin", selectedImage: "pin.fill"),
+    ServerMenuItem(type: .news, name: "News", image: "newspaper", selectedImage: "newspaper.fill"),
+    ServerMenuItem(type: .files, name: "Files", image: "folder", selectedImage: "folder.fill"),
   ]
   
   enum FocusFields {
@@ -156,6 +151,71 @@ struct ServerView: View {
   }
   
   @FocusState private var focusedField: FocusFields?
+  
+  var body: some View {
+    Group {
+      if model.status == .disconnected {
+        connectForm
+          .navigationTitle("Connect to Server")
+      }
+      else if model.status != .loggedIn {
+        HStack {
+          Image("Hotline")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundColor(Color(hex: 0xE10000))
+            .frame(width: 18)
+            .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+            .padding(.trailing, 4)
+          
+          ProgressView(value: connectionStatusToProgress(status: model.status)) {
+            Text(connectionStatusToLabel(status: model.status))
+          }
+          .accentColor(colorScheme == .dark ? .white : .black)
+        }
+        .frame(maxWidth: 300)
+        .padding()
+        .navigationTitle("Connecting to Server")
+      }
+      else {
+        serverView
+          .environment(model)
+          .onChange(of: preferences.userIconID) { sendPreferences() }
+          .onChange(of: preferences.username) { sendPreferences() }
+          .onChange(of: preferences.refusePrivateMessages) { sendPreferences() }
+          .onChange(of: preferences.refusePrivateChat) { sendPreferences() }
+          .onChange(of: preferences.enableAutomaticMessage) { sendPreferences() }
+          .onChange(of: preferences.automaticMessage) { sendPreferences() }
+          .toolbar {
+            ToolbarItem(placement: .navigation) {
+              Image(systemName: "globe.americas.fill")
+                .renderingMode(.template)
+              
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18)
+                .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
+            }
+          }
+      }
+    }
+    .onDisappear {
+      model.disconnect()
+    }
+    .task {
+      var address = server.address
+      if server.port != HotlinePorts.DefaultServerPort {
+        address += ":\(server.port)"
+      }
+      connectAddress = server.address
+      connectLogin = server.login
+      connectPassword = server.password
+      connectToServer()
+    }
+    .focusedSceneValue(\.activeHotlineModel, model)
+    .focusedSceneValue(\.activeServerState, state)
+  }
   
   var connectForm: some View {
     VStack(alignment: .center) {
@@ -280,16 +340,8 @@ struct ServerView: View {
   var navigationList: some View {
     List(selection: $state.selection) {
       ForEach(ServerView.menuItems) { menuItem in
-//        if let minServerVersion = menuItem.serverVersion {
-//          if let v = model.serverVersion, v >= minServerVersion {
-//            ListItemView(icon: menuItem.image, title: menuItem.name)
-//              .tag(menuItem.type)
-//          }
-//        }
-//        else {
-          ListItemView(icon: menuItem.image, title: menuItem.name)
-            .tag(menuItem.type)
-//        }
+        ListItemView(icon: state.selection == menuItem.type ? menuItem.selectedImage : menuItem.image, title: menuItem.name)
+          .tag(menuItem.type)
       }
       
       if model.transfers.count > 0 {
@@ -366,70 +418,6 @@ struct ServerView: View {
     }
   }
   
-  var body: some View {
-    Group {
-      if model.status == .disconnected {
-        connectForm
-          .navigationTitle("Connect to Server")
-      }
-      else if model.status != .loggedIn {
-        HStack {
-          Image("Hotline")
-            .resizable()
-            .renderingMode(.template)
-            .scaledToFit()
-            .foregroundColor(Color(hex: 0xE10000))
-            .frame(width: 18)
-            .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-            .padding(.trailing, 4)
-          
-          ProgressView(value: connectionStatusToProgress(status: model.status)) {
-            Text(connectionStatusToLabel(status: model.status))
-          }
-          .accentColor(colorScheme == .dark ? .white : .black)
-        }
-        .frame(maxWidth: 300)
-        .padding()
-        .navigationTitle("Connecting to Server")
-      }
-      else {
-        serverView
-          .environment(model)
-          .onChange(of: preferences.userIconID) { sendPreferences() }
-          .onChange(of: preferences.username) { sendPreferences() }
-          .onChange(of: preferences.refusePrivateMessages) { sendPreferences() }
-          .onChange(of: preferences.refusePrivateChat) { sendPreferences() }
-          .onChange(of: preferences.enableAutomaticMessage) { sendPreferences() }
-          .onChange(of: preferences.automaticMessage) { sendPreferences() }
-          .toolbar {
-            ToolbarItem(placement: .navigation) {
-              Image(systemName: "globe.americas.fill")
-                .renderingMode(.template)
-              
-                .resizable()
-                .scaledToFit()
-                .frame(width: 18)
-                .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
-            }
-          }
-      }
-    }
-    .onDisappear {
-      model.disconnect()
-    }
-    .task {
-      var address = server.address
-      if server.port != HotlinePorts.DefaultServerPort {
-        address += ":\(server.port)"
-      }
-      connectAddress = server.address
-      connectLogin = server.login
-      connectPassword = server.password
-      connectToServer()
-    }
-    .focusedSceneValue(\.activeHotlineModel, model)
-    .focusedSceneValue(\.activeServerState, state)
-  }
   
   // MARK: -
   

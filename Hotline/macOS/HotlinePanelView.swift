@@ -45,20 +45,6 @@ struct HotlinePanelView: View {
         .help("Public Chat")
         
         Button {
-          ApplicationState.shared.activeServerState?.selection = .news
-        }
-        label: {
-          Image(systemName: "newspaper.fill")
-            .resizable()
-            .scaledToFit()
-        }
-        .buttonStyle(.plain)
-        .frame(width: 18, height: 18)
-        .opacity(ApplicationState.shared.activeServerState == nil ? 0.5 : 1.0)
-        .disabled(ApplicationState.shared.activeServerState == nil)
-        .help("News")
-        
-        Button {
           ApplicationState.shared.activeServerState?.selection = .board
         }
         label: {
@@ -71,6 +57,20 @@ struct HotlinePanelView: View {
         .opacity(ApplicationState.shared.activeServerState == nil ? 0.5 : 1.0)
         .disabled(ApplicationState.shared.activeServerState == nil)
         .help("Message Board")
+        
+        Button {
+          ApplicationState.shared.activeServerState?.selection = .news
+        }
+        label: {
+          Image(systemName: "newspaper.fill")
+            .resizable()
+            .scaledToFit()
+        }
+        .buttonStyle(.plain)
+        .frame(width: 18, height: 18)
+        .opacity(ApplicationState.shared.activeServerState == nil ? 0.5 : 1.0)
+        .disabled(ApplicationState.shared.activeServerState == nil)
+        .help("News")
         
         Button {
           ApplicationState.shared.activeServerState?.selection = .files
