@@ -37,16 +37,8 @@ struct ChatView: View {
                   // MARK: Agreement
                   if msg.type == .agreement {
                     VStack(alignment: .center, spacing: 16) {
-                      
                       #if os(iOS)
                       if let bannerImage = self.model.bannerImage {
-//                        #if os(macOS)
-//                        Image(nsImage: bannerImage)
-//                          .resizable()
-//                          .scaledToFit()
-//                          .frame(maxWidth: 468.0)
-//                          .clipShape(RoundedRectangle(cornerRadius: 3))
-//                        #elseif os(iOS)
                         Image(uiImage: bannerImage)
                           .resizable()
                           .scaledToFit()
@@ -54,24 +46,31 @@ struct ChatView: View {
                           .clipShape(RoundedRectangle(cornerRadius: 3))
                       }
                       #endif
-                                            
-                      VStack(spacing: 0) {
+                      HStack(spacing: 0) {
+                        Spacer()
+                        
                         ScrollView(.vertical) {
                           HStack {
-                            Text(msg.text)
+                            Text(LocalizedStringKey(msg.text.convertLinksToMarkdown()))
                               .font(.system(size: 12))
                               .fontDesign(.monospaced)
                               .textSelection(.enabled)
+                              .tint(Color("Link Color"))
                             Spacer()
                           }
                           .padding(16)
                         }
                         .scrollBounceBehavior(.basedOnSize)
-                        .frame(maxHeight: 375)
+                        .frame(maxWidth: 468, maxHeight: 375)
+                        
+                        Spacer()
                       }
-                      .background(Color(white: colorScheme == .light ? 0.0 : 1.0).opacity(0.05))
-                      .frame(maxWidth: 468.0)
-                      .clipShape(RoundedRectangle(cornerRadius: 3))
+                      #if os(iOS)
+                      .background(Color("Agreement Background"))
+                      #elseif os(macOS)
+                      .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow))
+                      #endif
+                      .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -92,16 +91,18 @@ struct ChatView: View {
                   else {
                     HStack(alignment: .firstTextBaseline) {
                       if let username = msg.username {
-                        Text("**\(username):** \(msg.text)")
+                        Text(LocalizedStringKey("**\(username):** \(msg.text)".convertLinksToMarkdown()))
                           .lineSpacing(4)
                           .multilineTextAlignment(.leading)
                           .textSelection(.enabled)
+                          .tint(Color("Link Color"))
                       }
                       else {
-                        Text(msg.text)
+                        Text(LocalizedStringKey(msg.text.convertLinksToMarkdown()))
                           .lineSpacing(4)
                           .multilineTextAlignment(.leading)
                           .textSelection(.enabled)
+                          .tint(Color("Link Color"))
                       }
                       Spacer()
                     }

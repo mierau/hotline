@@ -5,6 +5,27 @@ enum Endianness {
   case little
 }
 
+extension String {
+  func isImageURL() -> Bool {
+    guard let url = URL(string: self) else {
+      return false
+    }
+    
+    let validImageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"]
+    return validImageExtensions.contains(url.pathExtension.lowercased())
+  }
+  
+  func convertLinksToMarkdown() -> String {
+    let urlPattern = #"https?://[\w-]+(\.[\w-]+)+([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"#
+    
+    guard let regex = try? NSRegularExpression(pattern: urlPattern, options: .caseInsensitive) else {
+      return self
+    }
+    
+    return regex.stringByReplacingMatches(in: self, range: NSRange(location: 0, length: self.count), withTemplate: "[$0]($0)")
+  }
+}
+
 extension Array where Element == UInt8 {
   init(_ val: UInt8) {
     self.init()

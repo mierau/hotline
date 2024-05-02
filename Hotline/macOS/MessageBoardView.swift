@@ -13,7 +13,8 @@ struct MessageBoardView: View {
         ScrollView {
           LazyVStack(alignment: .leading) {
             ForEach(model.messageBoard, id: \.self) {
-              Text($0)
+              Text(LocalizedStringKey($0.convertLinksToMarkdown()))
+                .tint(Color("Link Color"))
                 .lineLimit(100)
                 .lineSpacing(4)
                 .padding()
@@ -51,9 +52,6 @@ struct MessageBoardView: View {
         }
         .padding()
       }
-      
-      
-      
     }
     .sheet(isPresented: $composerDisplayed) {
       TextEditor(text: $composerText)
@@ -82,11 +80,6 @@ struct MessageBoardView: View {
           }
         }
     }
-//    .alert("Hello", isPresented: $showPermissionAlert) {
-//      Button("OK") {
-//        showPermissionAlert.toggle()
-//      }
-//    } message: { Text("WHAT") }
     .toolbar {
       ToolbarItem(placement:.primaryAction) {
         Button {
