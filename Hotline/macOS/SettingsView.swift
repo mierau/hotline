@@ -106,6 +106,51 @@ struct IconSettingsView: View {
   }
 }
 
+struct SoundSettingsView: View {
+  @Environment(Prefs.self) private var preferences: Prefs
+    
+  var body: some View {
+    @Bindable var preferences = preferences
+    Form {
+      Toggle("Play Sounds for:", isOn: $preferences.playSounds)
+
+      Toggle("Chat", isOn: $preferences.playChatSound)
+        .disabled(!preferences.playSounds)
+        .padding([.leading], 20)
+
+      Toggle("File transfer complete", isOn: $preferences.playFileTransferCompleteSound)
+        .disabled(!preferences.playSounds)
+        .padding([.leading], 20)
+      Toggle("Private Message", isOn: $preferences.playPrivateMessageSound)
+        .disabled(!preferences.playSounds)
+        .padding([.leading], 20)
+
+      Toggle("Join", isOn: $preferences.playJoinSound)
+        .disabled(!preferences.playSounds)
+        .padding([.leading], 20)
+
+      Toggle("Leave", isOn: $preferences.playLeaveSound)
+        .disabled(!preferences.playSounds)
+        .padding([.leading], 20)
+
+      Toggle("Logged in", isOn: $preferences.playLoggedInSound)
+        .disabled(!preferences.playSounds)
+        .padding([.leading], 20)
+
+      Toggle("Error", isOn: $preferences.playErrorSound)
+        .disabled(!preferences.playSounds)
+        .padding([.leading], 20)
+
+      Toggle("Chat Invitation", isOn: $preferences.playChatInvitationSound)
+        .disabled(!preferences.playSounds)
+        .padding([.leading], 20)
+
+    }
+    .padding(20)
+    .frame(width: 350)
+  }
+}
+
 struct SettingsView: View {
   private enum Tabs: Hashable {
     case general, icon
@@ -121,6 +166,11 @@ struct SettingsView: View {
       IconSettingsView()
         .tabItem {
           Label("Icon", systemImage: "person")
+        }
+        .tag(Tabs.icon)
+      SoundSettingsView()
+        .tabItem {
+          Label("Sound", systemImage: "speaker.wave.3")
         }
         .tag(Tabs.icon)
     }

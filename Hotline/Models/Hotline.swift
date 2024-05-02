@@ -647,7 +647,9 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       self.deleteAllTransfers()
     }
     else if status == .loggedIn {
-      soundEffects.playSoundEffect(.loggedIn)
+      if Prefs().playSounds && Prefs().playLoggedInSound {
+        soundEffects.playSoundEffect(.loggedIn)
+      }
     }
     
     self.status = status
@@ -680,7 +682,9 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   func hotlineReceivedChatMessage(message: String) {
-    soundEffects.playSoundEffect(.chatMessage)
+    if Prefs().playSounds && Prefs().playChatSound {
+      soundEffects.playSoundEffect(.chatMessage)
+    }
     self.chat.append(ChatMessage(text: message, type: .message, date: Date()))
   }
   
@@ -717,7 +721,9 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       let user = self.users.remove(at: existingUserIndex)
       self.chat.append(ChatMessage(text: "\(user.name) left", type: .status, date: Date()))
       
-      soundEffects.playSoundEffect(.userLogout)
+      if Prefs().playSounds && Prefs().playLeaveSound {
+        soundEffects.playSoundEffect(.userLogout)
+      }
     }
   }
   
@@ -800,8 +806,9 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       let transfer = self.transfers[i]
       transfer.fileURL = at
       transfer.downloadCallback?(transfer, at)
-      
-      soundEffects.playSoundEffect(.transferComplete)
+      if Prefs().playSounds && Prefs().playFileTransferCompleteSound {
+        soundEffects.playSoundEffect(.transferComplete)
+      }
     }
     
     if let i = self.downloads.firstIndex(where: { $0.referenceNumber == reference }) {
@@ -822,7 +829,9 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     }
     else {
       if !self.users.isEmpty {
-        soundEffects.playSoundEffect(.userLogin)
+        if Prefs().playSounds && Prefs().playJoinSound {
+          soundEffects.playSoundEffect(.userLogin)
+        }
       }
       
       print("Hotline: added user: \(user.name)")
