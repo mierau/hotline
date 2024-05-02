@@ -2,31 +2,48 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+#if os(macOS)
+
+@Observable
+class AppLaunchState {
+  static let shared = AppLaunchState()
+  
+  enum LaunchState {
+    case loading
+    case launched
+    case terminated
+  }
+  
+  var launchState = LaunchState.loading
+}
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    AppLaunchState.shared.launchState = .launched
+  }
+  
+  func applicationWillTerminate(_ notification: Notification) {
+    AppLaunchState.shared.launchState = .terminated
+  }
+}
+
 @main
 struct Application: App {
-  #if os(iOS)
-  private var model = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
-  #endif
-  
-  #if os(macOS)
+  @Environment(\.scenePhase) private var scenePhase
   @Environment(\.openWindow) private var openWindow
   @Environment(\.openURL) private var openURL
-  #endif
+  
+  @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
   
   @State private var preferences = Prefs()
   @State private var soundEffects = SoundEffectPlayer()
   @State private var bookmarks = Bookmarks()
-  
+  @State private var hotlinePanel: HotlinePanel? = nil
+
   @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
-  
+    
   var body: some Scene {
-    #if os(iOS)
-    WindowGroup {
-      TrackerView()
-        .environment(model)
-    }
-    #elseif os(macOS)
     // MARK: Tracker Window
     Window("Servers", id: "servers") {
       TrackerView()
@@ -36,7 +53,12 @@ struct Application: App {
     .keyboardShortcut(.init(.init("R"), modifiers: .command))
     .defaultSize(width: 700, height: 550)
     .defaultPosition(.center)
-        
+    .onChange(of: AppLaunchState.shared.launchState) {
+      if AppLaunchState.shared.launchState == .launched {
+        showBannerWindow()
+      }
+    }
+    
     // MARK: Server Window
     WindowGroup(id: "server", for: Server.self) { server in
       ServerView(server: server)
@@ -49,12 +71,40 @@ struct Application: App {
     }
     .defaultSize(width: 750, height: 700)
     .defaultPosition(.center)
+    .onChange(of: activeServerState) {
+      ApplicationState.shared.activeServerState = activeServerState
+    }
+    .onChange(of: activeHotline) {
+      ApplicationState.shared.activeHotline = activeHotline
+    }
+    .onChange(of: activeHotline?.serverTitle) {
+      if let hotline = activeHotline {
+        ApplicationState.shared.activeServerName = hotline.serverTitle
+      }
+    }
+    .onChange(of: activeHotline?.bannerImage) {
+      withAnimation {
+        ApplicationState.shared.activeServerBanner = activeHotline?.bannerImage
+      }
+    }
+    .onChange(of: activeHotline) {
+      ApplicationState.shared.activeHotline = activeHotline
+      if let hotline = activeHotline {
+        ApplicationState.shared.activeServerName = hotline.serverTitle
+      }
+    }
     .commands {
-      CommandGroup(replacing: CommandGroupPlacement.newItem) {
+      CommandGroup(replacing: .newItem) {
         Button("Connect to Server...") {
           openWindow(id: "server")
         }
         .keyboardShortcut(.init("K"), modifiers: .command)
+      }
+      CommandGroup(after: .singleWindowList) {
+        Button("Toolbar") {
+          toggleBannerWindow()
+        }
+        .keyboardShortcut(.init("\\"), modifiers: [.shift, .command])
       }
       CommandGroup(after: .help) {
         Divider()
@@ -139,7 +189,30 @@ struct Application: App {
     .windowToolbarStyle(.unifiedCompact(showsTitle: true))
     .defaultSize(width: 450, height: 550)
     .defaultPosition(.center)
-
-    #endif
+  }
+  
+  func showBannerWindow() {
+    if hotlinePanel == nil {
+      hotlinePanel = HotlinePanel(HotlinePanelView())
+    }
+    
+    if hotlinePanel?.isVisible == false {
+      hotlinePanel?.orderFront(nil)
+    }
+  }
+  
+  func toggleBannerWindow() {
+    if hotlinePanel == nil {
+      hotlinePanel = HotlinePanel(HotlinePanelView())
+    }
+    
+    if hotlinePanel?.isVisible == true {
+      hotlinePanel?.orderOut(nil)
+    }
+    else {
+      hotlinePanel?.orderFront(nil)
+    }
   }
 }
+
+#endif

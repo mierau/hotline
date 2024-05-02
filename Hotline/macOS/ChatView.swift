@@ -38,21 +38,22 @@ struct ChatView: View {
                   if msg.type == .agreement {
                     VStack(alignment: .center, spacing: 16) {
                       
+                      #if os(iOS)
                       if let bannerImage = self.model.bannerImage {
-                        #if os(macOS)
-                        Image(nsImage: bannerImage)
-                          .resizable()
-                          .scaledToFit()
-                          .frame(maxWidth: 468.0)
-                          .clipShape(RoundedRectangle(cornerRadius: 3))
-                        #elseif os(iOS)
+//                        #if os(macOS)
+//                        Image(nsImage: bannerImage)
+//                          .resizable()
+//                          .scaledToFit()
+//                          .frame(maxWidth: 468.0)
+//                          .clipShape(RoundedRectangle(cornerRadius: 3))
+//                        #elseif os(iOS)
                         Image(uiImage: bannerImage)
                           .resizable()
                           .scaledToFit()
                           .frame(maxWidth: 468.0)
                           .clipShape(RoundedRectangle(cornerRadius: 3))
-                        #endif
                       }
+                      #endif
                                             
                       VStack(spacing: 0) {
                         ScrollView(.vertical) {

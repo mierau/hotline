@@ -2,11 +2,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @Observable
-class ServerState {
+class ServerState: Equatable {
+  var id: UUID = UUID()
   var selection: ServerNavigationType
   
   init(selection: ServerNavigationType) {
     self.selection = selection
+  }
+  
+  static func == (lhs: ServerState, rhs: ServerState) -> Bool {
+    return lhs.id == rhs.id
   }
 }
 
@@ -121,6 +126,7 @@ struct ServerView: View {
   @Environment(\.dismiss) var dismiss
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.controlActiveState) private var controlActiveState
+  @Environment(\.scenePhase) private var scenePhase
   
   @State private var model: Hotline = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
   @State private var state: ServerState = ServerState(selection: .chat)

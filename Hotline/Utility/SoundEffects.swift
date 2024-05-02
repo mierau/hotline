@@ -12,7 +12,9 @@ enum SoundEffects: String {
 
 @Observable
 class SoundEffectPlayer: NSObject, AVAudioPlayerDelegate {
-  var activeSounds: [AVAudioPlayer] = []
+  static let shared = SoundEffectPlayer()
+  
+  private var activeSounds: [AVAudioPlayer] = []
   
   func playSoundEffect(_ name: SoundEffects) {
     // Load a local sound file
@@ -23,18 +25,21 @@ class SoundEffectPlayer: NSObject, AVAudioPlayerDelegate {
       return
     }
     
-    do {
-      let soundEffect = try AVAudioPlayer(contentsOf: soundFileURL)
-      soundEffect.delegate = self
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else {
+        return
+      }
       
-      self.activeSounds.append(soundEffect)
-      
-      soundEffect.volume = 0.75
-      soundEffect.play()
+      if let soundEffect = try? AVAudioPlayer(contentsOf: soundFileURL) {
+        soundEffect.delegate = self
+        soundEffect.volume = 0.75
+        soundEffect.play()
+        
+        self.activeSounds.append(soundEffect)
+      }
     }
-    catch {}
   }
-  
+
   func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
     if let i = self.activeSounds.firstIndex(of: player) {
       self.activeSounds.remove(at: i)

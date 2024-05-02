@@ -1,10 +1,14 @@
 import SwiftUI
 
 @Observable
-final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
+class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
+  let id: UUID = UUID()
   let trackerClient: HotlineTrackerClient
   let client: HotlineClient
-  let soundEffects: SoundEffectPlayer = SoundEffectPlayer()
+  
+  static func == (lhs: Hotline, rhs: Hotline) -> Bool {
+    return lhs.id == rhs.id
+  }
   
   #if os(macOS)
   static func getClassicIcon(_ index: Int) -> NSImage? {
@@ -178,7 +182,6 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
     self.iconID = iconID
     
     self.client.login(address: server.address, port: server.port, login: server.login, password: server.password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
-      print("Server info:", serverName, serverVersion)
       self?.serverVersion = serverVersion ?? 123
       if serverName != nil {
         self?.serverName = serverName
