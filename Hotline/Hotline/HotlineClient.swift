@@ -616,6 +616,52 @@ class HotlineClient: NetSocketDelegate {
     }
   }
   
+  @MainActor func sendGetFileInfo(name fileName: String, path filePath: [String], callback: ((FileDetails?) -> Void)? = nil) {
+    var t = HotlineTransaction(type: .getFileInfo)
+    t.setFieldString(type: .fileName, val: fileName)
+    t.setFieldPath(type: .filePath, val: filePath)
+    
+    self.sendPacket(t) { reply, err in
+      guard err == nil,
+            let fileName = reply.getField(type: .fileName)?.getString(),
+            let fileCreator = reply.getField(type: .fileCreatorString)?.getString(),
+            let fileType = reply.getField(type: .fileTypeString)?.getString(),
+            let fileTypeString = reply.getField(type: .fileTypeString)?.getString(),
+            let fileCreateDate = reply.getField(type: .fileCreateDate)?.data.readDate(at: 0),
+            let fileModifyDate = reply.getField(type: .fileModifyDate)?.data.readDate(at: 0)
+ else {
+        callback?(nil)
+        return
+      }
+      
+
+      // Size field is not included in server reply for folders
+      let fileSize = reply.getField(type: .fileSize)?.getInteger() ?? 0
+
+      // Comment field is not included for if no comment present
+      let fileComment = reply.getField(type: .fileComment)?.getString() ?? ""
+
+      callback?(FileDetails(name: fileName, path: filePath, size: fileSize, comment: fileComment, type: fileType, creator: fileCreator,
+                            created: fileCreateDate, modified: fileModifyDate))
+    }
+  }
+  
+  @MainActor func sendSetFileInfo(fileName: String, path filePath: [String], fileNewName: String?, comment: String?, encoding: String.Encoding = .utf8) {
+    var t = HotlineTransaction(type: .setFileInfo)
+    t.setFieldString(type: .fileName, val: fileName, encoding: encoding)
+    t.setFieldPath(type: .filePath, val: filePath)
+
+    if fileNewName != nil {
+      t.setFieldString(type: .fileNewName, val: fileNewName!, encoding: encoding)
+    }
+    
+    if comment != nil {
+      t.setFieldString(type: .fileComment, val: comment!, encoding: encoding)
+    }
+
+    self.sendPacket(t)
+  }
+    
   @MainActor func sendDownloadFile(name fileName: String, path filePath: [String], preview: Bool = false, callback: ((Bool, UInt32?, Int?, Int?, Int?) -> Void)? = nil) {
     var t = HotlineTransaction(type: .downloadFile)
     t.setFieldString(type: .fileName, val: fileName)

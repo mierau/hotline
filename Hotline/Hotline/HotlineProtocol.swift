@@ -752,8 +752,14 @@ enum HotlineTransactionFieldType: UInt16 {
   case fileName = 201 // String
   case filePath = 202 // Path
   case fileTransferOptions = 204 // Integer
+  case fileTypeString = 205 // String
+  case fileCreatorString = 206 // String
   case fileSize = 207 // Integer
-  // TODO: Add file field types
+  case fileCreateDate = 208
+  case fileModifyDate = 209
+  case fileComment = 210 // Integer
+  case fileNewName = 211 // String
+  case fileType = 213 // Integer
   case quotingMessage = 214 // String?
   case automaticResponse = 215 // String
   case folderItemCount = 220 // Integer

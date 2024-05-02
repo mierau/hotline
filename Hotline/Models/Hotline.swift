@@ -440,6 +440,17 @@ final class Hotline: HotlineClientDelegate, HotlineFileClientDelegate {
       }
     }
   }
+    
+  @MainActor func fileDetails(_ fileName: String, path: [String], complete callback: ((FileDetails?) -> Void)? = nil) {
+    var fullPath: [String] = []
+    if path.count > 1 {
+      fullPath = Array(path[0..<path.count-1])
+    }
+    
+    self.client.sendGetFileInfo(name: fileName, path: fullPath) { info in
+      callback?(info)
+    }
+  }
   
   @MainActor func previewFile(_ fileName: String, path: [String], complete callback: ((PreviewFileInfo?) -> Void)? = nil) {
     var fullPath: [String] = []
