@@ -118,6 +118,12 @@ struct Application: App {
             openURL(url)
           }
         }
+        Divider()
+        Button("Download Latest...") {
+          if let url = URL(string: "https://github.com/mierau/hotline/releases/latest") {
+            openURL(url)
+          }
+        }
       }
       CommandMenu("Server") {
         Button("Disconnect") {
