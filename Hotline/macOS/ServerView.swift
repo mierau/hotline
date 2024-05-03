@@ -119,7 +119,6 @@ enum ServerNavigationType: Identifiable, Hashable, Equatable {
 }
 
 struct ServerView: View {
-  @Environment(Prefs.self) private var preferences: Prefs
   @Environment(SoundEffectPlayer.self) private var soundEffects: SoundEffectPlayer
   @Environment(Bookmarks.self) private var bookmarks: Bookmarks
   @Environment(\.dismiss) var dismiss
@@ -182,12 +181,12 @@ struct ServerView: View {
       else {
         serverView
           .environment(model)
-          .onChange(of: preferences.userIconID) { sendPreferences() }
-          .onChange(of: preferences.username) { sendPreferences() }
-          .onChange(of: preferences.refusePrivateMessages) { sendPreferences() }
-          .onChange(of: preferences.refusePrivateChat) { sendPreferences() }
-          .onChange(of: preferences.enableAutomaticMessage) { sendPreferences() }
-          .onChange(of: preferences.automaticMessage) { sendPreferences() }
+          .onChange(of: Prefs.shared.userIconID) { sendPreferences() }
+          .onChange(of: Prefs.shared.username) { sendPreferences() }
+          .onChange(of: Prefs.shared.refusePrivateMessages) { sendPreferences() }
+          .onChange(of: Prefs.shared.refusePrivateChat) { sendPreferences() }
+          .onChange(of: Prefs.shared.enableAutomaticMessage) { sendPreferences() }
+          .onChange(of: Prefs.shared.automaticMessage) { sendPreferences() }
           .toolbar {
             ToolbarItem(placement: .navigation) {
               Image(systemName: "globe.americas.fill")
@@ -453,7 +452,7 @@ struct ServerView: View {
       return
     }
     
-    model.login(server: server, username: preferences.username, iconID: preferences.userIconID) { success in
+    model.login(server: server, username: Prefs.shared.username, iconID: Prefs.shared.userIconID) { success in
       if !success {
         print("FAILED LOGIN??")
         model.disconnect()
@@ -482,7 +481,6 @@ struct ServerView: View {
   }
   
   private func connectionStatusToLabel(status: HotlineClientStatus) -> String {
-//    if let s = self.server {
     let n = server.name ?? server.address
     switch status {
     case .disconnected:
@@ -496,42 +494,27 @@ struct ServerView: View {
     case .loggedIn:
       return "Logged in to \(n)"
     }
-//    }
-//    else {
-//      switch status {
-//      case .disconnected:
-//        return "Disconnected"
-//      case .connecting:
-//        return "Connecting..."
-//      case .connected:
-//        return "Connected"
-//      case .loggingIn:
-//        return "Logging in..."
-//      case .loggedIn:
-//        return "Logged in"
-//      }
-//    }
   }
   
   @MainActor func sendPreferences() {
     if self.model.status == .loggedIn {
       var options: HotlineUserOptions = HotlineUserOptions()
       
-      if preferences.refusePrivateMessages {
+      if Prefs.shared.refusePrivateMessages {
         options.update(with: .refusePrivateMessages)
       }
       
-      if preferences.refusePrivateChat {
+      if Prefs.shared.refusePrivateChat {
         options.update(with: .refusePrivateChat)
       }
       
-      if preferences.enableAutomaticMessage {
+      if Prefs.shared.enableAutomaticMessage {
         options.update(with: .automaticResponse)
       }
       
       print("Updating preferences with server")
       
-      self.model.sendUserInfo(username: preferences.username, iconID: preferences.userIconID, options: options, autoresponse: preferences.automaticMessage)
+      self.model.sendUserInfo(username: Prefs.shared.username, iconID: Prefs.shared.userIconID, options: options, autoresponse: Prefs.shared.automaticMessage)
     }
   }
 }

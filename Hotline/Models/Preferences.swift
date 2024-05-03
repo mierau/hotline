@@ -16,6 +16,7 @@ enum PrefsKeys: String {
   case playLoggedInSound = "play logged in sound"
   case playErrorSound = "play error sound"
   case playChatInvitationSound = "play chat invitation sound"
+  case showBannerToolbar = "show banner toolbar"
 }
 
 @Observable
@@ -37,6 +38,7 @@ class Prefs {
       PrefsKeys.playLoggedInSound.rawValue: true,
       PrefsKeys.playErrorSound.rawValue: true,
       PrefsKeys.playChatInvitationSound.rawValue: true,
+      PrefsKeys.showBannerToolbar.rawValue: true,
     ])
     
     self.username = UserDefaults.standard.string(forKey: PrefsKeys.username.rawValue)!
@@ -54,6 +56,7 @@ class Prefs {
     self.playLoggedInSound = UserDefaults.standard.bool(forKey: PrefsKeys.playLoggedInSound.rawValue)
     self.playErrorSound = UserDefaults.standard.bool(forKey: PrefsKeys.playErrorSound.rawValue)
     self.playChatInvitationSound = UserDefaults.standard.bool(forKey: PrefsKeys.playChatInvitationSound.rawValue)
+    self.showBannerToolbar = UserDefaults.standard.bool(forKey: PrefsKeys.showBannerToolbar.rawValue)
   }
   
   public static let shared = Prefs()
@@ -117,56 +120,8 @@ class Prefs {
   var automaticMessage: String {
     didSet { UserDefaults.standard.set(self.automaticMessage, forKey: PrefsKeys.automaticMessage.rawValue) }
   }
+  
+  var showBannerToolbar: Bool {
+    didSet { UserDefaults.standard.set(self.showBannerToolbar, forKey: PrefsKeys.showBannerToolbar.rawValue) }
+  }
 }
-
-//@Observable
-//final class Preferences {
-//  
-//  var username: String {
-//    get {
-//      access(keyPath: \.username)
-//      return UserDefaults.standard.object(forKey: "username") as? String ?? "guest"
-//    }
-//    set {
-//      withMutation(keyPath: \.username) {
-//        UserDefaults.standard.set(newValue, forKey: "username")
-//      }
-//    }
-//  }
-//  
-//  var refusePrivateMessages: Bool {
-//    get { return UserDefaults.standard.object(forKey: "refuse private messages") as? Bool ?? false }
-//    set { UserDefaults.standard.set(newValue, forKey: "refuse private messages") }
-//  }
-//  
-//  var refusePrivateChat: Bool {
-//    get { return UserDefaults.standard.object(forKey: "refuse private chat") as? Bool ?? false }
-//    set { UserDefaults.standard.set(newValue, forKey: "refuse private chat") }
-//  }
-//  
-//  var automaticResponseEnabled: Bool {
-//    get { return UserDefaults.standard.object(forKey: "enable automatic response") as? Bool ?? false }
-//    set { UserDefaults.standard.set(newValue, forKey: "enable automatic response") }
-//  }
-//  
-//  var automaticResponse: String {
-//    get { return UserDefaults.standard.object(forKey: "automatic response") as? String ?? "" }
-//    set { UserDefaults.standard.set(newValue, forKey: "automatic response") }
-//  }
-//  
-//  var userIconID: Int {
-//    get { return UserDefaults.standard.object(forKey: "user icon") as? Int ?? 404 }
-//    set { UserDefaults.standard.set(newValue, forKey: "user icon") }
-//  }
-//  
-////  @AppStorage("username") public var username: String = "guest"
-////  @AppStorage("refuse private messages") public var refusePrivateMessages: Bool = false
-////  @AppStorage("refuse private chat") public var refusePrivateChat: Bool = false
-////  @AppStorage("enable automatic response") public var enableAutomaticResponse: Bool = false
-////  @AppStorage("automatic response") public var automaticResponse: String = ""
-////  
-////  // Icon
-////  @AppStorage("user icon id") public var iconID: Int = 404
-//  
-//  public static let shared = Preferences()
-//}

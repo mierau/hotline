@@ -673,7 +673,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       self.deleteAllTransfers()
     }
     else if status == .loggedIn {
-      if Prefs().playSounds && Prefs().playLoggedInSound {
+      if Prefs.shared.playSounds && Prefs.shared.playLoggedInSound {
         SoundEffectPlayer.shared.playSoundEffect(.loggedIn)
       }
     }
@@ -772,7 +772,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       let user = self.users.remove(at: existingUserIndex)
       self.chat.append(ChatMessage(text: "\(user.name) left", type: .status, date: Date()))
       
-      if Prefs().playSounds && Prefs().playLeaveSound {
+      if Prefs.shared.playSounds && Prefs.shared.playLeaveSound {
         SoundEffectPlayer.shared.playSoundEffect(.userLogout)
       }
     }
@@ -857,7 +857,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       let transfer = self.transfers[i]
       transfer.fileURL = at
       transfer.downloadCallback?(transfer, at)
-      if Prefs().playSounds && Prefs().playFileTransferCompleteSound {
+      if Prefs.shared.playSounds && Prefs.shared.playFileTransferCompleteSound {
         SoundEffectPlayer.shared.playSoundEffect(.transferComplete)
       }
     }
@@ -881,7 +881,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
     }
     else {
       if !self.users.isEmpty {
-        if Prefs().playSounds && Prefs().playJoinSound {
+        if Prefs.shared.playSounds && Prefs.shared.playJoinSound {
           SoundEffectPlayer.shared.playSoundEffect(.userLogin)
         }
       }

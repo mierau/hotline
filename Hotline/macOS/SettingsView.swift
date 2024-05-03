@@ -1,15 +1,13 @@
 import SwiftUI
 
 struct GeneralSettingsView: View {
-  @Environment(Prefs.self) private var preferences: Prefs
-  
   @State private var username: String = ""
   @State private var usernameChanged: Bool = false
   
   let saveTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
     
   var body: some View {
-    @Bindable var preferences = preferences
+    @Bindable var preferences = Prefs.shared
     
     Form {
       TextField("Your Name", text: $username, prompt: Text("guest"))
@@ -49,12 +47,10 @@ struct GeneralSettingsView: View {
 }
 
 struct IconSettingsView: View {
-  @Environment(Prefs.self) private var preferences: Prefs
-  
   @State private var hoveredUserIconID: Int = -1
   
   var body: some View {
-    @Bindable var preferences = preferences
+    @Bindable var preferences = Prefs.shared
     
     Form {
       ScrollViewReader { scrollProxy in
@@ -107,10 +103,8 @@ struct IconSettingsView: View {
 }
 
 struct SoundSettingsView: View {
-  @Environment(Prefs.self) private var preferences: Prefs
-    
   var body: some View {
-    @Bindable var preferences = preferences
+    @Bindable var preferences = Prefs.shared
     Form {
       Toggle("Play Sounds for:", isOn: $preferences.playSounds)
 

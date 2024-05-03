@@ -8,7 +8,6 @@ import UniformTypeIdentifiers
 struct Application: App {
   private var model = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
   
-  @State private var preferences = Prefs()
   @State private var soundEffects = SoundEffectPlayer()
   @State private var bookmarks = Bookmarks()
   

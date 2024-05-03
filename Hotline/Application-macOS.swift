@@ -35,7 +35,6 @@ struct Application: App {
   
   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
   
-  @State private var preferences = Prefs()
   @State private var soundEffects = SoundEffectPlayer()
   @State private var bookmarks = Bookmarks()
   @State private var hotlinePanel: HotlinePanel? = nil
@@ -55,7 +54,9 @@ struct Application: App {
     .defaultPosition(.center)
     .onChange(of: AppLaunchState.shared.launchState) {
       if AppLaunchState.shared.launchState == .launched {
-        showBannerWindow()
+        if Prefs.shared.showBannerToolbar {
+          showBannerWindow()
+        }
       }
     }
     
@@ -63,7 +64,6 @@ struct Application: App {
     WindowGroup(id: "server", for: Server.self) { server in
       ServerView(server: server)
         .frame(minWidth: 430, minHeight: 300)
-        .environment(preferences)
         .environment(soundEffects)
         .environment(bookmarks)
     } defaultValue: {
@@ -163,7 +163,6 @@ struct Application: App {
     // MARK: Settings Window
     Settings {
       SettingsView()
-        .environment(preferences)
     }
     
     // MARK: News Editor Window
@@ -204,6 +203,7 @@ struct Application: App {
     
     if hotlinePanel?.isVisible == false {
       hotlinePanel?.orderFront(nil)
+      Prefs.shared.showBannerToolbar = true
     }
   }
   
@@ -214,9 +214,11 @@ struct Application: App {
     
     if hotlinePanel?.isVisible == true {
       hotlinePanel?.orderOut(nil)
+      Prefs.shared.showBannerToolbar = false
     }
     else {
       hotlinePanel?.orderFront(nil)
+      Prefs.shared.showBannerToolbar = true
     }
   }
 }
