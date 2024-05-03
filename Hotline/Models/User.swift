@@ -8,7 +8,7 @@ struct UserStatus: OptionSet {
 }
 
 struct User: Identifiable {
-  var id: UInt
+  var id: UInt16
   var name: String
   var iconID: UInt
   var status: UserStatus
@@ -21,13 +21,13 @@ struct User: Identifiable {
     if hotlineUser.isIdle { status.update(with: .idle) }
     if hotlineUser.isAdmin { status.update(with: .admin) }
     
-    self.id = UInt(hotlineUser.id)
+    self.id = hotlineUser.id
     self.name = hotlineUser.name
     self.iconID = UInt(hotlineUser.iconID)
     self.status = status
   }
   
-  init(id: UInt, name: String, iconID: UInt, status: UserStatus) {
+  init(id: UInt16, name: String, iconID: UInt, status: UserStatus) {
     self.id = id
     self.name = name
     self.iconID = iconID

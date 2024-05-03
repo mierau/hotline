@@ -24,7 +24,6 @@ struct ChatView: View {
   var body: some View {
     NavigationStack {
       ScrollViewReader { reader in
-        
         VStack(alignment: .leading, spacing: 0) {
           
           // MARK: Scroll View
@@ -193,17 +192,17 @@ struct ChatView: View {
       }
     }
     .background(Color(nsColor: .textBackgroundColor))
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          if prepareChatDocument() {
-            showingExporter = true
-          }
-        } label: {
-          Image(systemName: "square.and.arrow.up")
-        }.help("Save Chat...")
-      }
-    }
+//    .toolbar {
+//      ToolbarItem(placement: .primaryAction) {
+//        Button {
+//          if prepareChatDocument() {
+//            showingExporter = true
+//          }
+//        } label: {
+//          Image(systemName: "square.and.arrow.up")
+//        }.help("Save Chat...")
+//      }
+//    }
     .fileExporter(isPresented: $showingExporter, document: self.chatDocument, contentType: .utf8PlainText, defaultFilename: "\(self.model.serverTitle) Chat.txt") { result in
       switch result {
       case .success(let url):

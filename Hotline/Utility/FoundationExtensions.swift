@@ -17,7 +17,6 @@ extension String {
     }
 
     regex.enumerateMatches(in: self, range: NSMakeRange(0, self.count)) { (result: NSTextCheckingResult!, _, _) in
-      let range = result.range
       if let newRange = Range(result.range, in: self) {
         let str = String(self[newRange])
         attributedString.addAttribute(.link, value: str, range: result.range)

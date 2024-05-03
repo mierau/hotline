@@ -115,7 +115,7 @@ enum ServerNavigationType: Identifiable, Hashable, Equatable {
   case news
   case board
   case files
-  case user(userID: UInt)
+  case user(userID: UInt16)
 }
 
 struct ServerView: View {
@@ -351,6 +351,14 @@ struct ServerView: View {
       
       if model.users.count > 0 {
         self.usersSection
+          .onChange(of: state.selection) {
+            switch(state.selection) {
+            case .user(let userID):
+              model.markInstantMessagesAsRead(userID: userID)
+            default:
+              break
+            }
+          }
       }
     }
   }
@@ -382,6 +390,13 @@ struct ServerView: View {
             .foregroundStyle(user.isAdmin ? Color(hex: 0xE10000) : .primary)
           
           Spacer()
+          
+          if model.hasUnreadInstantMessages(userID: user.id) {
+            Circle()
+              .frame(width: 6, height: 6)
+              .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2))
+              .opacity(0.5)
+          }
         }
         .opacity(user.isIdle ? 0.6 : 1.0)
         .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
@@ -400,23 +415,32 @@ struct ServerView: View {
         case .chat:
           ChatView()
             .navigationTitle(model.serverTitle)
+            .navigationSubtitle("Public Chat")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .news:
           NewsView()
             .navigationTitle(model.serverTitle)
+            .navigationSubtitle("Newsgroup")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .board:
           MessageBoardView()
             .navigationTitle(model.serverTitle)
+            .navigationSubtitle("Message Board")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .files:
           FilesView()
             .navigationTitle(model.serverTitle)
+            .navigationSubtitle("Shared Files")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .user(let userID):
+          let user = model.users.first(where: { $0.id == userID })
           MessageView(userID: userID)
             .navigationTitle(model.serverTitle)
+            .navigationSubtitle(user?.name ?? "Private Message")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
+            .onAppear {
+              model.markInstantMessagesAsRead(userID: userID)
+            }
         }
     }
   }

@@ -108,7 +108,6 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   ]
   
   var status: HotlineClientStatus = .disconnected
-  
   var server: Server?  {
     didSet {
       self.updateServerTitle()
@@ -125,8 +124,6 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   var iconID: Int = 414
   var access: HotlineUserAccessOptions?
   var agreed: Bool = false
-  
-  var currentUser: User? = nil
   var users: [User] = []
   var chat: [ChatMessage] = []
   var messageBoard: [String] = []
@@ -135,9 +132,10 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   var filesLoaded: Bool = false
   var news: [NewsInfo] = []
   var newsLoaded: Bool = false
-  
+  var instantMessages: [UInt16:[InstantMessage]] = [:]
   var transfers: [TransferInfo] = []
   var downloads: [HotlineFileClient] = []
+  var unreadInstantMessages: [UInt16:UInt16] = [:]
   
   @ObservationIgnored var bannerClient: HotlineFileClient?
   #if os(macOS)
@@ -209,6 +207,31 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   
   @MainActor func sendAgree() {
     self.client.sendAgree(username: self.username, iconID: UInt16(self.iconID), options: .none)
+  }
+  
+  @MainActor func sendInstantMessage(_ text: String, userID: UInt16) {
+    let message = InstantMessage(direction: .outgoing, text: text, type: .message, date: Date())
+    
+    if self.instantMessages[userID] == nil {
+      self.instantMessages[userID] = [message]
+    }
+    else {
+      self.instantMessages[userID]!.append(message)
+    }
+    
+    self.client.sendInstantMessage(message: text, userID: userID)
+    
+    if Prefs.shared.playPrivateMessageSound && Prefs.shared.playPrivateMessageSound {
+      SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
+    }
+  }
+  
+  func hasUnreadInstantMessages(userID: UInt16) -> Bool {
+    return self.unreadInstantMessages[userID] != nil
+  }
+  
+  func markInstantMessagesAsRead(userID: UInt16) {
+    self.unreadInstantMessages.removeValue(forKey: userID)
   }
   
   @MainActor func sendChat(_ text: String) {
@@ -681,19 +704,43 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   func hotlineReceivedServerMessage(message: String) {
-//    print("Hotline: received server message:\n\(message)")
-//    self.chat.append(ChatMessage(text: message, type: .server, date: Date()))
+    if Prefs.shared.playChatSound && Prefs.shared.playChatSound {
+      SoundEffectPlayer.shared.playSoundEffect(.serverMessage)
+    }
+    
+    print("Hotline: received server message:\n\(message)")
+    self.chat.append(ChatMessage(text: message, type: .server, date: Date()))
+  }
+  
+  func hotlineReceivedPrivateMessage(userID: UInt16, message: String) {
+    if let existingUserIndex = self.users.firstIndex(where: { $0.id == UInt(userID) }) {
+      let user = self.users[existingUserIndex]
+      print("Hotline: received private message from \(user.name): \(message)")
+      
+      if Prefs.shared.playPrivateMessageSound && Prefs.shared.playPrivateMessageSound {
+        SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
+      }
+      
+      let instantMessage = InstantMessage(direction: .incoming, text: message, type: .message, date: Date())
+      if self.instantMessages[userID] == nil {
+        self.instantMessages[userID] = [instantMessage]
+      }
+      else {
+        self.instantMessages[userID]!.append(instantMessage)
+      }
+      self.unreadInstantMessages[userID] = userID
+    }
   }
   
   func hotlineReceivedChatMessage(message: String) {
-    if Prefs().playSounds && Prefs().playChatSound {
+    if Prefs.shared.playSounds && Prefs.shared.playChatSound {
       SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
     }
     self.chat.append(ChatMessage(text: message, type: .message, date: Date()))
   }
   
   func hotlineReceivedUserList(users: [HotlineUser]) {
-    var existingUserIDs: [UInt] = []
+    var existingUserIDs: [UInt16] = []
     var userList: [User] = []
     
     for u in users {
@@ -701,7 +748,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
         // If a user is already in the user list we have to assume
         // they changed somehow before we received the user list
         // which means let's keep their existing info.
-        existingUserIDs.append(UInt(u.id))
+        existingUserIDs.append(u.id)
         userList.append(self.users[i])
       }
       else {
@@ -827,6 +874,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   private func addOrUpdateHotlineUser(_ user: HotlineUser) {
+    print("Hotline: users: \n\(self.users)")
     if let i = self.users.firstIndex(where: { $0.id == user.id }) {
       print("Hotline: updating user \(self.users[i].name)")
       self.users[i] = User(hotlineUser: user)

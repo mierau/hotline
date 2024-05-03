@@ -37,6 +37,7 @@ protocol HotlineClientDelegate: AnyObject {
   func hotlineReceivedChatMessage(message: String)
   func hotlineReceivedUserList(users: [HotlineUser])
   func hotlineReceivedServerMessage(message: String)
+  func hotlineReceivedPrivateMessage(userID: UInt16, message: String)
   func hotlineReceivedUserAccess(options: HotlineUserAccessOptions)
   func hotlineUserChanged(user: HotlineUser)
   func hotlineUserDisconnected(userID: UInt16)
@@ -49,6 +50,7 @@ extension HotlineClientDelegate {
   func hotlineReceivedChatMessage(message: String) {}
   func hotlineReceivedUserList(users: [HotlineUser]) {}
   func hotlineReceivedServerMessage(message: String) {}
+  func hotlineReceivedPrivateMessage(userID: UInt16, message: String) {}
   func hotlineReceivedUserAccess(options: HotlineUserAccessOptions) {}
   func hotlineUserChanged(user: HotlineUser) {}
   func hotlineUserDisconnected(userID: UInt16) {}
@@ -303,11 +305,12 @@ class HotlineClient: NetSocketDelegate {
          let userIconID = userIconIDField.getUInt16(),
          let userFlagsField = packet.getField(type: .userFlags),
          let userFlags = userFlagsField.getUInt16() {
-        print("HotlineClient: User changed \(username) icon: \(userIconID)")
+        print("HotlineClient: User changed \(userID) \(username) icon: \(userIconID)")
         
         let user = HotlineUser(id: userID, iconID: userIconID, status: userFlags, name: username)
         self.delegate?.hotlineUserChanged(user: user)
       }
+      
     case .notifyOfUserDelete:
       if let userIDField = packet.getField(type: .userID),
          let userID = userIDField.getUInt16() {
@@ -322,7 +325,14 @@ class HotlineClient: NetSocketDelegate {
     case .serverMessage:
       if let messageField = packet.getField(type: .data),
          let message = messageField.getString() {
-        self.delegate?.hotlineReceivedServerMessage(message: message)
+        
+        if let userIDField = packet.getField(type: .userID),
+           let userID = userIDField.getUInt16() {
+          self.delegate?.hotlineReceivedPrivateMessage(userID: userID, message: message)
+        }
+        else {
+          self.delegate?.hotlineReceivedServerMessage(message: message)
+        }
       }
       
     case .showAgreement:
@@ -444,6 +454,14 @@ class HotlineClient: NetSocketDelegate {
   
   @MainActor func sendChat(message: String, encoding: String.Encoding = .utf8) {
     var t = HotlineTransaction(type: .sendChat)
+    t.setFieldString(type: .data, val: message, encoding: encoding)
+    self.sendPacket(t)
+  }
+  
+  @MainActor func sendInstantMessage(message: String, userID: UInt16, encoding: String.Encoding = .utf8) {
+    var t = HotlineTransaction(type: .sendInstantMessage)
+    t.setFieldUInt16(type: .userID, val: userID)
+    t.setFieldUInt32(type: .options, val: 1)
     t.setFieldString(type: .data, val: message, encoding: encoding)
     self.sendPacket(t)
   }
@@ -626,7 +644,7 @@ class HotlineClient: NetSocketDelegate {
             let fileName = reply.getField(type: .fileName)?.getString(),
             let fileCreator = reply.getField(type: .fileCreatorString)?.getString(),
             let fileType = reply.getField(type: .fileTypeString)?.getString(),
-            let fileTypeString = reply.getField(type: .fileTypeString)?.getString(),
+            let _ = reply.getField(type: .fileTypeString)?.getString(),
             let fileCreateDate = reply.getField(type: .fileCreateDate)?.data.readDate(at: 0),
             let fileModifyDate = reply.getField(type: .fileModifyDate)?.data.readDate(at: 0)
  else {
