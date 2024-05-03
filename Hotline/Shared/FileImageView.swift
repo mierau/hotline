@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct AnimatedImageView: NSViewRepresentable {
+struct FileImageView: NSViewRepresentable {
   var image: NSImage?
   
   let minimumSize: CGSize = CGSize(width: 350, height: 350)

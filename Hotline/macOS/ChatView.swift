@@ -24,20 +24,19 @@ struct ChatView: View {
   var body: some View {
     NavigationStack {
       ScrollViewReader { reader in
-
+        
         VStack(alignment: .leading, spacing: 0) {
           
           // MARK: Scroll View
           GeometryReader { gm in
             ScrollView(.vertical) {
               LazyVStack(alignment: .leading) {
-                  
+                
                 ForEach(model.chat) { msg in
                   
                   // MARK: Agreement
                   if msg.type == .agreement {
-                    VStack(alignment: .center, spacing: 16) {
-                      #if os(iOS)
+#if os(iOS)
                       if let bannerImage = self.model.bannerImage {
                         Image(uiImage: bannerImage)
                           .resizable()
@@ -45,35 +44,29 @@ struct ChatView: View {
                           .frame(maxWidth: 468.0)
                           .clipShape(RoundedRectangle(cornerRadius: 3))
                       }
-                      #endif
-                      HStack(spacing: 0) {
-                        Spacer()
-                        
-                        ScrollView(.vertical) {
-                          HStack {
-                            Text(LocalizedStringKey(msg.text.convertLinksToMarkdown()))
-                              .font(.system(size: 12))
-                              .fontDesign(.monospaced)
-                              .textSelection(.enabled)
-                              .tint(Color("Link Color"))
-                            Spacer()
-                          }
-                          .padding(16)
+#endif
+                      ScrollView(.vertical) {
+                        HStack {
+                          Spacer()
+                          Text(msg.text.convertToAttributedStringWithLinks(relaxed: false))
+                            .font(.system(size: 12))
+                            .fontDesign(.monospaced)
+                            .textSelection(.enabled)
+                            .tint(Color("Link Color"))
+                            .frame(maxWidth: 400, alignment: .center)
+                            .padding(16)
+                          Spacer()
                         }
-                        .scrollBounceBehavior(.basedOnSize)
-                        .frame(maxWidth: 468, maxHeight: 375)
-                        
-                        Spacer()
                       }
-                      #if os(iOS)
+                      .frame(maxWidth: .infinity, maxHeight: 375)
+                      .scrollBounceBehavior(.basedOnSize)
+#if os(iOS)
                       .background(Color("Agreement Background"))
-                      #elseif os(macOS)
+#elseif os(macOS)
                       .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow))
-                      #endif
+#endif
                       .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
+                      .padding(.bottom, 16)
                   }
                   // MARK: Status
                   else if msg.type == .status {
@@ -86,16 +79,49 @@ struct ChatView: View {
                         .opacity(0.3)
                       Spacer()
                     }
-                    .padding()
+                    .padding(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
                   }
                   else {
                     HStack(alignment: .firstTextBaseline) {
                       if let username = msg.username {
-                        Text(LocalizedStringKey("**\(username):** \(msg.text)".convertLinksToMarkdown()))
-                          .lineSpacing(4)
-                          .multilineTextAlignment(.leading)
-                          .textSelection(.enabled)
-                          .tint(Color("Link Color"))
+//                        if msg.text.isImageURL() {
+//                          HStack(alignment: .bottom) {
+//                            Text("**\(username):** ")
+//                            
+//                            let imageURL = URL(string: msg.text)!
+//                            AsyncImage(url: imageURL) { phase in
+//                              switch phase {
+//                              case .failure:
+//                                Text(LocalizedStringKey(msg.text.convertLinksToMarkdown()))
+//                                  .lineSpacing(4)
+//                                  .multilineTextAlignment(.leading)
+//                                  .textSelection(.enabled)
+//                                  .tint(Color("Link Color"))
+//                              case .success(let img):
+//                                Link(destination: imageURL) {
+//                                  img
+//                                    .resizable()
+//                                    .scaledToFit()
+//                                    .frame(maxWidth: 250, maxHeight: 150, alignment: .leading)
+//                                    .onAppear {
+//                                      reader.scrollTo(bottomID, anchor: .bottom)
+//                                    }
+//                                }
+//                              default:
+//                                ProgressView().controlSize(.small)
+//                              }
+//                            }
+//                            
+//                            Spacer()
+//                          }
+//                        }
+//                        else {
+                          Text(LocalizedStringKey("**\(username):** \(msg.text)".convertLinksToMarkdown()))
+                            .lineSpacing(4)
+                            .multilineTextAlignment(.leading)
+                            .textSelection(.enabled)
+                            .tint(Color("Link Color"))
+//                        }
                       }
                       else {
                         Text(LocalizedStringKey(msg.text.convertLinksToMarkdown()))
@@ -106,68 +132,63 @@ struct ChatView: View {
                       }
                       Spacer()
                     }
-                    .padding(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    .padding(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
                   }
                 }
                 EmptyView().id(bottomID)
               }
-              //          .padding(.bottom, 12)
+              .padding()
             }
-            //        .padding(.bottom, 60)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .defaultScrollAnchor(.bottom)
             .onChange(of: model.chat.count) {
-//              withAnimation {
               reader.scrollTo(bottomID, anchor: .bottom)
-//              }
             }
             .onAppear {
               reader.scrollTo(bottomID, anchor: .bottom)
-//              focusedField = .chatInput
             }
             .onChange(of: gm.size) {
               reader.scrollTo(bottomID, anchor: .bottom)
             }
           }
-        }
-        
-        // MARK: Input Divider
-        Divider()
-          .padding([.top, .bottom], 0)
-        
-        // MARK: Input Bar
-        HStack(alignment: .lastTextBaseline, spacing: 0) {
-          TextField("", text: $input, axis: .vertical)
-            .focused($focusedField, equals: .chatInput)
-            .textFieldStyle(.plain)
-            .lineLimit(1...5)
-            .multilineTextAlignment(.leading)
-//            .frame(maxWidth: .infinity)
-            .onSubmit {
-              if !self.input.isEmpty {
-                model.sendChat(self.input)
+          
+          // MARK: Input Divider
+          Divider()
+          
+          // MARK: Input Bar
+          HStack(alignment: .lastTextBaseline, spacing: 0) {
+            TextField("", text: $input, axis: .vertical)
+              .focused($focusedField, equals: .chatInput)
+              .textFieldStyle(.plain)
+              .lineLimit(1...5)
+              .multilineTextAlignment(.leading)
+            //            .frame(maxWidth: .infinity)
+              .onSubmit {
+                if !self.input.isEmpty {
+                  model.sendChat(self.input)
+                }
+                self.input = ""
               }
-              self.input = ""
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-        }
-        .frame(maxWidth: .infinity, minHeight: 28)
-        .padding(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
-        .overlay(alignment: .leadingLastTextBaseline) {
-          Image(systemName: "chevron.right").opacity(0.4).offset(x: 16)
-        }
-        .onContinuousHover { phase in
-          switch phase {
-          case .active(_):
-            NSCursor.iBeam.set()
-          case .ended:
-            NSCursor.arrow.set()
-            break
+              .frame(maxWidth: .infinity)
+              .padding()
           }
-        }
-        .onTapGesture {
-          focusedField = .chatInput
+          .frame(maxWidth: .infinity, minHeight: 28)
+          .padding(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+          .overlay(alignment: .leadingLastTextBaseline) {
+            Image(systemName: "chevron.right").opacity(0.4).offset(x: 16)
+          }
+          .onContinuousHover { phase in
+            switch phase {
+            case .active(_):
+              NSCursor.iBeam.set()
+            case .ended:
+              NSCursor.arrow.set()
+              break
+            }
+          }
+          .onTapGesture {
+            focusedField = .chatInput
+          }
         }
       }
     }

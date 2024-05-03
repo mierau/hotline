@@ -23,6 +23,7 @@
 		DA4930BD2B4F8DD700822D0B /* NetSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4930BC2B4F8DD700822D0B /* NetSocket.swift */; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
+		DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */; platformFilters = (macos, ); };
 		DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */; };
 		DA57536C2B36BA1D00FAC277 /* TextDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57536B2B36BA1D00FAC277 /* TextDocument.swift */; };
 		DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineClient.swift */; };
@@ -32,7 +33,7 @@
 		DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA77253E2B21176D006C5ABB /* NewsView.swift */; platformFilter = ios; };
 		DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7725402B21435B006C5ABB /* ObservableScrollView.swift */; };
 		DA872B132BDDBF78008B1012 /* HotlinePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA872B122BDDBF78008B1012 /* HotlinePanel.swift */; platformFilters = (macos, ); };
-		DA872B152BDDEE1A008B1012 /* VisualEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA872B142BDDEE1A008B1012 /* VisualEffectView.swift */; };
+		DA872B152BDDEE1A008B1012 /* VisualEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA872B142BDDEE1A008B1012 /* VisualEffectView.swift */; platformFilters = (macos, ); };
 		DA9CAFBB2B126D5700CDA197 /* Application-macOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBA2B126D5700CDA197 /* Application-macOS.swift */; platformFilters = (macos, ); };
 		DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */; platformFilter = ios; };
 		DA9CAFC12B126D5800CDA197 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DA9CAFC02B126D5800CDA197 /* Assets.xcassets */; };
@@ -41,7 +42,7 @@
 		DAAEE66B2B3FBC2100A5BA07 /* TransferInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66A2B3FBC2100A5BA07 /* TransferInfo.swift */; };
 		DAAEE66D2B475F1400A5BA07 /* PreviewFileInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66C2B475F1400A5BA07 /* PreviewFileInfo.swift */; };
 		DAAEE66F2B47625600A5BA07 /* FilePreviewImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */; platformFilters = (macos, ); };
-		DAB4D87B2B4B78310048A05C /* AnimatedImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87A2B4B78310048A05C /* AnimatedImageView.swift */; platformFilters = (macos, ); };
+		DAB4D87B2B4B78310048A05C /* FileImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87A2B4B78310048A05C /* FileImageView.swift */; platformFilters = (macos, ); };
 		DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */; platformFilters = (macos, ); };
 		DAB4D8802B4C8E9A0048A05C /* URLAdditions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87F2B4C8E9A0048A05C /* URLAdditions.swift */; };
 		DAB4D8822B4C8FED0048A05C /* FileIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D8812B4C8FED0048A05C /* FileIconView.swift */; };
@@ -94,6 +95,7 @@
 		DA4930BC2B4F8DD700822D0B /* NetSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetSocket.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncLinkPreview.swift; sourceTree = "<group>"; };
 		DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineFileClient.swift; sourceTree = "<group>"; };
 		DA57536B2B36BA1D00FAC277 /* TextDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDocument.swift; sourceTree = "<group>"; };
 		DA6300962B24036B0034CBFD /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
@@ -112,7 +114,7 @@
 		DAAEE66A2B3FBC2100A5BA07 /* TransferInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferInfo.swift; sourceTree = "<group>"; };
 		DAAEE66C2B475F1400A5BA07 /* PreviewFileInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFileInfo.swift; sourceTree = "<group>"; };
 		DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewImageView.swift; sourceTree = "<group>"; };
-		DAB4D87A2B4B78310048A05C /* AnimatedImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedImageView.swift; sourceTree = "<group>"; };
+		DAB4D87A2B4B78310048A05C /* FileImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileImageView.swift; sourceTree = "<group>"; };
 		DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewTextView.swift; sourceTree = "<group>"; };
 		DAB4D87F2B4C8E9A0048A05C /* URLAdditions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLAdditions.swift; sourceTree = "<group>"; };
 		DAB4D8812B4C8FED0048A05C /* FileIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileIconView.swift; sourceTree = "<group>"; };
@@ -220,13 +222,14 @@
 		DAB4D87C2B4B783A0048A05C /* Shared */ = {
 			isa = PBXGroup;
 			children = (
-				DAB4D87A2B4B78310048A05C /* AnimatedImageView.swift */,
+				DAB4D87A2B4B78310048A05C /* FileImageView.swift */,
 				DAB4D8812B4C8FED0048A05C /* FileIconView.swift */,
 				DAB4D8832B4CABEF0048A05C /* DataAdditions.swift */,
 				DAB4D87F2B4C8E9A0048A05C /* URLAdditions.swift */,
 				DA4930BC2B4F8DD700822D0B /* NetSocket.swift */,
 				DA872B122BDDBF78008B1012 /* HotlinePanel.swift */,
 				DA872B142BDDEE1A008B1012 /* VisualEffectView.swift */,
+				DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -426,7 +429,8 @@
 				DAE136BA2B9D1147007D8307 /* HotlinePanelView.swift in Sources */,
 				11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */,
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
-				DAB4D87B2B4B78310048A05C /* AnimatedImageView.swift in Sources */,
+				DAB4D87B2B4B78310048A05C /* FileImageView.swift in Sources */,
+				DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */,
 				DAE735032B30C0BB000C56F6 /* MessageView.swift in Sources */,
 				DABE8C062B57A06100884D28 /* Bookmarks.swift in Sources */,
 				DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */,

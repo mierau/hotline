@@ -6,17 +6,54 @@ enum Endianness {
 }
 
 extension String {
+  func convertToAttributedStringWithLinks(relaxed: Bool = false) -> AttributedString {
+    let attributedString: NSMutableAttributedString = NSMutableAttributedString(string: self)
+    let urlPattern = relaxed ?
+      #"(hotline|http|https)?(://)?[\w-]+(\.[\w-]+)+([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"# :
+      #"(hotline|http|https)://[\w-]+(\.[\w-]+)+([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"#
+    
+    guard let regex = try? NSRegularExpression(pattern: urlPattern, options: .caseInsensitive) else {
+      return AttributedString(attributedString)
+    }
+
+    regex.enumerateMatches(in: self, range: NSMakeRange(0, self.count)) { (result: NSTextCheckingResult!, _, _) in
+      let range = result.range
+      if let newRange = Range(result.range, in: self) {
+        let str = String(self[newRange])
+        attributedString.addAttribute(.link, value: str, range: result.range)
+      }
+    }
+    
+    return AttributedString(attributedString)
+  }
+  
+  func isWebURL() -> Bool {
+    guard let url = URL(string: self) else {
+      return false
+    }
+    switch url.scheme?.lowercased() {
+    case "http", "https":
+      return true
+    default:
+      return false
+    }
+  }
+  
   func isImageURL() -> Bool {
     guard let url = URL(string: self) else {
       return false
     }
     
-    let validImageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"]
-    return validImageExtensions.contains(url.pathExtension.lowercased())
+    switch url.pathExtension.lowercased() {
+    case "jpg", "jpeg", "png", "gif":
+      return true
+    default:
+      return false
+    }
   }
   
   func convertLinksToMarkdown() -> String {
-    let urlPattern = #"https?://[\w-]+(\.[\w-]+)+([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"#
+    let urlPattern = #"(hotline|http|https)?(://)?[\w-]+(\.[\w-]+)+([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"#
     
     guard let regex = try? NSRegularExpression(pattern: urlPattern, options: .caseInsensitive) else {
       return self

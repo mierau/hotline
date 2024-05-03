@@ -31,7 +31,7 @@ struct FilePreviewImageView: View {
       }
       else {
         if let image = preview?.image {
-          AnimatedImageView(image: image)
+          FileImageView(image: image)
             .frame(minWidth: 200, maxWidth: .infinity, minHeight: 200, maxHeight: .infinity)
         }
         else {
