@@ -29,14 +29,12 @@ struct ServerMenuItem: Identifiable, Hashable {
   let type: ServerNavigationType
   let name: String
   let image: String
-  let selectedImage: String
   
-  init(type: ServerNavigationType, name: String, image: String, selectedImage: String) {
+  init(type: ServerNavigationType, name: String, image: String) {
     self.id = UUID()
     self.type = type
     self.name = name
     self.image = image
-    self.selectedImage = selectedImage
   }
   
   func hash(into hasher: inout Hasher) {
@@ -62,6 +60,7 @@ struct ServerMenuItem: Identifiable, Hashable {
 struct ListItemView: View {
   let icon: String
   let title: String
+  let unread: Bool
   
   var body: some View {
       HStack {
@@ -71,6 +70,15 @@ struct ListItemView: View {
           .frame(width: 16, height: 16)
           .padding(.leading, 4)
         Text(title)
+          .lineLimit(1)
+          .truncationMode(.tail)
+        Spacer()
+        if unread {
+          Circle()
+            .frame(width: 6, height: 6)
+            .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2))
+            .opacity(0.5)
+        }
       }
   }
 }
@@ -138,10 +146,10 @@ struct ServerView: View {
   @Binding var server: Server
   
   static var menuItems: [ServerMenuItem] = [
-    ServerMenuItem(type: .chat, name: "Chat", image: "bubble.fill", selectedImage: "bubble.fill"),
-    ServerMenuItem(type: .board, name: "Board", image: "pin.fill", selectedImage: "pin.fill"),
-    ServerMenuItem(type: .news, name: "News", image: "newspaper.fill", selectedImage: "newspaper.fill"),
-    ServerMenuItem(type: .files, name: "Files", image: "folder.fill", selectedImage: "folder.fill"),
+    ServerMenuItem(type: .chat, name: "Chat", image: "bubble.fill"),
+    ServerMenuItem(type: .board, name: "Board", image: "pin.fill"),
+    ServerMenuItem(type: .news, name: "News", image: "newspaper.fill"),
+    ServerMenuItem(type: .files, name: "Files", image: "folder.fill"),
   ]
   
   enum FocusFields {
@@ -340,8 +348,12 @@ struct ServerView: View {
   var navigationList: some View {
     List(selection: $state.selection) {
       ForEach(ServerView.menuItems) { menuItem in
-        ListItemView(icon: state.selection == menuItem.type ? menuItem.selectedImage : menuItem.image, title: menuItem.name)
-          .tag(menuItem.type)
+        if menuItem.type == .chat {
+          ListItemView(icon: menuItem.image, title: menuItem.name, unread: model.unreadPublicChat).tag(menuItem.type)
+        }
+        else {
+          ListItemView(icon: menuItem.image, title: menuItem.name, unread: false).tag(menuItem.type)
+        }
       }
       
       if model.transfers.count > 0 {
@@ -350,14 +362,16 @@ struct ServerView: View {
       
       if model.users.count > 0 {
         self.usersSection
-          .onChange(of: state.selection) {
-            switch(state.selection) {
-            case .user(let userID):
-              model.markInstantMessagesAsRead(userID: userID)
-            default:
-              break
-            }
-          }
+      }
+    }
+    .onChange(of: state.selection) {
+      switch(state.selection) {
+      case .chat:
+        model.markPublicChatAsRead()
+      case .user(let userID):
+        model.markInstantMessagesAsRead(userID: userID)
+      default:
+        break
       }
     }
   }

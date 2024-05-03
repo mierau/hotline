@@ -136,6 +136,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   var transfers: [TransferInfo] = []
   var downloads: [HotlineFileClient] = []
   var unreadInstantMessages: [UInt16:UInt16] = [:]
+  var unreadPublicChat: Bool = false
   
   @ObservationIgnored var bannerClient: HotlineFileClient?
   #if os(macOS)
@@ -224,6 +225,10 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
     if Prefs.shared.playPrivateMessageSound && Prefs.shared.playPrivateMessageSound {
       SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
     }
+  }
+  
+  func markPublicChatAsRead() {
+    self.unreadPublicChat = false
   }
   
   func hasUnreadInstantMessages(userID: UInt16) -> Bool {
@@ -737,6 +742,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
     }
     self.chat.append(ChatMessage(text: message, type: .message, date: Date()))
+    self.unreadPublicChat = true
   }
   
   func hotlineReceivedUserList(users: [HotlineUser]) {

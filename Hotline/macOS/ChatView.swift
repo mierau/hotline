@@ -67,6 +67,13 @@ struct ChatView: View {
                       .clipShape(RoundedRectangle(cornerRadius: 8))
                       .padding(.bottom, 16)
                   }
+                  // MARK: Server Message
+                  else if msg.type == .server {
+                    Text(msg.text)
+                      .lineSpacing(4)
+                      .multilineTextAlignment(.leading)
+                      .textSelection(.enabled)
+                  }
                   // MARK: Status
                   else if msg.type == .status {
                     HStack {
@@ -141,7 +148,10 @@ struct ChatView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .defaultScrollAnchor(.bottom)
             .onChange(of: model.chat.count) {
-              reader.scrollTo(bottomID, anchor: .bottom)
+              withAnimation(.easeOut(duration: 0.15).delay(0.25)) {
+                reader.scrollTo(bottomID, anchor: .bottom)
+              }
+              model.markPublicChatAsRead()
             }
             .onAppear {
               reader.scrollTo(bottomID, anchor: .bottom)
