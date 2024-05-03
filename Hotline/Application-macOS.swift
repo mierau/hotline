@@ -60,6 +60,25 @@ struct Application: App {
       }
     }
     
+    Window("About", id: "about") {
+      AboutView()
+        .ignoresSafeArea()
+        .background(Color.hotlineRed)
+    }
+    .windowResizability(.contentSize)
+    .windowStyle(.hiddenTitleBar)
+    .defaultSize(width: 300, height: 400)
+    .defaultPosition(.center)
+    .commands {
+      CommandGroup(replacing: CommandGroupPlacement.appInfo) {
+        Button(action: {
+          openWindow(id: "about")
+        }) {
+          Text("About Hotline")
+        }
+      }
+    }
+    
     // MARK: Server Window
     WindowGroup(id: "server", for: Server.self) { server in
       ServerView(server: server)
@@ -164,6 +183,7 @@ struct Application: App {
     Settings {
       SettingsView()
     }
+    
     
     // MARK: News Editor Window
 //    WindowGroup(id: "news-editor", for: NewsArticle.self) { $article in
