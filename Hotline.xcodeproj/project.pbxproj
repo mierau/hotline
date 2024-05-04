@@ -26,6 +26,7 @@
 		DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */; platformFilters = (macos, ); };
 		DA55AC752BE4888300034857 /* InstantMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC742BE4888300034857 /* InstantMessage.swift */; };
 		DA55AC772BE589F700034857 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC762BE589F700034857 /* AboutView.swift */; platformFilters = (macos, ); };
+		DA55AC792BE6A1AD00034857 /* RegularExpressions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC782BE6A1AD00034857 /* RegularExpressions.swift */; };
 		DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */; };
 		DA57536C2B36BA1D00FAC277 /* TextDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57536B2B36BA1D00FAC277 /* TextDocument.swift */; };
 		DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineClient.swift */; };
@@ -100,6 +101,7 @@
 		DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncLinkPreview.swift; sourceTree = "<group>"; };
 		DA55AC742BE4888300034857 /* InstantMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstantMessage.swift; sourceTree = "<group>"; };
 		DA55AC762BE589F700034857 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		DA55AC782BE6A1AD00034857 /* RegularExpressions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegularExpressions.swift; sourceTree = "<group>"; };
 		DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineFileClient.swift; sourceTree = "<group>"; };
 		DA57536B2B36BA1D00FAC277 /* TextDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDocument.swift; sourceTree = "<group>"; };
 		DA6300962B24036B0034CBFD /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
@@ -273,6 +275,7 @@
 				DAE735062B3251B3000C56F6 /* SoundEffects.swift */,
 				DA57536B2B36BA1D00FAC277 /* TextDocument.swift */,
 				DABE8C032B57940A00884D28 /* DAKeychain.swift */,
+				DA55AC782BE6A1AD00034857 /* RegularExpressions.swift */,
 			);
 			path = Utility;
 			sourceTree = "<group>";
@@ -450,6 +453,7 @@
 				DAE735072B3251B3000C56F6 /* SoundEffects.swift in Sources */,
 				DA55AC752BE4888300034857 /* InstantMessage.swift in Sources */,
 				DAE735012B2E71F2000C56F6 /* FilesView.swift in Sources */,
+				DA55AC792BE6A1AD00034857 /* RegularExpressions.swift in Sources */,
 				11A7260A2BE0675A000C1DA7 /* FileDetailsView.swift in Sources */,
 				DA72A0DD2B4CD0BF00A0F48A /* NewsEditorView.swift in Sources */,
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,

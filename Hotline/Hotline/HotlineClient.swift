@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import RegexBuilder
 
 enum HotlineClientStatus: Int {
   case disconnected
@@ -491,8 +492,7 @@ class HotlineClient: NetSocketDelegate {
       }
       
       var messages: [String] = []
-      let messageBoardRegex = /([\s\r\n]*[_\-]+[\s\r\n]+)/
-      let matches = text.matches(of: messageBoardRegex)
+      let matches = text.matches(of: RegularExpressions.messageBoardDivider)
       var start = text.startIndex
       
       if matches.count > 0 {
