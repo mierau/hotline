@@ -8,7 +8,7 @@ struct HotlinePanelView: View {
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
   
   var body: some View {
-    VStack {
+    VStack(spacing: 0) {
       Image(nsImage: ApplicationState.shared.activeServerBanner ?? NSImage(named: "Default Banner")!)
         .interpolation(.high)
         .resizable()
@@ -97,16 +97,16 @@ struct HotlinePanelView: View {
         .frame(width: 18, height: 18)
         .help("Settings")
       }
-      .padding(.top, 8)
+      .padding(.top, 16)
       .padding(.bottom, 16)
       .padding([.leading, .trailing], 16)
     }
 //    .frame(width: 468)
 //    .background(colorScheme == .dark ? .black : .white)
-    .background(
-      VisualEffectView(material: .headerView, blendingMode: .behindWindow)
-        .cornerRadius(10.0)
-    )
+//    .background(
+//      VisualEffectView(material: .headerView, blendingMode: .behindWindow)
+//        .cornerRadius(10.0)
+//    )
   }
 }
 

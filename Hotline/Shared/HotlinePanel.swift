@@ -1,9 +1,11 @@
 import Cocoa
 import SwiftUI
 
+fileprivate let HOTLINE_PANEL_SIZE: CGSize = CGSizeMake(476, 114)
+
 class HotlinePanel: NSPanel {
   init(_ view: HotlinePanelView) {
-    super.init(contentRect: .zero, styleMask: [.nonactivatingPanel, .titled, .closable, .utilityWindow, .fullSizeContentView], backing: .buffered, defer: false)
+    super.init(contentRect: NSRect(x: 0, y: 0, width: HOTLINE_PANEL_SIZE.width, height: HOTLINE_PANEL_SIZE.height), styleMask: [.nonactivatingPanel, .titled, .closable, .utilityWindow, .fullSizeContentView], backing: .buffered, defer: false)
     
     // Make sure that the panel is in front of almost all other windows
     self.isFloatingPanel = false
@@ -12,7 +14,9 @@ class HotlinePanel: NSPanel {
     self.animationBehavior = .utilityWindow
     
     // Allow the panel to appear in a fullscreen space
-    self.collectionBehavior.insert(.fullScreenAuxiliary)
+//    self.collectionBehavior.insert(.fullScreenAuxiliary)
+    self.collectionBehavior.insert(.canJoinAllSpaces)
+    self.collectionBehavior.insert(.ignoresCycle)
 
     // Don't delete panel state when it's closed.
     self.isReleasedWhenClosed = false
@@ -31,9 +35,19 @@ class HotlinePanel: NSPanel {
     self.titlebarAppearsTransparent = true
     
     let hostingView = NSHostingView(rootView: view.edgesIgnoringSafeArea(.top))
-    hostingView.sizingOptions = [.standardBounds]
+    hostingView.sizingOptions = [.preferredContentSize]
 
-    self.contentView = hostingView
+    let visualEffectView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: HOTLINE_PANEL_SIZE.width, height: HOTLINE_PANEL_SIZE.height))
+    visualEffectView.material = .headerView
+    visualEffectView.blendingMode = .behindWindow
+    visualEffectView.state = NSVisualEffectView.State.active
+    visualEffectView.autoresizingMask = [.width, .height]
+    visualEffectView.autoresizesSubviews = true
+    visualEffectView.addSubview(hostingView)
+    
+    self.contentView = visualEffectView
+    
+    hostingView.frame = visualEffectView.bounds
     
     self.cascadeTopLeft(from: NSMakePoint(16, 16))
   }
