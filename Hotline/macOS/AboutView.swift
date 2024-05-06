@@ -7,73 +7,191 @@ enum VersionCheckState {
   case updateAvailable(version: String)
 }
 
+struct AboutContributor: Identifiable {
+  let id: UUID = UUID()
+  let username: String
+  let webURL: URL
+  let pictureURL: URL?
+}
+
 struct AboutView: View {
   @Environment(\.openURL) private var openURL
   
   @State private var versionCheck: VersionCheckState = .needToCheck
   @State private var downloadURL: String = "https://github.com/mierau/hotline/releases/latest"
+  @State private var contributors: [AboutContributor] = []
   
   var body: some View {
-    VStack(alignment: .center, spacing: 0) {
-      Spacer()
-      
-      Image("About Hotline")
-        .padding(.top, 32)
-      
-      Text("Hotline")
-        .font(.title)
-        .fontWeight(.semibold)
-        .padding(.top, 16)
-        .foregroundColor(.white)
-      
-      let appDetails = getAppVersionAndBuild()
-      Text("\(String(format: "%.1f", appDetails.version))b\(appDetails.build)")
-        .fontWeight(.semibold)
-        .foregroundColor(.white)
-        .opacity(0.6)
-      
-      HStack(alignment: .center) {
-        switch versionCheck {
-        case .needToCheck:
-          Button("Check for Updates") {
-            Task {
-              await checkForUpdate()
+    HStack(alignment: .center, spacing: 0) {
+      VStack(alignment: .center, spacing: 0) {
+        Spacer()
+        
+        Image("About Hotline")
+          .padding(.top, 44)
+        
+        Text("Hotline")
+          .font(.system(size: 28))
+          .fontWeight(.bold)
+          .padding(.top, 12)
+          .kerning(-1.0)
+          .foregroundColor(.white)
+        
+        let appDetails = getAppVersionAndBuild()
+        Text("Version \(String(format: "%.1f", appDetails.version))b\(appDetails.build)")
+          .foregroundColor(.white)
+          .opacity(0.4)
+        
+        HStack(alignment: .center) {
+          switch versionCheck {
+          case .needToCheck:
+            Button("Check for Updates") {
+              Task {
+                await checkForUpdate()
+              }
             }
-          }
-          .controlSize(.regular)
-        case .checking:
-          HStack(spacing: 8) {
-            ProgressView()
-              .controlSize(.small)
-              .tint(.white)
-            Text("Checking for updates...")
-              .fontWeight(.semibold)
-              .foregroundStyle(.white)
-          }
-        case .upToDate:
-          Label("Hotline is up to date.", systemImage: "checkmark.circle.fill")
+            .controlSize(.small)
+          case .checking:
+            HStack(spacing: 8) {
+              ProgressView()
+                .controlSize(.small)
+              Text("Checking for updates...")
+                .fontWeight(.semibold)
+            }
             .foregroundStyle(.white)
-            .fontWeight(.semibold)
             .tint(.white)
-            .onTapGesture {
-              versionCheck = .needToCheck
+          case .upToDate:
+            Label("Hotline is up to date.", systemImage: "checkmark.circle.fill")
+              .foregroundStyle(.white)
+              .fontWeight(.semibold)
+              .tint(.white)
+              .onTapGesture {
+                versionCheck = .needToCheck
+              }
+          case .updateAvailable(let version):
+            Button("Download Latest \(version)") {
+              if let url = URL(string: downloadURL) {
+                openURL(url)
+              }
             }
-        case .updateAvailable(let version):
-          Button("Download Latest \(version)") {
-            if let url = URL(string: downloadURL) {
-              openURL(url)
+            .controlSize(.small)
+          }
+        }
+        .frame(height: 40)
+//        .padding(.top, 4)
+
+        Spacer()
+      }
+      .frame(width: 270)
+      
+      ScrollView(.vertical) {
+        VStack(alignment: .leading, spacing: 16) {
+          
+          VStack(alignment: .leading, spacing: 4) {
+            Link(destination: URL(string: "https://github.com/mierau/hotline")!) {
+              HStack(alignment: .center) {
+                Text("GitHub Contributors")
+                  .lineLimit(1)
+                  .font(.system(size: 16))
+                  .fontWeight(.semibold)
+                  .foregroundStyle(.black)
+                  .opacity(0.5)
+                
+                Image(systemName: "arrow.forward.circle.fill")
+                  .resizable()
+                  .scaledToFit()
+                  .frame(width: 16, height: 16)
+                  .foregroundStyle(.black)
+                  .opacity(0.5)
+              }
+            }
+            .padding(.top, 24)
+            
+            Text("Hotline is an open source project made possible by its contributors.")
+              .font(.system(size: 11))
+              .foregroundStyle(.black)
+              .blendMode(.overlay)
+              .padding(.trailing, 32)
+          }
+          .padding(.bottom, 8)
+          
+          ForEach(contributors) { contributor in
+            Link(destination: contributor.webURL) {
+              HStack {
+                if let pictureURL = contributor.pictureURL {
+                  AsyncImage(url: pictureURL) { img in
+                    img
+                      .interpolation(.high)
+                      .resizable()
+                      .scaledToFit()
+                      .background(.white)
+                  } placeholder: {
+                    Color.white.opacity(0.2)
+                  }
+                  .frame(width: 32, height: 32)
+                  .clipShape(Circle())
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(contributor.username)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                  
+                  Text(contributor.webURL.absoluteString)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.4))
+                }
+                
+                Spacer()
+              }
             }
           }
-          .controlSize(.regular)
         }
       }
-      .frame(height: 40)
-      .padding(.top, 8)
-
-      Spacer()
+      .ignoresSafeArea()
+      .scrollClipDisabled()
+      .padding(.leading, 24)
     }
-    .frame(width: 300, height: 400)
-    .ignoresSafeArea()
+    .frame(width: 570, height: 330)
+    .background(
+      VStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .center, spacing: 0) {
+          Divider()
+          Spacer()
+        }
+        .frame(height: 330 + 100)
+        .offset(x: 270)
+      }
+    )
+    .background(Color.hotlineRed)
+    .task {
+      await loadContributors()
+    }
+  }
+  
+  func loadContributors() async {
+    var newContributors: [AboutContributor] = []
+    
+    if let url = URL(string: "https://api.github.com/repos/mierau/hotline/contributors"),
+       let (data, _) = try? await URLSession.shared.data(from: url) {
+      if let jsonContributors = try? JSONSerialization.jsonObject(with: data, options: []) as? [[String: Any]] {
+        for contributor in jsonContributors {
+          if let username = contributor["login"] as? String,
+             let webURLString = contributor["html_url"] as? String,
+             let webURL = URL(string: webURLString) {
+            var pictureURL: URL? = nil
+            if let pictureURLString = contributor["avatar_url"] as? String {
+              pictureURL = URL(string: pictureURLString)
+            }
+            newContributors.append(AboutContributor(username: username, webURL: webURL, pictureURL: pictureURL))
+          }
+        }
+      }
+    }
+    
+    contributors = newContributors
   }
   
   func checkForUpdate() async {

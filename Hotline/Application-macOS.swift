@@ -66,8 +66,8 @@ struct Application: App {
         .background(Color.hotlineRed)
     }
     .windowResizability(.contentSize)
-    .windowStyle(.hiddenTitleBar)
-    .defaultSize(width: 300, height: 400)
+//    .windowStyle(.hiddenTitleBar)
+    .windowStyle(HiddenTitleBarWindowStyle())
     .defaultPosition(.center)
     .commands {
       CommandGroup(replacing: CommandGroupPlacement.appInfo) {
