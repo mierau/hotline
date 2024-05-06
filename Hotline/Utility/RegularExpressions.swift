@@ -80,6 +80,8 @@ struct RegularExpressions {
         "tel"
         "today"
         "travel"
+        "garden"
+        "online"
         "ai"
         "be"
         "by"
