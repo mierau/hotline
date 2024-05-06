@@ -24,8 +24,8 @@ struct GeneralSettingsView: View {
           }
       }
     }
-    .padding(20)
-    .frame(width: 350)
+    .padding()
+    .frame(width: 392)
     .onAppear {
       self.username = preferences.username
       self.usernameChanged = false
@@ -56,13 +56,13 @@ struct IconSettingsView: View {
       ScrollViewReader { scrollProxy in
         ScrollView {
           LazyVGrid(columns: [
-            GridItem(.fixed(4+64+4)),
-            GridItem(.fixed(4+64+4)),
-            GridItem(.fixed(4+64+4)),
-            GridItem(.fixed(4+64+4)),
-            GridItem(.fixed(4+64+4)),
-            GridItem(.fixed(4+64+4)),
-            GridItem(.fixed(4+64+4))
+            GridItem(.fixed(4+32+4)),
+            GridItem(.fixed(4+32+4)),
+            GridItem(.fixed(4+32+4)),
+            GridItem(.fixed(4+32+4)),
+            GridItem(.fixed(4+32+4)),
+            GridItem(.fixed(4+32+4)),
+            GridItem(.fixed(4+32+4))
           ], spacing: 0) {
             ForEach(Hotline.classicIconSet, id: \.self) { iconID in
               HStack {
@@ -70,10 +70,10 @@ struct IconSettingsView: View {
                   .resizable()
                   .interpolation(.none)
                   .scaledToFit()
-                  .frame(width: 64, height: 32)
+                  .frame(width: 32, height: 16)
               }
               .tag(iconID)
-              .frame(width: 64, height: 64)
+              .frame(width: 32, height: 32)
               .padding(4)
               .background(iconID == preferences.userIconID ? Color.accentColor : (iconID == hoveredUserIconID ? Color.accentColor.opacity(0.1) : Color(nsColor: .textBackgroundColor)))
               .clipShape(RoundedRectangle(cornerRadius: 5))
@@ -95,7 +95,7 @@ struct IconSettingsView: View {
         .onAppear {
           scrollProxy.scrollTo(preferences.userIconID, anchor: .center)
         }
-        .frame(height: 415)
+        .frame(height: 355)
       }
     }
     .padding()
@@ -105,43 +105,39 @@ struct IconSettingsView: View {
 struct SoundSettingsView: View {
   var body: some View {
     @Bindable var preferences = Prefs.shared
+    
     Form {
-      Toggle("Play Sounds for:", isOn: $preferences.playSounds)
+      Toggle("Enable Sounds", isOn: $preferences.playSounds)
+        .controlSize(.large)
+      
+      Section("Sounds") {
+        Toggle("Chat", isOn: $preferences.playChatSound)
+          .disabled(!preferences.playSounds)
 
-      Toggle("Chat", isOn: $preferences.playChatSound)
-        .disabled(!preferences.playSounds)
-        .padding([.leading], 20)
+        Toggle("File Transfers", isOn: $preferences.playFileTransferCompleteSound)
+          .disabled(!preferences.playSounds)
 
-      Toggle("File transfer complete", isOn: $preferences.playFileTransferCompleteSound)
-        .disabled(!preferences.playSounds)
-        .padding([.leading], 20)
-      Toggle("Private Message", isOn: $preferences.playPrivateMessageSound)
-        .disabled(!preferences.playSounds)
-        .padding([.leading], 20)
+        Toggle("Private Message", isOn: $preferences.playPrivateMessageSound)
+          .disabled(!preferences.playSounds)
 
-      Toggle("Join", isOn: $preferences.playJoinSound)
-        .disabled(!preferences.playSounds)
-        .padding([.leading], 20)
+        Toggle("Join", isOn: $preferences.playJoinSound)
+          .disabled(!preferences.playSounds)
 
-      Toggle("Leave", isOn: $preferences.playLeaveSound)
-        .disabled(!preferences.playSounds)
-        .padding([.leading], 20)
+        Toggle("Leave", isOn: $preferences.playLeaveSound)
+          .disabled(!preferences.playSounds)
 
-      Toggle("Logged in", isOn: $preferences.playLoggedInSound)
-        .disabled(!preferences.playSounds)
-        .padding([.leading], 20)
+        Toggle("Logged in", isOn: $preferences.playLoggedInSound)
+          .disabled(!preferences.playSounds)
 
-      Toggle("Error", isOn: $preferences.playErrorSound)
-        .disabled(!preferences.playSounds)
-        .padding([.leading], 20)
+        Toggle("Error", isOn: $preferences.playErrorSound)
+          .disabled(!preferences.playSounds)
 
-      Toggle("Chat Invitation", isOn: $preferences.playChatInvitationSound)
-        .disabled(!preferences.playSounds)
-        .padding([.leading], 20)
-
+        Toggle("Chat Invitation", isOn: $preferences.playChatInvitationSound)
+          .disabled(!preferences.playSounds)
+      }
     }
-    .padding(20)
-    .frame(width: 350)
+    .formStyle(.grouped)
+    .frame(width: 392, height: 433)
   }
 }
 
