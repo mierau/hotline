@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 enum Endianness {
   case big
@@ -6,23 +7,13 @@ enum Endianness {
 }
 
 extension String {
-  func convertToAttributedStringWithLinks(relaxed: Bool = false) -> AttributedString {
+  func convertToAttributedStringWithLinks() -> AttributedString {
     let attributedString: NSMutableAttributedString = NSMutableAttributedString(string: self)
-    let urlPattern = relaxed ?
-      #"(hotline|http|https)?(://)?[\w-]+(\.[\w-]+)+([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"# :
-      #"(hotline|http|https)://[\w-]+(\.[\w-]+)+([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"#
-    
-    guard let regex = try? NSRegularExpression(pattern: urlPattern, options: .caseInsensitive) else {
-      return AttributedString(attributedString)
+    let matches = self.ranges(of: RegularExpressions.relaxedLink)
+    for match in matches {
+      attributedString.addAttribute(.link, value: self[match], range: NSRange(match, in: self))
+//      attributedString.addAttribute(.underlineStyle, value: 1, range: NSRange(match, in: self))
     }
-
-    regex.enumerateMatches(in: self, range: NSMakeRange(0, self.count)) { (result: NSTextCheckingResult!, _, _) in
-      if let newRange = Range(result.range, in: self) {
-        let str = String(self[newRange])
-        attributedString.addAttribute(.link, value: str, range: result.range)
-      }
-    }
-    
     return AttributedString(attributedString)
   }
   
@@ -51,14 +42,18 @@ extension String {
     }
   }
   
-  func convertLinksToMarkdown() -> String {
-    let urlPattern = #"(hotline|http|https)?(://)?[\w-]+(\.[\w-]+)+([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"#
-    
-    guard let regex = try? NSRegularExpression(pattern: urlPattern, options: .caseInsensitive) else {
-      return self
+  func convertingLinksToMarkdown() -> String {
+    var cp = String(self)
+    cp.replace(RegularExpressions.relaxedLink) { match -> String in
+      let linkText = self[match.range]
+      var injectedScheme = "https://"
+      if let _ = try? RegularExpressions.supportedLinkScheme.prefixMatch(in: linkText) {
+        injectedScheme = ""
+      }
+      
+      return "[\(linkText)](\(injectedScheme)\(linkText))"
     }
-    
-    return regex.stringByReplacingMatches(in: self, range: NSRange(location: 0, length: self.count), withTemplate: "[$0]($0)")
+    return cp
   }
 }
 

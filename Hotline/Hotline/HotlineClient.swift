@@ -498,7 +498,8 @@ class HotlineClient: NetSocketDelegate {
       if matches.count > 0 {
         for match in matches {
           let range = match.range
-          messages.append(String(text[start..<range.lowerBound]))
+          let messageText = String(text[start..<range.lowerBound])
+          messages.append(messageText.convertingLinksToMarkdown())
           start = range.upperBound
         }
       }

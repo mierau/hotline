@@ -47,7 +47,7 @@ struct ChatView: View {
                       ScrollView(.vertical) {
                         HStack {
                           Spacer()
-                          Text(msg.text.convertToAttributedStringWithLinks(relaxed: false))
+                          Text(msg.text.convertToAttributedStringWithLinks())
                             .font(.system(size: 12))
                             .fontDesign(.monospaced)
                             .textSelection(.enabled)
@@ -122,7 +122,7 @@ struct ChatView: View {
 //                          }
 //                        }
 //                        else {
-                          Text(LocalizedStringKey("**\(username):** \(msg.text)".convertLinksToMarkdown()))
+                          Text(LocalizedStringKey("**\(username):** \(msg.text)".convertingLinksToMarkdown()))
                             .lineSpacing(4)
                             .multilineTextAlignment(.leading)
                             .textSelection(.enabled)
@@ -130,7 +130,7 @@ struct ChatView: View {
 //                        }
                       }
                       else {
-                        Text(LocalizedStringKey(msg.text.convertLinksToMarkdown()))
+                        Text(msg.text)
                           .lineSpacing(4)
                           .multilineTextAlignment(.leading)
                           .textSelection(.enabled)

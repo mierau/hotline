@@ -211,7 +211,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   @MainActor func sendInstantMessage(_ text: String, userID: UInt16) {
-    let message = InstantMessage(direction: .outgoing, text: text, type: .message, date: Date())
+    let message = InstantMessage(direction: .outgoing, text: text.convertingLinksToMarkdown(), type: .message, date: Date())
     
     if self.instantMessages[userID] == nil {
       self.instantMessages[userID] = [message]
@@ -726,7 +726,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
         SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
       }
       
-      let instantMessage = InstantMessage(direction: .incoming, text: message, type: .message, date: Date())
+      let instantMessage = InstantMessage(direction: .incoming, text: message.convertingLinksToMarkdown(), type: .message, date: Date())
       if self.instantMessages[userID] == nil {
         self.instantMessages[userID] = [instantMessage]
       }

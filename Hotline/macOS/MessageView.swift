@@ -26,7 +26,7 @@ struct MessageView: View {
                     Spacer()
                   }
                   
-                  Text(LocalizedStringKey(msg.text.convertLinksToMarkdown()))
+                  Text(LocalizedStringKey(msg.text))
                     .lineSpacing(4)
                     .multilineTextAlignment(.leading)
                     .textSelection(.enabled)

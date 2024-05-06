@@ -12,8 +12,8 @@ struct MessageBoardView: View {
       if model.access?.contains(.canReadMessageBoard) != false {
         ScrollView {
           LazyVStack(alignment: .leading) {
-            ForEach(model.messageBoard, id: \.self) {
-              Text(LocalizedStringKey($0.convertLinksToMarkdown()))
+            ForEach(model.messageBoard, id: \.self) { msg in
+              Text(LocalizedStringKey(msg))
                 .tint(Color("Link Color"))
                 .lineLimit(100)
                 .lineSpacing(4)

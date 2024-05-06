@@ -36,7 +36,7 @@ struct AsyncLinkPreview: View {
       LinkView(metadata: metadata)
         .frame(width: 200)
     } else {
-      Text(LocalizedStringKey(url!.absoluteString.convertLinksToMarkdown()))
+      Text(LocalizedStringKey(url!.absoluteString))
         .multilineTextAlignment(.leading)
         .tint(Color("Link Color"))
     }
