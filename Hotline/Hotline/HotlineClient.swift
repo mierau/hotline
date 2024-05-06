@@ -694,17 +694,17 @@ class HotlineClient: NetSocketDelegate {
             let transferSizeField = reply.getField(type: .transferSize),
             let transferSize = transferSizeField.getInteger(),
             let transferReferenceField = reply.getField(type: .referenceNumber),
-            let referenceNumber = transferReferenceField.getUInt32(),
-            let transferFileSizeField = reply.getField(type: .fileSize),
-            let transferFileSize = transferFileSizeField.getInteger() else {
+            let referenceNumber = transferReferenceField.getUInt32() else {
         callback?(false, nil, nil, nil, nil)
         return
       }
     
+      let transferFileSizeField = reply.getField(type: .fileSize)
+      let transferFileSize = transferFileSizeField?.getInteger()
       let transferWaitingCountField = reply.getField(type: .waitingCount)
       let transferWaitingCount = transferWaitingCountField?.getInteger()
       
-      callback?(true, referenceNumber, transferSize, transferFileSize, transferWaitingCount)
+      callback?(true, referenceNumber, transferSize, transferFileSize ?? transferSize, transferWaitingCount)
     }
   }
   
