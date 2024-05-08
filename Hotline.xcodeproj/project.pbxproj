@@ -204,7 +204,6 @@
 				DABE8BF22B55DBFC00884D28 /* Sounds */,
 				DA4F2BF92B1A516F00D8ADDC /* iOS */,
 				DAE734F72B2E4126000C56F6 /* macOS */,
-				DAC3D9812BC33F4400A727C9 /* Managers */,
 				DADDB2892B22B2C60024040D /* Models */,
 				DABFCC262B1530AE009F40D2 /* Hotline */,
 				DAB4D87C2B4B783A0048A05C /* Shared */,
@@ -278,13 +277,6 @@
 				DA55AC782BE6A1AD00034857 /* RegularExpressions.swift */,
 			);
 			path = Utility;
-			sourceTree = "<group>";
-		};
-		DAC3D9812BC33F4400A727C9 /* Managers */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Managers;
 			sourceTree = "<group>";
 		};
 		DADDB2892B22B2C60024040D /* Models */ = {
