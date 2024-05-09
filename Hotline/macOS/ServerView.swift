@@ -400,19 +400,19 @@ struct ServerView: View {
           }
           
           Text(user.name)
-            .foregroundStyle(user.isAdmin ? Color(hex: 0xE10000) : .primary)
+            .foregroundStyle(user.isAdmin ? Color.hotlineRed : .primary)
           
           Spacer()
           
           if model.hasUnreadInstantMessages(userID: user.id) {
             Circle()
               .frame(width: 6, height: 6)
+              .foregroundStyle(user.isAdmin ? Color.hotlineRed : .primary.opacity(0.5))
               .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2))
-              .opacity(0.5)
           }
         }
-        .opacity(user.isIdle ? 0.6 : 1.0)
-        .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
+        .opacity(user.isIdle ? 0.5 : 1.0)
+        .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
         .tag(ServerNavigationType.user(userID: user.id))
       }
     }

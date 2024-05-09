@@ -77,11 +77,12 @@ struct AboutView: View {
           }
         }
         .frame(height: 40)
-//        .padding(.top, 4)
 
         Spacer()
       }
-      .frame(width: 270)
+      .frame(width: 250)
+      
+      Spacer()
       
       ScrollView(.vertical) {
         VStack(alignment: .leading, spacing: 16) {
@@ -118,17 +119,38 @@ struct AboutView: View {
             Link(destination: contributor.webURL) {
               HStack {
                 if let pictureURL = contributor.pictureURL {
-                  AsyncImage(url: pictureURL) { img in
-                    img
-                      .interpolation(.high)
-                      .resizable()
-                      .scaledToFit()
-                      .background(.white)
-                  } placeholder: {
-                    Color.white.opacity(0.2)
+                  AsyncImage(url: pictureURL) { phase in
+                    if let image = phase.image {
+                      image
+                        .interpolation(.high)
+                        .resizable()
+                        .scaledToFit()
+                        .background(.white)
+                        .frame(width: 32, height: 32)
+                    } else if phase.error != nil {
+                      Color.clear
+                        .frame(width: 32, height: 32)
+                    } else {
+                      Color.white
+                        .opacity(0.2)
+                        .frame(width: 32, height: 32)
+                    }
                   }
                   .frame(width: 32, height: 32)
                   .clipShape(Circle())
+                  
+//                  AsyncImage(url: pictureURL) { img in
+//                    img
+//                      .interpolation(.high)
+//                      .resizable()
+//                      .scaledToFit()
+//                      .background(.white)
+//                  } placeholder: {
+//                    Color.white.opacity(0.2)
+//                      .frame(width: 32, height: 32)
+//                  }
+//                  .frame(width: 32, height: 32)
+//                  .clipShape(Circle())
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
@@ -143,16 +165,12 @@ struct AboutView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.4))
                 }
-                
-                Spacer()
               }
             }
           }
         }
       }
-      .ignoresSafeArea()
       .scrollClipDisabled()
-      .padding(.leading, 24)
     }
     .frame(width: 570, height: 330)
     .background(
@@ -162,7 +180,7 @@ struct AboutView: View {
           Spacer()
         }
         .frame(height: 330 + 100)
-        .offset(x: 270)
+        .offset(x: 250)
       }
     )
     .background(Color.hotlineRed)
@@ -191,7 +209,9 @@ struct AboutView: View {
       }
     }
     
-    contributors = newContributors
+    withAnimation {
+      contributors = newContributors
+    }
   }
   
   func checkForUpdate() async {

@@ -30,6 +30,9 @@
 		DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */; };
 		DA57536C2B36BA1D00FAC277 /* TextDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57536B2B36BA1D00FAC277 /* TextDocument.swift */; };
 		DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineClient.swift */; };
+		DA65499A2BEC280E00EDB697 /* ServerMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6549992BEC280E00EDB697 /* ServerMessageView.swift */; };
+		DA65499C2BEC3FBD00EDB697 /* ServerAgreementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */; };
+		DA65499E2BEC438A00EDB697 /* NSWindowBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA65499D2BEC438A00EDB697 /* NSWindowBridge.swift */; };
 		DA72A0DD2B4CD0BF00A0F48A /* NewsEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */; };
 		DA72A0E02B4DA8CA00A0F48A /* SplitView in Frameworks */ = {isa = PBXBuildFile; productRef = DA72A0DF2B4DA8CA00A0F48A /* SplitView */; };
 		DA72A0E22B4DAA4000A0F48A /* NewsArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA72A0E12B4DAA4000A0F48A /* NewsArticle.swift */; };
@@ -105,6 +108,9 @@
 		DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineFileClient.swift; sourceTree = "<group>"; };
 		DA57536B2B36BA1D00FAC277 /* TextDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDocument.swift; sourceTree = "<group>"; };
 		DA6300962B24036B0034CBFD /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
+		DA6549992BEC280E00EDB697 /* ServerMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerMessageView.swift; sourceTree = "<group>"; };
+		DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAgreementView.swift; sourceTree = "<group>"; };
+		DA65499D2BEC438A00EDB697 /* NSWindowBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSWindowBridge.swift; sourceTree = "<group>"; };
 		DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsEditorView.swift; sourceTree = "<group>"; };
 		DA72A0E12B4DAA4000A0F48A /* NewsArticle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsArticle.swift; sourceTree = "<group>"; };
 		DA77253E2B21176D006C5ABB /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
@@ -275,6 +281,7 @@
 				DA57536B2B36BA1D00FAC277 /* TextDocument.swift */,
 				DABE8C032B57940A00884D28 /* DAKeychain.swift */,
 				DA55AC782BE6A1AD00034857 /* RegularExpressions.swift */,
+				DA65499D2BEC438A00EDB697 /* NSWindowBridge.swift */,
 			);
 			path = Utility;
 			sourceTree = "<group>";
@@ -319,6 +326,8 @@
 				DA2863D72B37AD1C00A7D050 /* SettingsView.swift */,
 				DAE136B92B9D1147007D8307 /* HotlinePanelView.swift */,
 				DA55AC762BE589F700034857 /* AboutView.swift */,
+				DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */,
+				DA6549992BEC280E00EDB697 /* ServerMessageView.swift */,
 			);
 			path = macOS;
 			sourceTree = "<group>";
@@ -414,6 +423,7 @@
 				DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */,
 				DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */,
 				DAC3D9832BC33FD000A727C9 /* ApplicationState.swift in Sources */,
+				DA65499C2BEC3FBD00EDB697 /* ServerAgreementView.swift in Sources */,
 				DAB4D8802B4C8E9A0048A05C /* URLAdditions.swift in Sources */,
 				DA2863DD2B3E8B7000A7D050 /* FilePreview.swift in Sources */,
 				DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */,
@@ -433,6 +443,7 @@
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
 				DAB4D87B2B4B78310048A05C /* FileImageView.swift in Sources */,
 				DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */,
+				DA65499E2BEC438A00EDB697 /* NSWindowBridge.swift in Sources */,
 				DAE735032B30C0BB000C56F6 /* MessageView.swift in Sources */,
 				DABE8C062B57A06100884D28 /* Bookmarks.swift in Sources */,
 				DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */,
@@ -455,6 +466,7 @@
 				DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */,
 				DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */,
 				DAB4D8822B4C8FED0048A05C /* FileIconView.swift in Sources */,
+				DA65499A2BEC280E00EDB697 /* ServerMessageView.swift in Sources */,
 				DAAEE66F2B47625600A5BA07 /* FilePreviewImageView.swift in Sources */,
 				DA872B152BDDEE1A008B1012 /* VisualEffectView.swift in Sources */,
 				DAAEE66D2B475F1400A5BA07 /* PreviewFileInfo.swift in Sources */,

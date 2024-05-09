@@ -723,7 +723,12 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       print("Hotline: received private message from \(user.name): \(message)")
       
       if Prefs.shared.playPrivateMessageSound && Prefs.shared.playPrivateMessageSound {
-        SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
+        if self.unreadInstantMessages[userID] == nil {
+          SoundEffectPlayer.shared.playSoundEffect(.serverMessage)
+        }
+        else {
+          SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
+        }
       }
       
       let instantMessage = InstantMessage(direction: .incoming, text: message.convertingLinksToMarkdown(), type: .message, date: Date())

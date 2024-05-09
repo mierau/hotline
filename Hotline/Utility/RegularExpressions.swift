@@ -48,7 +48,7 @@ struct RegularExpressions {
       // domain name
       OneOrMore {
         CharacterClass(
-          .anyOf(".-"),
+          .anyOf(".-@"),
           ("a"..."z"),
           ("0"..."9")
         )
@@ -129,6 +129,100 @@ struct RegularExpressions {
           ("a"..."z"),
           ("0"..."9")
         )
+      }
+    }
+    ChoiceOf {
+      Anchor.endOfLine
+      Anchor.wordBoundary
+    }
+  }
+  .anchorsMatchLineEndings()
+  .ignoresCase()
+  
+  static let emailAddress = Regex {
+    ChoiceOf {
+      Anchor.startOfLine
+      Anchor.wordBoundary
+    }
+    Capture {
+      // username
+      OneOrMore {
+        CharacterClass(
+          .anyOf(".-_"),
+          ("a"..."z"),
+          ("0"..."9")
+        )
+      }
+      "@"
+      // domain name
+      OneOrMore {
+        CharacterClass(
+          .anyOf(".-"),
+          ("a"..."z"),
+          ("0"..."9")
+        )
+      }
+      // top-level domain name
+      "."
+      ChoiceOf {
+        "com"
+        "net"
+        "org"
+        "edu"
+        "gov"
+        "mil"
+        "aero"
+        "asia"
+        "biz"
+        "cat"
+        "coop"
+        "info"
+        "int"
+        "jobs"
+        "mobi"
+        "museum"
+        "name"
+        "pizza"
+        "post"
+        "pro"
+        "red"
+        "tel"
+        "today"
+        "travel"
+        "garden"
+        "online"
+        "ai"
+        "be"
+        "by"
+        "ca"
+        "co"
+        "de"
+        "er"
+        "es"
+        "fr"
+        "gs"
+        "ie"
+        "im"
+        "in"
+        "io"
+        "is"
+        "it"
+        "jp"
+        "la"
+        "ly"
+        "ma"
+        "md"
+        "me"
+        "my"
+        "nl"
+        "ps"
+        "pt"
+        "ja"
+        "st"
+        "to"
+        "tv"
+        "uk"
+        "ws"
       }
     }
     ChoiceOf {

@@ -71,6 +71,7 @@ struct IconSettingsView: View {
                   .interpolation(.none)
                   .scaledToFit()
                   .frame(width: 32, height: 16)
+                  .help("Icon \(String(iconID))")
               }
               .tag(iconID)
               .frame(width: 32, height: 32)

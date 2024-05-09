@@ -49,9 +49,9 @@ struct Application: App {
         .frame(minWidth: 250, minHeight: 250)
         .environment(bookmarks)
     }
-    .keyboardShortcut(.init(.init("R"), modifiers: .command))
     .defaultSize(width: 700, height: 550)
     .defaultPosition(.center)
+    .keyboardShortcut(.init("R"), modifiers: .command)
     .onChange(of: AppLaunchState.shared.launchState) {
       if AppLaunchState.shared.launchState == .launched {
         if Prefs.shared.showBannerToolbar {
@@ -60,21 +60,20 @@ struct Application: App {
       }
     }
     
+    // MARK: About Box
     Window("About", id: "about") {
       AboutView()
         .ignoresSafeArea()
         .background(Color.hotlineRed)
     }
     .windowResizability(.contentSize)
-//    .windowStyle(.hiddenTitleBar)
-    .windowStyle(HiddenTitleBarWindowStyle())
+    .windowStyle(.hiddenTitleBar)
     .defaultPosition(.center)
+    .commandsRemoved() // Remove About that was automatically added to Window menu.
     .commands {
       CommandGroup(replacing: CommandGroupPlacement.appInfo) {
-        Button(action: {
+        Button("About Hotline") {
           openWindow(id: "about")
-        }) {
-          Text("About Hotline")
         }
       }
     }

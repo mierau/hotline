@@ -44,35 +44,17 @@ struct ChatView: View {
                           .clipShape(RoundedRectangle(cornerRadius: 3))
                       }
 #endif
-                      ScrollView(.vertical) {
-                        HStack {
-                          Spacer()
-                          Text(msg.text.convertToAttributedStringWithLinks())
-                            .font(.system(size: 12))
-                            .fontDesign(.monospaced)
-                            .textSelection(.enabled)
-                            .tint(Color("Link Color"))
-                            .frame(maxWidth: 400, alignment: .center)
-                            .padding(16)
-                          Spacer()
-                        }
-                      }
-                      .frame(maxWidth: .infinity, maxHeight: 375)
-                      .scrollBounceBehavior(.basedOnSize)
-#if os(iOS)
-                      .background(Color("Agreement Background"))
-#elseif os(macOS)
-                      .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow))
-#endif
-                      .clipShape(RoundedRectangle(cornerRadius: 8))
-                      .padding(.bottom, 16)
+                    ServerAgreementView(text: msg.text)
+                        .padding(.bottom, 16)
                   }
                   // MARK: Server Message
                   else if msg.type == .server {
-                    Text(msg.text)
-                      .lineSpacing(4)
-                      .multilineTextAlignment(.leading)
-                      .textSelection(.enabled)
+                    HStack {
+                      Spacer()
+                      ServerMessageView(message: msg.text)
+                      Spacer()
+                    }
+                    .padding(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
                   }
                   // MARK: Status
                   else if msg.type == .status {

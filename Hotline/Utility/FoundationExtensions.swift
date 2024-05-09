@@ -11,10 +11,20 @@ extension String {
     let attributedString: NSMutableAttributedString = NSMutableAttributedString(string: self)
     let matches = self.ranges(of: RegularExpressions.relaxedLink)
     for match in matches {
-      attributedString.addAttribute(.link, value: self[match], range: NSRange(match, in: self))
+      let matchString = String(self[match])
+      if matchString.isEmailAddress() {
+        attributedString.addAttribute(.link, value: "mailto:\(matchString)", range: NSRange(match, in: self))
+      }
+      else {
+        attributedString.addAttribute(.link, value: matchString, range: NSRange(match, in: self))
+      }
 //      attributedString.addAttribute(.underlineStyle, value: 1, range: NSRange(match, in: self))
     }
     return AttributedString(attributedString)
+  }
+  
+  func isEmailAddress() -> Bool {
+    self.wholeMatch(of: RegularExpressions.emailAddress) != nil
   }
   
   func isWebURL() -> Bool {
