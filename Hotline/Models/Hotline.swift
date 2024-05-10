@@ -387,6 +387,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       if let parentID = article.parentID,
          parentID != 0,
          let parentArticle = articleMap[parentID] {
+        article.expanded = true
         parentArticle.children.append(article)
       }
       else {

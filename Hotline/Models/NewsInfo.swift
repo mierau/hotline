@@ -26,6 +26,10 @@ enum NewsInfoType {
   var articleDate: Date?
   var read: Bool = false
   
+  var expandable: Bool {
+    self.type == .bundle || self.type == .category || self.children.count > 0
+  }
+  
   init(hotlineNewsCategory: HotlineNewsCategory) {
     self.categoryID = hotlineNewsCategory.id
     self.articleID = nil
