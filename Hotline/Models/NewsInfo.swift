@@ -24,6 +24,7 @@ enum NewsInfoType {
   var articleFlavors: [String]?
   var articleUsername: String?
   var articleDate: Date?
+  var read: Bool = false
   
   init(hotlineNewsCategory: HotlineNewsCategory) {
     self.categoryID = hotlineNewsCategory.id

@@ -345,28 +345,56 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
         self?.client.sendGetNewsArticles(path: path) { [weak self] articles in
 //          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
           print("GENERATING NEWS")
-          
+
           var newArticles: [NewsInfo] = []
           for article in articles {
             newArticles.append(NewsInfo(hotlineNewsArticle: article))
           }
           
+          let organizedNewsArticles: [NewsInfo] = self?.organizeNewsList(newArticles) ?? []
+          
           DispatchQueue.main.async {
             if let parent = existingNewsItem {
               print("UNDER PARENT:", parent.name)
-              parent.children = newArticles
+              parent.children = organizedNewsArticles
               
               print(parent.children)
             }
             else if path.isEmpty {
-              self?.news = newArticles
+              self?.news = organizedNewsArticles
             }
             
-            continuation.resume(returning: newArticles)
+            continuation.resume(returning: organizedNewsArticles)
           }
         }
       }
     }
+  }
+  
+  func organizeNewsList(_ news: [NewsInfo]) -> [NewsInfo] {
+    var articleMap: [UInt: NewsInfo] = [:]
+    
+    // Create lookup table of each news item.
+    for article in news {
+      if let articleID = article.articleID {
+        articleMap[articleID] = article
+      }
+    }
+    
+    // Place articles under their parent.
+    var organized: [NewsInfo] = []
+    for article in news {
+      if let parentID = article.parentID,
+         parentID != 0,
+         let parentArticle = articleMap[parentID] {
+        parentArticle.children.append(article)
+      }
+      else {
+        organized.append(article)
+      }
+    }
+    
+    return organized
   }
   
   @MainActor func getNewsCategories(at path: [String] = []) async -> [NewsInfo] {

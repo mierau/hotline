@@ -119,13 +119,14 @@ struct NewsView: View {
       }
       
       self.selection = clickedNews
-      if clickedNews.type == .bundle || clickedNews.type == .category {
+      if clickedNews.type == .bundle || clickedNews.type == .category || clickedNews.children.count > 0 {
         clickedNews.expanded.toggle()
       }
     }
     .onChange(of: selection) {
       self.articleText = nil
       if let article = selection, article.type == .article {
+        article.read = true
         if let articleFlavor = article.articleFlavors?.first,
            let articleID = article.articleID {
           Task {
@@ -247,7 +248,7 @@ struct NewsItemView: View {
   
   var body: some View {
     HStack(alignment: .center, spacing: 6) {
-      if news.type == .bundle || news.type == .category {
+      if news.type == .bundle || news.type == .category || news.children.count > 0 {
         Button {
           news.expanded.toggle()
         } label: {
@@ -261,19 +262,31 @@ struct NewsItemView: View {
         .frame(width: 10)
         .padding(.leading, 4)
       }
-      else if news.type == .article {
-        if news.parentID != nil {
-          Image(systemName: "arrowshape.turn.up.left.fill")
-            .resizable()
-            .renderingMode(.template)
-            .scaledToFit()
-            .frame(width: 10)
-            .foregroundStyle(.secondary)
-            .opacity(0.5)
-        }
+      else {
+        Spacer()
+          .frame(width: 14)
       }
+      
+      // Tree indent
+      Spacer()
+        .frame(width: CGFloat(max(0, depth-1)) * 16)
+      
+      switch news.type {
+      case .category:
+        Image("News Category")
+          .resizable()
+          .frame(width: 16, height: 16)
+      case .bundle:
+        Image("News Bundle")
+          .resizable()
+          .frame(width: 16, height: 16)
+      case .article:
+        Spacer()
+          .frame(width: 16)
+      }
+      
       Text(news.name)
-        .fontWeight((news.type == .bundle || news.type == .category) ? .bold : .regular)
+        .fontWeight((news.type == .bundle || news.type == .category || !news.read) ? .semibold : .regular)
         .lineLimit(1)
         .truncationMode(.tail)
       if news.type == .article && news.articleUsername != nil {
@@ -282,8 +295,6 @@ struct NewsItemView: View {
       Spacer()
       if news.type == .bundle || news.type == .category {
         Text("^[\(news.count) \(news.type == .bundle ? "Category" : "Post")](inflect: true)")
-        
-//        Text("\(news.count) \(news.type == .bundle ? "Categories" : "Posts")")
           .foregroundStyle(.secondary)
           .lineLimit(1)
           .padding([.leading, .trailing], 8)
@@ -297,13 +308,15 @@ struct NewsItemView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(.leading, CGFloat(depth * (12 + 10)))
     .onChange(of: news.expanded) {
+      guard news.expanded else {
+        return
+      }
+      
+      news.read = true
       if news.type == .bundle || news.type == .category {
-        if news.expanded {
-          Task {
-            await model.getNewsList(at: news.path)
-          }
+        Task {
+          await model.getNewsList(at: news.path)
         }
       }
     }
