@@ -5,12 +5,13 @@ struct ServerMessageView: View {
   
   var body: some View {
     HStack(alignment: .center, spacing: 8) {
-      Image(systemName: "exclamationmark.triangle.fill")
+      Image("Server Message")
         .symbolRenderingMode(.multicolor)
         .resizable()
         .scaledToFit()
-        .frame(width: 16, height: 16)
-      Text("**\(message)**")
+        .frame(width: 20, height: 20)
+      Text(message)
+        .fontWeight(.semibold)
         .lineSpacing(4)
         .multilineTextAlignment(.leading)
         .textSelection(.enabled)
