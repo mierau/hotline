@@ -260,11 +260,11 @@ struct NewsItemView: View {
         }
         .buttonStyle(.plain)
         .frame(width: 10)
-        .padding(.leading, 2)
+        .padding(.leading, 4)
       }
       else {
         Spacer()
-          .frame(width: 12)
+          .frame(width: 14)
       }
       
       // Tree indent
