@@ -17,6 +17,7 @@ enum PrefsKeys: String {
   case playErrorSound = "play error sound"
   case playChatInvitationSound = "play chat invitation sound"
   case showBannerToolbar = "show banner toolbar"
+  case showJoinLeaveMessages = "show join leave messages"
 }
 
 @Observable
@@ -39,6 +40,7 @@ class Prefs {
       PrefsKeys.playErrorSound.rawValue: true,
       PrefsKeys.playChatInvitationSound.rawValue: true,
       PrefsKeys.showBannerToolbar.rawValue: true,
+      PrefsKeys.showJoinLeaveMessages.rawValue: true,
     ])
     
     self.username = UserDefaults.standard.string(forKey: PrefsKeys.username.rawValue)!
@@ -57,6 +59,7 @@ class Prefs {
     self.playErrorSound = UserDefaults.standard.bool(forKey: PrefsKeys.playErrorSound.rawValue)
     self.playChatInvitationSound = UserDefaults.standard.bool(forKey: PrefsKeys.playChatInvitationSound.rawValue)
     self.showBannerToolbar = UserDefaults.standard.bool(forKey: PrefsKeys.showBannerToolbar.rawValue)
+    self.showJoinLeaveMessages = UserDefaults.standard.bool(forKey: PrefsKeys.showJoinLeaveMessages.rawValue)
   }
   
   public static let shared = Prefs()
@@ -123,5 +126,9 @@ class Prefs {
   
   var showBannerToolbar: Bool {
     didSet { UserDefaults.standard.set(self.showBannerToolbar, forKey: PrefsKeys.showBannerToolbar.rawValue) }
+  }
+  
+  var showJoinLeaveMessages: Bool {
+    didSet { UserDefaults.standard.set(self.showJoinLeaveMessages, forKey: PrefsKeys.showJoinLeaveMessages.rawValue) }
   }
 }
