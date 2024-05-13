@@ -11,7 +11,7 @@ struct FileView: View {
   let depth: Int
   
   var body: some View {
-    HStack {
+    HStack(alignment: .center, spacing: 0) {
       if file.isFolder {
         Button {
           if file.isFolder {
@@ -26,16 +26,20 @@ struct FileView: View {
         .buttonStyle(.plain)
         .frame(width: 10)
         .padding(.leading, 4)
+        .padding(.trailing, 8)
       }
       else {
-        HStack {
-          
-        }.frame(width: 10)
+        Spacer()
+          .frame(width: 10)
           .padding(.leading, 4)
+          .padding(.trailing, 8)
       }
+      
       HStack(alignment: .center) {
         if file.isUnavailable {
-          Image(systemName: "questionmark.app.fill").opacity(0.5)
+          Image(systemName: "questionmark.app.fill")
+            .frame(width: 16, height: 16)
+            .opacity(0.5)
         }
         else if file.isFolder {
           FolderIconView()
@@ -46,8 +50,13 @@ struct FileView: View {
             .frame(width: 16, height: 16)
         }
       }
-      .frame(width: 15)
-      Text(file.name).lineLimit(1).truncationMode(.tail).opacity(file.isUnavailable ? 0.5 : 1.0)
+      .frame(width: 16)
+      .padding(.trailing, 6)
+      
+      Text(file.name)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .opacity(file.isUnavailable ? 0.5 : 1.0)
       
       if file.isFolder && loading {
         ProgressView().controlSize(.small).padding([.leading, .trailing], 1)
@@ -55,9 +64,10 @@ struct FileView: View {
       Spacer()
       if !file.isUnavailable {
         if file.isFolder {
-          Text("^[\(file.fileSize) file](inflect: true)")
+          Text("^[\(file.fileSize) \("file")](inflect: true)")
             .foregroundStyle(.secondary)
             .lineLimit(1)
+            .padding(.trailing, 6)
         }
         else {
           Text(formattedFileSize(file.fileSize)).foregroundStyle(.secondary).lineLimit(1)
@@ -185,9 +195,10 @@ struct FilesView: View {
         ToolbarItem(placement: .primaryAction) {
           Button {
           } label: {
-            Label("Delete File", systemImage: "trash")
+            Label("Delete", systemImage: "trash")
           }
           .help("Delete")
+          .disabled(true)
         }
         
         ToolbarItem(placement: .primaryAction) {
@@ -200,10 +211,10 @@ struct FilesView: View {
               }
             }
           } label: {
-            Label("Preview File", systemImage: "eye")
+            Label("Preview", systemImage: "eye")
           }
-          .help("Preview File")
-          .disabled(selection?.isPreviewable == false)
+          .help("Preview")
+          .disabled(selection == nil || selection?.isPreviewable == false)
         }
         
         ToolbarItem(placement: .primaryAction) {
@@ -214,9 +225,10 @@ struct FilesView: View {
               }
             }
           } label: {
-            Label("Get File Info", systemImage: "info.circle")
+            Label("Get Info", systemImage: "info.circle")
           }
-          .help("Get File Info")
+          .help("Get Info")
+          .disabled(selection == nil)
         }
         
         ToolbarItem(placement: .primaryAction) {
@@ -225,9 +237,10 @@ struct FilesView: View {
               model.downloadFile(s.name, path: s.path)
             }
           } label: {
-            Label("Download File", systemImage: "square.and.arrow.down")
+            Label("Download", systemImage: "arrow.down")
           }
           .help("Download")
+          .disabled(selection == nil || selection?.isFolder == true)
         }
       }
     }

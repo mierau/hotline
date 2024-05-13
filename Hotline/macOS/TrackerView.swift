@@ -311,17 +311,28 @@ struct TrackerItemView: View {
         .padding(.leading, 4)
       }
       
-      HStack(alignment: .center) {
+      HStack(alignment: .center, spacing: 0) {
         if let bookmark = item.bookmark {
           switch bookmark.type {
           case .tracker:
-            Image(systemName: "point.3.filled.connected.trianglepath.dotted")
+//            Image(systemName: "point.3.filled.connected.trianglepath.dotted")
+            Image("Tracker")
+              .resizable()
+              .scaledToFit()
+              .frame(width: 16, height: 16)
           case .server:
-            Image(systemName: "globe.americas.fill")
+            Image("Server")
+              .resizable()
+              .scaledToFit()
+              .frame(width: 16, height: 16)
+//            Image(systemName: "globe.americas.fill")
           }
         }
         else if let _ = item.server {
-          Image(systemName: "globe.americas.fill")
+          Image("Server")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 16, height: 16)
         }
       }
       .frame(width: 15)

@@ -146,10 +146,10 @@ struct ServerView: View {
   @Binding var server: Server
   
   static var menuItems: [ServerMenuItem] = [
-    ServerMenuItem(type: .chat, name: "Chat", image: "bubble.fill"),
-    ServerMenuItem(type: .board, name: "Board", image: "pin.fill"),
-    ServerMenuItem(type: .news, name: "News", image: "newspaper.fill"),
-    ServerMenuItem(type: .files, name: "Files", image: "folder.fill"),
+    ServerMenuItem(type: .chat, name: "Chat", image: "bubble"),
+    ServerMenuItem(type: .board, name: "Board", image: "pin"),
+    ServerMenuItem(type: .news, name: "News", image: "newspaper"),
+    ServerMenuItem(type: .files, name: "Files", image: "folder"),
   ]
   
   enum FocusFields {
@@ -197,12 +197,12 @@ struct ServerView: View {
           .onChange(of: Prefs.shared.automaticMessage) { sendPreferences() }
           .toolbar {
             ToolbarItem(placement: .navigation) {
-              Image(systemName: "globe.americas.fill")
-                .renderingMode(.template)
+              Image("Server Large")
+//                .renderingMode(.template)
               
                 .resizable()
                 .scaledToFit()
-                .frame(width: 18)
+                .frame(width: 24)
                 .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
             }
           }
