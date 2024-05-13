@@ -1,6 +1,22 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct FolderIconView: View {
+  private func folderIcon() -> Image {
+#if os(iOS)
+    return Image(systemName: "folder.fill")
+#elseif os(macOS)
+    return Image(nsImage: NSWorkspace.shared.icon(for: UTType.folder))
+#endif
+  }
+  
+  var body: some View {
+    folderIcon()
+      .resizable()
+      .scaledToFit()
+  }
+}
+
 struct FileIconView: View {
   let filename: String
   

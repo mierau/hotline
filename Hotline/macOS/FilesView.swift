@@ -38,7 +38,8 @@ struct FileView: View {
           Image(systemName: "questionmark.app.fill").opacity(0.5)
         }
         else if file.isFolder {
-          Image(systemName: "folder.fill")
+          FolderIconView()
+            .frame(width: 16, height: 16)
         }
         else {
           FileIconView(filename: file.name)

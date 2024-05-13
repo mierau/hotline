@@ -56,7 +56,7 @@ struct NewsView: View {
           )
           .fraction(splitFraction)
           .constraints(minPFraction: 0.1, minSFraction: 0.3)
-          .hide(splitHidden)
+//          .hide(splitHidden)
           .styling(color: colorScheme == .dark ? .black : Splitter.defaultColor, inset: 0, visibleThickness: 0.5, invisibleThickness: 5, hideSplitter: true)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(Color(nsColor: .textBackgroundColor))
@@ -68,11 +68,11 @@ struct NewsView: View {
         }
       }
     }
-//    .sheet(isPresented: $editorOpen) {
-//      print("Sheet dismissed!")
-//    } content: {
-//      NewsEditorView()
-//    }
+    .sheet(isPresented: $editorOpen) {
+      print("Sheet dismissed!")
+    } content: {
+      NewsEditorView()
+    }
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
         Button {
@@ -84,13 +84,14 @@ struct NewsView: View {
       
       ToolbarItem(placement: .primaryAction) {
         Button {
-//          if let selection = selection {
-//            editorOpen = true
-////            openWindow(id: "news-editor", value: NewsArticle(parentID: nil, path: selection.path, title: "", body: ""))
-//          }
+          if selection?.type == .category || selection?.type == .article {
+            editorOpen = true
+//            openWindow(id: "news-editor", value: NewsArticle(parentID: nil, path: selection.path, title: "", body: ""))
+          }
         } label: {
           Image(systemName: "square.and.pencil")
         }
+        .disabled(selection?.type != .category && selection?.type != .article)
       }
       
       ToolbarItem(placement: .primaryAction) {
@@ -99,6 +100,7 @@ struct NewsView: View {
         } label: {
           Image(systemName: "arrowshape.turn.up.left")
         }
+        .disabled(selection?.type != .article)
       }
     }
   }
@@ -180,8 +182,8 @@ struct NewsView: View {
   
   var articleViewer: some View {
     ScrollView {
-      if let selection = selection {
-        VStack(alignment: .leading, spacing: 0) {
+      VStack(alignment: .leading, spacing: 0) {
+        if let selection = selection, selection.type == .article {
           if let poster = selection.articleUsername, let postDate = selection.articleDate {
             HStack(alignment: .firstTextBaseline) {
               Text(poster)
@@ -215,9 +217,27 @@ struct NewsView: View {
               .padding(.top, 16)
           }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding()
+        else {
+          HStack(alignment: .center) {
+            Spacer()
+            HStack(alignment: .center, spacing: 8) {
+//              Image(systemName: "doc.append")
+//                .resizable()
+//                .scaledToFit()
+//                .foregroundStyle(.tertiary)
+//                .frame(width: 16, height: 16)
+              Text("Select a news post to read")
+                .foregroundStyle(.tertiary)
+                .font(.system(size: 13))
+            }
+            Spacer()
+          }
+          .padding()
+          .padding(.top, 48)
+        }
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+      .padding()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .transition(.move(edge: .bottom))
@@ -294,10 +314,9 @@ struct NewsItemView: View {
       Spacer()
       if news.type == .bundle || news.type == .category {
         ZStack {
-          
           Text("^[\(news.count) \(news.type == .bundle ? "Category" : "Post")](inflect: true)")
             .foregroundStyle(.clear)
-            .font(.caption)
+            .font(.caption2)
             .lineLimit(1)
             .padding([.leading, .trailing], 8)
             .padding([.top, .bottom], 2)
@@ -306,7 +325,7 @@ struct NewsItemView: View {
           
           Text("^[\(news.count) \(news.type == .bundle ? "Category" : "Post")](inflect: true)")
             .foregroundStyle(.white)
-            .font(.caption)
+            .font(.caption2)
             .lineLimit(1)
             .padding([.leading, .trailing], 8)
             .padding([.top, .bottom], 2)
