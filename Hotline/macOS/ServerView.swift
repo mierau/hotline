@@ -394,7 +394,7 @@ struct ServerView: View {
               .padding(.leading, 4)
           }
           else {
-            Text("")
+            Image("User")
               .frame(width: 16, height: 16)
               .padding(.leading, 4)
           }
