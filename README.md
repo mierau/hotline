@@ -48,7 +48,7 @@ And this project is an attempt to create a modern open source version of Hotline
 | User icons                 |   ✓   |   ✓   |        |          |
 | User administration        |       |       |        |          |
 | News reading               |   ✓   |   ✓   |        |          |
-| News posting               |       |       |        |          |
+| News posting               |   ✓   |       |        |          |
 | Message board reading      |   ✓   |   ✓   |        |          |
 | Message board posting      |   ✓   |       |        |          |
 | File browsing              |   ✓   |   ✓   |        |          |
