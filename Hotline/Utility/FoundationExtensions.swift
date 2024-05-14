@@ -7,6 +7,13 @@ enum Endianness {
 }
 
 extension String {
+  func replyToString() -> String {
+    if self.range(of: "^Re:", options: [.regularExpression, .caseInsensitive]) != nil {
+      return String(self)
+    }
+    return "Re: \(self)"
+  }
+  
   func convertToAttributedStringWithLinks() -> AttributedString {
     let attributedString: NSMutableAttributedString = NSMutableAttributedString(string: self)
     let matches = self.ranges(of: RegularExpressions.relaxedLink)

@@ -49,12 +49,8 @@ struct ChatView: View {
                   }
                   // MARK: Server Message
                   else if msg.type == .server {
-                    HStack {
-                      Spacer()
-                      ServerMessageView(message: msg.text)
-                      Spacer()
-                    }
-                    .padding(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+                    ServerMessageView(message: msg.text)
+                      .padding(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                   }
                   // MARK: Status
                   else if msg.type == .status {

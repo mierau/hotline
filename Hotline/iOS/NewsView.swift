@@ -220,7 +220,7 @@ struct NewsView: View {
       }
       .task {
         if !fetched {
-          let _ = await model.getNewsList()
+          await model.getNewsList()
           fetched = true
         }
       }

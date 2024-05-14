@@ -556,35 +556,28 @@ class HotlineClient: NetSocketDelegate {
     }
   }
   
-  @MainActor func postNewsArticle(title: String, text: String, path: [String] = [], parentID: UInt32? = nil, callback: (([HotlineNewsArticle]) -> Void)? = nil) {
+  @MainActor func postNewsArticle(title: String, text: String, path: [String] = [], parentID: UInt32 = 0, callback: ((Bool) -> Void)? = nil) {
+    guard !path.isEmpty else {
+      callback?(false)
+      return
+    }
+    
     var t = HotlineTransaction(type: .postNewsArticle)
-    if !path.isEmpty {
-      t.setFieldPath(type: .newsPath, val: path)
-    }
-    if let parentID = parentID {
-      t.setFieldUInt32(type: .newsArticleID, val: parentID)
-    }
+    t.setFieldPath(type: .newsPath, val: path)
+    t.setFieldUInt32(type: .newsArticleID, val: parentID)
     t.setFieldString(type: .newsArticleTitle, val: title)
     t.setFieldString(type: .newsArticleDataFlavor, val: "text/plain")
     t.setFieldUInt32(type: .newsArticleFlags, val: 0)
     t.setFieldString(type: .newsArticleData, val: text)
     
+    print("HotlineClient postings \(title) under \(parentID)")
+    
     self.sendPacket(t) { reply, err in
-      guard err == nil,
-            let articleData = reply.getField(type: .newsArticleListData) else {
-        callback?([])
+      guard err == nil else {
+        callback?(false)
         return
       }
-      
-      var articles: [HotlineNewsArticle] = []
-      let newsList = articleData.getNewsList()
-      for art in newsList.articles {
-        var blah = art
-        blah.path = path
-        articles.append(blah)
-      }
-      
-      callback?(articles)
+      callback?(true)
     }
   }
   

@@ -9,15 +9,15 @@ enum NewsInfoType {
 @Observable class NewsInfo: Identifiable, Hashable {
   let id: UUID = UUID()
   
-  let name: String
-  let count: UInt
+  var name: String
+  var count: UInt
   let type: NewsInfoType
   
-  let categoryID: UUID?
-  let articleID: UInt?
-  let parentID: UInt?
+  var categoryID: UUID?
+  var articleID: UInt?
+  var parentID: UInt?
   
-  let path: [String]
+  var path: [String]
   var expanded: Bool = false
   var children: [NewsInfo] = []
   
@@ -28,6 +28,38 @@ enum NewsInfoType {
   
   var expandable: Bool {
     self.type == .bundle || self.type == .category || self.children.count > 0
+  }
+  
+  var lookupPath: String? {
+    switch self.type {
+    case .bundle, .category:
+      return "/\(self.path.joined(separator: "/"))"
+    case .article:
+      guard let aid = self.articleID else {
+        return nil
+      }
+//      if let pid = self.parentID, pid != 0 {
+//        return "/\(self.path.joined(separator: "/"))/\(pid)/\(aid)"
+//      }
+      return "/\(self.path.joined(separator: "/"))/\(aid)"
+    }
+  }
+  
+  var parentArticleLookupPath: String? {
+    switch self.type {
+    case .bundle, .category:
+//      if self.path.count <= 1 {
+//        return "/"
+//      }
+//      let parentPath = self.path[0..<self.path.count-1]
+//      return "/\(parentPath.joined(separator: "/"))"
+      return nil
+    case .article:
+      guard let pid = self.parentID, pid != 0 else {
+        return nil
+      }
+      return "/\(self.path.joined(separator: "/"))/\(pid)"
+    }
   }
   
   init(hotlineNewsCategory: HotlineNewsCategory) {

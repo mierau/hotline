@@ -4,9 +4,6 @@ struct HotlinePanelView: View {
   @Environment(\.openWindow) var openWindow
   @Environment(\.colorScheme) var colorScheme
   
-  @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
-  @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
-  
   var body: some View {
     VStack(spacing: 0) {
       Image(nsImage: ApplicationState.shared.activeServerBanner ?? NSImage(named: "Default Banner")!)

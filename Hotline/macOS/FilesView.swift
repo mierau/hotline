@@ -192,18 +192,18 @@ struct FilesView: View {
         }
       }
       .toolbar {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-          } label: {
-            Label("Delete", systemImage: "trash")
-          }
-          .help("Delete")
-          .disabled(true)
-        }
+//        ToolbarItem(placement: .primaryAction) {
+//          Button {
+//          } label: {
+//            Label("Delete", systemImage: "trash")
+//          }
+//          .help("Delete")
+//          .disabled(true)
+//        }
         
         ToolbarItem(placement: .primaryAction) {
           Button {
-            if let s = selection, !s.isFolder {
+            if let s = selection, s.isPreviewable {
               model.previewFile(s.name, path: s.path) { info in
                 if let info = info {
                   openPreviewWindow(info)

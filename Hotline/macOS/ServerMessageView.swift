@@ -15,9 +15,15 @@ struct ServerMessageView: View {
         .lineSpacing(4)
         .multilineTextAlignment(.leading)
         .textSelection(.enabled)
+      Spacer()
     }
     .padding()
+    .frame(maxWidth: .infinity)
+#if os(iOS)
     .background(Color("Agreement Background"))
+#elseif os(macOS)
+    .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow))
+#endif
     .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 }

@@ -131,6 +131,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   var files: [FileInfo] = []
   var filesLoaded: Bool = false
   var news: [NewsInfo] = []
+  private var newsLookup: [String:NewsInfo] = [:]
   var newsLoaded: Bool = false
   var instantMessages: [UInt16:[InstantMessage]] = [:]
   var transfers: [TransferInfo] = []
@@ -307,88 +308,110 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
     
   }
   
-  @MainActor func getNewsList(at path: [String] = []) async -> [NewsInfo] {
+  @MainActor func getNewsList(at path: [String] = []) async {
     return await withCheckedContinuation { [weak self] continuation in
-      var requestCategories = true
+      let parentNewsGroup = self?.findNews(in: self?.news ?? [], at: path)
       
-      let existingNewsItem = self?.findNews(in: self?.news ?? [], at: path)
-      
-      if existingNewsItem != nil {
-        if existingNewsItem!.type != .bundle {
-          requestCategories = false
-        }
-      }
-      
-      if requestCategories {
-        self?.client.sendGetNewsCategories(path: path) { [weak self] categories in
-//          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
+      // Send a categories request for bundle paths or root (empty path)
+      if path.isEmpty || parentNewsGroup?.type == .bundle {
+        print("Hotline: Requesting categories at: /\(path.joined(separator: "/"))")
+        
+        self?.client.sendGetNewsCategories(path: path) { @MainActor [weak self] categories in
+          // Create info for each category returned.
+          var newCategoryInfos: [NewsInfo] = []
           
-          var newCategories: [NewsInfo] = []
+          // Transform hotline categories into NewsInfo objects.
           for category in categories {
-            newCategories.append(NewsInfo(hotlineNewsCategory: category))
-          }
-          
-          DispatchQueue.main.async {
-            if let parent = existingNewsItem {
-              parent.children = newCategories
-            }
-            else if path.isEmpty {
-              self?.newsLoaded = true
-              self?.news = newCategories
+            var newsCategoryInfo = NewsInfo(hotlineNewsCategory: category)
+            
+            if let lookupPath = newsCategoryInfo.lookupPath {
+              // Merge returned category info with existing category info.
+              if let existingCategoryInfo = self?.newsLookup[lookupPath] {
+                print("Hotline: Merging category into existing category at \(lookupPath)")
+                
+                existingCategoryInfo.count = newsCategoryInfo.count
+                existingCategoryInfo.name = newsCategoryInfo.name
+                existingCategoryInfo.path = newsCategoryInfo.path
+                existingCategoryInfo.categoryID = newsCategoryInfo.categoryID
+                newsCategoryInfo = existingCategoryInfo
+              }
+              else {
+                print("Hotline: New category added at \(lookupPath)")
+                self?.newsLookup[lookupPath] = newsCategoryInfo
+              }
             }
             
-            continuation.resume(returning: newCategories)
+            newCategoryInfos.append(newsCategoryInfo)
           }
+          
+          if let parent = parentNewsGroup {
+            parent.children = newCategoryInfos
+          }
+          else if path.isEmpty {
+            self?.newsLoaded = true
+            self?.news = newCategoryInfos
+          }
+          
+          continuation.resume()
         }
       }
       else {
-        self?.client.sendGetNewsArticles(path: path) { [weak self] articles in
-//          let parentNews = self?.findNews(in: self?.news ?? [], at: path)
-          print("GENERATING NEWS")
+        print("Hotline: Requesting articles at: /\(path.joined(separator: "/"))")
+        
+        self?.client.sendGetNewsArticles(path: path) { @MainActor [weak self] articles in
+          print("Hotline: Organizing news at \(path.joined(separator: "/"))")
 
-          var newArticles: [NewsInfo] = []
+          // Create info for each article returned.
+          var newArticleInfos: [NewsInfo] = []
+          
           for article in articles {
-            newArticles.append(NewsInfo(hotlineNewsArticle: article))
-          }
-          
-          let organizedNewsArticles: [NewsInfo] = self?.organizeNewsList(newArticles) ?? []
-          
-          DispatchQueue.main.async {
-            if let parent = existingNewsItem {
-              print("UNDER PARENT:", parent.name)
-              parent.children = organizedNewsArticles
-              
-              print(parent.children)
-            }
-            else if path.isEmpty {
-              self?.news = organizedNewsArticles
+            var newsArticleInfo = NewsInfo(hotlineNewsArticle: article)
+            
+            if let lookupPath = newsArticleInfo.lookupPath {
+              // Merge returned category info with existing category info.
+              if let existingArticleInfo = self?.newsLookup[lookupPath] {
+                print("Hotline: Merging article into existing article at \(lookupPath)")
+                
+                existingArticleInfo.count = newsArticleInfo.count
+                existingArticleInfo.name = newsArticleInfo.name
+                existingArticleInfo.path = newsArticleInfo.path
+                existingArticleInfo.articleUsername = newsArticleInfo.articleUsername
+                existingArticleInfo.articleDate = newsArticleInfo.articleDate
+                existingArticleInfo.articleFlavors = newsArticleInfo.articleFlavors
+                existingArticleInfo.articleID = newsArticleInfo.articleID
+                newsArticleInfo = existingArticleInfo
+              }
+              else {
+                print("Hotline: New article added at \(lookupPath)")
+                self?.newsLookup[lookupPath] = newsArticleInfo
+              }
             }
             
-            continuation.resume(returning: organizedNewsArticles)
+            newArticleInfos.append(newsArticleInfo)
           }
+          
+          let organizedNewsArticles: [NewsInfo] = self?.organizeNewsArticles(newArticleInfos) ?? []
+          if let parent = parentNewsGroup {
+            parent.children = organizedNewsArticles
+          }
+          
+          continuation.resume()
         }
       }
     }
   }
   
-  func organizeNewsList(_ news: [NewsInfo]) -> [NewsInfo] {
-    var articleMap: [UInt: NewsInfo] = [:]
-    
-    // Create lookup table of each news item.
-    for article in news {
-      if let articleID = article.articleID {
-        articleMap[articleID] = article
-      }
-    }
-    
+  func organizeNewsArticles(_ flatArticles: [NewsInfo]) -> [NewsInfo] {
     // Place articles under their parent.
     var organized: [NewsInfo] = []
-    for article in news {
-      if let parentID = article.parentID,
-         parentID != 0,
-         let parentArticle = articleMap[parentID] {
-        article.expanded = true
-        parentArticle.children.append(article)
+    for article in flatArticles {
+      if let parentLookupPath = article.parentArticleLookupPath,
+         let parentArticle = self.newsLookup[parentLookupPath] {
+//        article.expanded = true
+        if parentArticle.children.firstIndex(of: article) == nil {
+          article.expanded = true
+          parentArticle.children.append(article)
+        }
       }
       else {
         organized.append(article)
@@ -398,29 +421,50 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
     return organized
   }
   
-  @MainActor func getNewsCategories(at path: [String] = []) async -> [NewsInfo] {
+  @MainActor func postNewsArticle(title: String, body: String, at path: [String], parentID: UInt32 = 0) async -> Bool {
     return await withCheckedContinuation { [weak self] continuation in
-      self?.client.sendGetNewsCategories(path: path) { [weak self] categories in
-        let parentNews = self?.findNews(in: self?.news ?? [], at: path)
-        
-        var newCategories: [NewsInfo] = []
-        for category in categories {
-          newCategories.append(NewsInfo(hotlineNewsCategory: category))
-        }
-        
-        DispatchQueue.main.async {
-          if let parent = parentNews {
-            parent.children = newCategories
-          }
-          else if path.isEmpty {
-            self?.news = newCategories
-          }
-          
-          continuation.resume(returning: newCategories)
-        }
+      guard let client = self?.client else {
+        continuation.resume(returning: false)
+        return
       }
+      
+      client.postNewsArticle(title: title, text: body, path: path, parentID: parentID, callback: { success in
+        print("Hotline: News article posted? \(success)")
+        continuation.resume(returning: success)
+      })
     }
   }
+  
+//  @MainActor func getNewsCategories(at path: [String] = []) async -> [NewsInfo] {
+//    return await withCheckedContinuation { [weak self] continuation in
+//      guard let client = self?.client else {
+//        continuation.resume(returning: [])
+//        return
+//      }
+//      
+//      client.sendGetNewsCategories(path: path) { [weak self] categories in
+//        let parentNews = self?.findNews(in: self?.news ?? [], at: path)
+//        
+//        var newCategories: [NewsInfo] = []
+//        for category in categories {
+//          let categoryInfo: NewsInfo = NewsInfo(hotlineNewsCategory: category)
+//          newCategories.append(categoryInfo)
+//          self?.newsLookup[categoryInfo.path.joined(separator: "/")] = categoryInfo
+//        }
+//        
+//        DispatchQueue.main.async {
+//          if let parent = parentNews {
+//            parent.children = newCategories
+//          }
+//          else if path.isEmpty {
+//            self?.news = newCategories
+//          }
+//          
+//          continuation.resume(returning: newCategories)
+//        }
+//      }
+//    }
+//  }
   
   @MainActor func getArticles(at path: [String]) async -> [NewsInfo] {
     return await withCheckedContinuation { [weak self] continuation in
@@ -953,9 +997,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   private func findNews(in newsToSearch: [NewsInfo], at path: [String]) -> NewsInfo? {
-    guard !path.isEmpty, !newsToSearch.isEmpty else { return nil }
-    
-    let currentName = path[0]
+    guard !path.isEmpty, !newsToSearch.isEmpty, let currentName = path.first else { return nil }
     
     for news in newsToSearch {
       if news.name == currentName {
@@ -970,5 +1012,19 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
     }
     
     return nil
+  }
+  
+  private func findNewsArticle(id articleID: UInt32, at path: [String]) -> NewsInfo? {
+    guard let parent = self.findNews(in: self.news, at: path), !parent.children.isEmpty else {
+      return nil
+    }
+    
+    return parent.children.first { child in
+      guard let childArticleID = child.articleID else {
+        return false
+      }
+              
+      return child.type == .article && child.articleID == childArticleID
+    }
   }
 }

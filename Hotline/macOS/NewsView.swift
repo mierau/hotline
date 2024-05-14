@@ -12,6 +12,8 @@ struct NewsView: View {
   @State private var splitHidden = SideHolder(.bottom)
   @State private var splitFraction = FractionHolder.usingUserDefaults(0.25, key: "News Split Fraction")
   @State private var editorOpen: Bool = false
+  @State private var replyOpen: Bool = false
+  @State private var loading: Bool = true
   
   var body: some View {
     Group {
@@ -63,44 +65,81 @@ struct NewsView: View {
         }
         .task {
           if !model.newsLoaded {
-            let _ = await model.getNewsList()
+            await model.getNewsList()
+            loading = false
           }
         }
       }
     }
     .sheet(isPresented: $editorOpen) {
-      print("Sheet dismissed!")
     } content: {
-      NewsEditorView()
+      if let selection = selection {
+        switch selection.type {
+        case .article, .category:
+          NewsEditorView(editorTitle: selection.path.last ?? "New Post", isReply: false, path: selection.path, parentID: 0)
+        default:
+          EmptyView()
+        }
+      }
+      else {
+        EmptyView()
+      }
+    }
+    .sheet(isPresented: $replyOpen) {
+    } content: {
+      if let selection = selection, selection.type == .article {
+        NewsEditorView(editorTitle: "Reply to \(selection.articleUsername ?? "Post")", isReply: true, path: selection.path, parentID: UInt32(selection.articleID!), title: selection.name.replyToString())
+      }
+      else {
+        EmptyView()
+      }
     }
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
         Button {
-          
-        } label: {
-          Image(systemName: "trash")
-        }
-      }
-      
-      ToolbarItem(placement: .primaryAction) {
-        Button {
           if selection?.type == .category || selection?.type == .article {
             editorOpen = true
-//            openWindow(id: "news-editor", value: NewsArticle(parentID: nil, path: selection.path, title: "", body: ""))
           }
         } label: {
           Image(systemName: "square.and.pencil")
         }
+        .help("New Post")
         .disabled(selection?.type != .category && selection?.type != .article)
       }
       
       ToolbarItem(placement: .primaryAction) {
         Button {
-          
+          if selection?.type == .article {
+            replyOpen = true
+          }
         } label: {
           Image(systemName: "arrowshape.turn.up.left")
         }
+        .help("Reply to Post")
         .disabled(selection?.type != .article)
+      }
+      
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          if let selectionPath = selection?.path {
+            Task {
+              loading = true
+              await model.getNewsList(at: selectionPath)
+              loading = false
+            }
+          }
+          else {
+            Task {
+              loading = true
+              await model.getNewsList()
+              loading = false
+            }
+          }
+        } label: {
+          Image(systemName: "arrow.clockwise")
+        }
+        .help("Reload Newsgroup")
+        .disabled(loading)
       }
     }
   }

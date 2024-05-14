@@ -15,7 +15,7 @@ struct FileDetailsView: View {
       Form {
         HStack(alignment: .center){
           FileIconView(filename: fd.name)
-            .frame(width: 16, height: 16)
+            .frame(width: 32, height: 32)
           TextField("", text: $filename)
             .disabled(!self.canRename())
         }

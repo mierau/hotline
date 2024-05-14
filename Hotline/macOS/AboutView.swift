@@ -89,20 +89,21 @@ struct AboutView: View {
           
           VStack(alignment: .leading, spacing: 4) {
             Link(destination: URL(string: "https://github.com/mierau/hotline")!) {
-              HStack(alignment: .center) {
-                Text("GitHub Contributors")
+              HStack(alignment: .center, spacing: 4) {
+                Text("Contributors")
                   .lineLimit(1)
                   .font(.system(size: 16))
                   .fontWeight(.semibold)
                   .foregroundStyle(.black)
-                  .opacity(0.5)
-                
+                  .opacity(0.75)
+
                 Image(systemName: "arrow.forward.circle.fill")
                   .resizable()
+                  .fontWeight(.bold)
                   .scaledToFit()
-                  .frame(width: 16, height: 16)
+                  .frame(width: 12, height: 12)
                   .foregroundStyle(.black)
-                  .opacity(0.5)
+                  .opacity(0.75)
               }
             }
             .padding(.top, 24)

@@ -80,9 +80,9 @@ struct FilePreviewImageView: View {
             Button {
               let _ = preview?.data?.saveAsFileToDownloads(filename: info.name)
             } label: {
-              Label("Save Image...", systemImage: "photo.badge.arrow.down")
+              Label("Download Image...", systemImage: "arrow.down")
             }
-            .help("Save Image")
+            .help("Download Image")
           }
           
           ToolbarItem(placement: .primaryAction) {
