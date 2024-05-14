@@ -69,7 +69,4 @@ And this project is an attempt to create a modern open source version of Hotline
 - Have fun. :)
 
 # macOS Screenshots
-![CleanShot 2024-01-01 at 11 59 13@2x](https://github.com/mierau/hotline/assets/55453/b8cbad58-e1e2-4ff3-ba4b-fa3302c897ca)
-
-# iOS Screenshots
-![IMG_0658](https://github.com/mierau/hotline/assets/55453/8d9fd292-80b7-4c3a-b1a2-6311994ec8e7)
+![CleanShot 2024-05-06 at 14 31 43@2x](https://github.com/mierau/hotline/assets/55453/c1b720cd-d2a9-4d64-b65c-24f2299eece7)
