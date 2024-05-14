@@ -11,6 +11,7 @@ struct GeneralSettingsView: View {
     
     Form {
       TextField("Your Name", text: $username, prompt: Text("guest"))
+      Toggle("Show Join/Leave in Chat", isOn: $preferences.showJoinLeaveMessages)
       Toggle("Refuse private messages", isOn: $preferences.refusePrivateMessages)
       Toggle("Refuse private chat", isOn: $preferences.refusePrivateChat)
       Toggle("Automatic Response", isOn: $preferences.enableAutomaticMessage)

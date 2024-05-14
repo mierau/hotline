@@ -854,7 +854,10 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   func hotlineUserDisconnected(userID: UInt16) {
     if let existingUserIndex = self.users.firstIndex(where: { $0.id == UInt(userID) }) {
       let user = self.users.remove(at: existingUserIndex)
-      self.chat.append(ChatMessage(text: "\(user.name) left", type: .status, date: Date()))
+      
+      if Prefs.shared.showJoinLeaveMessages {
+        self.chat.append(ChatMessage(text: "\(user.name) left", type: .status, date: Date()))
+      }
       
       if Prefs.shared.playSounds && Prefs.shared.playLeaveSound {
         SoundEffectPlayer.shared.playSoundEffect(.userLogout)
@@ -972,7 +975,9 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       
       print("Hotline: added user: \(user.name)")
       self.users.append(User(hotlineUser: user))
-      self.chat.append(ChatMessage(text: "\(user.name) joined", type: .status, date: Date()))
+      if Prefs.shared.showJoinLeaveMessages {
+        self.chat.append(ChatMessage(text: "\(user.name) joined", type: .status, date: Date()))
+      }
     }
   }
   
