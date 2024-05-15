@@ -628,6 +628,15 @@ class HotlineClient: NetSocketDelegate {
     }
   }
   
+  @MainActor func sendDeleteFile(name fileName: String, path filePath: [String], callback: ((Bool) -> Void)? = nil) {
+    var t = HotlineTransaction(type: .deleteFile)
+    t.setFieldString(type: .fileName, val: fileName)
+    t.setFieldPath(type: .filePath, val: filePath)
+    self.sendPacket(t) { reply, err in
+      callback?(err == nil)
+    }
+  }
+  
   @MainActor func sendGetFileInfo(name fileName: String, path filePath: [String], callback: ((FileDetails?) -> Void)? = nil) {
     var t = HotlineTransaction(type: .getFileInfo)
     t.setFieldString(type: .fileName, val: fileName)

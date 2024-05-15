@@ -121,16 +121,15 @@ struct NewsView: View {
       
       ToolbarItem(placement: .primaryAction) {
         Button {
+          loading = true
           if let selectionPath = selection?.path {
             Task {
-              loading = true
               await model.getNewsList(at: selectionPath)
               loading = false
             }
           }
           else {
             Task {
-              loading = true
               await model.getNewsList()
               loading = false
             }
@@ -153,7 +152,17 @@ struct NewsView: View {
     .listStyle(.inset)
     .alternatingRowBackgrounds(.enabled)
     .contextMenu(forSelectionType: NewsInfo.self) { items in
-        // ...
+      let selectedItem = items.first
+      
+      Button {
+        if selectedItem?.type == .article {
+          replyOpen = true
+        }
+      } label: {
+        Label("Reply to \(selectedItem?.articleUsername ?? "Post")", systemImage: "arrowshape.turn.up.left")
+      }
+      .disabled(selectedItem == nil || selectedItem?.type != .article)
+      
     } primaryAction: { items in
       guard let clickedNews = items.first else {
         return

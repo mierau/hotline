@@ -127,12 +127,51 @@ struct FilesView: View {
 //    let _ = FilePreviewWindowController(info: previewInfo)
   }
   
+  @MainActor private func getFileInfo(_ file: FileInfo) {
+    Task {
+      if let fileInfo = await model.getFileDetails(file.name, path: file.path) {
+        Task { @MainActor in
+          self.fileDetails = fileInfo
+        }
+      }
+    }
+  }
+  
+  @MainActor private func downloadFile(_ file: FileInfo) {
+    guard !file.isFolder else {
+      return
+    }
+    
+    model.downloadFile(file.name, path: file.path)
+  }
+  
+  @MainActor private func previewFile(_ file: FileInfo) {
+    guard file.isPreviewable else {
+      return
+    }
+  
+    model.previewFile(file.name, path: file.path) { info in
+      if let info = info {
+        openPreviewWindow(info)
+      }
+    }
+  }
+  
+  private func deleteFile(_ file: FileInfo) async {
+    var parentPath: [String] = []
+    if file.path.count > 1 {
+      parentPath = Array(file.path[0..<file.path.count-1])
+    }
+    
+    if await model.deleteFile(file.name, path: file.path) {
+      let _ = await model.getFileList(path: parentPath)
+    }
+  }
+  
   var body: some View {
     NavigationStack {
       List(model.files, id: \.self, selection: $selection) { file in
         FileView(file: file, depth: 0).tag(file.id)
-//          .environment(self.fileSelection)
-//          .frame(height: 34)
       }
       .environment(\.defaultMinListRowHeight, 34)
       .listStyle(.inset)
@@ -143,7 +182,51 @@ struct FilesView: View {
         }
       }
       .contextMenu(forSelectionType: FileInfo.self) { items in
-          // ...
+        let selectedFile = items.first
+        
+        Button {
+          if let s = selectedFile, !s.isFolder {
+            downloadFile(s)
+          }
+        } label: {
+          Label("Download", systemImage: "arrow.down")
+        }
+        .disabled(selectedFile == nil || (selectedFile != nil && selectedFile!.isFolder))
+        
+        Divider()
+                
+        Button {
+          if let s = selectedFile {
+            getFileInfo(s)
+          }
+        } label: {
+          Label("Get Info", systemImage: "info.circle")
+        }
+        .disabled(selectedFile == nil)
+        
+        Button {
+          if let s = selectedFile {
+            previewFile(s)
+          }
+        } label: {
+          Label("Preview", systemImage: "eye")
+        }
+        .disabled(selectedFile == nil || (selectedFile != nil && !selectedFile!.isPreviewable))
+        
+        if model.access?.contains(.canDeleteFiles) == true {
+          Divider()
+          
+          Button {
+            if let s = selectedFile {
+              Task {
+                await deleteFile(s)
+              }
+            }
+          } label: {
+            Label("Delete", systemImage: "trash")
+          }
+          .disabled(selectedFile == nil)
+        }
       } primaryAction: { items in
         guard let clickedFile = items.first else {
           return
@@ -154,7 +237,7 @@ struct FilesView: View {
           clickedFile.expanded.toggle()
         }
         else {
-          model.downloadFile(clickedFile.name, path: clickedFile.path)
+          downloadFile(clickedFile)
         }
       }
       .onKeyPress(.rightArrow) {
@@ -173,11 +256,7 @@ struct FilesView: View {
       }
       .onKeyPress(.space) {
         if let s = selection, s.isPreviewable {
-          model.previewFile(s.name, path: s.path) { info in
-            if let info = info {
-              openPreviewWindow(info)
-            }
-          }
+          previewFile(s)
           return .handled
         }
         return .ignored
@@ -203,12 +282,8 @@ struct FilesView: View {
         
         ToolbarItem(placement: .primaryAction) {
           Button {
-            if let s = selection, s.isPreviewable {
-              model.previewFile(s.name, path: s.path) { info in
-                if let info = info {
-                  openPreviewWindow(info)
-                }
-              }
+            if let selectedFile = selection, selectedFile.isPreviewable {
+              previewFile(selectedFile)
             }
           } label: {
             Label("Preview", systemImage: "eye")
@@ -219,10 +294,8 @@ struct FilesView: View {
         
         ToolbarItem(placement: .primaryAction) {
           Button {
-            if let s = selection {
-              model.fileDetails(s.name, path: s.path) { info in
-                fileDetails = info
-              }
+            if let selectedFile = selection {
+              getFileInfo(selectedFile)
             }
           } label: {
             Label("Get Info", systemImage: "info.circle")
@@ -233,8 +306,8 @@ struct FilesView: View {
         
         ToolbarItem(placement: .primaryAction) {
           Button {
-            if let s = selection, !s.isFolder {
-              model.downloadFile(s.name, path: s.path)
+            if let selectedFile = selection, !selectedFile.isFolder {
+              downloadFile(selectedFile)
             }
           } label: {
             Label("Download", systemImage: "arrow.down")

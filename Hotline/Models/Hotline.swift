@@ -545,14 +545,29 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
     }
   }
     
-  @MainActor func fileDetails(_ fileName: String, path: [String], complete callback: ((FileDetails?) -> Void)? = nil) {
+  @MainActor func getFileDetails(_ fileName: String, path: [String]) async -> FileDetails? {
     var fullPath: [String] = []
     if path.count > 1 {
       fullPath = Array(path[0..<path.count-1])
     }
     
-    self.client.sendGetFileInfo(name: fileName, path: fullPath) { info in
-      callback?(info)
+    return await withCheckedContinuation { [weak self] continuation in
+      self?.client.sendGetFileInfo(name: fileName, path: fullPath) { info in
+        continuation.resume(returning: info)
+      }
+    }
+  }
+  
+  @MainActor func deleteFile(_ fileName: String, path: [String]) async -> Bool {
+    var fullPath: [String] = []
+    if path.count > 1 {
+      fullPath = Array(path[0..<path.count-1])
+    }
+    
+    return await withCheckedContinuation { [weak self] continuation in
+      self?.client.sendDeleteFile(name: fileName, path: fullPath) { success in
+        continuation.resume(returning: success)
+      }
     }
   }
   
@@ -610,57 +625,6 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       callback?(info)
     }
   }
-  
-//  @MainActor func previewFile(_ fileName: String, path: [String], addTransfer: Bool = false, complete callback: ((TransferInfo, Data) -> Void)? = nil) {
-//    var fullPath: [String] = []
-//    if path.count > 1 {
-//      fullPath = Array(path[0..<path.count-1])
-//    }
-//    
-//    self.client.sendDownloadFile(name: fileName, path: fullPath, preview: true, sent: { _ in
-//      
-//    }, reply: { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadFileSize, downloadWaitingCount in
-//      guard success else {
-//        return
-//      }
-//      
-//      print("GOT DOWNLOAD REPLY:")
-//      print("SUCCESS?", success)
-//      print("TRANSFER SIZE: \(downloadTransferSize.debugDescription)")
-//      print("FILE SIZE: \(downloadFileSize.debugDescription)")
-//      print("REFERENCE NUM: \(downloadReferenceNumber.debugDescription)")
-//      print("WAITING COUNT: \(downloadWaitingCount.debugDescription)")
-//      
-//      if
-//        let self = self,
-//        let address = self.server?.address,
-//        let port = self.server?.port,
-//        let referenceNumber = downloadReferenceNumber,
-//        let transferSize = downloadTransferSize {
-//        
-//        let fileClient = HotlineFileClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), type: .preview)
-//        fileClient.delegate = self
-//        self.downloads.append(fileClient)
-//        
-//        if addTransfer {
-//          let transfer = TransferInfo(id: referenceNumber, title: fileName, size: UInt(transferSize))
-//          transfer.previewCallback = callback
-//          self.transfers.append(transfer)
-//        }
-//        
-//        fileClient.downloadToMemory()
-//        
-//        print("DOWNLOADING TO MEMORY")
-////        fileClient.downloadToMemory({ [weak self] fileData in
-////          print("DOWNLOADED PREVIEW DATA", fileData?.count)
-////          self?.downloads.removeAll { $0.referenceNumber == referenceNumber }
-////          callback?(fileData != nil, fileData)
-////        })
-//        
-////        self.downloads.append(fileClient)
-//      }
-//    })
-//  }
   
   @MainActor func deleteTransfer(id: UInt32) {
     if let b = self.bannerClient, b.referenceNumber == id {
