@@ -1,7 +1,7 @@
 import SwiftUI
 
 @Observable
-class ApplicationState {
+final class ApplicationState {
   static let shared = ApplicationState()
   
   var activeHotline: Hotline? = nil

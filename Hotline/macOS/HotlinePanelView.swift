@@ -16,7 +16,13 @@ struct HotlinePanelView: View {
       
       HStack(spacing: 16) {
         Button {
-          openWindow(id: "servers")
+          if let event = NSApp.currentEvent,
+             event.modifierFlags.contains(.option) {
+            openWindow(id: "server")
+          }
+          else {
+            openWindow(id: "servers")
+          }
         }
         label: {
           Image(systemName: "globe.americas.fill")

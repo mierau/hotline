@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 #if os(macOS)
 
 @Observable
-class AppLaunchState {
+final class AppLaunchState {
   static let shared = AppLaunchState()
   
   enum LaunchState {
