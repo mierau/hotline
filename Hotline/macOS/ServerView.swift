@@ -127,11 +127,11 @@ enum ServerNavigationType: Identifiable, Hashable, Equatable {
 }
 
 struct ServerView: View {
-  @Environment(BookmarksOld.self) private var bookmarks: BookmarksOld
   @Environment(\.dismiss) var dismiss
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.controlActiveState) private var controlActiveState
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.modelContext) private var modelContext
   
   @State private var model: Hotline = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
   @State private var state: ServerState = ServerState(selection: .chat)
@@ -334,7 +334,8 @@ struct ServerView: View {
                 let password: String? = connectPassword.isEmpty ? nil : connectPassword
                 
                 if !host.isEmpty {
-                  let _ = bookmarks.add(BookmarkOld(type: .server, name: name, address: host, port: port, login: login, password: password))
+                  let newBookmark = Bookmark(type: .server, name: name, address: host, port: port, login: login, password: password)
+                  Bookmark.add(newBookmark, context: modelContext)
                 }
               }
             }

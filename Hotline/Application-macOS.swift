@@ -33,7 +33,6 @@ struct Application: App {
   
   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
   
-  @State private var bookmarks = BookmarksOld()
   @State private var hotlinePanel: HotlinePanel? = nil
 
   @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
@@ -44,9 +43,8 @@ struct Application: App {
     Window("Servers", id: "servers") {
       TrackerView()
         .frame(minWidth: 250, minHeight: 250)
-        .environment(bookmarks)
     }
-    .modelContainer(for: Bookmark.self, isAutosaveEnabled: true, isUndoEnabled: true)
+    .modelContainer(for: [Bookmark.self])
     .defaultSize(width: 700, height: 550)
     .defaultPosition(.center)
     .keyboardShortcut(.init("R"), modifiers: .command)
@@ -80,10 +78,10 @@ struct Application: App {
     WindowGroup(id: "server", for: Server.self) { server in
       ServerView(server: server)
         .frame(minWidth: 430, minHeight: 300)
-        .environment(bookmarks)
     } defaultValue: {
       Server(name: nil, description: nil, address: "")
     }
+    .modelContainer(for: [Bookmark.self])
     .defaultSize(width: 750, height: 700)
     .defaultPosition(.center)
     .onChange(of: activeServerState) {
@@ -179,18 +177,7 @@ struct Application: App {
     Settings {
       SettingsView()
     }
-    
-    
-    // MARK: News Editor Window
-//    WindowGroup(id: "news-editor", for: NewsArticle.self) { $article in
-//      NewsEditorView(article: $article)
-//    }
-//    .windowResizability(.contentSize)
-//    .windowStyle(.titleBar)
-//    .windowToolbarStyle(.unifiedCompact(showsTitle: true))
-//    .defaultSize(width: 450, height: 550)
-//    .defaultPosition(.center)
-    
+        
     // MARK: Image Preview Window
     WindowGroup(id: "preview-image", for: PreviewFileInfo.self) { $info in
       FilePreviewImageView(info: $info)

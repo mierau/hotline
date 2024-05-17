@@ -1,20 +1,20 @@
 import Foundation
 import SwiftData
 
-enum BookmarkType: Codable {
-  case tracker
-  case server
-  case temporary
+enum BookmarkType: String, Codable {
+  case tracker = "tracker"
+  case server = "server"
+  case temporary = "temporary"
 }
 
 @Model
 final class Bookmark {
-  var type: BookmarkType
+  var type: BookmarkType = BookmarkType.server
   var order: Int = 0
   
-  var name: String
-  var address: String
-  var port: Int
+  var name: String = ""
+  var address: String = ""
+  var port: Int = HotlinePorts.DefaultServerPort
   
   @Attribute(.allowsCloudEncryption)
   var login: String?
