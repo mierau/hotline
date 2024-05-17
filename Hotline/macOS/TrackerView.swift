@@ -11,6 +11,7 @@ struct TrackerView: View {
   @State private var refreshing = false
   @State private var trackerSheetPresented: Bool = false
   @State private var trackerSheetBookmark: Bookmark? = nil
+  @State private var attemptedPrepopulate: Bool = false
   
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
   @State private var selection: Bookmark? = nil
@@ -46,11 +47,21 @@ struct TrackerView: View {
     .environment(\.defaultMinListRowHeight, 34)
     .listStyle(.inset)
     .alternatingRowBackgrounds(.enabled)
-    .onAppear {
-//      Bookmark.deleteAll(context: modelContext)
+    .onChange(of: ApplicationState.shared.cloudKitReady) {
+      if attemptedPrepopulate {
+        print("Tracker: Already attempted to prepopulate bookmarks")
+        return
+      }
+      
+      print("Tracker: Prepopulating bookmarks")
+      
+      attemptedPrepopulate = true
       
       // Make sure default bookmarks are there when empty.
       Bookmark.populateDefaults(context: modelContext)
+    }
+    .onAppear {
+//      Bookmark.deleteAll(context: modelContext)
     }
     .contextMenu(forSelectionType: Bookmark.self) { items in
       if let item = items.first {
@@ -174,15 +185,6 @@ struct TrackerView: View {
         .help("Connect to Server")
       }
     }
-//    .onReceive(NotificationCenter.default.publisher(for: NSNotification.BookmarkAdded)) { notification in
-//      guard let bookmarks = bookmarks.bookmarks, let userInfo = notification.userInfo else {
-//        return
-//      }
-//      
-//      if let i = userInfo["index"] as? Int, bookmarks.count > i {
-//        self.servers.insert(TrackerItem(bookmark: bookmarks[i]), at: i)
-//      }
-//    }
     .onOpenURL(perform: { url in
       if let s = Server(url: url) {
         openWindow(id: "server", value: s)
@@ -309,7 +311,7 @@ struct TrackerItemView: View {
   let bookmark: Bookmark
   
   var body: some View {
-    HStack(alignment: .center, spacing: 8) {
+    HStack(alignment: .center, spacing: 6) {
       if bookmark.type == .tracker {
         Button {
           bookmark.expanded.toggle()
@@ -323,6 +325,7 @@ struct TrackerItemView: View {
         .buttonStyle(.plain)
         .frame(width: 10)
         .padding(.leading, 4)
+        .padding(.trailing, 2)
       }
       
       switch bookmark.type {
@@ -345,6 +348,7 @@ struct TrackerItemView: View {
           .frame(width: 11, height: 11, alignment: .center)
           .opacity(0.5)
           .padding(.leading, 3)
+          .padding(.trailing, 2)
         Image("Server")
           .resizable()
           .scaledToFit()

@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import CloudKit
 import UniformTypeIdentifiers
 
 @Observable
@@ -16,8 +17,50 @@ final class AppLaunchState {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+  private var cloudKitObserverToken: Any? = nil
+  
   func applicationDidFinishLaunching(_ notification: Notification) {
     AppLaunchState.shared.launchState = .launched
+    
+    CKContainer.default().accountStatus { status, error in
+      switch status {
+      case .noAccount:
+        print("iCloud Unavailable")
+        
+        // We mark CloudKit has available now since we're not waiting on
+        // a server sync or anything.
+        ApplicationState.shared.cloudKitReady = true
+      default:
+        print("iCloud Available")
+        
+        self.cloudKitObserverToken = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification, object: nil, queue: OperationQueue.main) { [weak self] note in
+          print("iCloud Changed!")
+          ApplicationState.shared.cloudKitReady = true
+            
+          guard let token = self?.cloudKitObserverToken else { return }
+          NotificationCenter.default.removeObserver(token)
+        }
+      }
+    }
+    
+//    if FileManager.default.ubiquityIdentityToken == nil {
+//      print("iCloud Unavailable")
+//      
+//      // We mark CloudKit has available now since we're not waiting on
+//      // a server sync or anything.
+//      ApplicationState.shared.cloudKitReady = true
+//    }
+//    else {
+//      print("iCloud Available")
+//      
+//      self.cloudKitObserverToken = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification, object: nil, queue: OperationQueue.main) { [weak self] note in
+//        print("iCloud Changed!")
+//        ApplicationState.shared.cloudKitReady = true
+//          
+//        guard let token = self?.cloudKitObserverToken else { return }
+//        NotificationCenter.default.removeObserver(token)
+//      }
+//    }
   }
   
   func applicationWillTerminate(_ notification: Notification) {
@@ -37,6 +80,19 @@ struct Application: App {
 
   @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
+  
+  private var modelContainer: ModelContainer = {
+    let schema = Schema([
+      Bookmark.self
+    ])
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false, cloudKitDatabase: .private("iCloud.co.goodmake.hotline"))
+    let modelContainer = try! ModelContainer(for: schema, configurations: [config])
+    
+    // Print local SwiftData sqlite file.
+//    print(modelContainer.configurations.first?.url.path(percentEncoded: false))
+    
+    return modelContainer
+  }()
     
   var body: some Scene {
     // MARK: Tracker Window
@@ -44,7 +100,7 @@ struct Application: App {
       TrackerView()
         .frame(minWidth: 250, minHeight: 250)
     }
-    .modelContainer(for: [Bookmark.self])
+    .modelContainer(self.modelContainer)
     .defaultSize(width: 700, height: 550)
     .defaultPosition(.center)
     .keyboardShortcut(.init("R"), modifiers: .command)
@@ -81,7 +137,7 @@ struct Application: App {
     } defaultValue: {
       Server(name: nil, description: nil, address: "")
     }
-    .modelContainer(for: [Bookmark.self])
+    .modelContainer(self.modelContainer)
     .defaultSize(width: 750, height: 700)
     .defaultPosition(.center)
     .onChange(of: activeServerState) {

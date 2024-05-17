@@ -11,4 +11,6 @@ final class ApplicationState {
   var activeServerID: UUID? = nil
   var activeServerBanner: NSImage? = nil
   var activeServerName: String? = nil
+  
+  var cloudKitReady: Bool = false
 }

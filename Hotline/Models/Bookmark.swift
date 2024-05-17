@@ -34,6 +34,10 @@ final class Bookmark {
   @Transient
   var servers: [Bookmark] = []
   
+  func hash(into hasher: inout Hasher) {
+    
+  }
+  
   @Transient
   var displayAddress: String {
     switch self.type {
@@ -53,25 +57,6 @@ final class Bookmark {
         return "\(self.address):\(String(self.port))"
       }
     }
-    
-//    if let s = server {
-//      if s.port == HotlinePorts.DefaultServerPort {
-//        return s.address
-//      }
-//      else {
-//        return "\(s.address):\(s.port)"
-//      }
-//    }
-//    else if let b = bookmark {
-//      if b.port == HotlinePorts.DefaultServerPort {
-//        return b.address
-//      }
-//      else {
-//        return "\(b.address):\(b.port)"
-//      }
-//    }
-    
-//    return nil
   }
   
   @Transient
