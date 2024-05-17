@@ -119,16 +119,15 @@ struct ChatView: View {
                     .padding(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
                   }
                 }
-                EmptyView().id(bottomID)
               }
               .padding()
+
+              VStack(spacing: 0) {}.id(bottomID)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .defaultScrollAnchor(.bottom)
             .onChange(of: model.chat.count) {
-              withAnimation(.easeOut(duration: 0.15).delay(0.25)) {
-                reader.scrollTo(bottomID, anchor: .bottom)
-              }
+              reader.scrollTo(bottomID, anchor: .bottom)
               model.markPublicChatAsRead()
             }
             .onAppear {
