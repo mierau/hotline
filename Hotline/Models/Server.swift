@@ -10,14 +10,14 @@ struct Server: Codable {
   var login: String
   var password: String
   
-  init(name: String?, description: String?, address: String, port: Int = HotlinePorts.DefaultServerPort, users: Int = 0, login: String = "", password: String = "") {
+  init(name: String?, description: String?, address: String, port: Int = HotlinePorts.DefaultServerPort, users: Int = 0, login: String? = nil, password: String? = nil) {
     self.name = name
     self.description = description
     self.address = address.lowercased()
     self.port = port
     self.users = users
-    self.login = login
-    self.password = password
+    self.login = login ?? ""
+    self.password = password ?? ""
   }
   
   init?(url: URL) {

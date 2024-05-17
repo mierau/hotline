@@ -5,20 +5,20 @@ extension NSNotification {
   static let BookmarkRemoved = Notification.Name("BookmarkRemoved")
 }
 
-enum BookmarkType: String, Codable {
+enum BookmarkOldType: String, Codable {
   case tracker = "tracker"
   case server = "server"
 }
 
-struct Bookmark: Codable, Equatable {
-  let type: BookmarkType
+struct BookmarkOld: Codable, Equatable {
+  let type: BookmarkOldType
   let name: String
   let address: String
   let port: Int
   let login: String?
   let password: String?
   
-  init(type: BookmarkType, name: String, address: String, port: Int = HotlinePorts.DefaultServerPort, login: String? = nil, password: String? = nil) {
+  init(type: BookmarkOldType, name: String, address: String, port: Int = HotlinePorts.DefaultServerPort, login: String? = nil, password: String? = nil) {
     self.type = type
     self.name = name
     self.address = address
@@ -28,20 +28,20 @@ struct Bookmark: Codable, Equatable {
   }
 }
 
-@Observable final class Bookmarks {
-  var bookmarks: [Bookmark]? = nil
+@Observable final class BookmarksOld {
+  var bookmarks: [BookmarkOld]? = nil
   
-  static let DefaultBookmarks: [Bookmark] = [
-    Bookmark(type: .server, name: "System 7 Today", address: "hotline.system7today.com"),
-    Bookmark(type: .server, name: "The Mobius Strip", address: "67.174.208.111"),
-    Bookmark(type: .tracker, name: "Featured Servers", address: "hltracker.com"),
+  static let DefaultBookmarks: [BookmarkOld] = [
+    BookmarkOld(type: .server, name: "System 7 Today", address: "hotline.system7today.com"),
+    BookmarkOld(type: .server, name: "The Mobius Strip", address: "67.174.208.111"),
+    BookmarkOld(type: .tracker, name: "Featured Servers", address: "hltracker.com"),
   ]
   
   init() {
     self.load()
   }
   
-  func apply(_ newBookmarks: [Bookmark], save shouldSave: Bool = true) {
+  func apply(_ newBookmarks: [BookmarkOld], save shouldSave: Bool = true) {
     self.bookmarks = newBookmarks
     if shouldSave {
       self.save()
@@ -53,21 +53,21 @@ struct Bookmark: Codable, Equatable {
     let jsonData: Data? = jsonString?.data(using: .utf8, allowLossyConversion: false)
     
     let decoder = JSONDecoder()
-    var decodedBookmarks = try? decoder.decode([Bookmark].self, from: jsonData ?? Data())
+    var decodedBookmarks = try? decoder.decode([BookmarkOld].self, from: jsonData ?? Data())
     if decodedBookmarks == nil || decodedBookmarks?.isEmpty == true {
       print("Bookmarks: using default bookmarks")
-      decodedBookmarks = Bookmarks.DefaultBookmarks
+      decodedBookmarks = BookmarksOld.DefaultBookmarks
     }
     else {
       print("Bookmarks: using saved bookmarks")
     }
     
-    self.bookmarks = [Bookmark](decodedBookmarks!)
+    self.bookmarks = [BookmarkOld](decodedBookmarks!)
   }
   
   func save() {
     var bookmarksToSave = self.bookmarks
-    if bookmarksToSave == Bookmarks.DefaultBookmarks {
+    if bookmarksToSave == BookmarksOld.DefaultBookmarks {
       print("Bookmarks: skipping saving default bookmarks")
       bookmarksToSave = []
     }
@@ -83,7 +83,7 @@ struct Bookmark: Codable, Equatable {
   
   // MARK: -
   
-  func add(_ bookmark: Bookmark, save shouldSave: Bool = true) {
+  func add(_ bookmark: BookmarkOld, save shouldSave: Bool = true) {
     self.bookmarks?.insert(bookmark, at: 0)
     
     if shouldSave {
@@ -95,7 +95,7 @@ struct Bookmark: Codable, Equatable {
     }
   }
   
-  func delete(_ bookmark: Bookmark, save shouldSave: Bool = true) -> Bool {
+  func delete(_ bookmark: BookmarkOld, save shouldSave: Bool = true) -> Bool {
     if let i = self.bookmarks?.firstIndex(where: { b in b.address.lowercased() == bookmark.address.lowercased() && b.port == bookmark.port }) {
       self.bookmarks?.remove(at: i)
       
@@ -112,7 +112,7 @@ struct Bookmark: Codable, Equatable {
     return false
   }
   
-  func update(_ bookmark: Bookmark, save shouldSave: Bool = true) -> Bool {
+  func update(_ bookmark: BookmarkOld, save shouldSave: Bool = true) -> Bool {
     if let i = self.bookmarks?.firstIndex(where: { b in b.address.lowercased() == bookmark.address.lowercased() && b.port == bookmark.port }) {
       self.bookmarks?[i] = bookmark
       if shouldSave {

@@ -13,7 +13,7 @@ struct NewsView: View {
   @State private var splitFraction = FractionHolder.usingUserDefaults(0.25, key: "News Split Fraction")
   @State private var editorOpen: Bool = false
   @State private var replyOpen: Bool = false
-  @State private var loading: Bool = true
+  @State private var loading: Bool = false
   
   var body: some View {
     Group {
@@ -65,6 +65,7 @@ struct NewsView: View {
         }
         .task {
           if !model.newsLoaded {
+            loading = true
             await model.getNewsList()
             loading = false
           }

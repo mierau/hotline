@@ -2,8 +2,6 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
-#if os(macOS)
-
 @Observable
 final class AppLaunchState {
   static let shared = AppLaunchState()
@@ -35,8 +33,7 @@ struct Application: App {
   
   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
   
-  @State private var soundEffects = SoundEffectPlayer()
-  @State private var bookmarks = Bookmarks()
+  @State private var bookmarks = BookmarksOld()
   @State private var hotlinePanel: HotlinePanel? = nil
 
   @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
@@ -49,6 +46,7 @@ struct Application: App {
         .frame(minWidth: 250, minHeight: 250)
         .environment(bookmarks)
     }
+    .modelContainer(for: Bookmark.self, isAutosaveEnabled: true, isUndoEnabled: true)
     .defaultSize(width: 700, height: 550)
     .defaultPosition(.center)
     .keyboardShortcut(.init("R"), modifiers: .command)
@@ -82,7 +80,6 @@ struct Application: App {
     WindowGroup(id: "server", for: Server.self) { server in
       ServerView(server: server)
         .frame(minWidth: 430, minHeight: 300)
-        .environment(soundEffects)
         .environment(bookmarks)
     } defaultValue: {
       Server(name: nil, description: nil, address: "")
@@ -241,5 +238,3 @@ struct Application: App {
     }
   }
 }
-
-#endif

@@ -12,6 +12,7 @@
 		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; platformFilter = ios; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; platformFilter = ios; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; platformFilter = ios; };
+		DA20BBE12BF5237600B94E7C /* Bookmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA20BBE02BF5237600B94E7C /* Bookmark.swift */; };
 		DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2863D72B37AD1C00A7D050 /* SettingsView.swift */; platformFilters = (macos, ); };
 		DA2863DA2B37BF6E00A7D050 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2863D92B37BF6E00A7D050 /* Preferences.swift */; };
 		DA2863DD2B3E8B7000A7D050 /* FilePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2863DC2B3E8B7000A7D050 /* FilePreview.swift */; };
@@ -64,7 +65,7 @@
 		DABE8C002B55E69800884D28 /* server-message.aiff in Resources */ = {isa = PBXBuildFile; fileRef = DABE8BFF2B55E69800884D28 /* server-message.aiff */; };
 		DABE8C022B55E69D00884D28 /* new-news.aiff in Resources */ = {isa = PBXBuildFile; fileRef = DABE8C012B55E69D00884D28 /* new-news.aiff */; };
 		DABE8C042B57940B00884D28 /* DAKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = DABE8C032B57940A00884D28 /* DAKeychain.swift */; };
-		DABE8C062B57A06100884D28 /* Bookmarks.swift in Sources */ = {isa = PBXBuildFile; fileRef = DABE8C052B57A06100884D28 /* Bookmarks.swift */; };
+		DABE8C062B57A06100884D28 /* BookmarksOld.swift in Sources */ = {isa = PBXBuildFile; fileRef = DABE8C052B57A06100884D28 /* BookmarksOld.swift */; };
 		DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DABFCC282B1530DC009F40D2 /* FoundationExtensions.swift */; };
 		DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */; };
 		DAC3D97E2BC0F1ED00A727C9 /* Application-iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC3D97D2BC0F1ED00A727C9 /* Application-iOS.swift */; platformFilter = ios; };
@@ -89,6 +90,7 @@
 		DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersView.swift; sourceTree = "<group>"; };
 		DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardView.swift; sourceTree = "<group>"; };
 		DA0D69902B1E894800C71DF5 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
+		DA20BBE02BF5237600B94E7C /* Bookmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bookmark.swift; sourceTree = "<group>"; };
 		DA2863D72B37AD1C00A7D050 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		DA2863D92B37BF6E00A7D050 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
 		DA2863DB2B37DBE000A7D050 /* Hotline.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Hotline.entitlements; sourceTree = "<group>"; };
@@ -142,7 +144,7 @@
 		DABE8BFF2B55E69800884D28 /* server-message.aiff */ = {isa = PBXFileReference; lastKnownFileType = audio.aiff; path = "server-message.aiff"; sourceTree = "<group>"; };
 		DABE8C012B55E69D00884D28 /* new-news.aiff */ = {isa = PBXFileReference; lastKnownFileType = audio.aiff; path = "new-news.aiff"; sourceTree = "<group>"; };
 		DABE8C032B57940A00884D28 /* DAKeychain.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DAKeychain.swift; sourceTree = "<group>"; };
-		DABE8C052B57A06100884D28 /* Bookmarks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bookmarks.swift; sourceTree = "<group>"; };
+		DABE8C052B57A06100884D28 /* BookmarksOld.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarksOld.swift; sourceTree = "<group>"; };
 		DABFCC282B1530DC009F40D2 /* FoundationExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationExtensions.swift; sourceTree = "<group>"; };
 		DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUIExtensions.swift; sourceTree = "<group>"; };
 		DAC3D97D2BC0F1ED00A727C9 /* Application-iOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Application-iOS.swift"; path = "Sounds/Application-iOS.swift"; sourceTree = "<group>"; };
@@ -294,7 +296,7 @@
 				DADDB28E2B238D850024040D /* Hotline.swift */,
 				DADDB28A2B22B31F0024040D /* Tracker.swift */,
 				DAC3D9822BC33FD000A727C9 /* ApplicationState.swift */,
-				DABE8C052B57A06100884D28 /* Bookmarks.swift */,
+				DABE8C052B57A06100884D28 /* BookmarksOld.swift */,
 				DA2863D92B37BF6E00A7D050 /* Preferences.swift */,
 				DADDB28C2B22B5920024040D /* Server.swift */,
 				DA32CD482B2931640053B98B /* User.swift */,
@@ -307,6 +309,7 @@
 				DA32CD4E2B2931CC0053B98B /* NewsInfo.swift */,
 				DA72A0E12B4DAA4000A0F48A /* NewsArticle.swift */,
 				DAAEE66C2B475F1400A5BA07 /* PreviewFileInfo.swift */,
+				DA20BBE02BF5237600B94E7C /* Bookmark.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -318,6 +321,7 @@
 				DAE734F82B2E4185000C56F6 /* ServerView.swift */,
 				DAE734FE2B2E6750000C56F6 /* ChatView.swift */,
 				DAE735042B3218D8000C56F6 /* NewsView.swift */,
+				DA2D98112BF29D5F0027E4BD /* NewsItemView.swift */,
 				DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */,
 				DAE735022B30C0BB000C56F6 /* MessageView.swift */,
 				DAE734FC2B2E65E9000C56F6 /* MessageBoardView.swift */,
@@ -330,7 +334,6 @@
 				DA55AC762BE589F700034857 /* AboutView.swift */,
 				DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */,
 				DA6549992BEC280E00EDB697 /* ServerMessageView.swift */,
-				DA2D98112BF29D5F0027E4BD /* NewsItemView.swift */,
 			);
 			path = macOS;
 			sourceTree = "<group>";
@@ -448,8 +451,9 @@
 				DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */,
 				DA65499E2BEC438A00EDB697 /* NSWindowBridge.swift in Sources */,
 				DAE735032B30C0BB000C56F6 /* MessageView.swift in Sources */,
-				DABE8C062B57A06100884D28 /* Bookmarks.swift in Sources */,
+				DABE8C062B57A06100884D28 /* BookmarksOld.swift in Sources */,
 				DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */,
+				DA20BBE12BF5237600B94E7C /* Bookmark.swift in Sources */,
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,
 				DA2863DA2B37BF6E00A7D050 /* Preferences.swift in Sources */,
 				DA32CD4F2B2931CC0053B98B /* NewsInfo.swift in Sources */,

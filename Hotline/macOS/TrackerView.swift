@@ -1,61 +1,246 @@
 import SwiftUI
+import SwiftData
 
 struct TrackerView: View {
-  @Environment(Bookmarks.self) private var bookmarks: Bookmarks
+//  @Environment(BookmarksOld.self) private var bookmarks: BookmarksOld
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.openWindow) private var openWindow
   @Environment(\.controlActiveState) private var controlActiveState
+  @Environment(\.modelContext) private var modelContext
   
-  @MainActor
-  func refresh() async {
-    
+  @State private var refreshing = false
+  @State private var trackerSheetPresented: Bool = false
+  @State private var trackerSheetBookmark: Bookmark? = nil
+  
+  @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
+  @State private var selection: Bookmark? = nil
+  
+  var body: some View {
+    List(selection: $selection) {
+      ForEach(bookmarks, id: \.self) { bookmark in
+        TrackerItemView(bookmark: bookmark)
+          .tag(bookmark)
+        
+        if bookmark.type == .tracker && bookmark.expanded {
+          ForEach(bookmark.servers, id: \.self) { trackedServer in
+            TrackerItemView(bookmark: trackedServer)
+              .moveDisabled(true)
+              .deleteDisabled(true)
+              .tag(trackedServer)
+          }
+        }
+      }
+      .onMove { movedIndexes, destinationIndex in
+        Bookmark.move(movedIndexes, to: destinationIndex, context: modelContext)
+      }
+      .onDelete { deletedIndexes in
+        Bookmark.delete(at: deletedIndexes, context: modelContext)
+      }
+    }
+    .onDeleteCommand {
+      if let bookmark = selection,
+         bookmark.type != .temporary {
+        Bookmark.delete(bookmark, context: modelContext)
+      }
+    }
+    .environment(\.defaultMinListRowHeight, 34)
+    .listStyle(.inset)
+    .alternatingRowBackgrounds(.enabled)
+    .onAppear {
+//      Bookmark.deleteAll(context: modelContext)
+      
+      // Make sure default bookmarks are there when empty.
+      Bookmark.populateDefaults(context: modelContext)
+    }
+    .contextMenu(forSelectionType: Bookmark.self) { items in
+      if let item = items.first {
+        if item.type == .temporary {
+          Button {
+            let newBookmark = Bookmark(type: .server, name: item.name, address: item.address, port: item.port, login: item.login, password: item.password)
+            Bookmark.add(newBookmark, context: modelContext)
+          } label: {
+            Label("Bookmark", systemImage: "bookmark")
+          }
+          
+          Divider()
+        }
+        
+        Button {
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(item.displayAddress, forType: .string)
+        } label: {
+          Label("Copy Address", systemImage: "doc.on.doc")
+        }
+        
+        if item.type == .tracker || item.type == .server {
+          Divider()
+          
+          if item.type == .tracker {
+            Button {
+              trackerSheetBookmark = item
+            } label: {
+              Label("Edit Tracker...", systemImage: "pencil")
+            }
+          }
+          
+          Button {
+            Bookmark.delete(item, context: modelContext)
+          } label: {
+            Label(item.type == .tracker ? "Delete Tracker" : "Delete Bookmark", systemImage: "trash")
+          }
+        }
+      }
+    } primaryAction: { items in
+      guard let clickedItem = items.first else {
+        return
+      }
+      
+      if clickedItem.type == .tracker {
+        if let event = NSApp.currentEvent,
+           event.modifierFlags.contains(.option) {
+          trackerSheetBookmark = clickedItem
+        }
+        else {
+          clickedItem.expanded.toggle()
+        }
+      }
+      else if let server = clickedItem.server {
+        openWindow(id: "server", value: server)
+      }
+    }
+    .onKeyPress(.rightArrow) {
+      if
+        let bookmark = selection,
+        bookmark.type == .tracker {
+        bookmark.expanded = true
+        return .handled
+      }
+      return .ignored
+    }
+    .onKeyPress(.leftArrow) {
+      if
+        let bookmark = selection,
+        bookmark.type == .tracker {
+        bookmark.expanded = false
+        return .handled
+      }
+      return .ignored
+    }
+    .sheet(item: $trackerSheetBookmark) { item in
+      TrackerBookmarkSheet(item)
+    }
+    .sheet(isPresented: $trackerSheetPresented) {
+      TrackerBookmarkSheet()
+    }
+    .navigationTitle("Servers")
+    .toolbar {
+      ToolbarItem(placement: .navigation) {
+        Image("Hotline")
+          .resizable()
+          .renderingMode(.template)
+          .scaledToFit()
+          .foregroundColor(Color(hex: 0xE10000))
+          .frame(width: 9)
+          .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+      }
+      
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          refreshing = true
+          refresh()
+          refreshing = false
+        } label: {
+          Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        .disabled(refreshing)
+        .help("Refresh Trackers")
+      }
+      
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          trackerSheetPresented = true
+        } label: {
+          Label("Add Tracker", systemImage: "point.3.filled.connected.trianglepath.dotted")
+        }
+        .help("Add Tracker")
+      }
+      
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          openWindow(id: "server")
+        } label: {
+          Label("Connect to Server", systemImage: "globe.americas.fill")
+        }
+        .help("Connect to Server")
+      }
+    }
+//    .onReceive(NotificationCenter.default.publisher(for: NSNotification.BookmarkAdded)) { notification in
+//      guard let bookmarks = bookmarks.bookmarks, let userInfo = notification.userInfo else {
+//        return
+//      }
+//      
+//      if let i = userInfo["index"] as? Int, bookmarks.count > i {
+//        self.servers.insert(TrackerItem(bookmark: bookmarks[i]), at: i)
+//      }
+//    }
+    .onOpenURL(perform: { url in
+      if let s = Server(url: url) {
+        openWindow(id: "server", value: s)
+      }
+    })
+  }
+  
+  func refresh() {
     // When a tracker is selected, refresh only that tracker.
     if
-      let selectedItem = selection,
-      let bookmark = selectedItem.bookmark,
-      bookmark.type == .tracker {
-      if !selectedItem.expanded {
-        selectedItem.expanded = true
+      let selectedBookmark = selection,
+      selectedBookmark.type == .tracker {
+      if !selectedBookmark.expanded {
+        selectedBookmark.expanded = true
       }
       else {
-        await selectedItem.loadServers()
+        Task {
+          await selectedBookmark.fetchServers()
+        }
       }
       return
     }
     
     // Otherwise refresh/expand all trackers.
-    for server in self.servers {
-      if
-        let bookmark = server.bookmark,
-        bookmark.type == .tracker {
-        if !server.expanded {
-          server.expanded = true
+    for bookmark in self.bookmarks {
+      if bookmark.type == .tracker {
+        if !bookmark.expanded {
+          bookmark.expanded = true
         }
         else {
           Task {
-            await server.loadServers()
+            await bookmark.fetchServers()
           }
         }
       }
     }
   }
+}
+
+struct TrackerBookmarkSheet: View {
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.modelContext) private var modelContext
   
-  @State private var servers: [TrackerItem] = []
-  @State private var selection: TrackerItem? = nil
-  
-  @State private var scrollOffset: CGFloat = CGFloat.zero
-  @State private var initialLoadComplete = false
-  @State private var refreshing = false
-  @State private var topBarOpacity: Double = 1.0
-  @State private var connectVisible = false
-  @State private var connectDismissed = true
-  @State private var serverVisible = false
-  
-  @State private var trackerSheetPresented: Bool = false
-  @State private var trackerName: String = ""
+  @State private var bookmark: Bookmark? = nil
   @State private var trackerAddress: String = ""
+  @State private var trackerName: String = ""
   
-  var trackerBookmarkSheet: some View {
+  init() {
+    
+  }
+  
+  init(_ editingBookmark: Bookmark) {
+    _bookmark = .init(initialValue: editingBookmark)
+    _trackerAddress = .init(initialValue: editingBookmark.displayAddress)
+    _trackerName = .init(initialValue: editingBookmark.name)
+  }
+  
+  var body: some View {
     VStack(alignment: .leading) {
       Text("Type the address and name of a Hotline Tracker:")
         .foregroundStyle(.secondary)
@@ -78,7 +263,7 @@ struct TrackerView: View {
     .padding()
     .toolbar {
       ToolbarItem(placement: .confirmationAction) {
-        Button("Add Tracker") {
+        Button(self.bookmark != nil ? "Save Tracker" : "Add Tracker") {
           var displayName = trackerName.trimmingCharacters(in: .whitespacesAndNewlines)
           let (host, port) = Tracker.parseTrackerAddressAndPort(trackerAddress)
           
@@ -88,205 +273,48 @@ struct TrackerView: View {
           
           if !displayName.isEmpty && !host.isEmpty {
             if !host.isEmpty {
-              let _ = bookmarks.add(Bookmark(type: .tracker, name: displayName, address: host, port: port))
-              trackerSheetPresented = false
-              trackerName = ""
-              trackerAddress = ""
+              if self.bookmark != nil {
+                // We're editing an existing bookmark.
+                self.bookmark?.name = displayName
+                self.bookmark?.address = host
+                self.bookmark?.port = port
+              }
+              else {
+                // We're creating a new bookmark.
+                let newBookmark = Bookmark(type: .tracker, name: displayName, address: host, port: port)
+                Bookmark.add(newBookmark, context: modelContext)
+              }
+              
+              self.trackerName = ""
+              self.trackerAddress = ""
+              
+              dismiss()
             }
           }
         }
       }
       ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") {
-          trackerSheetPresented = false
-          trackerName = ""
-          trackerAddress = ""
+          self.trackerName = ""
+          self.trackerAddress = ""
+          
+          dismiss()
         }
       }
     }
-  }
-  
-  var body: some View {
-    List($servers, id: \.self, editActions: [.move], selection: $selection) { $item in
-      TrackerItemView(item: item, depth: 0)
-        .deleteDisabled(!item.editable)
-        .moveDisabled(!item.editable)
-        .tag(item)
-    }
-    .environment(\.defaultMinListRowHeight, 34)
-    .listStyle(.inset)
-    .alternatingRowBackgrounds(.enabled)
-    .onDeleteCommand {
-      if let sel = selection, let bookmark = sel.bookmark {
-        let _ = bookmarks.delete(bookmark)
-        if let i = self.servers.firstIndex(where: { $0.id == sel.id }) {
-          self.servers.remove(at: i)
-        }
-        selection = nil
-      }
-    }
-    .contextMenu(forSelectionType: TrackerItem.self) { items in
-      if let item = items.first {
-        if let server = item.server {
-          Button {
-            let _ = bookmarks.add(Bookmark(type: .server, name: server.name ?? server.address, address: server.address, port: server.port))
-          } label: {
-            Label("Bookmark", systemImage: "bookmark")
-          }
-        }
-        
-        if let address = item.displayAddress {
-          Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(address, forType: .string)
-          } label: {
-            Label("Copy Address", systemImage: "doc.on.doc")
-          }
-        }
-      }
-    } primaryAction: { items in
-      guard let clickedItem = items.first else {
-        return
-      }
-      
-      if
-        let bookmark = clickedItem.bookmark,
-        bookmark.type == .tracker {
-        clickedItem.expanded.toggle()
-      }
-      else if let server = clickedItem.server {
-        openWindow(id: "server", value: server)
-      }
-      else if let bookmark = clickedItem.bookmark, bookmark.type == .server {
-        let server = Server(name: bookmark.name, description: nil, address: bookmark.address, port: bookmark.port, login: bookmark.login ?? "", password: bookmark.password ?? "")
-        openWindow(id: "server", value: server)
-      }
-    }
-    .onKeyPress(.rightArrow) {
-      if
-        let selectedItem = selection,
-        let bookmark = selectedItem.bookmark,
-        bookmark.type == .tracker {
-        selectedItem.expanded = true
-        return .handled
-      }
-      return .ignored
-    }
-    .onKeyPress(.leftArrow) {
-      if
-        let selectedItem = selection,
-        let bookmark = selectedItem.bookmark,
-        bookmark.type == .tracker {
-        selectedItem.expanded = false
-        return .handled
-      }
-      return .ignored
-    }
-    .sheet(isPresented: $trackerSheetPresented) {
-      trackerBookmarkSheet
-    }
-    .navigationTitle("Servers")
-    .toolbar {
-      ToolbarItem(placement: .navigation) {
-        Image("Hotline")
-          .resizable()
-          .renderingMode(.template)
-          .scaledToFit()
-          .foregroundColor(Color(hex: 0xE10000))
-          .frame(width: 9)
-          .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-      }
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          Task {
-            initialLoadComplete = false
-            await refresh()
-            initialLoadComplete = true
-          }
-        } label: {
-          Label("Refresh", systemImage: "arrow.clockwise")
-        }
-        .help("Refresh Trackers")
-      }
-      
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          trackerSheetPresented = true
-        } label: {
-          Label("Add Tracker", systemImage: "point.3.filled.connected.trianglepath.dotted")
-        }
-        .help("Add Tracker")
-      }
-      
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          openWindow(id: "server")
-        } label: {
-          Label("Connect to Server", systemImage: "globe.americas.fill")
-        }
-        .help("Connect to Server")
-      }
-    }
-    .task {
-      guard let bookmarks = bookmarks.bookmarks else {
-        return
-      }
-      // Add initial items to tracker list.
-      var items: [TrackerItem] = []
-      for bookmark in bookmarks {
-        items.append(TrackerItem(bookmark: bookmark))
-      }
-      self.servers = items
-    }
-    .onChange(of: servers) {
-      Task {
-        saveBookmarks()
-      }
-    }
-    .onReceive(NotificationCenter.default.publisher(for: NSNotification.BookmarkAdded)) { notification in
-      guard let bookmarks = bookmarks.bookmarks, let userInfo = notification.userInfo else {
-        return
-      }
-      
-      if let i = userInfo["index"] as? Int, bookmarks.count > i {
-        self.servers.insert(TrackerItem(bookmark: bookmarks[i]), at: i)
-      }
-    }
-    .onOpenURL(perform: { url in
-      if let s = Server(url: url) {
-        openWindow(id: "server", value: s)
-      }
-    })
-  }
-  
-  private func saveBookmarks() {
-    var newBookmarks: [Bookmark] = []
-    for server in self.servers {
-      if let b = server.bookmark {
-        newBookmarks.append(b)
-      }
-    }
-    
-    bookmarks.apply(newBookmarks)
   }
 }
 
 struct TrackerItemView: View {
-  @State var expanded = false
-  @State var loading = false
-  
-  var item: TrackerItem
-  let depth: Int
+  let bookmark: Bookmark
   
   var body: some View {
-    HStack {
-      if
-        let bookmark = item.bookmark,
-        bookmark.type == .tracker {
+    HStack(alignment: .center, spacing: 8) {
+      if bookmark.type == .tracker {
         Button {
-          item.expanded.toggle()
+          bookmark.expanded.toggle()
         } label: {
-          Text(Image(systemName: item.expanded ? "chevron.down" : "chevron.right"))
+          Text(Image(systemName: bookmark.expanded ? "chevron.down" : "chevron.right"))
             .bold()
             .font(.system(size: 10))
             .opacity(0.5)
@@ -296,208 +324,63 @@ struct TrackerItemView: View {
         .frame(width: 10)
         .padding(.leading, 4)
       }
-      else {
-        HStack {
-          if let bookmark = item.bookmark, bookmark.type == .server {
-            Image(systemName: "bookmark.fill")
-              .resizable()
-              .renderingMode(.template)
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 11, height: 11, alignment: .center)
-              .opacity(0.5)
-          }
-        }
-        .frame(width: 10)
-        .padding(.leading, 4)
-      }
       
-      HStack(alignment: .center, spacing: 0) {
-        if let bookmark = item.bookmark {
-          switch bookmark.type {
-          case .tracker:
-//            Image(systemName: "point.3.filled.connected.trianglepath.dotted")
-            Image("Tracker")
-              .resizable()
-              .scaledToFit()
-              .frame(width: 16, height: 16)
-          case .server:
-            Image("Server")
-              .resizable()
-              .scaledToFit()
-              .frame(width: 16, height: 16)
-//            Image(systemName: "globe.americas.fill")
-          }
-        }
-        else if let _ = item.server {
-          Image("Server")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 16, height: 16)
-        }
-      }
-      .frame(width: 15)
-      
-      if let bookmark = item.bookmark {
-        switch bookmark.type {
-        case .tracker:
-          Text(bookmark.name).bold().lineLimit(1).truncationMode(.tail)
-        case .server:
-          Text(bookmark.name).lineLimit(1).truncationMode(.tail)
-        }
-      }
-      else if let server = item.server {
-        Text(server.name ?? server.address).lineLimit(1)
-        
-        if let description = server.description, !description.isEmpty {
-          Text(description).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
-        }
-      }
-      
-      if
-        let server = item.server,
-        server.users > 0 {
-        Spacer()
-        Text("\(server.users) \(Image(systemName: "person.fill"))")
-          .lineLimit(1)
-          .foregroundStyle(.secondary)
-          .padding([.leading, .trailing], 4)
-          .padding([.top, .bottom], 2)
-//          .background(Capsule(style: .circular).stroke(.secondary, lineWidth: 1))
-//          .opacity(0.5)
-      }
-      else if
-        let bookmark = item.bookmark,
-        bookmark.type == .tracker {
-        if item.loading {
+      switch bookmark.type {
+      case .tracker:
+        Image("Tracker")
+          .resizable()
+          .scaledToFit()
+          .frame(width: 16, height: 16, alignment: .center)
+        Text(bookmark.name).bold().lineLimit(1).truncationMode(.tail)
+        if bookmark.loading {
           ProgressView()
             .padding([.leading, .trailing], 2)
             .controlSize(.small)
         }
+      case .server:
+        Image(systemName: "bookmark.fill")
+          .resizable()
+          .renderingMode(.template)
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 11, height: 11, alignment: .center)
+          .opacity(0.5)
+          .padding(.leading, 3)
+        Image("Server")
+          .resizable()
+          .scaledToFit()
+          .frame(width: 16, height: 16, alignment: .center)
+        Text(bookmark.name).lineLimit(1).truncationMode(.tail)
+      case .temporary:
         Spacer()
+          .frame(width: 14 + 8 + 16)
+        Image("Server")
+          .resizable()
+          .scaledToFit()
+          .frame(width: 16, height: 16, alignment: .center)
+        Text(bookmark.name).lineLimit(1).truncationMode(.tail)
+        if let serverDescription = bookmark.serverDescription {
+          Text(serverDescription)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+        }
       }
-      else {
-        Spacer()
-      }
+      
+      Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(.leading, CGFloat(depth * (12 + 10)))
-    .onChange(of: item.expanded) {
-      loading = false
+    .onChange(of: bookmark.expanded) {
+      guard bookmark.type == .tracker else {
+        return
+      }
       
-      if
-        item.expanded,
-        let bookmark = item.bookmark,
-        bookmark.type == .tracker {
+      if bookmark.expanded {
         Task {
-          await item.loadServers()
+          await bookmark.fetchServers()
         }
       }
     }
-    
-    if
-      item.expanded,
-      let servers = item.servers {
-      ForEach(servers, id: \.self) { serverItem in
-        TrackerItemView(item: serverItem, depth: self.depth + 1)
-          .tag(serverItem)
-          .deleteDisabled(!serverItem.editable)
-          .moveDisabled(!serverItem.editable)
-      }
-    }
   }
-}
-
-@Observable
-class TrackerItem: Identifiable, Hashable {
-  let id: UUID = UUID()
-  let bookmark: Bookmark?
-  let server: Server?
-  
-  var editable: Bool = true
-  
-  var servers: [TrackerItem]?
-  
-  var expanded: Bool = false
-  var loading: Bool = false
-  
-  var displayAddress: String? {
-    if let s = server {
-      if s.port == HotlinePorts.DefaultServerPort {
-        return s.address
-      }
-      else {
-        return "\(s.address):\(s.port)"
-      }
-    }
-    else if let b = bookmark {
-      if b.port == HotlinePorts.DefaultServerPort {
-        return b.address
-      }
-      else {
-        return "\(b.address):\(b.port)"
-      }
-    }
-    
-    return nil
-  }
-  
-  init(bookmark: Bookmark) {
-    self.bookmark = bookmark
-    self.server = nil
-    self.servers = nil
-    
-    if bookmark.type == .tracker {
-      self.servers = []
-    }
-  }
-  
-  init(server: Server) {
-    self.server = server
-    self.servers = nil
-    self.bookmark = nil
-  }
-  
-  static func == (lhs: TrackerItem, rhs: TrackerItem) -> Bool {
-    return lhs.id == rhs.id
-  }
-  
-  func hash(into hasher: inout Hasher) {
-    hasher.combine(self.id)
-  }
-  
-  
-  @MainActor
-  func loadServers() async {
-    guard
-      let bookmark = self.bookmark,
-      bookmark.type == .tracker
-    else {
-      self.loading = false
-      return
-    }
-    
-    let client = HotlineTrackerClient()
-    
-    self.loading = true
-
-    if let fetchedServers: [HotlineServer] = try? await client.fetchServers(address: bookmark.address, port: HotlinePorts.DefaultTrackerPort) {
-      var newItems: [TrackerItem] = []
-
-      for s in fetchedServers {
-        if let serverName = s.name {
-          let server = Server(name: serverName, description: s.description, address: s.address, port: Int(s.port), users: Int(s.users))
-          let item = TrackerItem(server: server)
-          item.editable = false
-          newItems.append(item)
-        }
-      }
-
-      self.servers = newItems
-    }
-    
-    self.loading = false
-  }
-
 }
 
 #Preview {

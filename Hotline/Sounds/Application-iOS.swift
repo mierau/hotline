@@ -2,13 +2,10 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
-#if os(iOS)
-
 @main
 struct Application: App {
   private var model = Hotline(trackerClient: HotlineTrackerClient(), client: HotlineClient())
   
-  @State private var soundEffects = SoundEffectPlayer()
   @State private var bookmarks = Bookmarks()
   
   @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
@@ -21,5 +18,3 @@ struct Application: App {
     }
   }
 }
-
-#endif

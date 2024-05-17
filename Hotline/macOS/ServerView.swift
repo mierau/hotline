@@ -127,8 +127,7 @@ enum ServerNavigationType: Identifiable, Hashable, Equatable {
 }
 
 struct ServerView: View {
-  @Environment(SoundEffectPlayer.self) private var soundEffects: SoundEffectPlayer
-  @Environment(Bookmarks.self) private var bookmarks: Bookmarks
+  @Environment(BookmarksOld.self) private var bookmarks: BookmarksOld
   @Environment(\.dismiss) var dismiss
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.controlActiveState) private var controlActiveState
@@ -335,7 +334,7 @@ struct ServerView: View {
                 let password: String? = connectPassword.isEmpty ? nil : connectPassword
                 
                 if !host.isEmpty {
-                  let _ = bookmarks.add(Bookmark(type: .server, name: name, address: host, port: port, login: login, password: password))
+                  let _ = bookmarks.add(BookmarkOld(type: .server, name: name, address: host, port: port, login: login, password: password))
                 }
               }
             }
