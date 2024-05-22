@@ -1,38 +1,34 @@
 import SwiftUI
 
 private enum FocusFields {
-  case title
   case body
 }
 
-struct NewsEditorView: View {
+struct MessageBoardEditorView: View {
   @Environment(\.controlActiveState) private var controlActiveState
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.dismiss) private var dismiss
   @Environment(Hotline.self) private var model: Hotline
-  
-  let editorTitle: String
-  let isReply: Bool
-  let path: [String]
-  let parentID: UInt32
-  
-  @State var title: String = ""
+    
   @State private var text: String = ""
   @State private var sending: Bool = false
   
   @FocusState private var focusedField: FocusFields?
   
-  func sendArticle() async -> Bool {
+  func sendPost() async {
     sending = true
     
-    let success = await model.postNewsArticle(title: title, body: text, at: path, parentID: parentID)
-    if success {
-      await model.getNewsList(at: path)
-    }
+    let cleanedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    
+    await model.postToMessageBoard(text: cleanedText)
+    let _ = await model.getMessageBoard()
+    
+//    let success = await model.postNewsArticle(title: title, body: text, at: path, parentID: parentID)
+//    if success {
+//      await model.getNewsList(at: path)
+//    }
     
     sending = false
-    
-    return success
   }
   
   var body: some View {
@@ -52,15 +48,13 @@ struct NewsEditorView: View {
         
         Spacer()
         
-        if !isReply {
-          Image("News Category")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 16, height: 16)
-            .padding(.trailing, 6)
-        }
+        Image("Message Board Post")
+          .resizable()
+          .scaledToFit()
+          .frame(width: 16, height: 16)
+          .padding(.trailing, 6)
         
-        Text(editorTitle)
+        Text("New Post")
           .fontWeight(.semibold)
           .lineLimit(1)
           .truncationMode(.middle)
@@ -74,8 +68,12 @@ struct NewsEditorView: View {
         }
         else {
           Button {
+            sending = true
+            model.postToMessageBoard(text: text)
             Task {
-              if await sendArticle() {
+              let _ = await model.getMessageBoard()
+              Task { @MainActor in
+                sending = false
                 dismiss()
               }
             }
@@ -84,67 +82,33 @@ struct NewsEditorView: View {
               .resizable()
               .renderingMode(.template)
               .scaledToFit()
-              .foregroundColor((title.isEmpty || text.isEmpty) ? .secondary : .accentColor)
+              .foregroundColor(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : .accentColor)
           }
           .buttonStyle(.plain)
           .frame(width: 22, height: 22)
-          .help("Post to Newsgroup")
-          .disabled(title.isEmpty || text.isEmpty)
+          .help("Post to Message Board")
+          .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
       .frame(maxWidth: .infinity)
-      .padding([.leading, .top, .trailing])
-      
-      TextField("Title", text: $title, axis: .vertical)
-        .textFieldStyle(.plain)
-        .lineLimit(3)
-        .padding()
-        .focusEffectDisabled()
-        .fontWeight(.semibold)
-        .frame(maxWidth: .infinity)
-        .border(Color.pink, width: 0)
-        .background(.tertiary.opacity(0.2))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .padding()
-        .focused($focusedField, equals: .title)
+      .padding()
       
       Divider()
       
       BetterTextEditor(text: $text)
-        .betterEditorFont(NSFont.monospacedSystemFont(ofSize: 14.0, weight: .regular))
+        .betterEditorFont(NSFont.systemFont(ofSize: 14.0))
         .betterEditorAutomaticSpellingCorrection(true)
         .betterEditorTextInset(.init(width: 16, height: 18))
+        .lineSpacing(20)
         .background(Color(nsColor: .textBackgroundColor))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .focused($focusedField, equals: .body)
-      
-      HStack(alignment: .center) {
-        Spacer()
-        
-        Text(String("**bold**  _italics_  [link name](url)  ![image name](url)"))
-          .foregroundStyle(.secondary)
-          .font(.caption)
-          .fontDesign(.monospaced)
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .padding()
-        
-        Spacer()
-      }
-      .frame(maxWidth: .infinity)
-      .background(.tertiary.opacity(0.15))
     }
     .frame(minWidth: 300, idealWidth: 450, maxWidth: .infinity, minHeight: 300, idealHeight: 500, maxHeight: .infinity)
     .background(Color(nsColor: .textBackgroundColor))
     .presentationCompactAdaptation(.sheet)
-    .toolbarTitleDisplayMode(.inlineLarge)
     .onAppear {
-      if !title.isEmpty {
-        focusedField = .body
-      }
-      else {
-        focusedField = .title
-      }
+      focusedField = .body
     }
     .onDisappear {
       dismiss()

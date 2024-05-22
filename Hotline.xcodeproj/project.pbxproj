@@ -35,6 +35,8 @@
 		DA65499A2BEC280E00EDB697 /* ServerMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6549992BEC280E00EDB697 /* ServerMessageView.swift */; };
 		DA65499C2BEC3FBD00EDB697 /* ServerAgreementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */; };
 		DA65499E2BEC438A00EDB697 /* NSWindowBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA65499D2BEC438A00EDB697 /* NSWindowBridge.swift */; };
+		DA6980792BF80525003E434B /* TextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6980782BF80525003E434B /* TextView.swift */; };
+		DA69807E2BFD449B003E434B /* MessageBoardEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA69807D2BFD449B003E434B /* MessageBoardEditorView.swift */; };
 		DA72A0DD2B4CD0BF00A0F48A /* NewsEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */; };
 		DA72A0E02B4DA8CA00A0F48A /* SplitView in Frameworks */ = {isa = PBXBuildFile; productRef = DA72A0DF2B4DA8CA00A0F48A /* SplitView */; };
 		DA72A0E22B4DAA4000A0F48A /* NewsArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA72A0E12B4DAA4000A0F48A /* NewsArticle.swift */; };
@@ -114,6 +116,8 @@
 		DA6549992BEC280E00EDB697 /* ServerMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerMessageView.swift; sourceTree = "<group>"; };
 		DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAgreementView.swift; sourceTree = "<group>"; };
 		DA65499D2BEC438A00EDB697 /* NSWindowBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSWindowBridge.swift; sourceTree = "<group>"; };
+		DA6980782BF80525003E434B /* TextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextView.swift; sourceTree = "<group>"; };
+		DA69807D2BFD449B003E434B /* MessageBoardEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardEditorView.swift; sourceTree = "<group>"; };
 		DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsEditorView.swift; sourceTree = "<group>"; };
 		DA72A0E12B4DAA4000A0F48A /* NewsArticle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsArticle.swift; sourceTree = "<group>"; };
 		DA77253E2B21176D006C5ABB /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
@@ -243,6 +247,7 @@
 				DA872B122BDDBF78008B1012 /* HotlinePanel.swift */,
 				DA872B142BDDEE1A008B1012 /* VisualEffectView.swift */,
 				DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */,
+				DA6980782BF80525003E434B /* TextView.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -322,6 +327,7 @@
 				DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */,
 				DAE735022B30C0BB000C56F6 /* MessageView.swift */,
 				DAE734FC2B2E65E9000C56F6 /* MessageBoardView.swift */,
+				DA69807D2BFD449B003E434B /* MessageBoardEditorView.swift */,
 				DAE735002B2E71F2000C56F6 /* FilesView.swift */,
 				DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */,
 				DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */,
@@ -445,6 +451,7 @@
 				11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */,
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
 				DAB4D87B2B4B78310048A05C /* FileImageView.swift in Sources */,
+				DA6980792BF80525003E434B /* TextView.swift in Sources */,
 				DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */,
 				DA65499E2BEC438A00EDB697 /* NSWindowBridge.swift in Sources */,
 				DAE735032B30C0BB000C56F6 /* MessageView.swift in Sources */,
@@ -458,6 +465,7 @@
 				DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */,
 				DAE735072B3251B3000C56F6 /* SoundEffects.swift in Sources */,
 				DA55AC752BE4888300034857 /* InstantMessage.swift in Sources */,
+				DA69807E2BFD449B003E434B /* MessageBoardEditorView.swift in Sources */,
 				DAE735012B2E71F2000C56F6 /* FilesView.swift in Sources */,
 				DA55AC792BE6A1AD00034857 /* RegularExpressions.swift in Sources */,
 				11A7260A2BE0675A000C1DA7 /* FileDetailsView.swift in Sources */,

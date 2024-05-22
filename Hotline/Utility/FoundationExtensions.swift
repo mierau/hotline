@@ -7,6 +7,28 @@ enum Endianness {
 }
 
 extension String {
+//  func convertToPlainText() -> String {
+//    var newString = self
+//    
+//    let map: [Character: Character] = [
+//      "“": ",
+//      "”": ",
+//      "‘": "'",
+//      "’": "'",
+//      "\n": "\r"
+//    ]
+//    
+//    newString = newString.replacingOccurrences(of: "\u{0060}", with: "'")
+//    newString = newString.replacingOccurrences(of: "\u{00b4}", with: "'")
+//    newString = newString.replacingOccurrences(of: "\u{2018}", with: "'")
+//    newString = newString.replacingOccurrences(of: "\u{2019}", with: "'")
+//    newString = newString.replacingOccurrences(of: "\u{201c}", with: "'")
+//    newString = newString.replacingOccurrences(of: "\u{201d}", with: "'")
+//    newString = newString.replacingOccurrences(of: "\"", with: "\"")
+//    
+//    return newString
+//  }
+  
   func replyToString() -> String {
     if self.range(of: "^Re:", options: [.regularExpression, .caseInsensitive]) != nil {
       return String(self)

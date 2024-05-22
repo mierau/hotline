@@ -151,6 +151,12 @@ struct ServerView: View {
     ServerMenuItem(type: .files, name: "Files", image: "folder"),
   ]
   
+  static var classicMenuItems: [ServerMenuItem] = [
+    ServerMenuItem(type: .chat, name: "Chat", image: "bubble"),
+    ServerMenuItem(type: .board, name: "Board", image: "pin"),
+    ServerMenuItem(type: .files, name: "Files", image: "folder"),
+  ]
+  
   enum FocusFields {
     case address
     case login
@@ -347,7 +353,8 @@ struct ServerView: View {
   
   var navigationList: some View {
     List(selection: $state.selection) {
-      ForEach(ServerView.menuItems) { menuItem in
+      // Don't show news on older servers.
+      ForEach(model.serverVersion < 151 ? ServerView.classicMenuItems : ServerView.menuItems) { menuItem in
         if menuItem.type == .chat {
           ListItemView(icon: menuItem.image, title: menuItem.name, unread: model.unreadPublicChat).tag(menuItem.type)
         }

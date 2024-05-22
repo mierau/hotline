@@ -3,9 +3,8 @@ import SwiftUI
 struct MessageBoardView: View {
   @Environment(Hotline.self) private var model: Hotline
   
-  @State private var initialLoadComplete = false
-  @State private var composerDisplayed = false
-  @State private var composerText = ""
+  @State private var composerDisplayed: Bool = false
+  @State private var composerText: String = ""
   
   var body: some View {
     NavigationStack {
@@ -54,31 +53,36 @@ struct MessageBoardView: View {
       }
     }
     .sheet(isPresented: $composerDisplayed) {
-      TextEditor(text: $composerText)
-        .padding()
-        .font(.system(size: 13))
-        .lineSpacing(4)
-        .background(Color(nsColor: .textBackgroundColor))
+      MessageBoardEditorView()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(idealWidth: 450, idealHeight: 350)
-        .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel") {
-              composerDisplayed.toggle()
-            }
-          }
-          
-          ToolbarItem(placement: .primaryAction) {
-            Button("Post") {
-              composerDisplayed.toggle()
-              let text = composerText
-              composerText = ""
-              model.postToMessageBoard(text: text)
-              Task {
-                await model.getMessageBoard()
-              }
-            }
-          }
-        }
+//      RichTextEditor(text: $composerText)
+//        .richEditorFont(NSFont.systemFont(ofSize: 16.0))
+//        .richEditorAutomaticDashSubstitution(false)
+//        .richEditorAutomaticQuoteSubstitution(false)
+//        .richEditorAutomaticSpellingCorrection(false)
+//        .background(Color(nsColor: .textBackgroundColor))
+//        .frame(maxWidth: .infinity, maxHeight: .infinity)
+//        .frame(idealWidth: 450, idealHeight: 350)
+//        .toolbar {
+//          ToolbarItem(placement: .cancellationAction) {
+//            Button("Cancel") {
+//              composerDisplayed.toggle()
+//            }
+//          }
+//          
+//          ToolbarItem(placement: .primaryAction) {
+//            Button("Post") {
+//              composerDisplayed.toggle()
+//              let text = composerText
+//              composerText = ""
+//              model.postToMessageBoard(text: text)
+//              Task {
+//                await model.getMessageBoard()
+//              }
+//            }
+//          }
+//        }
     }
     .toolbar {
       ToolbarItem(placement:.primaryAction) {

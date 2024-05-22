@@ -259,7 +259,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   @MainActor func postToMessageBoard(text: String) {
     self.client.sendPostMessageBoard(text: text)
   }
-  
+    
   @MainActor func getFileList(path: [String] = []) async -> [FileInfo] {
     return await withCheckedContinuation { [weak self] continuation in
       self?.client.sendGetFileList(path: path) { [weak self] files in
@@ -422,6 +422,8 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   @MainActor func postNewsArticle(title: String, body: String, at path: [String], parentID: UInt32 = 0) async -> Bool {
+    
+    
     return await withCheckedContinuation { [weak self] continuation in
       guard let client = self?.client else {
         continuation.resume(returning: false)
