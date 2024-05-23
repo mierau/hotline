@@ -96,6 +96,45 @@ final class Bookmark {
     self.serverDescription = server.description
   }
   
+  init?(fileURL bookmarkFileURL: URL) {
+    guard let fileAttributes = try? FileManager.default.attributesOfItem(atPath: bookmarkFileURL.path(percentEncoded: false)),
+          let fileSize = fileAttributes[FileAttributeKey.size] as? UInt64,
+          fileSize <= 2000,
+          let fileData = try? Data(contentsOf: bookmarkFileURL) else {
+      return nil
+    }
+      
+    print("Bookmark: Parsing Hotline bookmark file...")
+      
+    var fileDataArray: [UInt8] = [UInt8](fileData)
+      
+    guard let headerValue = fileDataArray.consumeUInt32(),
+          headerValue.fourCharCode() == "HTsc",
+          let versionNumber = fileDataArray.consumeUInt16(),
+          versionNumber == 1,
+          fileDataArray.consume(128), // Skip 128 reserved bytes.
+          let loginLength = fileDataArray.consumeUInt16(),
+          let loginData: Data = fileDataArray.consumeBytes(32),
+          let passwordLength = fileDataArray.consumeUInt16(),
+          let passwordData: Data = fileDataArray.consumeBytes(32),
+          let addressLength = fileDataArray.consumeUInt16(),
+          let addressData: Data = fileDataArray.consumeBytes(256),
+          let addressString = String(data: addressData[0..<Int(addressLength)], encoding: .ascii),
+          let loginString = String(data: loginData[0..<Int(loginLength)], encoding: .ascii),
+          let passwordString = String(data: passwordData[0..<Int(passwordLength)], encoding: .ascii) else {
+      return nil
+    }
+      
+    let (addressHost, addressPort) = Server.parseServerAddressAndPort(addressString)
+    
+    self.type = .server
+    self.name = addressHost
+    self.address = addressHost
+    self.port = addressPort
+    self.login = loginString.isEmpty ? nil : loginString
+    self.password = passwordString.isEmpty ? nil : passwordString
+  }
+  
   static func populateDefaults(force: Bool = false, context: ModelContext) {
     if force || Bookmark.fetchCount(context: context) == 0 {
       Bookmark.add(Bookmark.DefaultBookmarks, context: context)

@@ -202,6 +202,19 @@ extension Array where Element == UInt8 {
     return str
   }
   
+  mutating func consumeLongPString() -> String? {
+    let (str, len) = self.readLongPString(at: 0)
+    guard let str = str else {
+      return nil
+    }
+    if len == 0 {
+      return ""
+    }
+    
+    self.removeFirst(len)
+    return str
+  }
+  
   mutating func consumeString(_ length: Int) -> String? {
     guard let val = self.readString(at: 0, length: length) else {
       return nil
@@ -387,6 +400,23 @@ extension Array where Element == UInt8 {
   
   mutating func appendData(_ data: [UInt8]) {
     self.append(contentsOf: data)
+  }
+  
+  mutating func hotlineEncrypt() {
+    for i in (0..<self.count).reversed() {
+      self[i] = 0xFF - self[i]
+    }
+  }
+  
+  func hotlineEncrypted() -> [UInt8] {
+    var cpy = [UInt8](self)
+    
+    
+    
+    for i in (0..<cpy.count).reversed() {
+      cpy[i] = 0xFF - cpy[i]
+    }
+    return cpy
   }
 }
 

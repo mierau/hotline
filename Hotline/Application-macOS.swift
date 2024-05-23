@@ -22,6 +22,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     AppLaunchState.shared.launchState = .launched
     
+    let blah = NSFileTypeForHFSTypeCode("HTbm".fourCharCode())
+    print("FILETYPE: \(blah)", blah!, "'HTbm'")
+    
     CKContainer.default().accountStatus { status, error in
       switch status {
       case .noAccount:

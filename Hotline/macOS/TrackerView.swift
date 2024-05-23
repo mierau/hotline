@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct TrackerView: View {
 //  @Environment(BookmarksOld.self) private var bookmarks: BookmarksOld
@@ -12,6 +13,7 @@ struct TrackerView: View {
   @State private var trackerSheetPresented: Bool = false
   @State private var trackerSheetBookmark: Bookmark? = nil
   @State private var attemptedPrepopulate: Bool = false
+  @State private var fileDropActive = false
   
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
   @State private var selection: Bookmark? = nil
@@ -136,6 +138,33 @@ struct TrackerView: View {
         return .handled
       }
       return .ignored
+    }
+    .onDrop(of: [UTType.fileURL], isTargeted: $fileDropActive) { providers, dropPoint in
+      for provider in providers {
+        let _ = provider.loadDataRepresentation(for: UTType.fileURL) { dataRepresentation, err in
+          // HOTLINE CREATOR CODE: 1213484099
+          // HOTLINE BOOKMARK TYPE CODE: 1213489773
+          
+          if let filePathData = dataRepresentation,
+             let filePath = String(data: filePathData, encoding: .utf8),
+             let fileURL = URL(string: filePath) {
+            
+            print("Hotline Bookmark: Dropped from ", fileURL.path(percentEncoded: false))
+            
+            DispatchQueue.main.async {
+              if let newBookmark = Bookmark(fileURL: fileURL) {
+                print("Hotline Bookmark: Added bookmark.")
+                Bookmark.add(newBookmark, context: modelContext)
+              }
+              else {
+                print("Hotline Bookmark: Failed to parse.")
+              }
+            }
+          }
+        }
+      }
+      
+      return true
     }
     .sheet(item: $trackerSheetBookmark) { item in
       TrackerBookmarkSheet(item)
