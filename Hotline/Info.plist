@@ -8,10 +8,10 @@
 			<key>CFBundleTypeName</key>
 			<string>Hotline Bookmark</string>
 			<key>LSHandlerRank</key>
-			<string>Alternate</string>
+			<string>None</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>'HTbm'</string>
+				<string>&apos;HTbm&apos;</string>
 			</array>
 		</dict>
 	</array>
@@ -38,25 +38,21 @@
 			</array>
 		</dict>
 	</array>
-	<key>UTImportedTypeDeclarations</key>
+	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
-			<key>UTTypeConformsTo</key>
-			<array/>
 			<key>UTTypeDescription</key>
 			<string>Hotline Bookmark</string>
 			<key>UTTypeIconFiles</key>
 			<array/>
 			<key>UTTypeIdentifier</key>
-			<string>'HTbm'</string>
+			<string>&apos;HTbm&apos;</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
-					<string>.htbm</string>
+					<string>.hlbm</string>
 				</array>
-				<key>public.mime-type</key>
-				<array/>
 			</dict>
 		</dict>
 	</array>

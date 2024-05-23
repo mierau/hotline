@@ -1,9 +1,9 @@
 import SwiftUI
 import SwiftData
+import Foundation
 import UniformTypeIdentifiers
 
 struct TrackerView: View {
-//  @Environment(BookmarksOld.self) private var bookmarks: BookmarksOld
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.openWindow) private var openWindow
   @Environment(\.controlActiveState) private var controlActiveState
@@ -14,6 +14,8 @@ struct TrackerView: View {
   @State private var trackerSheetBookmark: Bookmark? = nil
   @State private var attemptedPrepopulate: Bool = false
   @State private var fileDropActive = false
+  @State private var bookmarkExportActive = false
+  @State private var bookmarkExport: BookmarkDocument? = nil
   
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
   @State private var selection: Bookmark? = nil
@@ -96,6 +98,17 @@ struct TrackerView: View {
             }
           }
           
+          if item.type == .server {
+            Button {
+              bookmarkExport = BookmarkDocument(bookmark: item)
+              bookmarkExportActive = true
+            } label: {
+              Label("Export Bookmark...", systemImage: "bookmark.square")
+            }
+          }
+          
+          Divider()
+          
           Button {
             Bookmark.delete(item, context: modelContext)
           } label: {
@@ -121,6 +134,17 @@ struct TrackerView: View {
         openWindow(id: "server", value: server)
       }
     }
+    .fileExporter(isPresented: $bookmarkExportActive, document: bookmarkExport, contentTypes: [.data], defaultFilename: "\(bookmarkExport?.bookmark.name ?? "Hotline Bookmark").hlbm", onCompletion: { result in
+      switch result {
+      case .success(let fileURL):
+        print("Hotline Bookmark: Successfully exported:", fileURL)
+      case .failure(let err):
+        print("Hotline Bookmark: Failed to export:", err)
+      }
+      
+      bookmarkExport = nil
+      bookmarkExportActive = false
+    }, onCancellation: {})
     .onKeyPress(.rightArrow) {
       if
         let bookmark = selection,
