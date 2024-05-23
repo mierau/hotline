@@ -516,8 +516,6 @@ class HotlineClient: NetSocketDelegate {
       return
     }
     
-    print("CONVERTED:", text.convertingLineEndings(to: .cr))
-    
     var t = HotlineTransaction(type: .oldPostNews)
     t.setFieldString(type: .data, val: text.convertingLineEndings(to: .cr), encoding: .macOSRoman)
     self.sendPacket(t)
