@@ -516,8 +516,10 @@ class HotlineClient: NetSocketDelegate {
       return
     }
     
+    print("CONVERTED:", text.convertingLineEndings(to: .cr))
+    
     var t = HotlineTransaction(type: .oldPostNews)
-    t.setFieldString(type: .data, val: text, encoding: .macOSRoman)
+    t.setFieldString(type: .data, val: text.convertingLineEndings(to: .cr), encoding: .macOSRoman)
     self.sendPacket(t)
   }
   
@@ -568,7 +570,7 @@ class HotlineClient: NetSocketDelegate {
     t.setFieldString(type: .newsArticleTitle, val: title)
     t.setFieldString(type: .newsArticleDataFlavor, val: "text/plain")
     t.setFieldUInt32(type: .newsArticleFlags, val: 0)
-    t.setFieldString(type: .newsArticleData, val: text)
+    t.setFieldString(type: .newsArticleData, val: text.convertingLineEndings(to: .cr))
     
     print("HotlineClient postings \(title) under \(parentID)")
     

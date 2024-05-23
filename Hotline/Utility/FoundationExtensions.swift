@@ -6,28 +6,32 @@ enum Endianness {
   case little
 }
 
+enum LineEnding {
+  case lf // Unix-style (\n)
+  case crlf // Windows-style (\r\n)
+  case cr // Classic Mac-style (\r)
+}
+
 extension String {
-//  func convertToPlainText() -> String {
-//    var newString = self
-//    
-//    let map: [Character: Character] = [
-//      "“": ",
-//      "”": ",
-//      "‘": "'",
-//      "’": "'",
-//      "\n": "\r"
-//    ]
-//    
-//    newString = newString.replacingOccurrences(of: "\u{0060}", with: "'")
-//    newString = newString.replacingOccurrences(of: "\u{00b4}", with: "'")
-//    newString = newString.replacingOccurrences(of: "\u{2018}", with: "'")
-//    newString = newString.replacingOccurrences(of: "\u{2019}", with: "'")
-//    newString = newString.replacingOccurrences(of: "\u{201c}", with: "'")
-//    newString = newString.replacingOccurrences(of: "\u{201d}", with: "'")
-//    newString = newString.replacingOccurrences(of: "\"", with: "\"")
-//    
-//    return newString
-//  }
+  
+  func convertingLineEndings(to targetEnding: LineEnding) -> String {
+    let lf = "\n"
+    let crlf = "\r\n"
+    let cr = "\r"
+    
+    // Normalize all line endings to LF (\n)
+    let normalizedString = self.replacingOccurrences(of: cr, with: lf).replacingOccurrences(of: crlf, with: lf)
+    
+    // Replace normalized LF (\n) line endings with the target line ending
+    switch targetEnding {
+    case .lf:
+      return normalizedString
+    case .crlf:
+      return normalizedString.replacingOccurrences(of: lf, with: crlf)
+    case .cr:
+      return normalizedString.replacingOccurrences(of: lf, with: cr)
+    }
+  }
   
   func replyToString() -> String {
     if self.range(of: "^Re:", options: [.regularExpression, .caseInsensitive]) != nil {
