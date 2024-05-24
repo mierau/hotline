@@ -86,7 +86,10 @@ struct FileView: View {
             .padding(.trailing, 6)
         }
         else {
-          Text(formattedFileSize(file.fileSize)).foregroundStyle(.secondary).lineLimit(1)
+          Text(formattedFileSize(file.fileSize))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.trailing, 6)
         }
       }
     }
