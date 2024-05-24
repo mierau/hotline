@@ -13,6 +13,21 @@ import UniformTypeIdentifiers
   
   let isFolder: Bool
   let isUnavailable: Bool
+  
+  var isDropboxFolder: Bool {
+    guard self.isFolder,
+          (self.name.range(of: "upload", options: [.caseInsensitive]) != nil) || (self.name.range(of: "drop box", options: [.caseInsensitive]) != nil)
+    else {
+      return false
+    }
+    return true
+  }
+  
+  var isAdminDropboxFolder: Bool {
+    self.isDropboxFolder && (self.name.range(of: "admin", options: [.caseInsensitive]) != nil)
+  }
+  
+  
   var expanded: Bool = false
   var children: [FileInfo]? = nil
   

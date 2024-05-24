@@ -336,6 +336,14 @@ class HotlineFile: Identifiable, Hashable {
   
   let isFolder: Bool
   
+  var isDropboxFolder: Bool {
+    guard self.isFolder,
+          (self.name.range(of: "upload", options: [.caseInsensitive]) != nil) || (self.name.range(of: "drop box", options: [.caseInsensitive]) != nil) else {
+      return false
+    }
+    return true
+  }
+  
   static func == (lhs: HotlineFile, rhs: HotlineFile) -> Bool {
     return lhs.id == rhs.id
   }

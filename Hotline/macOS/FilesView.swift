@@ -41,9 +41,25 @@ struct FileView: View {
             .frame(width: 16, height: 16)
             .opacity(0.5)
         }
-        else if file.isFolder {
-          FolderIconView()
+        else if file.isAdminDropboxFolder {
+          Image("Admin Drop Box")
+            .resizable()
+            .scaledToFit()
             .frame(width: 16, height: 16)
+        }
+        else if file.isDropboxFolder {
+          Image("Drop Box")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 16, height: 16)
+        }
+        else if file.isFolder {
+          Image("Folder")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 16, height: 16)
+//          FolderIconView(dropbox: file.isUploadFolder)
+//            .frame(width: 16, height: 16)
         }
         else {
           FileIconView(filename: file.name)
@@ -64,7 +80,7 @@ struct FileView: View {
       Spacer()
       if !file.isUnavailable {
         if file.isFolder {
-          Text("^[\(file.fileSize) \("file")](inflect: true)")
+          Text(file.fileSize == 0 ? "Empty" : "^[\(file.fileSize) \("file")](inflect: true)")
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .padding(.trailing, 6)
