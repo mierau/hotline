@@ -224,7 +224,11 @@ struct ServerView: View {
       connectAddress = server.address
       connectLogin = server.login
       connectPassword = server.password
-      connectToServer()
+      
+      // Connect to server automatically unless the option key is held down.
+      if !NSEvent.modifierFlags.contains(.option) {
+        connectToServer()
+      }
     }
     .focusedSceneValue(\.activeHotlineModel, model)
     .focusedSceneValue(\.activeServerState, state)

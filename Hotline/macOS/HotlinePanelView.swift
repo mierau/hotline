@@ -16,8 +16,7 @@ struct HotlinePanelView: View {
       
       HStack(spacing: 16) {
         Button {
-          if let event = NSApp.currentEvent,
-             event.modifierFlags.contains(.option) {
+          if NSEvent.modifierFlags.contains(.option) {
             openWindow(id: "server")
           }
           else {

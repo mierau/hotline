@@ -122,8 +122,7 @@ struct TrackerView: View {
       }
       
       if clickedItem.type == .tracker {
-        if let event = NSApp.currentEvent,
-           event.modifierFlags.contains(.option) {
+        if NSEvent.modifierFlags.contains(.option) {
           trackerSheetBookmark = clickedItem
         }
         else {
