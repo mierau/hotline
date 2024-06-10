@@ -226,6 +226,11 @@ struct Application: App {
         }
         .disabled(activeHotline?.status != .loggedIn)
         .keyboardShortcut(.init("4"), modifiers: .command)
+        Button("Show Accounts") {
+          activeServerState?.selection = .accounts
+        }
+        .disabled(activeHotline?.status != .loggedIn || activeHotline?.access?.contains(.canOpenUsers) == false  )
+        .keyboardShortcut(.init("5"), modifiers: .command)
       }
     }
     

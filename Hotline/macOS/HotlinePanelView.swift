@@ -88,6 +88,20 @@ struct HotlinePanelView: View {
         .disabled(ApplicationState.shared.activeServerState == nil)
         .help("Files")
         
+        Button {
+          ApplicationState.shared.activeServerState?.selection = .accounts
+        }
+        label: {
+          Image(systemName: "person.2.fill")
+            .resizable()
+            .scaledToFit()
+        }
+        .buttonStyle(.plain)
+        .frame(width: 18, height: 18)
+        .opacity(ApplicationState.shared.activeServerState == nil ? 0.5 : 1.0)
+        .disabled(ApplicationState.shared.activeServerState == nil || ApplicationState.shared.activeHotline?.access?.contains(.canOpenUsers) == false)
+        .help("Accounts")
+        
         Spacer()
         
         SettingsLink(label: {

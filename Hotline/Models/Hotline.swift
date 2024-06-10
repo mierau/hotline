@@ -125,6 +125,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   var access: HotlineUserAccessOptions?
   var agreed: Bool = false
   var users: [User] = []
+  var accounts: [HotlineAccount] = []
   var chat: [ChatMessage] = []
   var messageBoard: [String] = []
   var messageBoardLoaded: Bool = false
@@ -133,6 +134,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   var news: [NewsInfo] = []
   private var newsLookup: [String:NewsInfo] = [:]
   var newsLoaded: Bool = false
+  var accountsLoaded: Bool = false
   var instantMessages: [UInt16:[InstantMessage]] = [:]
   var transfers: [TransferInfo] = []
   var downloads: [HotlineFileClient] = []
@@ -306,6 +308,14 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
       }
     }
     
+  }
+  
+  @MainActor func getAccounts() async -> [HotlineAccount] {
+    return await withCheckedContinuation { [weak self] continuation in
+      self?.client.sendGetAccounts() { articles in
+        continuation.resume(returning: articles)
+      }
+    }
   }
   
   @MainActor func getNewsList(at path: [String] = []) async {

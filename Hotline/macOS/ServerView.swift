@@ -114,6 +114,8 @@ enum ServerNavigationType: Identifiable, Hashable, Equatable {
       return "Board"
     case .files:
       return "Files"
+    case .accounts:
+      return "Accounts"
     case .user(let userID):
       return String(userID)
     }
@@ -123,6 +125,7 @@ enum ServerNavigationType: Identifiable, Hashable, Equatable {
   case news
   case board
   case files
+  case accounts
   case user(userID: UInt16)
 }
 
@@ -149,6 +152,7 @@ struct ServerView: View {
     ServerMenuItem(type: .board, name: "Board", image: "pin"),
     ServerMenuItem(type: .news, name: "News", image: "newspaper"),
     ServerMenuItem(type: .files, name: "Files", image: "folder"),
+    ServerMenuItem(type: .accounts, name: "Accounts", image: "person.2"),
   ]
   
   static var classicMenuItems: [ServerMenuItem] = [
@@ -362,6 +366,11 @@ struct ServerView: View {
         if menuItem.type == .chat {
           ListItemView(icon: menuItem.image, title: menuItem.name, unread: model.unreadPublicChat).tag(menuItem.type)
         }
+        else if menuItem.type == .accounts {
+          if model.access?.contains(.canOpenUsers) == true {
+            ListItemView(icon: menuItem.image, title: menuItem.name, unread: false).tag(menuItem.type)
+          }
+        }
         else {
           ListItemView(icon: menuItem.image, title: menuItem.name, unread: false).tag(menuItem.type)
         }
@@ -456,6 +465,11 @@ struct ServerView: View {
             .navigationTitle(model.serverTitle)
             .navigationSubtitle("Shared Files")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
+        case .accounts:
+            AccountManagerView()
+              .navigationTitle(model.serverTitle)
+              .navigationSubtitle("Accounts")
+              .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .user(let userID):
           let user = model.users.first(where: { $0.id == userID })
           MessageView(userID: userID)
@@ -467,6 +481,8 @@ struct ServerView: View {
             }
         }
     }
+    .toolbar(removing: .sidebarToggle)
+
   }
   
   
