@@ -21,7 +21,22 @@ struct HotlineUserAccessOptions: OptionSet {
   static func accessIndexToBit(_ index: Int) -> Int {
     return 63 - index
   }
-  
+ 
+  // Hotline 1.9.2 default user permissions
+  static let defaultAccess = Self([
+    .canDownloadFiles,
+    .canDownloadFolders,
+    .canUploadFiles,
+    .canUploadFolders,
+    .canSendMessages,
+    .canReadMessageBoard,
+    .canPostMessageBoard,
+    .canCreateChat,
+    .canReadChat,
+    .canSendChat,
+    .canUseAnyName
+  ])
+
   static func printAccessOptions(_ val: HotlineUserAccessOptions) {
     func formatBinaryString(_ binaryString: String) -> String {
         var formattedString = ""
@@ -178,6 +193,87 @@ struct HotlineNewsArticle: Identifiable {
   
   static func == (lhs: HotlineNewsArticle, rhs: HotlineNewsArticle) -> Bool {
     return lhs.id == rhs.id
+  }
+}
+
+struct HotlineAccount: Identifiable {
+  let id: UUID = UUID()
+  var name: String = ""
+  var login: String = ""
+  var password: String? = nil
+  var persisted: Bool = true
+  var access: HotlineUserAccessOptions = HotlineUserAccessOptions()
+  var fields: [HotlineTransactionField] = []
+
+  init(from data: [UInt8]) {
+    self.decodeFields(from: data)
+  }
+  
+  init(_ name: String, _ login: String, _ access: HotlineUserAccessOptions) {
+    self.name = name
+    self.login = login
+    self.access = access
+    self.persisted = false
+  }
+
+  
+  mutating func decodeFields(from data: [UInt8]) {
+    var fieldData = data
+    
+    guard fieldData.count > 0,
+          let fieldCount = fieldData.consumeUInt16(),
+          fieldCount > 0 else {
+      return
+    }
+    
+    for _ in 0..<fieldCount {
+      if
+        let fieldID = fieldData.consumeUInt16(),
+        let fieldSize = fieldData.consumeUInt16(),
+        let fieldRemainingData: [UInt8] = fieldData.consumeBytes(Int(fieldSize)) {
+        
+        if let fieldType = HotlineTransactionFieldType(rawValue: fieldID) {
+          
+          let field = HotlineTransactionField(type: fieldType, dataSize: fieldSize, data: fieldRemainingData)
+          
+          if fieldType == .userName {
+            self.name = field.getString()!
+          }
+          
+          if fieldType == .userLogin {
+            self.login = field.getObfuscatedString()!
+          }
+          
+          if fieldType == .userPassword {
+            self.password = field.getObfuscatedString()!
+          }
+                   
+          if fieldType == .userAccess, let opts = field.getUInt64(){
+            self.access = HotlineUserAccessOptions(rawValue: opts)
+            
+            HotlineUserAccessOptions.printAccessOptions(self.access)
+          }
+          
+          
+          self.fields.append(HotlineTransactionField(type: fieldType, dataSize: fieldSize, data: fieldRemainingData))
+        }
+      }
+    }
+  }
+  
+  static func == (lhs: HotlineAccount, rhs: HotlineAccount) -> Bool {
+    return lhs.id == rhs.id
+  }
+  
+  // Generate an initial random 21 character alphanumeric password, in the spirit of the original client
+  static func randomPassword() -> String {
+    return String((0..<20).map{_ in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".randomElement()!})
+  }
+}
+
+extension HotlineAccount: Hashable {
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(self.id)
   }
 }
 
@@ -572,6 +668,14 @@ struct HotlineTransactionField {
     return self.data.readString(at: 0, length: self.data.count)
   }
   
+  func getObfuscatedString() -> String? {
+    return String(bytes: self.data.map { 255 - $0 }, encoding: .ascii)
+  }
+  
+  func getDecodedString() -> String? {
+    return self.data.readString(at: 0, length: self.data.count)
+  }
+  
   func getUser() -> HotlineUser {
     return HotlineUser(from: self.data)
   }
@@ -586,6 +690,10 @@ struct HotlineTransactionField {
   
   func getNewsList() -> HotlineNewsList {
     return HotlineNewsList(from: self.data)
+  }
+  
+  func getAcccount() -> HotlineAccount {
+    return HotlineAccount(from: self.data)
   }
 }
 
@@ -673,6 +781,10 @@ struct HotlineTransaction {
   }
   
   mutating func setFieldUInt32(type: HotlineTransactionFieldType, val: UInt32) {
+    self.fields.append(HotlineTransactionField(type: type, val: val))
+  }
+  
+  mutating func setFieldUInt64(type: HotlineTransactionFieldType, val: UInt64) {
     self.fields.append(HotlineTransactionField(type: type, val: val))
   }
   
@@ -838,6 +950,8 @@ enum HotlineTransactionType: UInt16 {
   case notifyOfUserDelete = 302 // Server
   case getClientInfoText = 303
   case setClientUserInfo = 304
+  case getAccounts = 348
+  case updateUser = 349
   case newUser = 350
   case deleteUser = 351
   case getUser = 352

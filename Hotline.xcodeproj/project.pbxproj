@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726072BE0672A000C1DA7 /* FileDetails.swift */; };
 		11A7260A2BE0675A000C1DA7 /* FileDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726092BE06759000C1DA7 /* FileDetailsView.swift */; };
+		11F8288B2BF9428100216BA0 /* AccountManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11F8288A2BF9428100216BA0 /* AccountManagerView.swift */; };
 		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; platformFilter = ios; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; platformFilter = ios; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; platformFilter = ios; };
@@ -89,6 +90,7 @@
 /* Begin PBXFileReference section */
 		11A726072BE0672A000C1DA7 /* FileDetails.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileDetails.swift; sourceTree = "<group>"; };
 		11A726092BE06759000C1DA7 /* FileDetailsView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileDetailsView.swift; sourceTree = "<group>"; };
+		11F8288A2BF9428100216BA0 /* AccountManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManagerView.swift; sourceTree = "<group>"; };
 		DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersView.swift; sourceTree = "<group>"; };
 		DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardView.swift; sourceTree = "<group>"; };
 		DA0D69902B1E894800C71DF5 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
@@ -340,6 +342,7 @@
 				DA55AC762BE589F700034857 /* AboutView.swift */,
 				DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */,
 				DA6549992BEC280E00EDB697 /* ServerMessageView.swift */,
+				11F8288A2BF9428100216BA0 /* AccountManagerView.swift */,
 			);
 			path = macOS;
 			sourceTree = "<group>";
@@ -442,6 +445,7 @@
 				DAC3D97E2BC0F1ED00A727C9 /* Application-iOS.swift in Sources */,
 				DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */,
 				DAE734FF2B2E6750000C56F6 /* ChatView.swift in Sources */,
+				11F8288B2BF9428100216BA0 /* AccountManagerView.swift in Sources */,
 				DA4930BD2B4F8DD700822D0B /* NetSocket.swift in Sources */,
 				DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */,
 				DADDB28F2B238D850024040D /* Hotline.swift in Sources */,

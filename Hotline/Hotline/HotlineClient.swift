@@ -581,6 +581,28 @@ class HotlineClient: NetSocketDelegate {
     }
   }
   
+  @MainActor func sendGetAccounts(callback: (([HotlineAccount]) -> Void)? = nil) {
+    let t = HotlineTransaction(type: .getAccounts)
+    
+    self.sendPacket(t) { reply, err in
+      guard err == nil else {
+        callback?([])
+        return
+      }
+
+      let accountFields = reply.getFieldList(type: .data)
+      
+      var accounts: [HotlineAccount] = []
+      for data in accountFields {
+        accounts.append(data.getAcccount())
+      }
+      
+      accounts.sort { $0.login < $1.login }
+      
+      callback?(accounts)
+    }
+  }
+  
   @MainActor func sendGetNewsArticles(path: [String] = [], callback: (([HotlineNewsArticle]) -> Void)? = nil) {
     var t = HotlineTransaction(type: .getNewsArticleNameList)
     if !path.isEmpty {
@@ -665,6 +687,58 @@ class HotlineClient: NetSocketDelegate {
       callback?(FileDetails(name: fileName, path: filePath, size: fileSize, comment: fileComment, type: fileType, creator: fileCreator,
                             created: fileCreateDate, modified: fileModifyDate))
     }
+  }
+  
+
+  @MainActor func sendCreateUser(name: String, login: String,  password: String?, access: uint64) {
+    var t = HotlineTransaction(type: .newUser)
+    
+    t.setFieldString(type: .userName, val: name)
+    t.setFieldEncodedString(type: .userLogin, val: login)
+    t.setFieldUInt64(type: .userAccess, val: access)
+    
+    if let password {
+      t.setFieldEncodedString(type: .userPassword, val: password)
+    }
+    
+    self.sendPacket(t)
+    // TODO: handle errors
+  }
+
+  @MainActor func sendSetUser(name: String, login: String, newLogin: String?, password: String?, access: uint64) {
+    var t = HotlineTransaction(type: .setUser)
+    t.setFieldString(type: .userName, val: name)
+    t.setFieldUInt64(type: .userAccess, val: access)
+    
+    if let newLogin {
+      t.setFieldEncodedString(type: .data, val: login)
+      t.setFieldEncodedString(type: .userLogin, val: newLogin)
+    } else {
+      t.setFieldEncodedString(type: .userLogin, val: login)
+    }
+     
+    // In the setUser transaction, there are 3 possibilities for the password field:
+    // 1. If the password was not modified, the password field is sent with a zero byte.
+    if password == nil {
+      t.setFieldUInt8(type: .userPassword, val: 0)
+    }
+    
+    // 2. If the transaction should update the password, the password field is sent with the new password.
+    if let password, password != "" {
+      t.setFieldEncodedString(type: .userPassword, val: password)
+    }
+
+    // 3) If the transaction should remove the password, the password field is omitted from the transaction.
+    self.sendPacket(t)
+    // TODO: handle errors
+  }
+  
+  @MainActor func sendDeleteUser(login: String) {
+    var t = HotlineTransaction(type: .deleteUser)
+    t.setFieldEncodedString(type: .userLogin, val: login)
+    
+    self.sendPacket(t)
+    // TODO: handle errors
   }
   
   @MainActor func sendSetFileInfo(fileName: String, path filePath: [String], fileNewName: String?, comment: String?, encoding: String.Encoding = .utf8) {
