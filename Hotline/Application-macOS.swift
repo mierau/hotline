@@ -214,7 +214,7 @@ struct Application: App {
         Button("Show News") {
           activeServerState?.selection = .news
         }
-        .disabled(activeHotline?.status != .loggedIn)
+        .disabled(activeHotline?.status != .loggedIn || (activeHotline?.serverVersion ?? 0) < 151)
         .keyboardShortcut(.init("2"), modifiers: .command)
         Button("Show Message Board") {
           activeServerState?.selection = .board
@@ -229,7 +229,7 @@ struct Application: App {
         Button("Show Accounts") {
           activeServerState?.selection = .accounts
         }
-        .disabled(activeHotline?.status != .loggedIn || activeHotline?.access?.contains(.canOpenUsers) == false  )
+        .disabled(activeHotline?.status != .loggedIn || activeHotline?.access?.contains(.canOpenUsers) != true  )
         .keyboardShortcut(.init("5"), modifiers: .command)
       }
     }

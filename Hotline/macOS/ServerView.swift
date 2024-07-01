@@ -58,28 +58,35 @@ struct ServerMenuItem: Identifiable, Hashable {
 }
 
 struct ListItemView: View {
-  let icon: String
+  @Environment(\.controlActiveState) private var controlActiveState
+  
+  let icon: String?
   let title: String
   let unread: Bool
   
   var body: some View {
-      HStack {
-        Image(systemName: icon)
+    HStack(spacing: 5) {
+      if let i = icon {
+        Image(i)
           .resizable()
+        //            .renderingMode(.template)
           .scaledToFit()
-          .frame(width: 16, height: 16)
-          .padding(.leading, 4)
-        Text(title)
-          .lineLimit(1)
-          .truncationMode(.tail)
-        Spacer()
-        if unread {
-          Circle()
-            .frame(width: 6, height: 6)
-            .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2))
-            .opacity(0.5)
-        }
+          .frame(width: 20, height: 20)
+//          .padding(.leading, 2)
+          .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
       }
+      
+      Text(title)
+        .lineLimit(1)
+        .truncationMode(.tail)
+      Spacer()
+      if unread {
+        Circle()
+          .frame(width: 6, height: 6)
+          .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2))
+          .opacity(0.5)
+      }
+    }
   }
 }
 
@@ -148,17 +155,17 @@ struct ServerView: View {
   @Binding var server: Server
   
   static var menuItems: [ServerMenuItem] = [
-    ServerMenuItem(type: .chat, name: "Chat", image: "bubble"),
-    ServerMenuItem(type: .board, name: "Board", image: "pin"),
-    ServerMenuItem(type: .news, name: "News", image: "newspaper"),
-    ServerMenuItem(type: .files, name: "Files", image: "folder"),
-    ServerMenuItem(type: .accounts, name: "Accounts", image: "person.2"),
+    ServerMenuItem(type: .chat, name: "Chat", image: "Section Chat"),
+    ServerMenuItem(type: .board, name: "Board", image: "Section Board"),
+    ServerMenuItem(type: .news, name: "News", image: "Section News"),
+    ServerMenuItem(type: .files, name: "Files", image: "Section Files"),
+    ServerMenuItem(type: .accounts, name: "Accounts", image: "Section Users"),
   ]
   
   static var classicMenuItems: [ServerMenuItem] = [
-    ServerMenuItem(type: .chat, name: "Chat", image: "bubble"),
-    ServerMenuItem(type: .board, name: "Board", image: "pin"),
-    ServerMenuItem(type: .files, name: "Files", image: "folder"),
+    ServerMenuItem(type: .chat, name: "Chat", image: "Section Chat"),
+    ServerMenuItem(type: .board, name: "Board", image: "Section Board"),
+    ServerMenuItem(type: .files, name: "Files", image: "Section Files"),
   ]
   
   enum FocusFields {
@@ -211,7 +218,7 @@ struct ServerView: View {
               
                 .resizable()
                 .scaledToFit()
-                .frame(width: 24)
+                .frame(width: 28)
                 .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
             }
           }
@@ -377,10 +384,14 @@ struct ServerView: View {
       }
       
       if model.transfers.count > 0 {
+        Divider()
+        
         self.transfersSection
       }
       
       if model.users.count > 0 {
+        Divider()
+        
         self.usersSection
       }
     }
@@ -397,26 +408,28 @@ struct ServerView: View {
   }
   
   var transfersSection: some View {
-    Section("Transfers") {
+//    Section("Transfers") {
       ForEach(model.transfers) { transfer in
         TransferItemView(transfer: transfer)
       }
-    }
+//    }
   }
   
   var usersSection: some View {
-    Section("\(model.users.count) Online") {
+//    Section("\(model.users.count) Online") {
       ForEach(model.users) { user in
-        HStack {
+        HStack(spacing: 5) {
           if let iconImage = Hotline.getClassicIcon(Int(user.iconID)) {
             Image(nsImage: iconImage)
               .frame(width: 16, height: 16)
-              .padding(.leading, 4)
+              .padding(.leading, 2)
+              .padding(.trailing, 2)
           }
           else {
             Image("User")
               .frame(width: 16, height: 16)
-              .padding(.leading, 4)
+              .padding(.leading, 2)
+              .padding(.trailing, 2)
           }
           
           Text(user.name)
@@ -435,7 +448,7 @@ struct ServerView: View {
         .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
         .tag(ServerNavigationType.user(userID: user.id))
       }
-    }
+//    }
   }
   
   var serverView: some View {
@@ -453,7 +466,7 @@ struct ServerView: View {
         case .news:
           NewsView()
             .navigationTitle(model.serverTitle)
-            .navigationSubtitle("Newsgroup")
+            .navigationSubtitle("News")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .board:
           MessageBoardView()

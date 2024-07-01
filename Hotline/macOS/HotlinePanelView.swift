@@ -9,12 +9,15 @@ struct HotlinePanelView: View {
       Image(nsImage: ApplicationState.shared.activeServerBanner ?? NSImage(named: "Default Banner")!)
         .interpolation(.high)
         .resizable()
-        .scaledToFit()
+        .scaledToFill()
         .frame(width: 468, height: 60)
-        .clipShape(RoundedRectangle(cornerRadius: 6.0))
-        .padding([.top, .leading, .trailing], 4)
+        .frame(minWidth: 468, maxWidth: 468, minHeight: 60, maxHeight: 60)
+        .clipped()
+        .background(.black)
+//        .clipShape(RoundedRectangle(cornerRadius: 6.0))
+//        .padding([.top, .leading, .trailing], 4)
       
-      HStack(spacing: 16) {
+      HStack(spacing: 10) {
         Button {
           if NSEvent.modifierFlags.contains(.option) {
             openWindow(id: "server")
@@ -24,25 +27,24 @@ struct HotlinePanelView: View {
           }
         }
         label: {
-          Image(systemName: "globe.americas.fill")
+          Image("Section Servers")
             .resizable()
             .scaledToFit()
         }
         .buttonStyle(.plain)
-        .frame(width: 18, height: 18)
+        .frame(width: 20, height: 20)
         .help("Hotline Servers")
         
         Button {
           ApplicationState.shared.activeServerState?.selection = .chat
         }
         label: {
-          Image(systemName: "bubble.fill")
+          Image("Section Chat")
             .resizable()
             .scaledToFit()
         }
         .buttonStyle(.plain)
-        .frame(width: 18, height: 18)
-        .opacity(ApplicationState.shared.activeServerState == nil ? 0.5 : 1.0)
+        .frame(width: 20, height: 20)
         .disabled(ApplicationState.shared.activeServerState == nil)
         .help("Public Chat")
         
@@ -50,72 +52,88 @@ struct HotlinePanelView: View {
           ApplicationState.shared.activeServerState?.selection = .board
         }
         label: {
-          Image(systemName: "pin.fill")
+          Image("Section Board")
             .resizable()
             .scaledToFit()
         }
         .buttonStyle(.plain)
-        .frame(width: 18, height: 18)
-        .opacity(ApplicationState.shared.activeServerState == nil ? 0.5 : 1.0)
+        .frame(width: 20, height: 20)
         .disabled(ApplicationState.shared.activeServerState == nil)
         .help("Message Board")
         
-        Button {
-          ApplicationState.shared.activeServerState?.selection = .news
+        if let activeHotline = ApplicationState.shared.activeHotline,
+           activeHotline.serverVersion >= 151 {
+          Button {
+            ApplicationState.shared.activeServerState?.selection = .news
+          }
+          label: {
+            Image("Section News")
+              .resizable()
+              .scaledToFit()
+          }
+          .buttonStyle(.plain)
+          .frame(width: 20, height: 20)
+          .disabled(ApplicationState.shared.activeServerState == nil)
+          .help("News")
         }
-        label: {
-          Image(systemName: "newspaper.fill")
-            .resizable()
-            .scaledToFit()
-        }
-        .buttonStyle(.plain)
-        .frame(width: 18, height: 18)
-        .opacity(ApplicationState.shared.activeServerState == nil ? 0.5 : 1.0)
-        .disabled(ApplicationState.shared.activeServerState == nil)
-        .help("News")
         
         Button {
           ApplicationState.shared.activeServerState?.selection = .files
         }
         label: {
-          Image(systemName: "folder.fill")
+          Image("Section Files")
             .resizable()
             .scaledToFit()
         }
         .buttonStyle(.plain)
-        .frame(width: 18, height: 18)
-        .opacity(ApplicationState.shared.activeServerState == nil ? 0.5 : 1.0)
+        .frame(width: 20, height: 20)
         .disabled(ApplicationState.shared.activeServerState == nil)
         .help("Files")
         
-        Button {
-          ApplicationState.shared.activeServerState?.selection = .accounts
-        }
-        label: {
-          Image(systemName: "person.2.fill")
-            .resizable()
-            .scaledToFit()
-        }
-        .buttonStyle(.plain)
-        .frame(width: 18, height: 18)
-        .opacity(ApplicationState.shared.activeServerState == nil ? 0.5 : 1.0)
-        .disabled(ApplicationState.shared.activeServerState == nil || ApplicationState.shared.activeHotline?.access?.contains(.canOpenUsers) == false)
-        .help("Accounts")
-        
         Spacer()
         
+        if ApplicationState.shared.activeHotline?.access?.contains(.canOpenUsers) == true {
+          Button {
+            ApplicationState.shared.activeServerState?.selection = .accounts
+          }
+          label: {
+            Image("Section Users")
+              .resizable()
+              .scaledToFit()
+          }
+          .buttonStyle(.plain)
+          .frame(width: 20, height: 20)
+          .disabled(ApplicationState.shared.activeServerState == nil)
+          .help("Accounts")
+        }
+        
         SettingsLink(label: {
-          Image(systemName: "gearshape.fill")
+          Image("Section Settings")
             .resizable()
             .scaledToFit()
         })
         .buttonStyle(.plain)
-        .frame(width: 18, height: 18)
+        .frame(width: 20, height: 20)
         .help("Settings")
       }
-      .padding(.top, 16)
-      .padding(.bottom, 16)
-      .padding([.leading, .trailing], 16)
+      .padding(.top, 12)
+      .padding(.bottom, 12)
+      .padding([.leading, .trailing], 12)
+      
+//      GroupBox {
+//        HStack(spacing: 0) {
+//          Text("Not Connected")
+//            .font(.system(size: 10.0))
+//            .lineLimit(1)
+//            .truncationMode(.tail)
+//            .opacity(0.5)
+//            .padding(.vertical, 0.0)
+//            .padding(.horizontal, 4.0)
+//          
+//          Spacer()
+//        }
+//      }
+//      .padding([.leading, .bottom, .trailing], 4.0)
     }
 //    .frame(width: 468)
 //    .background(colorScheme == .dark ? .black : .white)

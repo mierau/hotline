@@ -48,11 +48,11 @@ struct MessageBoardEditorView: View {
         
         Spacer()
         
-        Image("Message Board Post")
-          .resizable()
-          .scaledToFit()
-          .frame(width: 16, height: 16)
-          .padding(.trailing, 6)
+//        Image("Message Board Post")
+//          .resizable()
+//          .scaledToFit()
+//          .frame(width: 16, height: 16)
+//          .padding(.trailing, 6)
         
         Text("New Post")
           .fontWeight(.semibold)

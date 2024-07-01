@@ -138,7 +138,7 @@ struct NewsView: View {
         } label: {
           Image(systemName: "arrow.clockwise")
         }
-        .help("Reload Newsgroup")
+        .help("Reload News")
         .disabled(loading)
       }
     }

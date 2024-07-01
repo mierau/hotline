@@ -75,7 +75,7 @@ struct FileView: View {
         .opacity(file.isUnavailable ? 0.5 : 1.0)
       
       if file.isFolder && loading {
-        ProgressView().controlSize(.small).padding([.leading, .trailing], 1)
+        ProgressView().controlSize(.small).padding([.leading, .trailing], 5)
       }
       Spacer()
       if !file.isUnavailable {

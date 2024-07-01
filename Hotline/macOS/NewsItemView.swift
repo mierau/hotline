@@ -79,29 +79,40 @@ struct NewsItemView: View {
       
       Spacer()
       
-      if news.type == .bundle || news.type == .category {
-        ZStack {
-//          Text("^[\(news.count) \(news.type == .bundle ? "Category" : "Post")](inflect: true)")
-          Text("\(news.count)")
-            .foregroundStyle(.clear)
-//            .font(.caption)
-            .lineLimit(1)
-            .padding([.leading, .trailing], 8)
-            .padding([.top, .bottom], 2)
-            .background(.secondary)
-            .clipShape(Capsule())
-          
-          Text("\(news.count)")
-            .foregroundStyle(.white)
-//            .font(.caption)
-            .lineLimit(1)
-            .padding([.leading, .trailing], 8)
-            .padding([.top, .bottom], 2)
-            .blendMode(.destinationOut)
-        }
-        .drawingGroup(opaque: false)
+      if news.type == .category && news.count > 0 {
+        Text("^[\(news.count) Post](inflect: true)")
+          .lineLimit(1)
+          .foregroundStyle(.secondary)
+          .padding(.trailing, 8)
       }
-      if news.type == .article && news.articleUsername != nil {
+//      if news.type == .bundle {
+//        Text("\(news.count)")
+//          .lineLimit(1)
+//          .foregroundStyle(.tertiary)
+//          .padding(.trailing, 8)
+        
+//        ZStack {
+//          Text("^[\(news.count) \(news.type == .bundle ? "Category" : "Post")](inflect: true)")
+//          Text("\(news.count)")
+//            .foregroundStyle(.clear)
+////            .font(.caption)
+//            .lineLimit(1)
+//            .padding([.leading, .trailing], 8)
+//            .padding([.top, .bottom], 2)
+//            .background(.secondary)
+//            .clipShape(Capsule())
+//          
+//          Text("\(news.count)")
+//            .foregroundStyle(.white)
+////            .font(.caption)
+//            .lineLimit(1)
+//            .padding([.leading, .trailing], 8)
+//            .padding([.top, .bottom], 2)
+//            .blendMode(.destinationOut)
+//        }
+//        .drawingGroup(opaque: false)
+//      }
+      else if news.type == .article && news.articleUsername != nil {
         if let d = news.articleDate {
           Text(NewsItemView.relativeDateFormatter.localizedString(for: d, relativeTo: Date.now))
             .lineLimit(1)

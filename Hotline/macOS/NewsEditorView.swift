@@ -88,7 +88,7 @@ struct NewsEditorView: View {
           }
           .buttonStyle(.plain)
           .frame(width: 22, height: 22)
-          .help("Post to Newsgroup")
+          .help("Post News")
           .disabled(title.isEmpty || text.isEmpty)
         }
       }

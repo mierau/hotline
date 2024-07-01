@@ -667,6 +667,10 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileClientDelegate {
   }
   
   @MainActor func downloadBanner(force: Bool = false) {
+    guard self.serverVersion >= 150 else {
+      return
+    }
+    
     if self.bannerClient != nil || force {
       self.bannerClient?.delegate = nil
       self.bannerClient?.cancel()

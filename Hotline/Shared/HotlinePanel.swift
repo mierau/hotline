@@ -1,7 +1,7 @@
 import Cocoa
 import SwiftUI
 
-fileprivate let HOTLINE_PANEL_SIZE: CGSize = CGSizeMake(476, 114)
+fileprivate let HOTLINE_PANEL_SIZE: CGSize = CGSizeMake(468, 114 - 10)
 
 class HotlinePanel: NSPanel {
   init(_ view: HotlinePanelView) {
