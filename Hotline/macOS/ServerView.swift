@@ -603,12 +603,12 @@ struct TransferItemView: View {
   }
   
   var body: some View {
-    HStack(alignment: .center) {
+    HStack(alignment: .center, spacing: 5) {
       HStack(spacing: 0) {
         Spacer()
         FileIconView(filename: transfer.title)
           .frame(width: 16, height: 16)
-          .padding(.leading, 2)
+//          .padding(.leading, 2)
         Spacer()
       }
       .frame(width: 20)
