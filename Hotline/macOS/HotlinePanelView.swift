@@ -61,21 +61,18 @@ struct HotlinePanelView: View {
         .disabled(ApplicationState.shared.activeServerState == nil)
         .help("Message Board")
         
-        if let activeHotline = ApplicationState.shared.activeHotline,
-           activeHotline.serverVersion >= 151 {
-          Button {
-            ApplicationState.shared.activeServerState?.selection = .news
-          }
-          label: {
-            Image("Section News")
-              .resizable()
-              .scaledToFit()
-          }
-          .buttonStyle(.plain)
-          .frame(width: 20, height: 20)
-          .disabled(ApplicationState.shared.activeServerState == nil)
-          .help("News")
+        Button {
+          ApplicationState.shared.activeServerState?.selection = .news
         }
+        label: {
+          Image("Section News")
+            .resizable()
+            .scaledToFit()
+        }
+        .buttonStyle(.plain)
+        .frame(width: 20, height: 20)
+        .disabled(ApplicationState.shared.activeServerState == nil || (ApplicationState.shared.activeHotline?.serverVersion ?? 0) < 151)
+        .help("News")
         
         Button {
           ApplicationState.shared.activeServerState?.selection = .files
