@@ -17,6 +17,8 @@ class HotlinePanel: NSPanel {
 //    self.collectionBehavior.insert(.fullScreenAuxiliary)
     self.collectionBehavior.insert(.canJoinAllSpaces)
     self.collectionBehavior.insert(.ignoresCycle)
+    
+//    self.appearance = NSAppearance(named: .vibrantDark)
 
     // Don't delete panel state when it's closed.
     self.isReleasedWhenClosed = false
@@ -38,7 +40,7 @@ class HotlinePanel: NSPanel {
     hostingView.sizingOptions = [.preferredContentSize]
 
     let visualEffectView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: HOTLINE_PANEL_SIZE.width, height: HOTLINE_PANEL_SIZE.height))
-    visualEffectView.material = .headerView
+    visualEffectView.material = .sidebar
     visualEffectView.blendingMode = .behindWindow
     visualEffectView.state = NSVisualEffectView.State.active
     visualEffectView.autoresizingMask = [.width, .height]

@@ -17,7 +17,7 @@ struct HotlinePanelView: View {
 //        .clipShape(RoundedRectangle(cornerRadius: 6.0))
 //        .padding([.top, .leading, .trailing], 4)
       
-      HStack(spacing: 10) {
+      HStack(spacing: 12) {
         Button {
           if NSEvent.modifierFlags.contains(.option) {
             openWindow(id: "server")
@@ -116,6 +116,7 @@ struct HotlinePanelView: View {
       .padding(.top, 12)
       .padding(.bottom, 12)
       .padding([.leading, .trailing], 12)
+//      .background(Color.red.opacity(0.5).blendMode(.multiply))
       
 //      GroupBox {
 //        HStack(spacing: 0) {
