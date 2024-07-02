@@ -85,6 +85,12 @@ struct NewsItemView: View {
           .foregroundStyle(.secondary)
           .padding(.trailing, 8)
       }
+      else if news.type == .bundle && news.count > 0 {
+        Text("^[\(news.count) Category](inflect: true)")
+          .lineLimit(1)
+          .foregroundStyle(.secondary)
+          .padding(.trailing, 8)
+      }
 //      if news.type == .bundle {
 //        Text("\(news.count)")
 //          .lineLimit(1)

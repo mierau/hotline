@@ -37,16 +37,14 @@ struct NewsView: View {
                 loadingIndicator
               }
               else if model.news.isEmpty {
-                VStack {
+                ZStack(alignment: .center) {
                   Text("No News")
-                    .bold()
+                    .font(.title)
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
-                    .font(.title3)
-                  Text("This server has no news available.")
-                    .foregroundStyle(.tertiary)
-                    .font(.system(size: 13))
+                    .padding()
                 }
-                .padding()
+                .frame(maxWidth: .infinity)
               }
               else {
                 newsBrowser

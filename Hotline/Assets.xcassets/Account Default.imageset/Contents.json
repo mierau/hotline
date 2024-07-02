@@ -1,17 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "Message Board Post.png",
+      "filename" : "Account Default.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "Message Board Post@2x.png",
+      "filename" : "Account Default@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "Message Board Post@3x.png",
+      "filename" : "Account Default@3x.png",
       "idiom" : "universal",
       "scale" : "3x"
     }

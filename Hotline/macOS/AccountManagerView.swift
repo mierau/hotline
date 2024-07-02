@@ -7,87 +7,84 @@ struct AccountManagerView: View {
   @State private var selection: HotlineAccount?
   @State private var loading: Bool = true
   
-  @State var pendingName: String = ""
-  @State var pendingLogin: String = ""
-  @State var pendingPassword: String = ""
-  @State var pendingAccess = HotlineUserAccessOptions.defaultAccess
+  @State private var pendingName: String = ""
+  @State private var pendingLogin: String = ""
+  @State private var pendingPassword: String = ""
+  @State private var pendingAccess = HotlineUserAccessOptions.defaultAccess
   
   @State private var toDelete: HotlineAccount?
   
   let placeholderPassword = "xxxxxxxxxxxxxxxxxx"
   
   var body: some View {
-    NavigationSplitView(){
-      if loading == false {
-        List(accounts, id: \.self, selection: $selection) { account in
-          HStack {
-            if account.access.contains(.canDisconnectUsers) {
-              Image(nsImage: Hotline.getClassicIcon(192)!)
-                .frame(width: 16, height: 16)
-                .padding(.leading, 4)
-              Text(account.login)
-            }
-            else if account.access.rawValue == 0 {
-              Image(nsImage: Hotline.getClassicIcon(190)!)
-                .frame(width: 16, height: 16)
-                .padding(.leading, 4)
-              Text(account.login)
-            }
-            else if account.persisted == false {
-              HStack {
-                Image(nsImage: Hotline.getClassicIcon(191)!)
-                  .frame(width: 16, height: 16)
-                  .padding(.leading, 4)
-                Text(account.login)
-                  .italic()
-              }
-            } else {
-              Image(nsImage: Hotline.getClassicIcon(193)!)
-                .frame(width: 16, height: 16)
-                .padding(.leading, 4)
-              Text(account.login)
-            }
-          }
-        }
-        .sheet(item: $toDelete ) { item in
-          Form {
-            HStack{
-              Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 30))
-              Text("Delete account \"\(item.name)\" and all associated files?")
-                .lineSpacing(4)
-            }
-          }
-          .frame(minWidth: 300, idealWidth: 450, maxWidth: .infinity, minHeight: 100, idealHeight: 100, maxHeight: .infinity)
-          .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              Button("Cancel") {
-                toDelete = nil
-              }
-            }
-            
-            ToolbarItem(placement: .primaryAction) {
-              Button("Delete"){
-                guard toDelete != nil else {
-                  return
-                }
-                model.client.sendDeleteUser(login: toDelete!.login)
-                accounts = accounts.filter { $0.login != toDelete!.login }
-                self.toDelete = nil
-                self.selection = nil
-              }
-            }
-          }
+    HStack(spacing: 0) {
+      ZStack {
+        accountList
+        if loading {
+          ProgressView()
         }
       }
-    } detail: {
-      if let selection {
+      if selection != nil {
+        accountDetails
+      }
+      else {
+        ZStack(alignment: .center) {
+          Text("No Account Selected")
+            .font(.title)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding()
+        }
+        .frame(maxWidth: .infinity)
+      }
+    }
+    .environment(\.defaultMinListRowHeight, 34)
+    .listStyle(.inset)
+    .alternatingRowBackgrounds(.enabled)
+    .task {
+      if loading {
+        accounts = await model.getAccounts()
+        loading = false
+      }
+    }
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          let newAccount = HotlineAccount("unnamed", "unnamed", HotlineUserAccessOptions.defaultAccess)
+          
+          pendingPassword = HotlineAccount.randomPassword()
+          accounts.append(newAccount)
+          selection = newAccount
+        } label: {
+          Label("New Account", systemImage: "plus")
+        }
+        .help("Create a new account")
+        .disabled(model.access?.contains(.canCreateUsers) != true)
+      }
+      
+      ToolbarItem(placement: .destructiveAction) {
+        Button {
+          toDelete = selection
+        } label: {
+          Label("Delete Account", systemImage: "trash")
+        }
+        .help("Delete account")
+        .disabled(selection == nil || model.access?.contains(.canDeleteUsers) != true)
+      }
+    }
+  }
+  
+  var accountDetails: some View {
+    VStack(alignment: .center, spacing: 0) {
+      ScrollView(.vertical) {
         Form {
-          Group {
-            TextField("Name", text: $pendingName)
+          Section {
+            TextField(text: $pendingName) {
+              Text("Name")
+            }
             TextField("Login", text: $pendingLogin)
-              .disabled(selection.persisted == true)
-            if selection.persisted == true {
+              .disabled(selection?.persisted == true)
+            if selection?.persisted == true {
               SecureField("Password", text: $pendingPassword)
             } else {
               TextField("Password", text: $pendingPassword)
@@ -192,77 +189,43 @@ struct AccountManagerView: View {
         .disabled(model.access?.contains(.canModifyUsers) == false)
         .formStyle(.grouped)
         .onChange(of: selection) {
-          pendingName = selection.name
-          pendingLogin = selection.login
-          pendingAccess = selection.access
-          
-          if selection.persisted {
-            if selection.password == nil {
-              pendingPassword = ""
-            } else {
-              pendingPassword = placeholderPassword
+          if let selection {
+            pendingName = selection.name
+            pendingLogin = selection.login
+            pendingAccess = selection.access
+            
+            if selection.persisted {
+              if selection.password == nil {
+                pendingPassword = ""
+              } else {
+                pendingPassword = placeholderPassword
+              }
             }
           }
         }
         .onAppear() {
-          pendingName = selection.name
-          pendingLogin = selection.login
-          pendingAccess = selection.access
-          
-          if selection.persisted {
-            if selection.password == nil {
-              pendingPassword = ""
-            } else {
-              pendingPassword = placeholderPassword
-            }
-          } else {
-            pendingPassword =  HotlineAccount.randomPassword()
-          }
-        }
-      }
-    }
-    .environment(\.defaultMinListRowHeight, 34)
-    .listStyle(.inset)
-    .alternatingRowBackgrounds(.enabled)
-    .task {
-      if loading {
-        accounts = await model.getAccounts()
-        loading = false
-      }
-    }
-    .toolbar {
-      if model.access?.contains(.canCreateUsers) == true {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            let newAccount = HotlineAccount("unnamed", "unnamed", HotlineUserAccessOptions.defaultAccess)
+          if let selection {
+            pendingName = selection.name
+            pendingLogin = selection.login
+            pendingAccess = selection.access
             
-            pendingPassword = HotlineAccount.randomPassword()
-            accounts.append(newAccount)
-            selection = newAccount
-          } label: {
-            Label("New Account", systemImage: "plus")
+            if selection.persisted {
+              if selection.password == nil {
+                pendingPassword = ""
+              } else {
+                pendingPassword = placeholderPassword
+              }
+            } else {
+              pendingPassword =  HotlineAccount.randomPassword()
+            }
           }
-          .help("Create a new account")
         }
       }
+      .frame(maxWidth: .infinity)
       
-      if model.access?.contains(.canDeleteUsers) == true {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            toDelete = selection
-          } label: {
-            Label("Delete Account", systemImage: "trash")
-          }
-          .help("Delete account")
-          .disabled(selection == nil)
-        }
-      }
-    }
-    
-    Divider()
-    
-    VStack(alignment: .trailing) {
-      HStack(){
+      Divider()
+      
+      HStack() {
         Button("Revert") {
           if let selection {
             pendingAccess = selection.access
@@ -274,7 +237,12 @@ struct AccountManagerView: View {
             }
           }
         }
+        .controlSize(.large)
+        .frame(minWidth: 75)
         .disabled(!self.isSaveable())
+//        .padding()
+        
+        Spacer()
         
         Button("Save"){
           guard let selection else {
@@ -285,14 +253,20 @@ struct AccountManagerView: View {
           if selection.persisted == true {
 
             if pendingPassword == placeholderPassword {
-              model.client.sendSetUser(name: pendingName, login: pendingLogin, newLogin: nil, password: nil, access: pendingAccess.rawValue)
+              Task { @MainActor in
+                model.client.sendSetUser(name: pendingName, login: pendingLogin, newLogin: nil, password: nil, access: pendingAccess.rawValue)
+              }
             } else {
-              model.client.sendSetUser(name: pendingName, login: pendingLogin, newLogin: nil, password: pendingPassword, access: pendingAccess.rawValue)
+              Task { @MainActor in
+                model.client.sendSetUser(name: pendingName, login: pendingLogin, newLogin: nil, password: pendingPassword, access: pendingAccess.rawValue)
+              }
             }
 
           } else {
             // Create new existing account
-            model.client.sendCreateUser(name: pendingName, login: pendingLogin, password: pendingPassword, access: pendingAccess.rawValue)
+            Task { @MainActor in
+              model.client.sendCreateUser(name: pendingName, login: pendingLogin, password: pendingPassword, access: pendingAccess.rawValue)
+            }
             self.selection?.password = pendingPassword
             pendingPassword = placeholderPassword
           }
@@ -310,10 +284,90 @@ struct AccountManagerView: View {
           accounts.sort { $0.login < $1.login }
           self.selection = account
         }
+        .controlSize(.large)
+        .frame(minWidth: 75)
         .keyboardShortcut(.defaultAction)
         .disabled(!self.isSaveable())
       }
-      .frame(height: 40)
+      .padding()
+    }
+    
+  }
+  
+  var accountList: some View {
+    List(accounts, id: \.self, selection: $selection) { account in
+      HStack(spacing: 5) {
+        if account.access.contains(.canDisconnectUsers) {
+          Image("User Admin")
+            .frame(width: 16, height: 16)
+            .opacity(account.persisted ? 1.0 : 0.25)
+          //                .padding(.leading, 4)
+          Text(account.login)
+            .foregroundStyle(Color.hotlineRed)
+        }
+        else if account.access.rawValue == 0 {
+          Image("User")
+            .frame(width: 16, height: 16)
+          //                .padding(.leading, 4)
+          Text(account.login)
+            .foregroundStyle(.secondary)
+        }
+        //            else if account.persisted == false {
+        //              HStack {
+        //                Image("User")
+        //                  .frame(width: 16, height: 16)
+        ////                  .padding(.leading, 4)
+        //                Text(account.login)
+        //                  .italic()
+        //              }
+        //            }
+        else {
+          Image("User")
+            .frame(width: 16, height: 16)
+            .opacity(account.persisted ? 1.0 : 0.5)
+          //                .padding(.leading, 4)
+          Text(account.login)
+        }
+      }
+    }
+    .frame(width: 250)
+    .sheet(item: $toDelete) { item in
+      Form {
+        HStack{
+          Image(systemName: "exclamationmark.triangle")
+            .font(.system(size: 30))
+          Text("Delete account \"\(item.name)\" and all associated files?")
+            .lineSpacing(4)
+        }
+      }
+      .frame(minWidth: 300, idealWidth: 450, maxWidth: .infinity, minHeight: 100, idealHeight: 100, maxHeight: .infinity)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            toDelete = nil
+          }
+        }
+        
+        ToolbarItem(placement: .primaryAction) {
+          Button("Delete") {
+            guard let userToDelete = toDelete else {
+              return
+            }
+            
+            self.toDelete = nil
+            self.selection = nil
+            
+            if userToDelete.persisted {
+              Task { @MainActor in
+                model.client.sendDeleteUser(login: userToDelete.login)
+              }
+            }
+            
+            accounts = accounts.filter { $0.login != userToDelete.login }
+            
+          }
+        }
+      }
     }
   }
   

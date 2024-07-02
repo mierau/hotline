@@ -40,16 +40,14 @@ struct MessageBoardView: View {
         .background(Color(nsColor: .textBackgroundColor))
       }
       else {
-        VStack {
+        ZStack(alignment: .center) {
           Text("No Message Board")
-            .bold()
+            .font(.title)
+            .multilineTextAlignment(.center)
             .foregroundStyle(.secondary)
-            .font(.title3)
-          Text("This server has the message board turned off.")
-            .foregroundStyle(.tertiary)
-            .font(.system(size: 13))
+            .padding()
         }
-        .padding()
+        .frame(maxWidth: .infinity)
       }
     }
     .sheet(isPresented: $composerDisplayed) {
