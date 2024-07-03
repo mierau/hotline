@@ -46,7 +46,7 @@ And this project is an attempt to create a modern open source version of Hotline
 | Private messages           |   ✓   |       |        |          |
 | User list                  |   ✓   |   ✓   |        |          |
 | User icons                 |   ✓   |   ✓   |        |          |
-| User administration        |       |       |        |          |
+| User administration        |   ✓   |       |        |          |
 | News reading               |   ✓   |   ✓   |        |          |
 | News posting               |   ✓   |       |        |          |
 | Message board reading      |   ✓   |   ✓   |        |          |
