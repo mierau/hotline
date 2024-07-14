@@ -7,61 +7,61 @@
       "size" : "1024x1024"
     },
     {
-      "filename" : "16x16.png",
+      "filename" : "Icon_16px.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "16x16"
     },
     {
-      "filename" : "16x16@2x.png",
+      "filename" : "Icon_32px 1.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "16x16"
     },
     {
-      "filename" : "32x32.png",
+      "filename" : "Icon_32px.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "32x32"
     },
     {
-      "filename" : "32x32@2x.png",
+      "filename" : "Icon_64px.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "32x32"
     },
     {
-      "filename" : "128x128.png",
+      "filename" : "Icon_128px.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "128x128"
     },
     {
-      "filename" : "128x128@2x.png",
+      "filename" : "Icon_256px 1.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "128x128"
     },
     {
-      "filename" : "256x256.png",
+      "filename" : "Icon_256px.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "256x256"
     },
     {
-      "filename" : "256x256@2x.png",
+      "filename" : "Icon_512px 1.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "256x256"
     },
     {
-      "filename" : "512x512.png",
+      "filename" : "Icon_512px.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "512x512"
     },
     {
-      "filename" : "512x512@2x.png",
+      "filename" : "Icon_1024px.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "512x512"
