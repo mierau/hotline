@@ -46,6 +46,7 @@
 		DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7725402B21435B006C5ABB /* ObservableScrollView.swift */; };
 		DA872B132BDDBF78008B1012 /* HotlinePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA872B122BDDBF78008B1012 /* HotlinePanel.swift */; platformFilters = (macos, ); };
 		DA872B152BDDEE1A008B1012 /* VisualEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA872B142BDDEE1A008B1012 /* VisualEffectView.swift */; platformFilters = (macos, ); };
+		DA99218E2C51AA5D0058FA6C /* HotlineDataBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA99218D2C51AA5D0058FA6C /* HotlineDataBuilder.swift */; };
 		DA9CAFBB2B126D5700CDA197 /* Application-macOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBA2B126D5700CDA197 /* Application-macOS.swift */; platformFilters = (macos, ); };
 		DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */; platformFilter = ios; };
 		DA9CAFC12B126D5800CDA197 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DA9CAFC02B126D5800CDA197 /* Assets.xcassets */; };
@@ -129,6 +130,7 @@
 		DA7725402B21435B006C5ABB /* ObservableScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservableScrollView.swift; sourceTree = "<group>"; };
 		DA872B122BDDBF78008B1012 /* HotlinePanel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HotlinePanel.swift; sourceTree = "<group>"; };
 		DA872B142BDDEE1A008B1012 /* VisualEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectView.swift; sourceTree = "<group>"; };
+		DA99218D2C51AA5D0058FA6C /* HotlineDataBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineDataBuilder.swift; sourceTree = "<group>"; };
 		DA9CAFB72B126D5700CDA197 /* Hotline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hotline.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA9CAFBA2B126D5700CDA197 /* Application-macOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Application-macOS.swift"; sourceTree = "<group>"; };
 		DA9CAFBC2B126D5700CDA197 /* TrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackerView.swift; sourceTree = "<group>"; };
@@ -281,6 +283,7 @@
 				DA5753672B33E88A00FAC277 /* HotlineTransferClient.swift */,
 				DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */,
 				DAC87F062C5010E80060FADF /* HotlineExtensions.swift */,
+				DA99218D2C51AA5D0058FA6C /* HotlineDataBuilder.swift */,
 			);
 			path = Hotline;
 			sourceTree = "<group>";
@@ -483,6 +486,7 @@
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,
 				DA57536C2B36BA1D00FAC277 /* TextDocument.swift in Sources */,
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
+				DA99218E2C51AA5D0058FA6C /* HotlineDataBuilder.swift in Sources */,
 				DA872B132BDDBF78008B1012 /* HotlinePanel.swift in Sources */,
 				DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */,
 				DA5753682B33E88A00FAC277 /* HotlineTransferClient.swift in Sources */,

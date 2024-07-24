@@ -42,12 +42,6 @@ protocol HotlineFileUploadClientDelegate: HotlineTransferDelegate {
   func hotlineFileUploadComplete(client: HotlineFileUploadClient, reference: UInt32)
 }
 
-//enum HotlineFileTransferType {
-//  case fileDownload
-//  case filePreview
-//  case fileUpload
-//}
-
 enum HotlineFileTransferStage: Int {
   case fileHeader = 1
   case fileForkHeader = 2
@@ -257,11 +251,16 @@ class HotlineFileUploadClient: HotlineTransferClient {
       print("Upload: Sending magic")
       self.status = .progress(0.0)
       
-      var magicData = Data()
-      magicData.appendUInt32("HTXF".fourCharCode())
-      magicData.appendUInt32(self.referenceNumber)
-      magicData.appendUInt32(self.payloadSize)
-      magicData.appendUInt32(0)
+      let magicData = Data(endian: .big) {
+        "HTXF".fourCharCode()
+        self.referenceNumber
+        self.payloadSize
+        UInt32.zero
+      }
+//      magicData.appendUInt32("HTXF".fourCharCode())
+//      magicData.appendUInt32(self.referenceNumber)
+//      magicData.appendUInt32(self.payloadSize)
+//      magicData.appendUInt32(0)
       self.stage = .fileHeader
       self.sendFileData(magicData)
       
@@ -505,11 +504,12 @@ class HotlineFilePreviewClient: HotlineTransferClient {
       return
     }
     
-    var headerData = Data()
-    headerData.appendUInt32("HTXF".fourCharCode())
-    headerData.appendUInt32(self.referenceNumber)
-    headerData.appendUInt32(0)
-    headerData.appendUInt32(0)
+    let headerData = Data(endian: .big) {
+      "HTXF".fourCharCode()
+      self.referenceNumber
+      UInt32.zero
+      UInt32.zero
+    }
     
     c.send(content: headerData, completion: .contentProcessed { [weak self] (error) in
       guard let self = self else {
@@ -719,11 +719,21 @@ class HotlineFileDownloadClient: HotlineTransferClient {
       return
     }
     
-    var headerData = Data()
-    headerData.appendUInt32("HTXF".fourCharCode())
-    headerData.appendUInt32(self.referenceNumber)
-    headerData.appendUInt32(0)
-    headerData.appendUInt32(0)
+    
+    // Original method
+//    var headerData = Data()
+//    headerData.appendUInt32("HTXF".fourCharCode())
+//    headerData.appendUInt32(self.referenceNumber)
+//    headerData.appendUInt32(0)
+//    headerData.appendUInt32(0)
+    
+    // Result builder method
+    let headerData = Data(endian: .big) {
+      "HTXF".fourCharCode()
+      self.referenceNumber
+      UInt32.zero
+      UInt32.zero
+    }
     
     c.send(content: headerData, completion: .contentProcessed { [weak self] (error) in
       guard let self = self else {
@@ -1046,14 +1056,21 @@ struct HotlineFileHeader {
   }
   
   func data() -> Data {
-    var d = Data()
+    Data(endian: .big) {
+      self.format
+      self.version
+      Data(repeating: 0, count: 16)
+      self.forkCount
+    }
     
-    d.appendUInt32(self.format)
-    d.appendUInt16(self.version)
-    d.appendZeros(count: 16)
-    d.appendUInt16(self.forkCount)
-    
-    return d
+//    var d = Data()
+//    
+//    d.appendUInt32(self.format)
+//    d.appendUInt16(self.version)
+//    d.appendZeros(count: 16)
+//    d.appendUInt16(self.forkCount)
+//    
+//    return d
   }
 }
 
@@ -1085,14 +1102,21 @@ struct HotlineFileForkHeader {
   }
   
   func data() -> Data {
-    var d = Data()
+    Data(endian: .big) {
+      self.forkType
+      self.compressionType
+      UInt32.zero
+      self.dataSize
+    }
     
-    d.appendUInt32(self.forkType)
-    d.appendUInt32(self.compressionType)
-    d.appendUInt32(0)
-    d.appendUInt32(self.dataSize)
-    
-    return d
+//    var d = Data()
+//    
+//    d.appendUInt32(self.forkType)
+//    d.appendUInt32(self.compressionType)
+//    d.appendUInt32(0)
+//    d.appendUInt32(self.dataSize)
+//    
+//    return d
   }
   
   var isInfoFork: Bool {
@@ -1224,21 +1248,36 @@ struct HotlineFileInfoFork {
   }
   
   func data() -> Data {
-    var d = Data()
+    Data(endian: .big) {
+      self.platform
+      self.type
+      self.creator
+      self.flags
+      self.platformFlags
+      Data(repeating: 0, count: 32)
+      self.createdDate
+      self.modifiedDate
+      self.nameScript
+      UInt16(self.name.count)
+      (self.name, .macOSRoman)
+    }
     
-    d.appendUInt32(self.platform)
-    d.appendUInt32(self.type)
-    d.appendUInt32(self.creator)
-    d.appendUInt32(self.flags)
-    d.appendUInt32(self.platformFlags)
-    d.appendZeros(count: 32)
-    d.appendDate(self.createdDate)
-    d.appendDate(self.modifiedDate)
-    d.appendUInt16(self.nameScript)
     
-    d.appendUInt16(UInt16(self.name.count))
-    d.appendString(self.name, encoding: .macOSRoman)
-    
-    return d
+//    var d = Data()
+//    
+//    d.appendUInt32(self.platform)
+//    d.appendUInt32(self.type)
+//    d.appendUInt32(self.creator)
+//    d.appendUInt32(self.flags)
+//    d.appendUInt32(self.platformFlags)
+//    d.appendZeros(count: 32)
+//    d.appendDate(self.createdDate)
+//    d.appendDate(self.modifiedDate)
+//    d.appendUInt16(self.nameScript)
+//    
+//    d.appendUInt16(UInt16(self.name.count))
+//    d.appendString(self.name, encoding: .macOSRoman)
+//    
+//    return d
   }
 }

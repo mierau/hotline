@@ -579,6 +579,7 @@ struct ServerView: View {
 struct TransferItemView: View {
   let transfer: TransferInfo
     
+  @Environment(\.controlActiveState) private var controlActiveState
   @Environment(Hotline.self) private var model: Hotline
   @State private var hovered: Bool = false
   @State private var buttonHovered: Bool = false
@@ -607,6 +608,7 @@ struct TransferItemView: View {
         Spacer()
         FileIconView(filename: transfer.title)
           .frame(width: 16, height: 16)
+          .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
 //          .padding(.leading, 2)
         Spacer()
       }
@@ -631,22 +633,27 @@ struct TransferItemView: View {
         .buttonStyle(.plain)
         .padding(0)
         .frame(width: 16, height: 16)
+        .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
         .help(transfer.completed || transfer.failed ? "Remove" : "Cancel Transfer")
         .onHover { hovered in
           self.buttonHovered = hovered
         }
       }
       else if transfer.failed {
-        Image(systemName: "exclamationmark.triangle")
+        Image(systemName: "exclamationmark.triangle.fill")
           .resizable()
+          .symbolRenderingMode(.multicolor)
           .aspectRatio(contentMode: .fit)
           .frame(width: 16, height: 16)
+          .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
       }
       else if transfer.completed {
         Image(systemName: "checkmark.circle.fill")
           .resizable()
+          .foregroundStyle(Color.fileComplete)
           .aspectRatio(contentMode: .fit)
           .frame(width: 16, height: 16)
+          .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
       }
       else if transfer.progress == 0.0 {
         ProgressView()
@@ -660,7 +667,9 @@ struct TransferItemView: View {
       }
     }
     .onHover { hovered in
-      self.hovered = hovered
+      withAnimation(.easeOut(duration: 0.25)) {
+        self.hovered = hovered
+      }
     }
     .help(formattedProgressHelp())
   }
