@@ -30,7 +30,7 @@
 		DA55AC752BE4888300034857 /* InstantMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC742BE4888300034857 /* InstantMessage.swift */; };
 		DA55AC772BE589F700034857 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC762BE589F700034857 /* AboutView.swift */; platformFilters = (macos, ); };
 		DA55AC792BE6A1AD00034857 /* RegularExpressions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC782BE6A1AD00034857 /* RegularExpressions.swift */; };
-		DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */; };
+		DA5753682B33E88A00FAC277 /* HotlineTransferClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5753672B33E88A00FAC277 /* HotlineTransferClient.swift */; };
 		DA57536C2B36BA1D00FAC277 /* TextDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57536B2B36BA1D00FAC277 /* TextDocument.swift */; };
 		DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineClient.swift */; };
 		DA65499A2BEC280E00EDB697 /* ServerMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6549992BEC280E00EDB697 /* ServerMessageView.swift */; };
@@ -73,6 +73,7 @@
 		DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */; };
 		DAC3D97E2BC0F1ED00A727C9 /* Application-iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC3D97D2BC0F1ED00A727C9 /* Application-iOS.swift */; platformFilter = ios; };
 		DAC3D9832BC33FD000A727C9 /* ApplicationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC3D9822BC33FD000A727C9 /* ApplicationState.swift */; };
+		DAC87F072C5010E80060FADF /* HotlineExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC87F062C5010E80060FADF /* HotlineExtensions.swift */; };
 		DADDB28B2B22B31F0024040D /* Tracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28A2B22B31F0024040D /* Tracker.swift */; };
 		DADDB28D2B22B5920024040D /* Server.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28C2B22B5920024040D /* Server.swift */; };
 		DADDB28F2B238D850024040D /* Hotline.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28E2B238D850024040D /* Hotline.swift */; };
@@ -113,7 +114,7 @@
 		DA55AC742BE4888300034857 /* InstantMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstantMessage.swift; sourceTree = "<group>"; };
 		DA55AC762BE589F700034857 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		DA55AC782BE6A1AD00034857 /* RegularExpressions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegularExpressions.swift; sourceTree = "<group>"; };
-		DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineFileClient.swift; sourceTree = "<group>"; };
+		DA5753672B33E88A00FAC277 /* HotlineTransferClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineTransferClient.swift; sourceTree = "<group>"; };
 		DA57536B2B36BA1D00FAC277 /* TextDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDocument.swift; sourceTree = "<group>"; };
 		DA6300962B24036B0034CBFD /* HotlineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineClient.swift; sourceTree = "<group>"; };
 		DA6549992BEC280E00EDB697 /* ServerMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerMessageView.swift; sourceTree = "<group>"; };
@@ -155,6 +156,7 @@
 		DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUIExtensions.swift; sourceTree = "<group>"; };
 		DAC3D97D2BC0F1ED00A727C9 /* Application-iOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Application-iOS.swift"; path = "Sounds/Application-iOS.swift"; sourceTree = "<group>"; };
 		DAC3D9822BC33FD000A727C9 /* ApplicationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationState.swift; sourceTree = "<group>"; };
+		DAC87F062C5010E80060FADF /* HotlineExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineExtensions.swift; sourceTree = "<group>"; };
 		DADDB28A2B22B31F0024040D /* Tracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tracker.swift; sourceTree = "<group>"; };
 		DADDB28C2B22B5920024040D /* Server.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server.swift; sourceTree = "<group>"; };
 		DADDB28E2B238D850024040D /* Hotline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hotline.swift; sourceTree = "<group>"; };
@@ -276,8 +278,9 @@
 			children = (
 				DA6300962B24036B0034CBFD /* HotlineClient.swift */,
 				DA9CAFCA2B126E3300CDA197 /* HotlineTrackerClient.swift */,
-				DA5753672B33E88A00FAC277 /* HotlineFileClient.swift */,
+				DA5753672B33E88A00FAC277 /* HotlineTransferClient.swift */,
 				DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */,
+				DAC87F062C5010E80060FADF /* HotlineExtensions.swift */,
 			);
 			path = Hotline;
 			sourceTree = "<group>";
@@ -482,7 +485,7 @@
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
 				DA872B132BDDBF78008B1012 /* HotlinePanel.swift in Sources */,
 				DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */,
-				DA5753682B33E88A00FAC277 /* HotlineFileClient.swift in Sources */,
+				DA5753682B33E88A00FAC277 /* HotlineTransferClient.swift in Sources */,
 				DAB4D8822B4C8FED0048A05C /* FileIconView.swift in Sources */,
 				DA65499A2BEC280E00EDB697 /* ServerMessageView.swift in Sources */,
 				DAAEE66F2B47625600A5BA07 /* FilePreviewImageView.swift in Sources */,
@@ -494,6 +497,7 @@
 				DAE734F92B2E4185000C56F6 /* ServerView.swift in Sources */,
 				DA2D98122BF29D5F0027E4BD /* NewsItemView.swift in Sources */,
 				DADDB28B2B22B31F0024040D /* Tracker.swift in Sources */,
+				DAC87F072C5010E80060FADF /* HotlineExtensions.swift in Sources */,
 				DAE734FD2B2E65E9000C56F6 /* MessageBoardView.swift in Sources */,
 				DA6980832BFFD06C003E434B /* BookmarkDocument.swift in Sources */,
 				DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */,

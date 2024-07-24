@@ -970,17 +970,3 @@ enum HotlineTransactionType: UInt16 {
   
   case unknown = 15000
 }
-
-// MARK: - Utilities
-
-func convertHotlineDate(year:UInt16, seconds: UInt32, milliseconds: UInt16) -> Date? {
-  var components = DateComponents()
-  components.timeZone = .gmt
-  components.year = Int(year)
-  components.month = 1
-  components.day = 1
-  components.second = 0
-  
-  let baseDate = Calendar.current.date(from: components)
-  return baseDate?.advanced(by: TimeInterval(seconds))
-}

@@ -784,6 +784,23 @@ class HotlineClient: NetSocketDelegate {
     }
   }
   
+  @MainActor func sendUploadFile(name fileName: String, path filePath: [String], callback: ((Bool, UInt32?) -> Void)? = nil) {
+    var t = HotlineTransaction(type: .uploadFile)
+    t.setFieldString(type: .fileName, val: fileName)
+    t.setFieldPath(type: .filePath, val: filePath)
+    
+    self.sendPacket(t) { reply, err in
+      guard err == nil,
+            let transferReferenceField = reply.getField(type: .referenceNumber),
+            let referenceNumber = transferReferenceField.getUInt32() else {
+        callback?(false, nil)
+        return
+      }
+    
+      callback?(true, referenceNumber)
+    }
+  }
+  
   @MainActor func sendDownloadBanner(callback: ((Bool, UInt32?, Int?) -> Void)? = nil) {
     let t = HotlineTransaction(type: .downloadBanner)
     

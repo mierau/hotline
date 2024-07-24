@@ -505,7 +505,6 @@ struct ServerView: View {
     guard !server.address.isEmpty else {
       return
     }
-    
     model.login(server: server, username: Prefs.shared.username, iconID: Prefs.shared.userIconID) { success in
       if !success {
         print("FAILED LOGIN??")

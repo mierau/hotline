@@ -16,6 +16,7 @@ class TransferInfo: Identifiable, Equatable, Hashable {
   
   var progressCallback: ((TransferInfo, Double) -> Void)? = nil
   var downloadCallback: ((TransferInfo, URL) -> Void)? = nil
+  var uploadCallback: ((TransferInfo) -> Void)? = nil
   var previewCallback: ((TransferInfo, Data) -> Void)? = nil
   
   init(id: UInt32, title: String, size: UInt) {

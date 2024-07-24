@@ -133,6 +133,7 @@ struct FilesView: View {
   
   @State private var selection: FileInfo?
   @State private var fileDetails: FileDetails?
+  @State private var uploadFileSelectorDisplayed: Bool = false
     
   private func openPreviewWindow(_ previewInfo: PreviewFileInfo) {
     switch previewInfo.previewType {
@@ -143,7 +144,6 @@ struct FilesView: View {
     default:
       return
     }
-//    let _ = FilePreviewWindowController(info: previewInfo)
   }
   
   @MainActor private func getFileInfo(_ file: FileInfo) {
@@ -162,6 +162,15 @@ struct FilesView: View {
     }
     
     model.downloadFile(file.name, path: file.path)
+  }
+  
+  @MainActor private func uploadFile(file fileURL: URL, to path: [String]) {
+    model.uploadFile(url: fileURL, path: path) { info in
+      Task {
+        // Refresh file listing to display newly uploaded file.
+        let _ = await model.getFileList(path: path)
+      }
+    }
   }
   
   @MainActor private func previewFile(_ file: FileInfo) {
@@ -290,15 +299,6 @@ struct FilesView: View {
         }
       }
       .toolbar {
-//        ToolbarItem(placement: .primaryAction) {
-//          Button {
-//          } label: {
-//            Label("Delete", systemImage: "trash")
-//          }
-//          .help("Delete")
-//          .disabled(true)
-//        }
-        
         ToolbarItem(placement: .primaryAction) {
           Button {
             if let selectedFile = selection, selectedFile.isPreviewable {
@@ -325,6 +325,15 @@ struct FilesView: View {
         
         ToolbarItem(placement: .primaryAction) {
           Button {
+            uploadFileSelectorDisplayed = true
+          } label: {
+            Label("Upload", systemImage: "arrow.up")
+          }
+          .help("Upload")
+        }
+        
+        ToolbarItem(placement: .primaryAction) {
+          Button {
             if let selectedFile = selection, !selectedFile.isFolder {
               downloadFile(selectedFile)
             }
@@ -339,6 +348,36 @@ struct FilesView: View {
     .sheet(item: $fileDetails ) { item in
       FileDetailsView(fd: item)
     }
+    .fileImporter(isPresented: $uploadFileSelectorDisplayed, allowedContentTypes: [.data], allowsMultipleSelection: false, onCompletion: { results in
+      switch results {
+      case .success(let fileURLS):
+        guard fileURLS.count > 0 else {
+          return
+        }
+        
+        let fileURL = fileURLS.first!
+
+        print(fileURL)
+        
+        var uploadPath: [String] = []
+        
+        if let selection = selection {
+          if selection.isFolder {
+            uploadPath = selection.path
+          }
+          else {
+            uploadPath = Array<String>(selection.path)
+            uploadPath.removeLast()
+          }
+        }
+        
+        print("UPLOAD PATH: \(uploadPath)")
+        uploadFile(file: fileURL, to: uploadPath)
+        
+      case .failure(let error):
+        print(error)
+      }
+    })
   }
 }
 

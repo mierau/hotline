@@ -15,9 +15,9 @@ enum FilePreviewType: Equatable {
 }
 
 @Observable
-final class FilePreview: HotlineFileClientDelegate {
+final class FilePreview: HotlineFilePreviewClientDelegate {
   @ObservationIgnored let info: PreviewFileInfo
-  @ObservationIgnored var client: HotlineFileClient? = nil
+  @ObservationIgnored var client: HotlineFilePreviewClient? = nil
   
   var state: FilePreviewState = .unloaded
   var progress: Double = 0.0
@@ -49,20 +49,20 @@ final class FilePreview: HotlineFileClientDelegate {
   init(info: PreviewFileInfo) {
     self.info = info
     
-    self.client = HotlineFileClient(address: info.address, port: UInt16(info.port), reference: info.id, size: UInt32(info.size), type: .preview)
+    self.client = HotlineFilePreviewClient(address: info.address, port: UInt16(info.port), reference: info.id, size: UInt32(info.size))
     self.client?.delegate = self
   }
   
   func download() {
-    self.client?.downloadToMemory()
+    self.client?.start()
   }
   
   func cancel() {
-    self.client?.cancel(deleteIncompleteFile: true)
+    self.client?.cancel()
   }
   
-  func hotlineFileStatusChanged(client: HotlineFileClient, reference: UInt32, status: HotlineFileClientStatus, timeRemaining: TimeInterval) {
-    print("FILE STATUS CHANGED", status)
+  func hotlineTransferStatusChanged(client: any HotlineTransferClient, reference: UInt32, status: HotlineTransferStatus, timeRemaining: TimeInterval) {
+    print("FilePreview: Download status changed:", status)
     
     switch status {
     case .unconnected:
@@ -86,7 +86,7 @@ final class FilePreview: HotlineFileClientDelegate {
     }
   }
   
-  func hotlineFileDownloadedData(client: HotlineFileClient, reference: UInt32, data: Data) {
+  func hotlineFilePreviewComplete(client: HotlineFilePreviewClient, reference: UInt32, data: Data) {
     self.state = .loaded
     self.data = data
     
