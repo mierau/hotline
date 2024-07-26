@@ -80,6 +80,9 @@ final class FilePreview: HotlineFilePreviewClientDelegate {
     case .failed(_):
       state = .failed
       progress = 0.0
+    case .completing:
+      state = .loading
+      progress = 1.0
     case .completed:
       state = .loaded
       progress = 1.0

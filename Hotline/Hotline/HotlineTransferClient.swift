@@ -21,8 +21,17 @@ enum HotlineTransferStatus: Equatable {
   case connecting
   case connected
   case progress(Double)
+  case completing
   case completed
   case failed(HotlineFileClientError)
+}
+
+enum HotlineFileForkType: UInt32 {
+  case none = 0
+  case unsupported = 1
+  case info = 0x494E464F // 'INFO'
+  case data = 0x44415441 // 'DATA'
+  case resource = 1296122706 // 'MACR'
 }
 
 protocol HotlineTransferDelegate: AnyObject {
@@ -183,6 +192,17 @@ class HotlineFileUploadClient: HotlineTransferClient {
           print("HotlineFileClient: Failed to finish transfer.")
           self?.invalidate()
           self?.status = .failed(.failedToUpload)
+        case .completing:
+          print("HotlineFileClient: Completed.")
+          self?.invalidate()
+          self?.status = .completed
+          DispatchQueue.main.async { [weak self] in
+            if let s = self {
+              s.delegate?.hotlineFileUploadComplete(client: s, reference: s.referenceNumber)
+            }
+          }
+        case .completed:
+          self?.invalidate()
         default:
           break
         }
@@ -214,9 +234,23 @@ class HotlineFileUploadClient: HotlineTransferClient {
     self.fileResourceURL?.stopAccessingSecurityScopedResource()
   }
   
+  private func sendComplete() {
+    guard let c = self.connection else {
+      self.invalidate()
+      print("HotlineFileUploadClient: invalid connection to send data.")
+      return
+    }
+    
+    self.status = .completing
+
+    c.send(content: nil, contentContext: .finalMessage, completion: .contentProcessed({ error in
+    }))
+  }
+  
   private func sendFileData(_ data: Data) {
     guard let c = self.connection else {
       self.invalidate()
+      
       print("HotlineFileUploadClient: invalid connection to send data.")
       return
     }
@@ -257,6 +291,7 @@ class HotlineFileUploadClient: HotlineTransferClient {
         self.payloadSize
         UInt32.zero
       }
+//      var magicData = Data()
 //      magicData.appendUInt32("HTXF".fourCharCode())
 //      magicData.appendUInt32(self.referenceNumber)
 //      magicData.appendUInt32(self.payloadSize)
@@ -273,7 +308,7 @@ class HotlineFileUploadClient: HotlineTransferClient {
       
     case .fileInfoForkHeader:
       print("Upload: Sending info fork header")
-      let header = HotlineFileForkHeader(type: "INFO".fourCharCode(), dataSize: UInt32(self.infoForkData.count))
+      let header = HotlineFileForkHeader(type: HotlineFileForkType.info.rawValue, dataSize: UInt32(self.infoForkData.count))
       self.stage = .fileInfoFork
       self.sendFileData(header.data())
       
@@ -294,7 +329,7 @@ class HotlineFileUploadClient: HotlineTransferClient {
         self.fileHandle = fh
         self.stage = .fileDataFork
         
-        let header = HotlineFileForkHeader(type: "DATA".fourCharCode(), dataSize: self.dataForkSize)
+        let header = HotlineFileForkHeader(type: HotlineFileForkType.data.rawValue, dataSize: self.dataForkSize)
         
         print("Upload: Sending data fork header \(self.dataForkSize)")
         self.sendFileData(header.data())
@@ -325,7 +360,7 @@ class HotlineFileUploadClient: HotlineTransferClient {
           fallthrough
         }
          
-        print("Upload: Sending Data Fork \(String(describing: fileData?.count))")
+        print("Upload: Sending data Fork \(String(describing: fileData?.count))")
         self.sendFileData(fileData!)
       }
       catch {
@@ -349,7 +384,7 @@ class HotlineFileUploadClient: HotlineTransferClient {
         return
       }
       
-      let header = HotlineFileForkHeader(type: "MACR".fourCharCode(), dataSize: self.resourceForkSize)
+      let header = HotlineFileForkHeader(type: HotlineFileForkType.resource.rawValue, dataSize: self.resourceForkSize)
       
       self.fileHandle = fh
       self.stage = .fileResourceFork
@@ -387,12 +422,7 @@ class HotlineFileUploadClient: HotlineTransferClient {
       
     case .fileComplete:
       print("Upload: Complete!")
-      self.status = .completed
-      self.invalidate()
-      
-      DispatchQueue.main.sync {
-        self.delegate?.hotlineFileUploadComplete(client: self, reference: self.referenceNumber)
-      }
+      self.sendComplete()
     }
   }
 }
@@ -719,15 +749,6 @@ class HotlineFileDownloadClient: HotlineTransferClient {
       return
     }
     
-    
-    // Original method
-//    var headerData = Data()
-//    headerData.appendUInt32("HTXF".fourCharCode())
-//    headerData.appendUInt32(self.referenceNumber)
-//    headerData.appendUInt32(0)
-//    headerData.appendUInt32(0)
-    
-    // Result builder method
     let headerData = Data(endian: .big) {
       "HTXF".fourCharCode()
       self.referenceNumber
@@ -871,34 +892,26 @@ class HotlineFileDownloadClient: HotlineTransferClient {
           }
         case .fileResourceFork:
           if self.fileBytes.count > 0 {
-//            if let f = self.fileResourceHandle {
-//              do {
-                var dataToWrite = self.fileBytes
-                
-                if dataToWrite.count >= self.fileCurrentForkBytesLeft {
-                  dataToWrite = self.fileBytes.subdata(in: 0..<self.fileCurrentForkBytesLeft)
-                  self.fileBytes.removeSubrange(0..<self.fileCurrentForkBytesLeft)
-                  
-                  self.transferStage = .fileForkHeader
-                  self.fileCurrentForkBytesLeft = 0
-                  self.fileCurrentForkHeader = nil
-                  
-                  keepProcessing = true
-                }
-                else {
-                  self.fileCurrentForkBytesLeft -= dataToWrite.count
-                  self.fileBytes = Data()
-                }
-                
-                print("WRITING TO RESOURCE FORK", dataToWrite.count)
-                
-                self.fileResourceBytes.append(dataToWrite)
-//                try f.write(contentsOf: dataToWrite)
-//              }
-//              catch {
-//                print("DOWNLOAD WRITE ERROR", error)
-//              }
-//            }
+            var dataToWrite = self.fileBytes
+            
+            if dataToWrite.count >= self.fileCurrentForkBytesLeft {
+              dataToWrite = self.fileBytes.subdata(in: 0..<self.fileCurrentForkBytesLeft)
+              self.fileBytes.removeSubrange(0..<self.fileCurrentForkBytesLeft)
+              
+              self.transferStage = .fileForkHeader
+              self.fileCurrentForkBytesLeft = 0
+              self.fileCurrentForkHeader = nil
+              
+              keepProcessing = true
+            }
+            else {
+              self.fileCurrentForkBytesLeft -= dataToWrite.count
+              self.fileBytes = Data()
+            }
+            
+            print("WRITING TO RESOURCE FORK", dataToWrite.count)
+            
+            self.fileResourceBytes.append(dataToWrite)
           }
         case .fileUnsupportedFork:
           if self.fileBytes.count > 0 {
@@ -988,7 +1001,7 @@ class HotlineFileDownloadClient: HotlineTransferClient {
       filePath = folderURL.generateUniqueFilePath(filename: name)
     }
       
-    var fileAttributes: [FileAttributeKey : Any] = [:]
+    var fileAttributes: [FileAttributeKey: Any] = [:]
     if let creatorCode = self.fileInfoFork?.creator {
       fileAttributes[.hfsCreatorCode] = creatorCode as NSNumber
     }
@@ -1000,6 +1013,13 @@ class HotlineFileDownloadClient: HotlineTransferClient {
     }
     if let modifiedDate = self.fileInfoFork?.modifiedDate {
       fileAttributes[.modificationDate] = modifiedDate as NSDate
+    }
+    if let comment = self.fileInfoFork?.comment {
+      if let commentPlistData = try? PropertyListSerialization.data(fromPropertyList: comment, format: .binary, options: 0) {
+        fileAttributes[FileAttributeKey(rawValue: "NSFileExtendedAttributes")] = [
+          FileAttributeKey(rawValue: "com.apple.metadata:kMDItemFinderComment"): commentPlistData
+        ]
+      }
     }
     
     if FileManager.default.createFile(atPath: filePath, contents: nil, attributes: fileAttributes) {
@@ -1034,7 +1054,6 @@ struct HotlineFileHeader {
     self.format = data.readUInt32(at: 0)!
     self.version = data.readUInt16(at: 4)!
     // 16 bytes of reserved data sits here. Skip it.
-    // self.reserved = data.readData(at: 4 + 2, length: 16)
     self.forkCount = data.readUInt16(at: 4 + 2 + 16)!
   }
   
@@ -1048,10 +1067,10 @@ struct HotlineFileHeader {
     
     let resourceURL = fileURL.appendingPathComponent("..namedfork/rsrc")
     if FileManager.default.fileExists(atPath: resourceURL.path(percentEncoded: false)) {
-      self.forkCount = 2
+      self.forkCount = 3
     }
     else {
-      self.forkCount = 1
+      self.forkCount = 2
     }
   }
   
@@ -1062,15 +1081,6 @@ struct HotlineFileHeader {
       Data(repeating: 0, count: 16)
       self.forkCount
     }
-    
-//    var d = Data()
-//    
-//    d.appendUInt32(self.format)
-//    d.appendUInt16(self.version)
-//    d.appendZeros(count: 16)
-//    d.appendUInt16(self.forkCount)
-//    
-//    return d
   }
 }
 
@@ -1108,27 +1118,18 @@ struct HotlineFileForkHeader {
       UInt32.zero
       self.dataSize
     }
-    
-//    var d = Data()
-//    
-//    d.appendUInt32(self.forkType)
-//    d.appendUInt32(self.compressionType)
-//    d.appendUInt32(0)
-//    d.appendUInt32(self.dataSize)
-//    
-//    return d
   }
   
   var isInfoFork: Bool {
-    return self.forkType == "INFO".fourCharCode()
+    return self.forkType == HotlineFileForkType.info.rawValue
   }
   
   var isDataFork: Bool {
-    return self.forkType == "DATA".fourCharCode()
+    return self.forkType == HotlineFileForkType.data.rawValue
   }
   
   var isResourceFork: Bool {
-    return self.forkType == "MACR".fourCharCode()
+    return self.forkType == HotlineFileForkType.resource.rawValue
   }
 }
 
@@ -1175,7 +1176,8 @@ struct HotlineFileInfoFork {
     self.nameScript = 0
     self.name = fileURL.lastPathComponent
     
-    self.comment = nil
+    let fileComment = try? FileManager.default.getFinderComment(fileURL)
+    self.comment = fileComment ?? ""
     
     self.headerSize = 0
   }
@@ -1248,7 +1250,9 @@ struct HotlineFileInfoFork {
   }
   
   func data() -> Data {
-    Data(endian: .big) {
+    let fileName = self.name.data(using: .macOSRoman)!
+    
+    let data = Data(endian: .big) {
       self.platform
       self.type
       self.creator
@@ -1258,26 +1262,14 @@ struct HotlineFileInfoFork {
       self.createdDate
       self.modifiedDate
       self.nameScript
-      UInt16(self.name.count)
-      (self.name, .macOSRoman)
+      UInt16(fileName.count)
+      fileName
+      if let commentData = self.comment?.data(using: .macOSRoman) {
+        UInt16(commentData.count)
+        commentData
+      }
     }
     
-    
-//    var d = Data()
-//    
-//    d.appendUInt32(self.platform)
-//    d.appendUInt32(self.type)
-//    d.appendUInt32(self.creator)
-//    d.appendUInt32(self.flags)
-//    d.appendUInt32(self.platformFlags)
-//    d.appendZeros(count: 32)
-//    d.appendDate(self.createdDate)
-//    d.appendDate(self.modifiedDate)
-//    d.appendUInt16(self.nameScript)
-//    
-//    d.appendUInt16(UInt16(self.name.count))
-//    d.appendString(self.name, encoding: .macOSRoman)
-//    
-//    return d
+    return data
   }
 }

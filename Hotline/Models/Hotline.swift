@@ -934,12 +934,13 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
         b.delegate = nil
         self.bannerClient = nil
       }
+    case .completing:
+      break
     case .completed:
       if let transfer = self.transfers.first(where: { $0.id == reference }) {
         transfer.completed = true
         transfer.timeRemaining = 0.0
       }
-      break
     }
   }
   
@@ -948,48 +949,6 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
       transfer.title = info.name
     }
   }
-  
-//  func hotlineFileReceivedInfo(client: HotlineFileClient, reference: UInt32, info: HotlineFileInfoFork) {
-//    if let transfer = self.transfers.first(where: { $0.id == reference }) {
-//      transfer.title = info.name
-//    }
-//  }
-  
-//  func hotlineTransferStatusChanged(client: HotlineTransferClient, status: HotlineTransferStatus, timeRemaining: TimeInterval) {
-//    switch status {
-//    case .unconnected:
-//      break
-//    case .connecting:
-//      break
-//    case .connected:
-//      break
-//    case .progress(let progress):
-//      if let transfer = self.transfers.first(where: { $0.id == client.referenceNumber }) {
-//        transfer.progress = progress
-//        transfer.timeRemaining = timeRemaining
-//        transfer.progressCallback?(transfer, progress)
-//      }
-//    case .failed(_):
-//      if let i = self.downloads.firstIndex(where: { $0.referenceNumber == client.referenceNumber }) {
-//        self.downloads.remove(at: i)
-//      }
-//      if let transfer = self.transfers.first(where: { $0.id == client.referenceNumber }) {
-//        transfer.failed = true
-//        transfer.timeRemaining = 0.0
-//      }
-//      if let b = self.bannerClient, reference == b.referenceNumber {
-//        b.delegate = nil
-//        self.bannerClient = nil
-//      }
-//    case .completed:
-//      if let transfer = self.transfers.first(where: { $0.id == client.referenceNumber }) {
-//        transfer.completed = true
-//        transfer.timeRemaining = 0.0
-//      }
-//      break
-//    }
-//  }
-  
   
   func hotlineFilePreviewComplete(client: HotlineFilePreviewClient, reference: UInt32, data: Data) {
     if let b = self.bannerClient, b.referenceNumber == reference {
@@ -1010,27 +969,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
       self.downloads.remove(at: i)
     }
   }
-  
-//  func hotlineFileDownloadedData(client: HotlineFileClient, reference: UInt32, data: Data) {
-//    if let b = self.bannerClient, b.referenceNumber == reference {
-//      #if os(macOS)
-//      self.bannerImage = NSImage(data: data)
-//      #elseif os(iOS)
-//      self.bannerImage = UIImage(data: data)
-//      #endif
-//    }
-//    else
-//    if let i = self.transfers.firstIndex(where: { $0.id == reference }) {
-//      let transfer = self.transfers[i]
-//      transfer.previewCallback?(transfer, data)
-//      self.transfers.remove(at: i)
-//    }
-//    
-//    if let i = self.downloads.firstIndex(where: { $0.referenceNumber == reference }) {
-//      self.downloads.remove(at: i)
-//    }
-//  }
-  
+    
   func hotlineFileDownloadComplete(client: HotlineFileDownloadClient,  reference: UInt32, at: URL) {
     if let i = self.transfers.firstIndex(where: { $0.id == reference }) {
       let transfer = self.transfers[i]

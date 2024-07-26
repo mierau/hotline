@@ -1,4 +1,5 @@
 import Foundation
+import CoreServices
 
 enum LineEnding {
   case lf // Unix-style (\n)
@@ -49,36 +50,199 @@ extension String {
 }
 
 extension FileManager {
-  func updateFileProgress(_ fileURL: URL, progress: Double) {
-    let filePath = fileURL.path(percentEncoded: false)
-    let fileAttributes = try? self.attributesOfItem(atPath: filePath)
+  static var extensionToHFSCreator: [String: UInt32] = [
+    // Documents
+    "txt": "ttxt".fourCharCode(),
+    "rtf": "MSWD".fourCharCode(),
+    "doc": "MSWD".fourCharCode(),
+    "qxd": "XPR3".fourCharCode(),
+    "indd": "InDn".fourCharCode(),
+    "idd": "InDn".fourCharCode(),
     
-//    let extendedAttributes = fileAttributes[]
+    // Spreadsheets
+    "csv": "ttxt".fourCharCode(),
+    "xls": "XCEL".fourCharCode(),
+    "xlsx": "XCEL".fourCharCode(),
+    "numbers": "NMBR".fourCharCode(),
     
-    print("ATTRIBUTES: ", fileAttributes)
+    // Presentations
+    "ppt": "PPT3".fourCharCode(),
+    "key": "KEYN".fourCharCode(),
     
-//    let blah = Progress(totalUnitCount: 100)
-//    
-//    blah.fileTotalCount = 1
-//    blah.fileOperationKind = .downloading
-//    blah.fileCompletedCount = 0
-  }
+    // Images
+    "ai": "ART5".fourCharCode(),
+    "jpg": "8BIM".fourCharCode(),
+    "jpeg": "8BIM".fourCharCode(),
+    "png": "8BIM".fourCharCode(),
+    "gif": "8BIM".fourCharCode(),
+    "tiff": "8BIM".fourCharCode(),
+    "ico": "8BIM".fourCharCode(),
+    "bmp": "8BIM".fourCharCode(),
+    "eps": "8BIM".fourCharCode(),
+    "ps": "8BIM".fourCharCode(),
+    "psd": "8BIM".fourCharCode(),
+    "pict": "8BIM".fourCharCode(),
+    "tga": "8BIM".fourCharCode(),
+    
+    // Archives
+    "zip": "SITx".fourCharCode(),
+    "sit": "SITx".fourCharCode(),
+    "dmg": "ddsk".fourCharCode(),
+    "sea": "SITx".fourCharCode(),
+    
+    // Programming
+    "swift": "R*ch".fourCharCode(),
+    "java": "R*ch".fourCharCode(),
+    "py": "R*ch".fourCharCode(),
+    "c": "R*ch".fourCharCode(),
+    "cpp": "R*ch".fourCharCode(),
+    "cp": "R*ch".fourCharCode(),
+    "h": "R*ch".fourCharCode(),
+    "js": "R*ch".fourCharCode(),
+    "html": "sfri".fourCharCode(),
+    "css": "sfri".fourCharCode(),
+    "php": "R*ch".fourCharCode(),
+    "json": "R*ch".fourCharCode(),
+    "md": "R*ch".fourCharCode(),
+    "log": "R*ch".fourCharCode(),
+    "xml": "R*ch".fourCharCode(),
+  ]
+  
+  static var extensionToHFSType: [String: UInt32] = [
+    // Documents
+    "txt": "TEXT".fourCharCode(),
+    "rtf": "RTF ".fourCharCode(),
+    "doc": "WDBN".fourCharCode(),
+    "docx": "W8BN".fourCharCode(),
+    "prd": "WPRD".fourCharCode(),
+    "wpd": "WP5".fourCharCode(),
+    "pdf": "PDF ".fourCharCode(),
+    "qxd": "XDOC".fourCharCode(),
+    "indd": "inDd".fourCharCode(),
+    "idd": "inDd".fourCharCode(),
+    
+    // Spreadsheets
+    "csv": "TEXT".fourCharCode(),
+    "xls": "XLS ".fourCharCode(),
+    "xlsx": "XLSX".fourCharCode(),
+    "numbers": "NMBR".fourCharCode(),
+    
+    // Presentations
+    "ppt": "PPT3".fourCharCode(),
+    "key": "KEYN".fourCharCode(),
+    
+    // Images
+    "jpg": "JPEG".fourCharCode(),
+    "jpeg": "JPEG".fourCharCode(),
+    "png": "PNGf".fourCharCode(),
+    "gif": "GIFf".fourCharCode(),
+    "tiff": "TIFF".fourCharCode(),
+    "ico": "ICO ".fourCharCode(),
+    "bmp": "BMPf".fourCharCode(),
+    "eps": "EPSF".fourCharCode(),
+    "ps": "EPSF".fourCharCode(),
+    "psd": "8BPS".fourCharCode(),
+    "pict": "PICT".fourCharCode(),
+    "tga": "TPIC".fourCharCode(),
+    "swf": "SWFL".fourCharCode(),
+    
+    // Audio
+    "mp3": "Mp3 ".fourCharCode(),
+    "m4a": "M4A ".fourCharCode(),
+    "aac": "caff".fourCharCode(),
+    "wav": "WAVE".fourCharCode(),
+    "aiff": "AIFF".fourCharCode(),
+    "midi": "Midi".fourCharCode(),
+    "snd": "snd ".fourCharCode(),
+    
+    // Video
+    "mp4": "M4V ".fourCharCode(),
+    "mpeg": "MPG ".fourCharCode(),
+    "mpg2": "MPG2".fourCharCode(),
+    "mov": "MooV".fourCharCode(),
+    "avi": "VfW ".fourCharCode(),
+    "wmv": "WMV ".fourCharCode(),
+    
+    // Archives
+    "zip": "ZIP ".fourCharCode(),
+    "rar": "RAR ".fourCharCode(),
+    "7z": "7ZIP".fourCharCode(),
+    "tar": "TAR ".fourCharCode(),
+    "gz": "GZIP".fourCharCode(),
+    "sit": "SITx".fourCharCode(),
+    "dmg": "udif".fourCharCode(),
+    "sea": "SITx".fourCharCode(),
+    "cdr": "CDRW".fourCharCode(),
+    
+    // Programming
+    "swift": "TEXT".fourCharCode(),
+    "java": "TEXT".fourCharCode(),
+    "py": "TEXT".fourCharCode(),
+    "c": "TEXT".fourCharCode(),
+    "cpp": "TEXT".fourCharCode(),
+    "cp": "TEXT".fourCharCode(),
+    "h": "TEXT".fourCharCode(),
+    "js": "TEXT".fourCharCode(),
+    "html": "TEXT".fourCharCode(),
+    "css": "TEXT".fourCharCode(),
+    "php": "TEXT".fourCharCode(),
+    "json": "TEXT".fourCharCode(),
+    "md": "TEXT".fourCharCode(),
+    "log": "TEXT".fourCharCode(),
+    "xml": "TEXT".fourCharCode(),
+    
+    // Fonts
+    "ttf": "tfil".fourCharCode(),
+  ]
   
   func getHFSTypeAndCreator(_ fileURL: URL) throws -> (hfsCreator: UInt32, hfsType: UInt32) {
     let filePath = fileURL.path(percentEncoded: false)
     let fileAttributes: [FileAttributeKey: Any] = try self.attributesOfItem(atPath: filePath)
+    let fileExtension = fileURL.pathExtension.lowercased()
     
-    var creator: UInt32 = 0
-    if let creatorCode: NSNumber = fileAttributes[.hfsCreatorCode] as? NSNumber {
+    var creator: UInt32 = "????".fourCharCode()
+    if let creatorCode: NSNumber = fileAttributes[.hfsCreatorCode] as? NSNumber,
+       creatorCode.uint32Value != 0 {
       creator = creatorCode.uint32Value
     }
+    if creator == "????".fourCharCode() {
+      if let possibleCreator = FileManager.extensionToHFSCreator[fileExtension] {
+        creator = possibleCreator
+      }
+    }
     
-    var type: UInt32 = 0
-    if let typeCode: NSNumber = fileAttributes[.hfsTypeCode] as? NSNumber {
+    var type: UInt32 = "????".fourCharCode()
+    if let typeCode: NSNumber = fileAttributes[.hfsTypeCode] as? NSNumber,
+       typeCode.uint32Value != 0 {
       type = typeCode.uint32Value
+    }
+    if type == "????".fourCharCode() {
+      if let possibleType = FileManager.extensionToHFSType[fileExtension] {
+        type = possibleType
+      }
     }
     
     return (hfsCreator: creator, hfsType: type)
+  }
+  
+  func getFinderComment(_ fileURL: URL) throws -> String {
+    let filePath = fileURL.path(percentEncoded: false)
+    let fileAttributes: [FileAttributeKey: Any] = try self.attributesOfItem(atPath: filePath)
+    
+    if let extendedAttributesData = fileAttributes[FileAttributeKey(rawValue: "NSFileExtendedAttributes")],
+       let extendedAttributes = extendedAttributesData as? [FileAttributeKey: Any] {
+      print(extendedAttributes)
+      
+      if let commentPlistDataAttribute = extendedAttributes[FileAttributeKey(rawValue: "com.apple.metadata:kMDItemFinderComment")],
+         let commentPlistData = commentPlistDataAttribute as? Data {
+        if let plist = try? PropertyListSerialization.propertyList(from: commentPlistData, options: [], format: nil),
+           let plistString = plist as? String {
+          return plistString
+        }
+      }
+    }
+    
+    return ""
   }
   
   func getCreatedAndModifiedDates(_ fileURL: URL) -> (createdDate: Date, modifiedDate: Date) {
@@ -89,6 +253,8 @@ extension FileManager {
           let modifiedNSDate: NSDate = fileAttributes[.modificationDate] as? NSDate else {
       return (createdDate: Date(), modifiedDate: Date())
     }
+    
+    print("GOT CREATED DATE: ", createdNSDate)
     
     return (createdDate: createdNSDate as Date, modifiedDate: modifiedNSDate as Date)
   }
@@ -114,7 +280,6 @@ extension FileManager {
     let data = try fileURL.withUnsafeFileSystemRepresentation { fileSystemPath in
       let length = getxattr(fileSystemPath, name, nil, 0, 0, 0)
       guard length >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [NSLocalizedDescriptionKey: String(cString: strerror(errno))]) }
-      
       
       var data = Data(count: length)
       if length == 0 {
@@ -593,6 +758,10 @@ extension Array where Element == UInt8 {
 }
 
 extension Data {
+  func hexDump() -> String {
+    return self.map { String(format: "%02x", $0) }.joined(separator: " ")
+  }
+  
   init(_ val: UInt8) {
     self.init()
     self.appendUInt8(val)

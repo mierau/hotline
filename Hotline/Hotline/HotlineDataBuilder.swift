@@ -3,11 +3,16 @@ import Foundation
 enum DataEndianness {
   case big
   case little
+  
+  static let system: DataEndianness = {
+    let number: UInt32 = 0x12345678
+    return number == number.littleEndian ? .little : .big
+  }()
 }
 
 @resultBuilder
 struct DataBuilder {
-  static var defaultEndian: DataEndianness = .little
+  static var defaultEndian: DataEndianness = .system
   
   static func buildBlock(_ components: Data...) -> Data {
     components.reduce(Data(), +)
@@ -42,24 +47,18 @@ struct DataBuilder {
       msecs = components.milliseconds
     }
     
-    year = DataBuilder.defaultEndian == .big ? year.bigEndian : year.littleEndian
-    secs = DataBuilder.defaultEndian == .big ? secs.bigEndian : secs.littleEndian
-    msecs = DataBuilder.defaultEndian == .big ? msecs.bigEndian : msecs.littleEndian
+    year = DataBuilder.defaultEndian == .little ? year.littleEndian : year.bigEndian
+    secs = DataBuilder.defaultEndian == .little ? secs.littleEndian : secs.bigEndian
+    msecs = DataBuilder.defaultEndian == .little ? msecs.littleEndian : msecs.bigEndian
     
-    withUnsafeBytes(of: year) { dateData.append(Data($0)) }
-    withUnsafeBytes(of: msecs) { dateData.append(Data($0)) }
-    withUnsafeBytes(of: secs) { dateData.append(Data($0)) }
+    dateData.append(withUnsafeBytes(of: year) { Data($0) })
+    dateData.append(withUnsafeBytes(of: msecs) { Data($0) })
+    dateData.append(withUnsafeBytes(of: secs) { Data($0) })
     
     return dateData
   }
   
-  static func buildExpression(_ expression: Int) -> Data {
-    print("ADDING BYTE:", expression)
-    return withUnsafeBytes(of: UInt8(expression)) { Data($0) }
-  }
-  
   static func buildExpression<T: FixedWidthInteger>(_ expression: (T, DataEndianness)) -> Data {
-    print("ADDING INTEGER:", expression)
     let value = expression.1 == .little ? expression.0.littleEndian : expression.0.bigEndian
     return withUnsafeBytes(of: value) { Data($0) }
   }
@@ -81,10 +80,16 @@ struct DataBuilder {
   static func buildOptional(_ component: Data?) -> Data {
     component ?? Data()
   }
+  
+  static func buildFinalResult(_ component: Data) -> Data {
+    var data = Data()
+    data.append(component)
+    return data
+  }
 }
 
 extension Data {
-  init(endian: DataEndianness = .little, @DataBuilder _ content: () -> Data) {
+  init(endian: DataEndianness = .system, @DataBuilder _ content: () -> Data) {
     DataBuilder.defaultEndian = endian
     self = content()
   }
