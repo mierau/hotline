@@ -140,6 +140,8 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   var downloads: [HotlineTransferClient] = []
   var unreadInstantMessages: [UInt16:UInt16] = [:]
   var unreadPublicChat: Bool = false
+  var errorDisplayed: Bool = false
+  var errorMessage: String? = nil
   
   @ObservationIgnored var bannerClient: HotlineFilePreviewClient?
   #if os(macOS)
@@ -902,8 +904,11 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     self.access = options
   }
   
-  func hotlineReceivedError(message: String) {
+  func hotlineReceivedErrorMessage(code: UInt32, message: String?) {
+    print("Hotline: received error message \(code)", message.debugDescription)
     
+    self.errorDisplayed = (message != nil) // Show error if there is a message to display.
+    self.errorMessage = message
   }
   
   // MARK: - Hotline Transfer Delegate

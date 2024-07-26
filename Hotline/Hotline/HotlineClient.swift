@@ -35,6 +35,7 @@ protocol HotlineClientDelegate: AnyObject {
   func hotlineGetUserInfo() -> (String, UInt16)
   func hotlineStatusChanged(status: HotlineClientStatus)
   func hotlineReceivedAgreement(text: String)
+  func hotlineReceivedErrorMessage(code: UInt32, message: String?)
   func hotlineReceivedChatMessage(message: String)
   func hotlineReceivedUserList(users: [HotlineUser])
   func hotlineReceivedServerMessage(message: String)
@@ -48,6 +49,7 @@ protocol HotlineClientDelegate: AnyObject {
 extension HotlineClientDelegate {
   func hotlineStatusChanged(status: HotlineClientStatus) {}
   func hotlineReceivedAgreement(text: String) {}
+  func hotlineReceivedErrorMessage(code: UInt32, message: String?) {}
   func hotlineReceivedChatMessage(message: String) {}
   func hotlineReceivedUserList(users: [HotlineUser]) {}
   func hotlineReceivedServerMessage(message: String) {}
@@ -376,8 +378,9 @@ class HotlineClient: NetSocketDelegate {
     if packet.errorCode != 0 {
       let errorField: HotlineTransactionField? = packet.getField(type: .errorText)
       print("HotlineClient 😵 \(packet.errorCode): \(errorField?.getString() ?? "")")
+      self.delegate?.hotlineReceivedErrorMessage(code: packet.errorCode, message: errorField?.getString())
     }
-    
+        
     guard let replyCallbackInfo = self.transactionLog[packet.id] else {
       print("Hmm, no reply waiting though")
       return
@@ -391,7 +394,6 @@ class HotlineClient: NetSocketDelegate {
     
     guard packet.errorCode == 0 else {
       let errorField: HotlineTransactionField? = packet.getField(type: .errorText)
-      print("HotlineClient 😵 \(packet.errorCode): \(errorField?.getString() ?? "")")
       replyCallback?(packet, .error(packet.errorCode, errorField?.getString()))
       return
     }

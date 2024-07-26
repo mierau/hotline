@@ -227,6 +227,9 @@ struct ServerView: View {
     .onDisappear {
       model.disconnect()
     }
+    .alert(model.errorMessage ?? "Server Message", isPresented: $model.errorDisplayed) {
+      Button("OK") {}
+    }
     .task {
       var address = server.address
       if server.port != HotlinePorts.DefaultServerPort {
