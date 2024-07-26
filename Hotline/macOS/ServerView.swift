@@ -650,7 +650,8 @@ struct TransferItemView: View {
       else if transfer.completed {
         Image(systemName: "checkmark.circle.fill")
           .resizable()
-          .foregroundStyle(Color.fileComplete)
+          .symbolRenderingMode(.palette)
+          .foregroundStyle(.white, .fileComplete)
           .aspectRatio(contentMode: .fit)
           .frame(width: 16, height: 16)
           .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
