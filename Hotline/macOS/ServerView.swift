@@ -227,7 +227,7 @@ struct ServerView: View {
     .onDisappear {
       model.disconnect()
     }
-    .alert(model.errorMessage ?? "Server Message", isPresented: $model.errorDisplayed) {
+    .alert(model.errorMessage ?? "Server Error", isPresented: $model.errorDisplayed) {
       Button("OK") {}
     }
     .task {
