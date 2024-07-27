@@ -244,8 +244,8 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     self.unreadInstantMessages.removeValue(forKey: userID)
   }
   
-  @MainActor func sendChat(_ text: String) {
-    self.client.sendChat(message: text)
+  @MainActor func sendChat(_ text: String, announce: Bool = false) {
+    self.client.sendChat(message: text, announce: announce)
   }
   
   @MainActor func getMessageBoard() async -> [String] {

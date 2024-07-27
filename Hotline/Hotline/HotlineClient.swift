@@ -455,9 +455,10 @@ class HotlineClient: NetSocketDelegate {
     self.sendPacket(t)
   }
   
-  @MainActor func sendChat(message: String, encoding: String.Encoding = .utf8) {
+  @MainActor func sendChat(message: String, encoding: String.Encoding = .utf8, announce: Bool = false) {
     var t = HotlineTransaction(type: .sendChat)
     t.setFieldString(type: .data, val: message, encoding: encoding)
+    t.setFieldUInt16(type: .chatOptions, val: announce ? 1 : 0)
     self.sendPacket(t)
   }
   

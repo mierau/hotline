@@ -148,10 +148,9 @@ struct ChatView: View {
               .textFieldStyle(.plain)
               .lineLimit(1...5)
               .multilineTextAlignment(.leading)
-            //            .frame(maxWidth: .infinity)
               .onSubmit {
                 if !self.input.isEmpty {
-                  model.sendChat(self.input)
+                  model.sendChat(self.input, announce: NSEvent.modifierFlags.contains(.shift))
                 }
                 self.input = ""
               }
