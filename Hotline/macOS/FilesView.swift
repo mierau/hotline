@@ -116,12 +116,10 @@ struct FolderView: View {
       }
       
       item.loadItem(forTypeIdentifier: identifier, options: nil) { (urlData, error) in
-        print("WHAT?", Thread.isMainThread)
         DispatchQueue.main.async {
-          print("WHAT 2?", Thread.isMainThread)
           if let urlData = urlData as? Data,
              let fileURL = URL(dataRepresentation: urlData, relativeTo: nil, isAbsolute: true) {
-            //            uploadFile(file: fileURL)
+            uploadFile(file: fileURL)
           }
         }
       }

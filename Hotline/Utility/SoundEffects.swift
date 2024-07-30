@@ -9,6 +9,7 @@ enum SoundEffects: String {
   case userLogout = "user-logout"
   case newNews = "new-news"
   case serverMessage = "server-message"
+  case error = "error"
 }
 
 @Observable

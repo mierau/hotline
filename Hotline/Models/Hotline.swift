@@ -909,6 +909,11 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     
     self.errorDisplayed = (message != nil) // Show error if there is a message to display.
     self.errorMessage = message
+    
+    if self.errorDisplayed,
+       Prefs.shared.playSounds && Prefs.shared.playErrorSound {
+      SoundEffectPlayer.shared.playSoundEffect(.error)
+    }
   }
   
   // MARK: - Hotline Transfer Delegate
