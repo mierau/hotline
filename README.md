@@ -53,7 +53,7 @@ And this project is an attempt to create a modern open source version of Hotline
 | Message board posting      |   ✓   |       |        |          |
 | File browsing              |   ✓   |   ✓   |        |          |
 | File downloading           |   ✓   |       |        |          |
-| File uploading             |       |       |        |          |
+| File uploading             |   ✓   |       |        |          |
 | File info                  |   ✓   |       |        |          |
 | File management            |       |       |        |          |
 | Folder downloading         |       |       |        |          |
