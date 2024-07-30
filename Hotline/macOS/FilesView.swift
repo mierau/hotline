@@ -1,39 +1,51 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct FileView: View {
+struct FolderView: View {
   @Environment(Hotline.self) private var model: Hotline
   
-  @State var expanded = false
   @State var loading = false
+  @State var dragOver = false
   
   var file: FileInfo
   let depth: Int
   
+  @MainActor private func uploadFile(file fileURL: URL) {
+    var filePath: [String] = [String](self.file.path)
+    if !self.file.isFolder {
+      filePath.removeLast()
+    }
+    
+    print("UPLOADING TO PATH: ", filePath)
+    
+    model.uploadFile(url: fileURL, path: filePath) { info in
+      Task {
+        // Refresh file listing to display newly uploaded file.
+        let _ = await model.getFileList(path: filePath)
+      }
+    }
+  }
+  
   var body: some View {
     HStack(alignment: .center, spacing: 0) {
-      if file.isFolder {
-        Button {
-          if file.isFolder {
-            file.expanded.toggle()
-          }
-        } label: {
-          Text(Image(systemName: file.expanded ? "chevron.down" : "chevron.right"))
-            .bold()
-            .font(.system(size: 10))
-            .opacity(0.5)
+      Spacer()
+        .frame(width: CGFloat(depth * (12 + 2)))
+      
+      Button {
+        if file.isFolder {
+          file.expanded.toggle()
         }
-        .buttonStyle(.plain)
-        .frame(width: 10)
-        .padding(.leading, 4)
-        .padding(.trailing, 8)
+      } label: {
+        Text(Image(systemName: file.expanded ? "chevron.down" : "chevron.right"))
+          .bold()
+          .font(.system(size: 10))
+          .foregroundStyle(dragOver ? Color.white : Color.primary)
+          .opacity(0.5)
       }
-      else {
-        Spacer()
-          .frame(width: 10)
-          .padding(.leading, 4)
-          .padding(.trailing, 8)
-      }
+      .buttonStyle(.plain)
+      .frame(width: 10)
+      .padding(.leading, 4)
+      .padding(.trailing, 8)
       
       HStack(alignment: .center) {
         if file.isUnavailable {
@@ -53,16 +65,107 @@ struct FileView: View {
             .scaledToFit()
             .frame(width: 16, height: 16)
         }
-        else if file.isFolder {
+        else {
           Image("Folder")
             .resizable()
             .scaledToFit()
             .frame(width: 16, height: 16)
-//          FolderIconView(dropbox: file.isUploadFolder)
-//            .frame(width: 16, height: 16)
+        }
+      }
+      .frame(width: 16)
+      .padding(.trailing, 6)
+      
+      Text(file.name)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .foregroundStyle(dragOver ? Color.white : Color.primary)
+        .opacity(file.isUnavailable ? 0.5 : 1.0)
+      
+      if loading {
+        ProgressView().controlSize(.small).padding([.leading, .trailing], 5)
+      }
+      Spacer()
+      if !file.isUnavailable {
+        Text(file.fileSize == 0 ? "Empty" : "^[\(file.fileSize) \("file")](inflect: true)")
+          .foregroundStyle(dragOver ? Color.white.opacity(0.75) : Color.secondary)
+          .lineLimit(1)
+          .padding(.trailing, 6)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(
+      RoundedRectangle(cornerRadius: 4.0)
+        .fill(dragOver ? Color(nsColor: NSColor.selectedContentBackgroundColor) : Color.clear)
+        .padding(.horizontal, -6)
+        .padding(.vertical, -4)
+    )
+    .onChange(of: file.expanded) {
+      loading = false
+      if file.expanded && file.fileSize > 0 {
+        Task {
+          loading = true
+          let _ = await model.getFileList(path: file.path)
+          loading = false
+        }
+      }
+    }
+    .onDrop(of: [.fileURL], isTargeted: $dragOver) { items in
+      guard let item = items.first,
+            let identifier = item.registeredTypeIdentifiers.first else {
+        return false
+      }
+      
+      item.loadItem(forTypeIdentifier: identifier, options: nil) { (urlData, error) in
+        print("WHAT?", Thread.isMainThread)
+        DispatchQueue.main.async {
+          print("WHAT 2?", Thread.isMainThread)
+          if let urlData = urlData as? Data,
+             let fileURL = URL(dataRepresentation: urlData, relativeTo: nil, isAbsolute: true) {
+            //            uploadFile(file: fileURL)
+          }
+        }
+      }
+      
+      return true
+    }
+    
+    if file.expanded {
+      ForEach(file.children!, id: \.self) { childFile in
+        if childFile.isFolder {
+          FolderView(file: childFile, depth: self.depth + 1).tag(file.id)
         }
         else {
-          FileIconView(filename: file.name)
+          FileView(file: childFile, depth: self.depth + 1).tag(file.id)
+        }
+      }
+    }
+  }
+}
+
+struct FileView: View {
+  @Environment(Hotline.self) private var model: Hotline
+  
+  var file: FileInfo
+  let depth: Int
+  
+  var body: some View {
+    HStack(alignment: .center, spacing: 0) {
+      Spacer()
+        .frame(width: CGFloat(depth * (12 + 2)))
+      
+      Spacer()
+        .frame(width: 10)
+        .padding(.leading, 4)
+        .padding(.trailing, 8)
+      
+      HStack(alignment: .center) {
+        if file.isUnavailable {
+          Image(systemName: "questionmark.app.fill")
+            .frame(width: 16, height: 16)
+            .opacity(0.5)
+        }
+        else {
+          FileIconView(filename: file.name, fileType: file.type)
             .frame(width: 16, height: 16)
         }
       }
@@ -73,46 +176,25 @@ struct FileView: View {
         .lineLimit(1)
         .truncationMode(.tail)
         .opacity(file.isUnavailable ? 0.5 : 1.0)
-      
-      if file.isFolder && loading {
-        ProgressView().controlSize(.small).padding([.leading, .trailing], 5)
-      }
+
       Spacer()
       if !file.isUnavailable {
-        if file.isFolder {
-          Text(file.fileSize == 0 ? "Empty" : "^[\(file.fileSize) \("file")](inflect: true)")
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .padding(.trailing, 6)
-        }
-        else {
-          Text(formattedFileSize(file.fileSize))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .padding(.trailing, 6)
-        }
+        Text(formattedFileSize(file.fileSize))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .padding(.trailing, 6)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(.leading, CGFloat(depth * (12 + 10)))
-    .onChange(of: file.expanded) {
-      loading = false
-      if file.isFolder && file.fileSize > 0 {
-        if file.expanded {
-          Task {
-            loading = true
-            let _ = await model.getFileList(path: file.path)
-            loading = false
-          }
-        }
-      }
-    }
-    
+
     if file.expanded {
       ForEach(file.children!, id: \.self) { childFile in
-        FileView(file: childFile, depth: self.depth + 1).tag(file.id)
-//          .environment(self.selectedFile)
-//            .frame(height: 34)
+        if childFile.isFolder {
+          FolderView(file: childFile, depth: self.depth + 1).tag(file.id)
+        }
+        else {
+          FileView(file: childFile, depth: self.depth + 1).tag(file.id)
+        }
       }
     }
   }
@@ -120,7 +202,6 @@ struct FileView: View {
   static let byteFormatter = ByteCountFormatter()
   
   private func formattedFileSize(_ fileSize: UInt) -> String {
-    //    let bcf = ByteCountFormatter()
     FileView.byteFormatter.allowedUnits = [.useAll]
     FileView.byteFormatter.countStyle = .file
     return FileView.byteFormatter.string(fromByteCount: Int64(fileSize))
@@ -199,9 +280,14 @@ struct FilesView: View {
   var body: some View {
     NavigationStack {
       List(model.files, id: \.self, selection: $selection) { file in
-        FileView(file: file, depth: 0).tag(file.id)
+        if file.isFolder {
+          FolderView(file: file, depth: 0).tag(file.id)
+        }
+        else {
+          FileView(file: file, depth: 0).tag(file.id)
+        }
       }
-      .environment(\.defaultMinListRowHeight, 34)
+      .environment(\.defaultMinListRowHeight, 28)
       .listStyle(.inset)
       .alternatingRowBackgrounds(.enabled)
       .task {

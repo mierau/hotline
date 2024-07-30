@@ -147,7 +147,7 @@ struct NewsView: View {
       NewsItemView(news: newsItem, depth: 0).tag(newsItem.id)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .environment(\.defaultMinListRowHeight, 34)
+    .environment(\.defaultMinListRowHeight, 28)
     .listStyle(.inset)
     .alternatingRowBackgrounds(.enabled)
     .contextMenu(forSelectionType: NewsInfo.self) { items in
@@ -219,7 +219,7 @@ struct NewsView: View {
     VStack {
       HStack {
         ProgressView {
-          Text("Loading News")
+          Text("Loading Newsgroups")
         }
         .controlSize(.regular)
       }

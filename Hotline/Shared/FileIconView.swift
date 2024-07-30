@@ -19,10 +19,11 @@ struct FolderIconView: View {
 
 struct FileIconView: View {
   let filename: String
+  let fileType: String?
   
   #if os(iOS)
-  private func fileIcon(filename: String) -> Image {
-    let fileExtension = (filename as NSString).pathExtension
+  private func fileIcon() -> Image {
+    let fileExtension = (self.filename as NSString).pathExtension
     if let fileType = UTType(filenameExtension: fileExtension) {
       if fileType.isSubtype(of: .movie) {
         return Image(systemName: "play.rectangle")
@@ -44,14 +45,29 @@ struct FileIconView: View {
     return Image(systemName: "doc")
   }
   #elseif os(macOS)
-  private func fileIcon(filename: String) -> Image {
-    Image(nsImage: NSWorkspace.shared.icon(for: UTType(filenameExtension: (filename as NSString).pathExtension) ?? UTType.content))
+  private func fileIcon() -> Image {
+    let fileExtension = (self.filename as NSString).pathExtension
+    
+    if !fileExtension.isEmpty,
+       let uttype = UTType(filenameExtension: fileExtension) {
+      return Image(nsImage: NSWorkspace.shared.icon(for: uttype))
+    }
+    else if let fileType = self.fileType,
+            let fileTypeExtension = FileManager.HFSTypeToExtension[fileType.lowercased()],
+            let uttype = UTType(filenameExtension: fileTypeExtension) {
+      return Image(nsImage: NSWorkspace.shared.icon(for: uttype))
+    }
+    else {
+      return Image(nsImage: NSWorkspace.shared.icon(for: UTType.data))
+    }
+    
+//    Image(nsImage: NSWorkspace.shared.icon(for: UTType(filenameExtension: (filename as NSString).pathExtension) ?? UTType.content))
   }
   #endif
 
   
   var body: some View {
-    fileIcon(filename: filename)
+    fileIcon()
       .resizable()
       .scaledToFit()
   }

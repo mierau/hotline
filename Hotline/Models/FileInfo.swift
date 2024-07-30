@@ -27,7 +27,6 @@ import UniformTypeIdentifiers
     self.isDropboxFolder && (self.name.range(of: "admin", options: [.caseInsensitive]) != nil)
   }
   
-  
   var expanded: Bool = false
   var children: [FileInfo]? = nil
   

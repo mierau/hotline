@@ -469,7 +469,7 @@ struct ServerView: View {
         case .news:
           NewsView()
             .navigationTitle(model.serverTitle)
-            .navigationSubtitle("News")
+            .navigationSubtitle("Newsgroups")
             .navigationSplitViewColumnWidth(min: 250, ideal: 500)
         case .board:
           MessageBoardView()
@@ -609,7 +609,7 @@ struct TransferItemView: View {
     HStack(alignment: .center, spacing: 5) {
       HStack(spacing: 0) {
         Spacer()
-        FileIconView(filename: transfer.title)
+        FileIconView(filename: transfer.title, fileType: nil)
           .frame(width: 16, height: 16)
           .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
 //          .padding(.leading, 2)

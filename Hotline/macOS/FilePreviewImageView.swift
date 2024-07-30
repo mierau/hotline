@@ -69,7 +69,7 @@ struct FilePreviewImageView: View {
     .background(.black)
     .toolbar {
       ToolbarItem(placement: .navigation) {
-        FileIconView(filename: info?.name ?? "")
+        FileIconView(filename: info?.name ?? "", fileType: nil)
           .frame(width: 16, height: 16)
           .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
       }

@@ -108,6 +108,73 @@ extension FileManager {
     "xml": "R*ch".fourCharCode(),
   ]
   
+  static var HFSTypeToExtension: [String: String] = [
+    // Documents
+    "text": "txt",
+    "rtf ": "rtf",
+    "wdbn": "doc",
+    "w8bn": "docx",
+    "wprd": "prd",
+    "wp5 ": "wpd",
+    "pdf ": "pdf",
+    "xdoc": "qxd",
+    "indd": "ind",
+    
+    // Spreadsheets
+    "xls ": "xls",
+    "xlsx": "xlsx",
+    "nmbr": "numbers",
+    
+    // Presentations
+    "ppt3": "ppt",
+    "keyn": "key",
+    
+    // Images
+    "jpeg": "jpg",
+    "pngf": "png",
+    "giff": "gif",
+    "tiff": "tiff",
+    "ico ": "ico",
+    "bmpf": "bmp",
+    "epsf": "eps",
+    "8bps": "psd",
+    "pict": "pict",
+    "tpic": "tga",
+    "swfl": "swf",
+    
+    // Audio
+    "mp3 ": "mp3",
+    "m4a ": "m4a",
+    "caff": "aac",
+    "wave": "wav",
+    "aiff": "aiff",
+    "midi": "midi",
+    "snd ": "snd",
+    
+    // Video
+    "m4v ": "mp4",
+    "mpg ": "mpeg",
+    "mpg2": "mpg2",
+    "moov": "mov",
+    "vfw ": "avi",
+    "wmv ": "wmv",
+    
+    // Archives
+    "zip ": "zip",
+    "rar ": "rar",
+    "7zip": "7z",
+    "tar ": "tar",
+    "gzip": "gz",
+    "sitx": "sit",
+    "sit!": "sit",
+    "sit5": "sit",
+    "udif": "dmg",
+    "cdrw": "cdr",
+    
+    // Fonts
+    "tfil": "ttf",
+  ]
+  
   static var extensionToHFSType: [String: UInt32] = [
     // Documents
     "txt": "TEXT".fourCharCode(),
@@ -115,7 +182,7 @@ extension FileManager {
     "doc": "WDBN".fourCharCode(),
     "docx": "W8BN".fourCharCode(),
     "prd": "WPRD".fourCharCode(),
-    "wpd": "WP5".fourCharCode(),
+    "wpd": "WP5 ".fourCharCode(),
     "pdf": "PDF ".fourCharCode(),
     "qxd": "XDOC".fourCharCode(),
     "indd": "inDd".fourCharCode(),
