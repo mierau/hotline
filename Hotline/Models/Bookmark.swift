@@ -31,6 +31,9 @@ final class Bookmark {
   @Attribute(.ephemeral)
   var serverDescription: String? = nil
   
+  @Attribute(.ephemeral)
+  var serverUserCount: Int? = nil
+  
   @Transient
   var servers: [Bookmark] = []
   
@@ -94,6 +97,7 @@ final class Bookmark {
     self.port = server.port
     
     self.serverDescription = server.description
+    self.serverUserCount = server.users
   }
   
   init?(fileData: Data, name: String? = nil) {

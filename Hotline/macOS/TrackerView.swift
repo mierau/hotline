@@ -362,6 +362,8 @@ struct TrackerBookmarkSheet: View {
 struct TrackerItemView: View {
   let bookmark: Bookmark
   
+  @State private var onlineAnimationMaxState: Bool = true
+  
   var body: some View {
     HStack(alignment: .center, spacing: 6) {
       if bookmark.type == .tracker {
@@ -392,6 +394,7 @@ struct TrackerItemView: View {
             .padding([.leading, .trailing], 2)
             .controlSize(.small)
         }
+        Spacer(minLength: 0)
       case .server:
         Image(systemName: "bookmark.fill")
           .resizable()
@@ -406,6 +409,7 @@ struct TrackerItemView: View {
           .scaledToFit()
           .frame(width: 16, height: 16, alignment: .center)
         Text(bookmark.name).lineLimit(1).truncationMode(.tail)
+        Spacer(minLength: 0)
       case .temporary:
         Spacer()
           .frame(width: 14 + 8 + 16)
@@ -420,9 +424,25 @@ struct TrackerItemView: View {
             .lineLimit(1)
             .truncationMode(.tail)
         }
+        Spacer(minLength: 0)
+        if let serverUserCount = bookmark.serverUserCount,
+           serverUserCount > 0 {
+          Text(String(serverUserCount))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+          
+          Circle()
+            .fill(.fileComplete)
+            .frame(width: 7, height: 7)
+            .opacity(onlineAnimationMaxState ? 1.0 : 0.2)
+            .onAppear {
+              withAnimation(.easeInOut(duration: 1.0).repeatForever()) {
+                onlineAnimationMaxState.toggle()
+              }
+            }
+            .padding(.trailing, 6)
+        }
       }
-      
-      Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onChange(of: bookmark.expanded) {

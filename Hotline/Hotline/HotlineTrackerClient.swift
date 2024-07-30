@@ -166,14 +166,14 @@ class HotlineTrackerClient {
         let ip_3 = bytes.consumeUInt8(),
         let ip_4 = bytes.consumeUInt8(),
         let port = bytes.consumeUInt16(),
-        bytes.consume(2),
         let userCount = bytes.consumeUInt16(),
+        bytes.consume(2),
         let serverName = bytes.consumePString(),
         let serverDescription = bytes.consumePString() else {
         print("HotlineTrackerClient: Data isn't long enough for next server")
         break
       }
-        
+              
       // Ignore servers that are just used as dividers in the tracker listing.
       let validName = try? trackerSeparatorRegex.prefixMatch(in: serverName)
       if validName == nil {
