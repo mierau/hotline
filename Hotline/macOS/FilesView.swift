@@ -414,6 +414,7 @@ struct FilesView: View {
             Label("Upload", systemImage: "arrow.up")
           }
           .help("Upload")
+          .disabled(model.access?.contains(.canUploadFiles) != true)
         }
         
         ToolbarItem(placement: .primaryAction) {
@@ -425,7 +426,7 @@ struct FilesView: View {
             Label("Download", systemImage: "arrow.down")
           }
           .help("Download")
-          .disabled(selection == nil || selection?.isFolder == true)
+          .disabled(selection == nil || selection?.isFolder == true || model.access?.contains(.canDownloadFiles) != true)
         }
       }
     }
