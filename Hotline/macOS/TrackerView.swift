@@ -18,8 +18,8 @@ struct TrackerView: View {
   @State private var bookmarkExport: BookmarkDocument? = nil
   
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
-  @State private var selection: Bookmark? = nil
-  
+  @Binding var selection: Bookmark?
+
   var body: some View {
     List(selection: $selection) {
       ForEach(bookmarks, id: \.self) { bookmark in
@@ -459,6 +459,16 @@ struct TrackerItemView: View {
   }
 }
 
-#Preview {
-  TrackerView()
+#if DEBUG
+private struct TrackerViewPreview: View {
+  @State var selection: Bookmark? = nil
+
+  var body: some View {
+    TrackerView(selection: $selection)
+  }
 }
+
+#Preview {
+  TrackerViewPreview()
+}
+#endif
