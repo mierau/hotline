@@ -77,6 +77,7 @@ struct Application: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
   
   @State private var hotlinePanel: HotlinePanel? = nil
+  @State private var selection: Bookmark? = nil
 
   @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
@@ -97,7 +98,7 @@ struct Application: App {
   var body: some Scene {
     // MARK: Tracker Window
     Window("Servers", id: "servers") {
-      TrackerView()
+      TrackerView(selection: $selection)
         .frame(minWidth: 250, minHeight: 250)
     }
     .modelContainer(self.modelContainer)
@@ -195,6 +196,14 @@ struct Application: App {
         }
       }
       CommandMenu("Server") {
+        Button("Connect") {
+          guard let selection else {
+            return
+          }
+          connect(to: selection)
+        }
+        .disabled(selection == nil || selection?.server == nil)
+        .keyboardShortcut(.downArrow, modifiers: .command)
         Button("Disconnect") {
           activeHotline?.disconnect()
         }
@@ -259,7 +268,13 @@ struct Application: App {
     .defaultSize(width: 450, height: 550)
     .defaultPosition(.center)
   }
-  
+
+  func connect(to item: Bookmark) {
+    if let server = item.server {
+      openWindow(id: "server", value: server)
+    }
+  }
+
   func showBannerWindow() {
     if hotlinePanel == nil {
       hotlinePanel = HotlinePanel(HotlinePanelView())
