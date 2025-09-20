@@ -16,18 +16,48 @@ struct TrackerView: View {
   @State private var fileDropActive = false
   @State private var bookmarkExportActive = false
   @State private var bookmarkExport: BookmarkDocument? = nil
+  @State private var searchText = ""
   
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
   @Binding var selection: Bookmark?
 
+  var filteredBookmarks: [Bookmark] {
+    if searchText.isEmpty {
+      return bookmarks
+    }
+
+    return bookmarks.filter { bookmark in
+      let bookmarkMatches = bookmark.name.localizedCaseInsensitiveContains(searchText)
+
+      if bookmark.type == .tracker {
+        let hasMatchingServers = bookmark.servers.contains { server in
+          server.name.localizedCaseInsensitiveContains(searchText)
+        }
+        return bookmarkMatches || hasMatchingServers
+      } else {
+        return bookmarkMatches
+      }
+    }
+  }
+
+  func filteredServers(for tracker: Bookmark) -> [Bookmark] {
+    if searchText.isEmpty {
+      return tracker.servers
+    }
+
+    return tracker.servers.filter { server in
+      server.name.localizedCaseInsensitiveContains(searchText)
+    }
+  }
+
   var body: some View {
     List(selection: $selection) {
-      ForEach(bookmarks, id: \.self) { bookmark in
+      ForEach(filteredBookmarks, id: \.persistentModelID) { bookmark in
         TrackerItemView(bookmark: bookmark)
           .tag(bookmark)
         
         if bookmark.type == .tracker && bookmark.expanded {
-          ForEach(bookmark.servers, id: \.self) { trackedServer in
+          ForEach(filteredServers(for: bookmark), id: \.persistentModelID) { trackedServer in
             TrackerItemView(bookmark: trackedServer)
               .moveDisabled(true)
               .deleteDisabled(true)
@@ -242,6 +272,7 @@ struct TrackerView: View {
         openWindow(id: "server", value: s)
       }
     })
+    .searchable(text: $searchText, prompt: "Search servers...")
   }
   
   func refresh() {
