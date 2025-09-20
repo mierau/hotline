@@ -445,11 +445,19 @@ struct TrackerItemView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .onAppear {
+      // Fetch servers for trackers that are already expanded on appear
+      if bookmark.type == .tracker && bookmark.expanded && bookmark.servers.isEmpty && !bookmark.loading {
+        Task {
+          await bookmark.fetchServers()
+        }
+      }
+    }
     .onChange(of: bookmark.expanded) {
       guard bookmark.type == .tracker else {
         return
       }
-      
+
       if bookmark.expanded {
         Task {
           await bookmark.fetchServers()
