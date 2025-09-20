@@ -22,7 +22,6 @@ final class Bookmark {
   @Attribute(.allowsCloudEncryption)
   var password: String?
   
-  @Attribute(.ephemeral)
   var expanded: Bool = false
   
   @Attribute(.ephemeral)
