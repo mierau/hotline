@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension EnvironmentValues {
+  @Entry var preferences: Prefs = Prefs.shared
+}
+
 enum PrefsKeys: String {
   case username = "username"
   case userIconID = "user icon id"
@@ -22,7 +26,9 @@ enum PrefsKeys: String {
 
 @Observable
 class Prefs {
-  init() {
+  static let shared = Prefs()
+  
+  private init() {
     UserDefaults.standard.register(defaults:[
       PrefsKeys.username.rawValue: "guest",
       PrefsKeys.userIconID.rawValue: 191,
@@ -61,8 +67,6 @@ class Prefs {
     self.showBannerToolbar = UserDefaults.standard.bool(forKey: PrefsKeys.showBannerToolbar.rawValue)
     self.showJoinLeaveMessages = UserDefaults.standard.bool(forKey: PrefsKeys.showJoinLeaveMessages.rawValue)
   }
-  
-  public static let shared = Prefs()
 
   var username: String {
     didSet { UserDefaults.standard.set(self.username, forKey: PrefsKeys.username.rawValue) }

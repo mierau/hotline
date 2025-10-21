@@ -6,7 +6,7 @@ struct HotlinePanelView: View {
   
   var body: some View {
     VStack(spacing: 0) {
-      Image(nsImage: ApplicationState.shared.activeServerBanner ?? NSImage(named: "Default Banner")!)
+      Image(nsImage: AppState.shared.activeServerBanner ?? NSImage(named: "Default Banner")!)
         .interpolation(.high)
         .resizable()
         .scaledToFill()
@@ -36,7 +36,7 @@ struct HotlinePanelView: View {
         .help("Hotline Servers")
         
         Button {
-          ApplicationState.shared.activeServerState?.selection = .chat
+          AppState.shared.activeServerState?.selection = .chat
         }
         label: {
           Image("Section Chat")
@@ -45,11 +45,11 @@ struct HotlinePanelView: View {
         }
         .buttonStyle(.plain)
         .frame(width: 20, height: 20)
-        .disabled(ApplicationState.shared.activeServerState == nil)
+        .disabled(AppState.shared.activeServerState == nil)
         .help("Public Chat")
         
         Button {
-          ApplicationState.shared.activeServerState?.selection = .board
+          AppState.shared.activeServerState?.selection = .board
         }
         label: {
           Image("Section Board")
@@ -58,11 +58,11 @@ struct HotlinePanelView: View {
         }
         .buttonStyle(.plain)
         .frame(width: 20, height: 20)
-        .disabled(ApplicationState.shared.activeServerState == nil)
+        .disabled(AppState.shared.activeServerState == nil)
         .help("Message Board")
         
         Button {
-          ApplicationState.shared.activeServerState?.selection = .news
+          AppState.shared.activeServerState?.selection = .news
         }
         label: {
           Image("Section News")
@@ -71,11 +71,11 @@ struct HotlinePanelView: View {
         }
         .buttonStyle(.plain)
         .frame(width: 20, height: 20)
-        .disabled(ApplicationState.shared.activeServerState == nil || (ApplicationState.shared.activeHotline?.serverVersion ?? 0) < 151)
+        .disabled(AppState.shared.activeServerState == nil || (AppState.shared.activeHotline?.serverVersion ?? 0) < 151)
         .help("News")
         
         Button {
-          ApplicationState.shared.activeServerState?.selection = .files
+          AppState.shared.activeServerState?.selection = .files
         }
         label: {
           Image("Section Files")
@@ -84,14 +84,14 @@ struct HotlinePanelView: View {
         }
         .buttonStyle(.plain)
         .frame(width: 20, height: 20)
-        .disabled(ApplicationState.shared.activeServerState == nil)
+        .disabled(AppState.shared.activeServerState == nil)
         .help("Files")
         
         Spacer()
         
-        if ApplicationState.shared.activeHotline?.access?.contains(.canOpenUsers) == true {
+        if AppState.shared.activeHotline?.access?.contains(.canOpenUsers) == true {
           Button {
-            ApplicationState.shared.activeServerState?.selection = .accounts
+            AppState.shared.activeServerState?.selection = .accounts
           }
           label: {
             Image("Section Users")
@@ -100,7 +100,7 @@ struct HotlinePanelView: View {
           }
           .buttonStyle(.plain)
           .frame(width: 20, height: 20)
-          .disabled(ApplicationState.shared.activeServerState == nil)
+          .disabled(AppState.shared.activeServerState == nil)
           .help("Accounts")
         }
         

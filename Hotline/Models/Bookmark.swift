@@ -4,7 +4,27 @@ import SwiftData
 enum BookmarkType: String, Codable {
   case tracker = "tracker"
   case server = "server"
-  case temporary = "temporary"
+}
+
+struct BookmarkServer: Hashable, Identifiable {
+  let id = UUID()
+  let name: String?
+  let address: String
+  let port: Int
+  let description: String?
+  let users: Int
+  
+  var server: Server {
+    Server(name: self.name, description: self.description, address: self.address, port: self.port, users: self.users)
+  }
+  
+  init(server: Server) {
+    self.name = server.name
+    self.address = server.address
+    self.port = server.port
+    self.description = server.description
+    self.users = server.users
+  }
 }
 
 @Model
@@ -18,29 +38,10 @@ final class Bookmark {
   
   @Attribute(.allowsCloudEncryption)
   var login: String?
-  
+
   @Attribute(.allowsCloudEncryption)
   var password: String?
-  
-  @Attribute(.ephemeral)
-  var expanded: Bool = false
-  
-  @Attribute(.ephemeral)
-  var loading: Bool = false
-  
-  @Attribute(.ephemeral)
-  var serverDescription: String? = nil
-  
-  @Attribute(.ephemeral)
-  var serverUserCount: Int? = nil
-  
-  @Transient
-  var servers: [Bookmark] = []
-  
-  func hash(into hasher: inout Hasher) {
-    
-  }
-  
+
   @Transient
   var displayAddress: String {
     switch self.type {
@@ -51,8 +52,8 @@ final class Bookmark {
       else {
         return "\(self.address):\(String(self.port))"
       }
-      
-    case .server, .temporary:
+
+    case .server:
       if self.port == HotlinePorts.DefaultServerPort {
         return self.address
       }
@@ -67,9 +68,9 @@ final class Bookmark {
     switch self.type {
     case .tracker:
       return nil
-      
-    case .server, .temporary:
-      return Server(name: self.name, description: self.serverDescription, address: self.address, port: self.port, login: self.login, password: self.password)
+
+    case .server:
+      return Server(name: self.name, description: nil, address: self.address, port: self.port, login: self.login, password: self.password)
     }
   }
   
@@ -84,22 +85,11 @@ final class Bookmark {
     self.name = name
     self.address = address
     self.port = port
-    
+
     self.login = login
     self.password = password
   }
-  
-  init(temporaryServer server: Server) {
-    self.type = .temporary
-    
-    self.name = server.name ?? server.address
-    self.address = server.address
-    self.port = server.port
-    
-    self.serverDescription = server.description
-    self.serverUserCount = server.users
-  }
-  
+
   init?(fileData: Data, name: String? = nil) {
     guard fileData.count <= 2000 else {
       return nil
@@ -248,11 +238,6 @@ final class Bookmark {
   }
   
   static func add(_ bookmark: Bookmark, context: ModelContext) {
-    guard bookmark.type != .temporary else {
-      print("Bookmark: Attempting to add temporary bookmark to store. Aborting.")
-      return
-    }
-    
     let existingBookmarks = Bookmark.fetchAll(context: context)
     
     // Reindex bookmarks before insert.
@@ -348,32 +333,23 @@ final class Bookmark {
     }
   }
   
-  func fetchServers() async {
+  func fetchServers() async -> [BookmarkServer] {
     guard self.type == .tracker else {
-      //      self.loading = false
-      return
+      return []
     }
-    
-    DispatchQueue.main.sync {
-      self.loading = true
-    }
-    
-    var fetchedBookmarks: [Bookmark] = []
-    
+
+    var fetchedBookmarks: [BookmarkServer] = []
+
     let client = HotlineTrackerClient()
     if let fetchedServers: [HotlineServer] = try? await client.fetchServers(address: self.address, port: self.port) {
       for fetchedServer in fetchedServers {
         if let serverName = fetchedServer.name {
           let server = Server(name: serverName, description: fetchedServer.description, address: fetchedServer.address, port: Int(fetchedServer.port), users: Int(fetchedServer.users))
-          fetchedBookmarks.append(Bookmark(temporaryServer: server))
+          fetchedBookmarks.append(BookmarkServer(server: server))
         }
       }
     }
-    
-    let newServers = fetchedBookmarks
-    DispatchQueue.main.sync {
-      self.servers = newServers
-      self.loading = false
-    }
+
+    return fetchedBookmarks
   }
 }

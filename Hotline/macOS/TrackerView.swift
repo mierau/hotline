@@ -3,6 +3,18 @@ import SwiftData
 import Foundation
 import UniformTypeIdentifiers
 
+enum TrackerSelection: Hashable {
+  case bookmark(Bookmark)
+  case bookmarkServer(BookmarkServer)
+  
+  var server: Server? {
+    switch self {
+    case .bookmark(let b): return b.server
+    case .bookmarkServer(let t): return t.server
+    }
+  }
+}
+
 struct TrackerView: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.openWindow) private var openWindow
@@ -16,22 +28,78 @@ struct TrackerView: View {
   @State private var fileDropActive = false
   @State private var bookmarkExportActive = false
   @State private var bookmarkExport: BookmarkDocument? = nil
-  
+  @State private var expandedTrackers: Set<Bookmark> = []
+  @State private var trackerServers: [Bookmark: [BookmarkServer]] = [:]
+  @State private var loadingTrackers: Set<Bookmark> = []
+  @State private var searchText: String = ""
+
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
-  @Binding var selection: Bookmark?
+  @Binding var selection: TrackerSelection?
+
+  private var filteredBookmarks: [Bookmark] {
+    guard !self.searchText.isEmpty else {
+      return self.bookmarks
+    }
+
+    let searchWords = self.searchText.lowercased().split(separator: " ").map(String.init)
+
+    return self.bookmarks.filter { bookmark in
+      // Always show tracker bookmarks (filter only their servers)
+      if bookmark.type == .tracker {
+        return true
+      }
+
+      // Filter server bookmarks by search text
+      return self.bookmarkMatchesSearch(bookmark, searchWords: searchWords)
+    }
+  }
+
+  private func bookmarkMatchesSearch(_ bookmark: Bookmark, searchWords: [String]) -> Bool {
+    let searchableText = "\(bookmark.name) \(bookmark.address)".lowercased()
+
+    // All search words must match
+    return searchWords.allSatisfy { word in
+      searchableText.contains(word)
+    }
+  }
+
+  private func filteredServers(for bookmark: Bookmark) -> [BookmarkServer] {
+    let servers = self.trackerServers[bookmark] ?? []
+
+    guard !self.searchText.isEmpty else {
+      return servers
+    }
+
+    let searchWords = self.searchText.lowercased().split(separator: " ").map(String.init)
+
+    return servers.filter { server in
+      let searchableText = "\(server.name ?? "") \(server.address) \(server.description ?? "")".lowercased()
+
+      // All search words must match
+      return searchWords.allSatisfy { word in
+        searchableText.contains(word)
+      }
+    }
+  }
 
   var body: some View {
     List(selection: $selection) {
-      ForEach(bookmarks, id: \.self) { bookmark in
-        TrackerItemView(bookmark: bookmark)
-          .tag(bookmark)
-        
-        if bookmark.type == .tracker && bookmark.expanded {
-          ForEach(bookmark.servers, id: \.self) { trackedServer in
-            TrackerItemView(bookmark: trackedServer)
+      ForEach(filteredBookmarks, id: \.self) { bookmark in
+        TrackerItemView(
+          bookmark: bookmark,
+          isExpanded: self.expandedTrackers.contains(bookmark),
+          isLoading: self.loadingTrackers.contains(bookmark)
+        ) {
+          self.toggleExpanded(for: bookmark)
+        }
+        .tag(TrackerSelection.bookmark(bookmark))
+
+        if bookmark.type == .tracker && self.expandedTrackers.contains(bookmark) {
+          ForEach(self.filteredServers(for: bookmark), id: \.self) { trackedServer in
+            TrackerBookmarkServerView(server: trackedServer)
               .moveDisabled(true)
               .deleteDisabled(true)
-              .tag(trackedServer)
+              .tag(TrackerSelection.bookmarkServer(trackedServer))
           }
         }
       }
@@ -43,15 +111,22 @@ struct TrackerView: View {
       }
     }
     .onDeleteCommand {
-      if let bookmark = selection,
-         bookmark.type != .temporary {
+      switch self.selection {
+      case .bookmark(let bookmark):
         Bookmark.delete(bookmark, context: modelContext)
+      default:
+        break
       }
+      
+//      if let bookmark = selection,
+//         bookmark.type != .temporary {
+//        Bookmark.delete(bookmark, context: modelContext)
+//      }
     }
     .environment(\.defaultMinListRowHeight, 34)
     .listStyle(.inset)
     .alternatingRowBackgrounds(.enabled)
-    .onChange(of: ApplicationState.shared.cloudKitReady) {
+    .onChange(of: AppState.shared.cloudKitReady) {
       if attemptedPrepopulate {
         print("Tracker: Already attempted to prepopulate bookmarks")
         return
@@ -67,53 +142,13 @@ struct TrackerView: View {
     .onAppear {
 //      Bookmark.deleteAll(context: modelContext)
     }
-    .contextMenu(forSelectionType: Bookmark.self) { items in
+    .contextMenu(forSelectionType: TrackerSelection.self) { items in
       if let item = items.first {
-        if item.type == .temporary {
-          Button {
-            let newBookmark = Bookmark(type: .server, name: item.name, address: item.address, port: item.port, login: item.login, password: item.password)
-            Bookmark.add(newBookmark, context: modelContext)
-          } label: {
-            Label("Bookmark", systemImage: "bookmark")
-          }
-          
-          Divider()
-        }
-        
-        Button {
-          NSPasteboard.general.clearContents()
-          NSPasteboard.general.setString(item.displayAddress, forType: .string)
-        } label: {
-          Label("Copy Address", systemImage: "doc.on.doc")
-        }
-        
-        if item.type == .tracker || item.type == .server {
-          Divider()
-          
-          if item.type == .tracker {
-            Button {
-              trackerSheetBookmark = item
-            } label: {
-              Label("Edit Tracker...", systemImage: "pencil")
-            }
-          }
-          
-          if item.type == .server {
-            Button {
-              bookmarkExport = BookmarkDocument(bookmark: item)
-              bookmarkExportActive = true
-            } label: {
-              Label("Export Bookmark...", systemImage: "bookmark.square")
-            }
-          }
-          
-          Divider()
-          
-          Button {
-            Bookmark.delete(item, context: modelContext)
-          } label: {
-            Label(item.type == .tracker ? "Delete Tracker" : "Delete Bookmark", systemImage: "trash")
-          }
+        switch item {
+        case .bookmark(let bookmark):
+          self.bookmarkContextMenu(bookmark)
+        case .bookmarkServer(let server):
+          self.bookmarkServerContextMenu(server)
         }
       }
     } primaryAction: { items in
@@ -121,17 +156,37 @@ struct TrackerView: View {
         return
       }
       
-      if clickedItem.type == .tracker {
-        if NSEvent.modifierFlags.contains(.option) {
-          trackerSheetBookmark = clickedItem
+      switch clickedItem {
+      case .bookmark(let bookmark):
+        if bookmark.type == .server {
+          if let s = bookmark.server {
+            openWindow(id: "server", value: s)
+          }
         }
-        else {
-          clickedItem.expanded.toggle()
+        else if bookmark.type == .tracker {
+          if NSEvent.modifierFlags.contains(.option) {
+            trackerSheetBookmark = bookmark
+          }
+          else {
+            self.toggleExpanded(for: bookmark)
+          }
         }
+        
+      case .bookmarkServer(let bookmarkServer):
+        openWindow(id: "server", value: bookmarkServer.server)
       }
-      else if let server = clickedItem.server {
-        openWindow(id: "server", value: server)
-      }
+      
+//      if clickedItem.type == .tracker {
+//        if NSEvent.modifierFlags.contains(.option) {
+//          trackerSheetBookmark = clickedItem
+//        }
+//        else {
+//          clickedItem.expanded.toggle()
+//        }
+//      }
+//      else if let server = clickedItem.server {
+//        openWindow(id: "server", value: server)
+//      }
     }
     .fileExporter(isPresented: $bookmarkExportActive, document: bookmarkExport, contentTypes: [.data], defaultFilename: "\(bookmarkExport?.bookmark.name ?? "Hotline Bookmark").hlbm", onCompletion: { result in
       switch result {
@@ -145,21 +200,41 @@ struct TrackerView: View {
       bookmarkExportActive = false
     }, onCancellation: {})
     .onKeyPress(.rightArrow) {
-      if
-        let bookmark = selection,
-        bookmark.type == .tracker {
-        bookmark.expanded = true
-        return .handled
+      switch self.selection {
+      case .bookmark(let bookmark):
+        if bookmark.type == .tracker {
+          self.expandedTrackers.insert(bookmark)
+          return .handled
+        }
+      default:
+        break
       }
+      
+//      if
+//        let bookmark = selection,
+//        bookmark.type == .tracker {
+//        bookmark.expanded = true
+//        return .handled
+//      }
       return .ignored
     }
     .onKeyPress(.leftArrow) {
-      if
-        let bookmark = selection,
-        bookmark.type == .tracker {
-        bookmark.expanded = false
-        return .handled
+      switch self.selection {
+      case .bookmark(let bookmark):
+        if bookmark.type == .tracker {
+          self.expandedTrackers.remove(bookmark)
+          return .handled
+        }
+      default:
+        break
       }
+      
+//      if
+//        let bookmark = selection,
+//        bookmark.type == .tracker {
+//        bookmark.expanded = false
+//        return .handled
+//      }
       return .ignored
     }
     .onDrop(of: [UTType.fileURL], isTargeted: $fileDropActive) { providers, dropPoint in
@@ -198,20 +273,26 @@ struct TrackerView: View {
     .navigationTitle("Servers")
     .toolbar {
       ToolbarItem(placement: .navigation) {
-        Image("Hotline")
-          .resizable()
-          .renderingMode(.template)
-          .scaledToFit()
-          .foregroundColor(Color(hex: 0xE10000))
-          .frame(width: 9)
-          .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+        let image = Image("Hotline")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundColor(Color(hex: 0xE10000))
+            .frame(width: 9)
+            .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+        
+//        if #available(macOS 26, *) {
+//            image.sharedBackgroundVisibility(.hidden)
+//        } else {
+            image
+//        }
       }
       
       ToolbarItem(placement: .primaryAction) {
         Button {
-          refreshing = true
-          refresh()
-          refreshing = false
+          self.refreshing = true
+          self.refresh()
+          self.refreshing = false
         } label: {
           Label("Refresh", systemImage: "arrow.clockwise")
         }
@@ -242,36 +323,140 @@ struct TrackerView: View {
         openWindow(id: "server", value: s)
       }
     })
+    .searchable(text: $searchText, placement: .automatic, prompt: "Search")
   }
+  
+  @ViewBuilder
+  func bookmarkServerContextMenu(_ server: BookmarkServer) -> some View {
+    Button {
+      let newBookmark = Bookmark(type: .server, name: server.name ?? server.address, address: server.address, port: server.port, login: nil, password: nil)
+      Bookmark.add(newBookmark, context: modelContext)
+    } label: {
+      Label("Bookmark", systemImage: "bookmark")
+    }
+    
+    Divider()
+    
+    Button {
+      NSPasteboard.general.clearContents()
+      let displayAddress = server.port == HotlinePorts.DefaultServerPort ?
+      server.address : "\(server.address):\(server.port)"
+      NSPasteboard.general.setString(displayAddress, forType: .string)
+    } label: {
+      Label("Copy Address", systemImage: "doc.on.doc")
+    }
+  }
+  
+  @ViewBuilder
+  func bookmarkContextMenu(_ bookmark: Bookmark) -> some View {
+    Button {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(bookmark.displayAddress, forType: .string)
+    } label: {
+      Label("Copy Address", systemImage: "doc.on.doc")
+    }
+
+    Divider()
+
+    if bookmark.type == .tracker {
+      Button {
+        trackerSheetBookmark = bookmark
+      } label: {
+        Label("Edit Tracker...", systemImage: "pencil")
+      }
+    }
+
+    if bookmark.type == .server {
+      Button {
+        bookmarkExport = BookmarkDocument(bookmark: bookmark)
+        bookmarkExportActive = true
+      } label: {
+        Label("Export Bookmark...", systemImage: "bookmark.square")
+      }
+    }
+
+    Divider()
+
+    Button {
+      Bookmark.delete(bookmark, context: modelContext)
+    } label: {
+      Label(bookmark.type == .tracker ? "Delete Tracker" : "Delete Bookmark", systemImage: "trash")
+    }
+  }
+
   
   func refresh() {
     // When a tracker is selected, refresh only that tracker.
-    if
-      let selectedBookmark = selection,
-      selectedBookmark.type == .tracker {
-      if !selectedBookmark.expanded {
-        selectedBookmark.expanded = true
-      }
-      else {
-        Task {
-          await selectedBookmark.fetchServers()
+    if let trackerSelection = self.selection {
+      switch trackerSelection {
+      case .bookmark(let bookmark):
+        if bookmark.type == .tracker {
+          if self.expandedTrackers.contains(bookmark) {
+            // Already expanded, just refresh the servers
+            Task {
+              await self.fetchServers(for: bookmark)
+            }
+          } else {
+            // Not expanded, expand it (which also fetches)
+            self.setExpanded(true, for: bookmark)
+          }
         }
+        return
+      default:
+        break
       }
-      return
     }
-    
+
     // Otherwise refresh/expand all trackers.
     for bookmark in self.bookmarks {
       if bookmark.type == .tracker {
-        if !bookmark.expanded {
-          bookmark.expanded = true
-        }
-        else {
+        if self.expandedTrackers.contains(bookmark) {
+          // Already expanded, just refresh the servers
           Task {
-            await bookmark.fetchServers()
+            await self.fetchServers(for: bookmark)
           }
+        } else {
+          // Not expanded, expand it (which also fetches)
+          self.setExpanded(true, for: bookmark)
         }
       }
+    }
+  }
+  
+  func toggleExpanded(for bookmark: Bookmark) {
+    guard bookmark.type == .tracker else { return }
+
+    if self.expandedTrackers.contains(bookmark) {
+      self.expandedTrackers.remove(bookmark)
+      self.trackerServers[bookmark] = nil
+    } else {
+      self.expandedTrackers.insert(bookmark)
+      Task {
+        await self.fetchServers(for: bookmark)
+      }
+    }
+  }
+
+  func setExpanded(_ expanded: Bool, for bookmark: Bookmark) {
+    guard bookmark.type == .tracker else { return }
+
+    if expanded && !self.expandedTrackers.contains(bookmark) {
+      self.expandedTrackers.insert(bookmark)
+      Task {
+        await self.fetchServers(for: bookmark)
+      }
+    } else if !expanded && self.expandedTrackers.contains(bookmark) {
+      self.expandedTrackers.remove(bookmark)
+      self.trackerServers[bookmark] = nil
+    }
+  }
+
+  private func fetchServers(for bookmark: Bookmark) async {
+    self.loadingTrackers.insert(bookmark)
+    let servers = await bookmark.fetchServers()
+    await MainActor.run {
+      self.trackerServers[bookmark] = servers
+      self.loadingTrackers.remove(bookmark)
     }
   }
 }
@@ -359,18 +544,60 @@ struct TrackerBookmarkSheet: View {
   }
 }
 
+struct TrackerBookmarkServerView: View {
+  let server: BookmarkServer
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 6) {
+      Spacer()
+        .frame(width: 14 + 8 + 16)
+      Image("Server")
+        .resizable()
+        .scaledToFit()
+        .frame(width: 16, height: 16, alignment: .center)
+      Text(self.server.name ?? "Server").lineLimit(1).truncationMode(.tail)
+      if let serverDescription = self.server.description {
+        Text(serverDescription)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+      }
+      Spacer(minLength: 0)
+      if self.server.users > 0 {
+        Text(String(self.server.users))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+
+        Circle()
+          .fill(.fileComplete)
+          .frame(width: 7, height: 7)
+          .keyframeAnimator(initialValue: 1.0, repeating: true) { content, opacity in
+            content.opacity(opacity)
+          } keyframes: { _ in
+            CubicKeyframe(1.0, duration: 2.0)  // Stay visible for 1 second
+            CubicKeyframe(0.75, duration: 0.5) // Fade out quickly
+            CubicKeyframe(1.0, duration: 0.5) // Fade in quickly
+          }
+          .padding(.trailing, 6)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
 struct TrackerItemView: View {
   let bookmark: Bookmark
-  
-  @State private var onlineAnimationMaxState: Bool = true
-  
+  let isExpanded: Bool
+  let isLoading: Bool
+  let onToggleExpanded: () -> Void
+
   var body: some View {
     HStack(alignment: .center, spacing: 6) {
       if bookmark.type == .tracker {
         Button {
-          bookmark.expanded.toggle()
+          self.onToggleExpanded()
         } label: {
-          Text(Image(systemName: bookmark.expanded ? "chevron.down" : "chevron.right"))
+          Text(Image(systemName: self.isExpanded ? "chevron.down" : "chevron.right"))
             .bold()
             .font(.system(size: 10))
             .opacity(0.5)
@@ -381,7 +608,7 @@ struct TrackerItemView: View {
         .padding(.leading, 4)
         .padding(.trailing, 2)
       }
-      
+
       switch bookmark.type {
       case .tracker:
         Image("Tracker")
@@ -389,7 +616,7 @@ struct TrackerItemView: View {
           .scaledToFit()
           .frame(width: 16, height: 16, alignment: .center)
         Text(bookmark.name).bold().lineLimit(1).truncationMode(.tail)
-        if bookmark.loading {
+        if isLoading {
           ProgressView()
             .padding([.leading, .trailing], 2)
             .controlSize(.small)
@@ -410,58 +637,26 @@ struct TrackerItemView: View {
           .frame(width: 16, height: 16, alignment: .center)
         Text(bookmark.name).lineLimit(1).truncationMode(.tail)
         Spacer(minLength: 0)
-      case .temporary:
-        Spacer()
-          .frame(width: 14 + 8 + 16)
-        Image("Server")
-          .resizable()
-          .scaledToFit()
-          .frame(width: 16, height: 16, alignment: .center)
-        Text(bookmark.name).lineLimit(1).truncationMode(.tail)
-        if let serverDescription = bookmark.serverDescription {
-          Text(serverDescription)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-        }
-        Spacer(minLength: 0)
-        if let serverUserCount = bookmark.serverUserCount,
-           serverUserCount > 0 {
-          Text(String(serverUserCount))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-          
-          Circle()
-            .fill(.fileComplete)
-            .frame(width: 7, height: 7)
-            .opacity(onlineAnimationMaxState ? 1.0 : 0.2)
-            .onAppear {
-              withAnimation(.easeInOut(duration: 1.0).repeatForever()) {
-                onlineAnimationMaxState.toggle()
-              }
-            }
-            .padding(.trailing, 6)
-        }
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .onChange(of: bookmark.expanded) {
-      guard bookmark.type == .tracker else {
-        return
-      }
-      
-      if bookmark.expanded {
-        Task {
-          await bookmark.fetchServers()
-        }
-      }
-    }
+//    .onChange(of: self.isExpanded) {
+//      guard bookmark.type == .tracker else {
+//        return
+//      }
+//      
+//      if self.isExpanded {
+//        Task {
+//          await bookmark.fetchServers()
+//        }
+//      }
+//    }
   }
 }
 
 #if DEBUG
 private struct TrackerViewPreview: View {
-  @State var selection: Bookmark? = nil
+  @State var selection: TrackerSelection? = nil
 
   var body: some View {
     TrackerView(selection: $selection)

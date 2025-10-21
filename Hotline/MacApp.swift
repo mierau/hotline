@@ -29,13 +29,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // We mark CloudKit has available now since we're not waiting on
         // a server sync or anything.
-        ApplicationState.shared.cloudKitReady = true
+        AppState.shared.cloudKitReady = true
       default:
         print("iCloud Available")
         
         self.cloudKitObserverToken = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification, object: nil, queue: OperationQueue.main) { [weak self] note in
           print("iCloud Changed!")
-          ApplicationState.shared.cloudKitReady = true
+          AppState.shared.cloudKitReady = true
             
           guard let token = self?.cloudKitObserverToken else { return }
           NotificationCenter.default.removeObserver(token)
@@ -48,15 +48,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 //      
 //      // We mark CloudKit has available now since we're not waiting on
 //      // a server sync or anything.
-//      ApplicationState.shared.cloudKitReady = true
+//      AppState.shared.cloudKitReady = true
 //    }
 //    else {
 //      print("iCloud Available")
 //      
 //      self.cloudKitObserverToken = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification, object: nil, queue: OperationQueue.main) { [weak self] note in
 //        print("iCloud Changed!")
-//        ApplicationState.shared.cloudKitReady = true
-//          
+//        AppState.shared.cloudKitReady = true
+//
 //        guard let token = self?.cloudKitObserverToken else { return }
 //        NotificationCenter.default.removeObserver(token)
 //      }
@@ -77,7 +77,7 @@ struct Application: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
   
   @State private var hotlinePanel: HotlinePanel? = nil
-  @State private var selection: Bookmark? = nil
+  @State private var selection: TrackerSelection? = nil
 
   @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
@@ -142,25 +142,25 @@ struct Application: App {
     .defaultSize(width: 750, height: 700)
     .defaultPosition(.center)
     .onChange(of: activeServerState) {
-      ApplicationState.shared.activeServerState = activeServerState
+      AppState.shared.activeServerState = activeServerState
     }
     .onChange(of: activeHotline) {
-      ApplicationState.shared.activeHotline = activeHotline
+      AppState.shared.activeHotline = activeHotline
     }
     .onChange(of: activeHotline?.serverTitle) {
       if let hotline = activeHotline {
-        ApplicationState.shared.activeServerName = hotline.serverTitle
+        AppState.shared.activeServerName = hotline.serverTitle
       }
     }
     .onChange(of: activeHotline?.bannerImage) {
       withAnimation {
-        ApplicationState.shared.activeServerBanner = activeHotline?.bannerImage
+        AppState.shared.activeServerBanner = activeHotline?.bannerImage
       }
     }
     .onChange(of: activeHotline) {
-      ApplicationState.shared.activeHotline = activeHotline
+      AppState.shared.activeHotline = activeHotline
       if let hotline = activeHotline {
-        ApplicationState.shared.activeServerName = hotline.serverTitle
+        AppState.shared.activeServerName = hotline.serverTitle
       }
     }
     .commands {
@@ -269,7 +269,7 @@ struct Application: App {
     .defaultPosition(.center)
   }
 
-  func connect(to item: Bookmark) {
+  func connect(to item: TrackerSelection) {
     if let server = item.server {
       openWindow(id: "server", value: server)
     }
