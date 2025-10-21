@@ -212,14 +212,24 @@ struct ServerView: View {
           .onChange(of: Prefs.shared.enableAutomaticMessage) { sendPreferences() }
           .onChange(of: Prefs.shared.automaticMessage) { sendPreferences() }
           .toolbar {
-            ToolbarItem(placement: .navigation) {
-              Image("Server Large")
-//                .renderingMode(.template)
-              
-                .resizable()
-                .scaledToFit()
-                .frame(width: 28)
-                .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
+            if #available(macOS 26.0, *) {
+              ToolbarItem(placement: .navigation) {
+                Image("Server Large")
+                  .resizable()
+                  .scaledToFit()
+                  .frame(width: 28)
+                  .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
+              }
+              .sharedBackgroundVisibility(.hidden)
+            }
+            else {
+              ToolbarItem(placement: .navigation) {
+                Image("Server Large")
+                  .resizable()
+                  .scaledToFit()
+                  .frame(width: 28)
+                  .opacity(controlActiveState == .inactive ? 0.4 : 1.0)
+              }
             }
           }
       }

@@ -24,6 +24,7 @@ struct TrackerView: View {
   @State private var refreshing = false
   @State private var trackerSheetPresented: Bool = false
   @State private var trackerSheetBookmark: Bookmark? = nil
+  @State private var serverSheetBookmark: Bookmark? = nil
   @State private var attemptedPrepopulate: Bool = false
   @State private var fileDropActive = false
   @State private var bookmarkExportActive = false
@@ -270,22 +271,21 @@ struct TrackerView: View {
     .sheet(isPresented: $trackerSheetPresented) {
       TrackerBookmarkSheet()
     }
+    .sheet(item: $serverSheetBookmark) { item in
+      ServerBookmarkSheet(item)
+    }
     .navigationTitle("Servers")
     .toolbar {
-      ToolbarItem(placement: .navigation) {
-        let image = Image("Hotline")
-            .resizable()
-            .renderingMode(.template)
-            .scaledToFit()
-            .foregroundColor(Color(hex: 0xE10000))
-            .frame(width: 9)
-            .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-        
-//        if #available(macOS 26, *) {
-//            image.sharedBackgroundVisibility(.hidden)
-//        } else {
-            image
-//        }
+      if #available(macOS 26.0, *) {
+        ToolbarItem(placement: .navigation) {
+          self.hotlineLogoImage
+        }
+        .sharedBackgroundVisibility(.hidden)
+      }
+      else {
+        ToolbarItem(placement: .navigation) {
+          self.hotlineLogoImage
+        }
       }
       
       ToolbarItem(placement: .primaryAction) {
@@ -324,6 +324,16 @@ struct TrackerView: View {
       }
     })
     .searchable(text: $searchText, placement: .automatic, prompt: "Search")
+  }
+  
+  private var hotlineLogoImage: some View {
+    Image("Hotline")
+      .resizable()
+      .renderingMode(.template)
+      .scaledToFit()
+      .foregroundColor(Color(hex: 0xE10000))
+      .frame(width: 9)
+      .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
   }
   
   @ViewBuilder
@@ -368,10 +378,16 @@ struct TrackerView: View {
 
     if bookmark.type == .server {
       Button {
+        serverSheetBookmark = bookmark
+      } label: {
+        Label("Edit Bookmark...", systemImage: "pencil")
+      }
+
+      Button {
         bookmarkExport = BookmarkDocument(bookmark: bookmark)
         bookmarkExportActive = true
       } label: {
-        Label("Export Bookmark...", systemImage: "bookmark.square")
+        Label("Export Bookmark...", systemImage: "square.and.arrow.down")
       }
     }
 
@@ -481,9 +497,12 @@ struct TrackerBookmarkSheet: View {
   
   var body: some View {
     VStack(alignment: .leading) {
-      Text("Type the address and name of a Hotline Tracker:")
-        .foregroundStyle(.secondary)
-        .padding(.bottom, 8)
+      if self.bookmark == nil {
+        Text("Type the address and name of a Hotline Tracker:")
+          .foregroundStyle(.secondary)
+          .padding(.bottom, 8)
+      }
+      
       Form {
         Group {
           TextField(text: $trackerAddress) {
@@ -502,33 +521,14 @@ struct TrackerBookmarkSheet: View {
     .padding()
     .toolbar {
       ToolbarItem(placement: .confirmationAction) {
-        Button(self.bookmark != nil ? "Save Tracker" : "Add Tracker") {
-          var displayName = trackerName.trimmingCharacters(in: .whitespacesAndNewlines)
-          let (host, port) = Tracker.parseTrackerAddressAndPort(trackerAddress)
-          
-          if displayName.isEmpty {
-            displayName = host
+        Button {
+          self.saveTracker()
+        } label: {
+          if self.bookmark != nil {
+            Text("Save Tracker")
           }
-          
-          if !displayName.isEmpty && !host.isEmpty {
-            if !host.isEmpty {
-              if self.bookmark != nil {
-                // We're editing an existing bookmark.
-                self.bookmark?.name = displayName
-                self.bookmark?.address = host
-                self.bookmark?.port = port
-              }
-              else {
-                // We're creating a new bookmark.
-                let newBookmark = Bookmark(type: .tracker, name: displayName, address: host, port: port)
-                Bookmark.add(newBookmark, context: modelContext)
-              }
-              
-              self.trackerName = ""
-              self.trackerAddress = ""
-              
-              dismiss()
-            }
+          else {
+            Text("Add Tracker")
           }
         }
       }
@@ -537,7 +537,109 @@ struct TrackerBookmarkSheet: View {
           self.trackerName = ""
           self.trackerAddress = ""
           
-          dismiss()
+          self.dismiss()
+        }
+      }
+    }
+  }
+  
+  private func saveTracker() {
+    var displayName = trackerName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let (host, port) = Tracker.parseTrackerAddressAndPort(trackerAddress)
+    
+    if displayName.isEmpty {
+      displayName = host
+    }
+    
+    if !displayName.isEmpty && !host.isEmpty {
+      if !host.isEmpty {
+        if self.bookmark != nil {
+          // We're editing an existing bookmark.
+          self.bookmark?.name = displayName
+          self.bookmark?.address = host
+          self.bookmark?.port = port
+        }
+        else {
+          // We're creating a new bookmark.
+          let newBookmark = Bookmark(type: .tracker, name: displayName, address: host, port: port)
+          Bookmark.add(newBookmark, context: modelContext)
+        }
+        
+        self.trackerName = ""
+        self.trackerAddress = ""
+        
+        self.dismiss()
+      }
+    }
+  }
+}
+
+struct ServerBookmarkSheet: View {
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.modelContext) private var modelContext
+
+  @State private var bookmark: Bookmark
+  @State private var serverName: String = ""
+  @State private var serverAddress: String = ""
+  @State private var serverLogin: String = ""
+  @State private var serverPassword: String = ""
+
+  init(_ editingBookmark: Bookmark) {
+    _bookmark = .init(initialValue: editingBookmark)
+    _serverName = .init(initialValue: editingBookmark.name)
+    _serverAddress = .init(initialValue: editingBookmark.displayAddress)
+    _serverLogin = .init(initialValue: editingBookmark.login ?? "")
+    _serverPassword = .init(initialValue: editingBookmark.password ?? "")
+  }
+
+  var body: some View {
+    VStack(alignment: .leading) {
+      Form {
+        Group {
+          TextField(text: $serverName) {
+            Text("Name:")
+          }
+          .padding(.bottom)
+          
+          TextField(text: $serverAddress) {
+            Text("Address:")
+          }
+          TextField(text: $serverLogin, prompt: Text("Optional")) {
+            Text("Login:")
+          }
+          SecureField(text: $serverPassword, prompt: Text("Optional")) {
+            Text("Password:")
+          }
+        }
+        .textFieldStyle(.roundedBorder)
+        .controlSize(.large)
+      }
+    }
+    .frame(width: 300)
+    .fixedSize(horizontal: true, vertical: true)
+    .padding()
+    .toolbar {
+      ToolbarItem(placement: .confirmationAction) {
+        Button("Save Bookmark") {
+          let displayName = self.serverName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let (host, port) = Server.parseServerAddressAndPort(self.serverAddress)
+          let login = self.serverLogin.trimmingCharacters(in: .whitespacesAndNewlines)
+          let password = self.serverPassword
+
+          if !displayName.isEmpty && !host.isEmpty {
+            self.bookmark.name = displayName
+            self.bookmark.address = host
+            self.bookmark.port = port
+            self.bookmark.login = login.isEmpty ? nil : login
+            self.bookmark.password = password.isEmpty ? nil : password
+
+            self.dismiss()
+          }
+        }
+      }
+      ToolbarItem(placement: .cancellationAction) {
+        Button("Cancel") {
+          self.dismiss()
         }
       }
     }
@@ -575,7 +677,7 @@ struct TrackerBookmarkServerView: View {
             content.opacity(opacity)
           } keyframes: { _ in
             CubicKeyframe(1.0, duration: 2.0)  // Stay visible for 1 second
-            CubicKeyframe(0.75, duration: 0.5) // Fade out quickly
+            CubicKeyframe(0.6, duration: 0.5) // Fade out quickly
             CubicKeyframe(1.0, duration: 0.5) // Fade in quickly
           }
           .padding(.trailing, 6)
@@ -640,17 +742,6 @@ struct TrackerItemView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-//    .onChange(of: self.isExpanded) {
-//      guard bookmark.type == .tracker else {
-//        return
-//      }
-//      
-//      if self.isExpanded {
-//        Task {
-//          await bookmark.fetchServers()
-//        }
-//      }
-//    }
   }
 }
 
