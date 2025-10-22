@@ -1,4 +1,4 @@
-![Hotline](https://github.com/mierau/hotline/assets/55453/165beea1-a760-4cd5-baad-c2917048e383)
+<img width="836" height="188" alt="GitHub Banner" src="https://github.com/user-attachments/assets/4f3ed0b2-2ddf-45d1-9bd7-a1a9f6a1573a" />
 
 # Hotline
 An attempt to resurrect Hotline for modern Apple systems (iOS, macOS, etc) by completely recreating it in Swift and SwiftUI.
@@ -56,7 +56,7 @@ And this project is an attempt to create a modern open source version of Hotline
 | File uploading             |   ✓   |       |        |          |
 | File info                  |   ✓   |       |        |          |
 | File management            |       |       |        |          |
-| Folder downloading         |       |       |        |          |
+| Folder downloading         |   ✓   |       |        |          |
 | Folder uploading           |       |       |        |          |
 | Custom icon sets           |       |       |        |          |
 
