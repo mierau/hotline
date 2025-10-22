@@ -1,7 +1,7 @@
 import SwiftUI
 
 @Observable
-class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelegate, HotlineFilePreviewClientDelegate, HotlineFileUploadClientDelegate {
+class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelegate, HotlineFilePreviewClientDelegate, HotlineFileUploadClientDelegate, HotlineFolderDownloadClientDelegate {
   let id: UUID = UUID()
   let trackerClient: HotlineTrackerClient
   let client: HotlineClient
@@ -559,7 +559,51 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
       }
     }
   }
-  
+
+  @MainActor func downloadFolder(_ folderName: String, path: [String], complete callback: ((TransferInfo, URL) -> Void)? = nil) {
+    var fullPath: [String] = []
+    if path.count > 1 {
+      fullPath = Array(path[0..<path.count-1])
+    }
+
+    self.client.sendDownloadFolder(name: folderName, path: fullPath) { [weak self] success, downloadReferenceNumber, downloadTransferSize, downloadItemCount, downloadWaitingCount in
+      print("GOT DOWNLOAD FOLDER REPLY:")
+      print("\tSUCCESS?", success)
+      print("\tTRANSFER SIZE: \(downloadTransferSize.debugDescription)")
+      print("\tITEM COUNT: \(downloadItemCount.debugDescription)")
+      print("\tREFERENCE NUM: \(downloadReferenceNumber.debugDescription)")
+      print("\tWAITING COUNT: \(downloadWaitingCount.debugDescription)")
+
+      if
+        let self = self,
+        let address = self.server?.address,
+        let port = self.server?.port,
+        let referenceNumber = downloadReferenceNumber,
+        let transferSize = downloadTransferSize,
+        let itemCount = downloadItemCount {
+
+        print("Creating HotlineFolderDownloadClient with address: \(address), port: \(port)")
+
+        let folderClient = HotlineFolderDownloadClient(address: address, port: UInt16(port), reference: referenceNumber, size: UInt32(transferSize), itemCount: itemCount)
+        folderClient.delegate = self
+        self.downloads.append(folderClient)
+
+        let transfer = TransferInfo(id: referenceNumber, title: folderName, size: UInt(transferSize))
+        transfer.isFolder = true
+        transfer.downloadCallback = callback
+        self.transfers.append(transfer)
+
+        // Create destination folder in Downloads
+        let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        let folderURL = downloadsURL.appendingPathComponent(folderName)
+
+        print("Starting folder download to: \(folderURL.path)")
+        folderClient.start(to: folderURL)
+        print("Folder download started")
+      }
+    }
+  }
+
   @MainActor func uploadFile(url fileURL: URL, path: [String], complete callback: ((TransferInfo) -> Void)? = nil) {
     let fileName = fileURL.lastPathComponent
     
@@ -1003,12 +1047,36 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
         SoundEffectPlayer.shared.playSoundEffect(.transferComplete)
       }
     }
-    
+
     if let i = self.downloads.firstIndex(where: { $0.referenceNumber == reference }) {
       self.downloads.remove(at: i)
     }
   }
-  
+
+  func hotlineFolderDownloadReceivedFileInfo(client: HotlineFolderDownloadClient, reference: UInt32, fileName: String, itemNumber: Int, totalItems: Int) {
+    // Optional: Update transfer title to show current file being downloaded
+    if let i = self.transfers.firstIndex(where: { $0.id == reference }) {
+      let transfer = self.transfers[i]
+      // You could update the title here to show progress: "FolderName (file 3 of 10)"
+      // transfer.title = "\(originalFolderName) (\(itemNumber) of \(totalItems))"
+    }
+  }
+
+  func hotlineFolderDownloadComplete(client: HotlineFolderDownloadClient, reference: UInt32, at: URL) {
+    if let i = self.transfers.firstIndex(where: { $0.id == reference }) {
+      let transfer = self.transfers[i]
+      transfer.fileURL = at
+      transfer.downloadCallback?(transfer, at)
+      if Prefs.shared.playSounds && Prefs.shared.playFileTransferCompleteSound {
+        SoundEffectPlayer.shared.playSoundEffect(.transferComplete)
+      }
+    }
+
+    if let i = self.downloads.firstIndex(where: { $0.referenceNumber == reference }) {
+      self.downloads.remove(at: i)
+    }
+  }
+
   // MARK: - Utilities
   
   func updateServerTitle() {

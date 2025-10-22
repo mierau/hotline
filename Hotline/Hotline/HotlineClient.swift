@@ -804,9 +804,33 @@ class HotlineClient: NetSocketDelegate {
     }
   }
   
+  @MainActor func sendDownloadFolder(name folderName: String, path folderPath: [String], callback: ((Bool, UInt32?, Int?, Int?, Int?) -> Void)? = nil) {
+    var t = HotlineTransaction(type: .downloadFolder)
+    t.setFieldString(type: .fileName, val: folderName)
+    t.setFieldPath(type: .filePath, val: folderPath)
+
+    self.sendPacket(t) { reply, err in
+      guard err == nil,
+            let transferSizeField = reply.getField(type: .transferSize),
+            let transferSize = transferSizeField.getInteger(),
+            let transferReferenceField = reply.getField(type: .referenceNumber),
+            let referenceNumber = transferReferenceField.getUInt32() else {
+        callback?(false, nil, nil, nil, nil)
+        return
+      }
+
+      let folderItemCountField = reply.getField(type: .folderItemCount)
+      let folderItemCount = folderItemCountField?.getInteger()
+      let transferWaitingCountField = reply.getField(type: .waitingCount)
+      let transferWaitingCount = transferWaitingCountField?.getInteger()
+
+      callback?(true, referenceNumber, transferSize, folderItemCount, transferWaitingCount)
+    }
+  }
+
   @MainActor func sendDownloadBanner(callback: ((Bool, UInt32?, Int?) -> Void)? = nil) {
     let t = HotlineTransaction(type: .downloadBanner)
-    
+
     self.sendPacket(t) { reply, err in
       guard err == nil,
             let transferSizeField = reply.getField(type: .transferSize),

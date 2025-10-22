@@ -585,10 +585,6 @@ struct ServerView: View {
   }
 }
 
-//#Preview {
-//  ServerView(server: Server(name: "", description: "", address: "", port: 0))
-//}
-
 struct TransferItemView: View {
   let transfer: TransferInfo
     
@@ -619,10 +615,18 @@ struct TransferItemView: View {
     HStack(alignment: .center, spacing: 5) {
       HStack(spacing: 0) {
         Spacer()
-        FileIconView(filename: transfer.title, fileType: nil)
-          .frame(width: 16, height: 16)
-          .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
-//          .padding(.leading, 2)
+        if transfer.isFolder {
+          Image("Folder")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 16, height: 16)
+            .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+        }
+        else {
+          FileIconView(filename: transfer.title, fileType: nil)
+            .frame(width: 16, height: 16)
+            .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+        }
         Spacer()
       }
       .frame(width: 20)

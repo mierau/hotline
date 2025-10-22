@@ -236,11 +236,12 @@ struct FilesView: View {
   }
   
   @MainActor private func downloadFile(_ file: FileInfo) {
-    guard !file.isFolder else {
-      return
+    if file.isFolder {
+      model.downloadFolder(file.name, path: file.path)
     }
-    
-    model.downloadFile(file.name, path: file.path)
+    else {
+      model.downloadFile(file.name, path: file.path)
+    }
   }
   
   @MainActor private func uploadFile(file fileURL: URL, to path: [String]) {
@@ -297,13 +298,13 @@ struct FilesView: View {
         let selectedFile = items.first
         
         Button {
-          if let s = selectedFile, !s.isFolder {
+          if let s = selectedFile {
             downloadFile(s)
           }
         } label: {
           Label("Download", systemImage: "arrow.down")
         }
-        .disabled(selectedFile == nil || (selectedFile != nil && selectedFile!.isFolder))
+        .disabled(selectedFile == nil)
         
         Divider()
                 
@@ -419,14 +420,14 @@ struct FilesView: View {
         
         ToolbarItem(placement: .primaryAction) {
           Button {
-            if let selectedFile = selection, !selectedFile.isFolder {
+            if let selectedFile = selection {
               downloadFile(selectedFile)
             }
           } label: {
             Label("Download", systemImage: "arrow.down")
           }
           .help("Download")
-          .disabled(selection == nil || selection?.isFolder == true || model.access?.contains(.canDownloadFiles) != true)
+          .disabled(selection == nil || model.access?.contains(.canDownloadFiles) != true)
         }
       }
     }
