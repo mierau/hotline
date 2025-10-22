@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AppKit
 
 @Observable
 class ServerState: Equatable {
@@ -688,6 +689,13 @@ struct TransferItemView: View {
       withAnimation(.easeOut(duration: 0.25)) {
         self.hovered = hovered
       }
+    }
+    .onTapGesture(count: 2) {
+      guard transfer.completed, let url = transfer.fileURL else {
+        return
+      }
+
+      NSWorkspace.shared.activateFileViewerSelecting([url])
     }
     .help(formattedProgressHelp())
   }
