@@ -15,16 +15,34 @@ import UniformTypeIdentifiers
   let isUnavailable: Bool
   
   var isDropboxFolder: Bool {
-    guard self.isFolder,
-          (self.name.range(of: "upload", options: [.caseInsensitive]) != nil) || (self.name.range(of: "drop box", options: [.caseInsensitive]) != nil)
-    else {
+    guard self.isFolder else {
       return false
     }
-    return true
+
+    if self.name.range(of: "upload", options: [.caseInsensitive]) != nil {
+      return true
+    }
+
+    if self.name.range(of: "dropbox", options: [.caseInsensitive]) != nil {
+      return true
+    }
+
+    if self.name.range(of: "drop box", options: [.caseInsensitive]) != nil {
+      return true
+    }
+
+    return false
   }
   
   var isAdminDropboxFolder: Bool {
     self.isDropboxFolder && (self.name.range(of: "admin", options: [.caseInsensitive]) != nil)
+  }
+  
+  var isAppBundle: Bool {
+    guard self.isFolder else {
+      return false
+    }
+    return self.name.lowercased().hasSuffix(".app")
   }
   
   var expanded: Bool = false

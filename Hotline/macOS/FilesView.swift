@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AppKit
 
 struct FolderView: View {
   @Environment(Hotline.self) private var model: Hotline
@@ -515,6 +516,13 @@ struct FilesView: View {
       }
     })
     .onSubmit(of: .search) {
+      #if os(macOS)
+      let shiftPressed = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+      if shiftPressed {
+        model.clearFileListCache()
+      }
+      #endif
+
       let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmed.isEmpty else {
         model.cancelFileSearch()

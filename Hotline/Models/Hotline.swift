@@ -15,6 +15,10 @@ struct FileSearchConfig: Equatable {
   var loopRepetitionLimit: Int = 4
   /// Number of child folders that get prioritized after a matching parent is found.
   var hotBurstLimit: Int = 2
+  /// Maximum age, in seconds, that a cached folder listing is treated as fresh.
+  var cacheTTL: TimeInterval = 60 * 15
+  /// Upper bound on the number of folder listings retained in the cache.
+  var maxCachedFolders: Int = 1024 * 3
 }
 
 enum FileSearchStatus: Equatable {
@@ -171,6 +175,11 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   var fileSearchCurrentPath: [String]? = nil
   @ObservationIgnored private var fileSearchSession: FileSearchSession? = nil
   @ObservationIgnored private var fileSearchResultKeys: Set<String> = []
+  private struct FileListCacheEntry {
+    let files: [FileInfo]
+    let timestamp: Date
+  }
+  @ObservationIgnored private var fileListCache: [String: FileListCacheEntry] = [:]
   var news: [NewsInfo] = []
   private var newsLookup: [String:NewsInfo] = [:]
   var newsLoaded: Bool = false
@@ -307,7 +316,11 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     self.client.sendPostMessageBoard(text: text)
   }
     
-  @MainActor func getFileList(path: [String] = [], suppressErrors: Bool = false) async -> [FileInfo] {
+  @MainActor func getFileList(path: [String] = [], suppressErrors: Bool = false, preferCache: Bool = false) async -> [FileInfo] {
+    if preferCache, let cached = cachedFileList(for: path, ttl: fileSearchConfig.cacheTTL, allowStale: false) {
+      return cached.items
+    }
+
     return await withCheckedContinuation { [weak self] continuation in
       self?.client.sendGetFileList(path: path, suppressErrors: suppressErrors) { [weak self] files in
         let parentFile = self?.findFile(in: self?.files ?? [], at: path)
@@ -326,6 +339,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
             self?.files = newFiles
           }
           
+          self?.storeFileListInCache(newFiles, for: path)
           continuation.resume(returning: newFiles)
         }
       }
@@ -429,6 +443,119 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
 
   private func searchPathKey(for path: [String]) -> String {
     path.joined(separator: "\u{001F}")
+  }
+
+  private func shouldBypassFileCache(for path: [String]) -> Bool {
+    guard let folderName = path.last else {
+      return false
+    }
+
+    let trimmed = folderName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    if trimmed.range(of: "upload", options: [.caseInsensitive]) != nil {
+      return true
+    }
+
+    if trimmed.range(of: "dropbox", options: [.caseInsensitive]) != nil {
+      return true
+    }
+
+    if trimmed.range(of: "drop box", options: [.caseInsensitive]) != nil {
+      return true
+    }
+
+    return false
+  }
+
+  private func cachedFileList(for path: [String], ttl: TimeInterval, allowStale: Bool) -> (items: [FileInfo], isFresh: Bool)? {
+    guard ttl > 0 else {
+      return nil
+    }
+
+    if shouldBypassFileCache(for: path) {
+      return nil
+    }
+
+    let key = searchPathKey(for: path)
+    guard let entry = fileListCache[key] else {
+      return nil
+    }
+
+    let age = Date().timeIntervalSince(entry.timestamp)
+    let isFresh = age <= ttl
+    if !allowStale && !isFresh {
+      return nil
+    }
+
+    return (entry.files, isFresh)
+  }
+
+  private func storeFileListInCache(_ files: [FileInfo], for path: [String]) {
+    guard fileSearchConfig.cacheTTL > 0 else {
+      return
+    }
+
+    if shouldBypassFileCache(for: path) {
+      return
+    }
+
+    let key = searchPathKey(for: path)
+    fileListCache[key] = FileListCacheEntry(files: files, timestamp: Date())
+    pruneFileListCacheIfNeeded()
+  }
+
+  private func pruneFileListCacheIfNeeded() {
+    let limit = fileSearchConfig.maxCachedFolders
+    guard limit > 0, fileListCache.count > limit else {
+      return
+    }
+
+    let excess = fileListCache.count - limit
+    guard excess > 0 else { return }
+
+    let sortedKeys = fileListCache.sorted { lhs, rhs in
+      lhs.value.timestamp < rhs.value.timestamp
+    }
+
+    for index in 0..<excess {
+      let key = sortedKeys[index].key
+      fileListCache.removeValue(forKey: key)
+    }
+  }
+
+  private func invalidateFileListCache(for path: [String], includingAncestors: Bool = false) {
+    guard !fileListCache.isEmpty else {
+      return
+    }
+
+    var currentPath = path
+    while true {
+      let key = searchPathKey(for: currentPath)
+      fileListCache.removeValue(forKey: key)
+
+      if !includingAncestors || currentPath.isEmpty {
+        break
+      }
+
+      currentPath.removeLast()
+      if currentPath.isEmpty {
+        let rootKey = searchPathKey(for: currentPath)
+        fileListCache.removeValue(forKey: rootKey)
+        break
+      }
+    }
+  }
+
+  fileprivate func cachedListingForSearch(path: [String], ttl: TimeInterval) -> (items: [FileInfo], isFresh: Bool)? {
+    cachedFileList(for: path, ttl: ttl, allowStale: true)
+  }
+
+  @MainActor func clearFileListCache() {
+    guard !fileListCache.isEmpty else {
+      return
+    }
+
+    fileListCache.removeAll(keepingCapacity: false)
   }
   
   @MainActor func getNewsArticle(id articleID: UInt, at path: [String], flavor: String) async -> String? {
@@ -748,7 +875,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
 
   @MainActor func uploadFile(url fileURL: URL, path: [String], complete callback: ((TransferInfo) -> Void)? = nil) {
     let fileName = fileURL.lastPathComponent
-    
+
     guard fileURL.isFileURL, !fileName.isEmpty else {
       print("NOT A FILE URL?")
       return
@@ -789,9 +916,11 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
       print("FILE IS EMPTY??")
       return
     }
-    
+
     print("FILE SIZE: \(fileSize) NAME: \(fileName) PATH: \(path)")
-    
+
+    invalidateFileListCache(for: path, includingAncestors: true)
+
     self.client.sendUploadFile(name: fileName, path: path) { [weak self] success, uploadReferenceNumber in
       print("UPLOAD REFERENCE: \(String(describing: uploadReferenceNumber))")
       
@@ -809,11 +938,11 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
         let transfer = TransferInfo(id: referenceNumber, title: fileName, size: fileSize)
         transfer.uploadCallback = callback
         self.transfers.append(transfer)
-        
+
         fileClient.start()
       }
     }
-    
+
   }
     
   @MainActor func getFileDetails(_ fileName: String, path: [String]) async -> FileDetails? {
@@ -834,9 +963,12 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     if path.count > 1 {
       fullPath = Array(path[0..<path.count-1])
     }
-    
+
     return await withCheckedContinuation { [weak self] continuation in
-      self?.client.sendDeleteFile(name: fileName, path: fullPath) { success in
+      self?.client.sendDeleteFile(name: fileName, path: fullPath) { [weak self] success in
+        if success {
+          self?.invalidateFileListCache(for: fullPath, includingAncestors: true)
+        }
         continuation.resume(returning: success)
       }
     }
@@ -1339,7 +1471,7 @@ final class FileSearchSession {
 
     if !hotline.filesLoaded {
       hotline.searchSession(self, didFocusOn: [])
-      let rootFiles = await hotline.getFileList(path: [], suppressErrors: true)
+      let rootFiles = await hotline.getFileList(path: [], suppressErrors: true, preferCache: true)
       processedCount = max(processedCount, 1)
       processListing(rootFiles, depth: 0, parentPath: [], parentIsHot: false)
     }
@@ -1362,6 +1494,16 @@ final class FileSearchSession {
 
       hotline.searchSession(self, didFocusOn: task.path)
       visited.insert(pathKey(for: task.path))
+
+      if let cached = hotline.cachedListingForSearch(path: task.path, ttl: config.cacheTTL) {
+        if cached.isFresh {
+          processedCount += 1
+          processListing(cached.items, depth: task.depth, parentPath: task.path, parentIsHot: task.isHot)
+          continue
+        } else {
+          processListing(cached.items, depth: task.depth, parentPath: task.path, parentIsHot: task.isHot)
+        }
+      }
 
       let children = await hotline.getFileList(path: task.path, suppressErrors: true)
       processedCount += 1
@@ -1401,7 +1543,7 @@ final class FileSearchSession {
         }
       }
 
-      if file.isFolder {
+      if file.isFolder && !file.isAppBundle {
         folderEntries.append((file, matchesName))
       }
     }
