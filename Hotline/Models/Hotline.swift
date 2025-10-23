@@ -1,12 +1,20 @@
 import SwiftUI
 
 struct FileSearchConfig: Equatable {
+  /// Number of folders we process before we start applying delay backoff.
   var initialBurstCount: Int = 15
+  /// Base delay applied between folder requests during the backoff phase.
   var initialDelay: TimeInterval = 0.02
+  /// Multiplier used to increase the delay after each processed folder in backoff.
   var backoffMultiplier: Double = 1.1
-  var maxDelay: TimeInterval = 1.3
+  /// Maximum delay cap so searches don't stall out during long walks.
+  var maxDelay: TimeInterval = 1.0
+  /// Maximum recursion depth allowed during file search.
   var maxDepth: Int = 40
+  /// Limit for repeated folder loops (guards against circular server listings).
   var loopRepetitionLimit: Int = 4
+  /// Number of child folders that get prioritized after a matching parent is found.
+  var hotBurstLimit: Int = 2
 }
 
 enum FileSearchStatus: Equatable {
@@ -1300,6 +1308,7 @@ final class FileSearchSession {
   private struct FolderTask {
     let path: [String]
     let depth: Int
+    let isHot: Bool
   }
 
   private weak var hotline: Hotline?
@@ -1332,18 +1341,20 @@ final class FileSearchSession {
       hotline.searchSession(self, didFocusOn: [])
       let rootFiles = await hotline.getFileList(path: [], suppressErrors: true)
       processedCount = max(processedCount, 1)
-      processListing(rootFiles, depth: 0)
+      processListing(rootFiles, depth: 0, parentPath: [], parentIsHot: false)
     }
     else {
       hotline.searchSession(self, didFocusOn: [])
       processedCount = max(processedCount, 1)
-      processListing(hotline.files, depth: 0)
+      processListing(hotline.files, depth: 0, parentPath: [], parentIsHot: false)
     }
 
     while !queue.isEmpty && !isCancelled {
       await Task.yield()
 
-      let task = queue.removeFirst()
+      guard let task = dequeueNextTask() else {
+        continue
+      }
       if shouldSkip(path: task.path, depth: task.depth) {
         hotline.searchSession(self, didEmit: [], processed: processedCount, pending: queue.count)
         continue
@@ -1359,7 +1370,7 @@ final class FileSearchSession {
         break
       }
 
-      processListing(children, depth: task.depth)
+      processListing(children, depth: task.depth, parentPath: task.path, parentIsHot: task.isHot)
 
       await applyBackoff()
     }
@@ -1371,27 +1382,61 @@ final class FileSearchSession {
     isCancelled = true
   }
 
-  private func processListing(_ items: [FileInfo], depth: Int) {
+  private func processListing(_ items: [FileInfo], depth: Int, parentPath: [String], parentIsHot: Bool) {
     guard let hotline else {
       return
     }
 
     var matches: [FileInfo] = []
+    var folderEntries: [(file: FileInfo, isHot: Bool)] = []
+    var hasFileMatch = false
 
     for file in items {
-      if nameMatchesQuery(file.name) {
+      let matchesName = nameMatchesQuery(file.name)
+
+      if matchesName {
         matches.append(file)
+        if !file.isFolder {
+          hasFileMatch = true
+        }
       }
 
       if file.isFolder {
-        enqueueFolder(file, depth: depth + 1)
+        folderEntries.append((file, matchesName))
       }
+    }
+
+    var remainingBurst = 0
+    if config.hotBurstLimit > 0 && (parentIsHot || hasFileMatch) {
+      remainingBurst = config.hotBurstLimit
+    }
+
+    if remainingBurst > 0 {
+      var candidateIndices: [Int] = []
+      for index in folderEntries.indices where !folderEntries[index].isHot {
+        candidateIndices.append(index)
+      }
+
+      if !candidateIndices.isEmpty {
+        candidateIndices.shuffle()
+        for index in candidateIndices {
+          folderEntries[index].isHot = true
+          remainingBurst -= 1
+          if remainingBurst == 0 {
+            break
+          }
+        }
+      }
+    }
+
+    for entry in folderEntries {
+      enqueueFolder(entry.file, depth: depth + 1, markHot: entry.isHot)
     }
 
     hotline.searchSession(self, didEmit: matches, processed: processedCount, pending: queue.count)
   }
 
-  private func enqueueFolder(_ folder: FileInfo, depth: Int) {
+  private func enqueueFolder(_ folder: FileInfo, depth: Int, markHot: Bool) {
     guard !isCancelled else { return }
     guard depth <= config.maxDepth else { return }
 
@@ -1403,7 +1448,43 @@ final class FileSearchSession {
       return
     }
 
-    queue.append(FolderTask(path: path, depth: depth))
+    queue.append(FolderTask(path: path, depth: depth, isHot: markHot))
+  }
+
+  private func dequeueNextTask() -> FolderTask? {
+    guard !queue.isEmpty else {
+      return nil
+    }
+
+    if queue.count == 1 {
+      return queue.removeFirst()
+    }
+
+    let currentDepth = queue[0].depth
+    var lastSameDepthIndex = 0
+    var hotIndices: [Int] = []
+
+    for index in 0..<queue.count {
+      let candidate = queue[index]
+      if candidate.depth == currentDepth {
+        lastSameDepthIndex = index
+        if candidate.isHot {
+          hotIndices.append(index)
+        }
+      } else {
+        break
+      }
+    }
+
+    let selectionPool: [Int]
+    if !hotIndices.isEmpty {
+      selectionPool = hotIndices
+    } else {
+      selectionPool = Array(0...lastSameDepthIndex)
+    }
+
+    let randomIndex = selectionPool.randomElement() ?? 0
+    return queue.remove(at: randomIndex)
   }
 
   private func shouldSkip(path: [String], depth: Int) -> Bool {

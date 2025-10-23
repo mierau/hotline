@@ -263,7 +263,7 @@ struct FilesView: View {
     if path.isEmpty {
       return "/"
     }
-    return "/" + path.joined(separator: "/") + "/"
+    return path.joined(separator: "/")
   }
     
   private func openPreviewWindow(_ previewInfo: PreviewFileInfo) {
@@ -464,7 +464,10 @@ struct FilesView: View {
             Label("Upload", systemImage: "arrow.up")
           }
           .help("Upload")
-          .disabled(model.access?.contains(.canUploadFiles) != true)
+          .disabled(
+            model.access?.contains(.canUploadFiles) != true ||
+            (model.fileSearchStatus.isActive && !(selection?.isFolder ?? false))
+          )
 
           Button {
             if let selectedFile = selection {
