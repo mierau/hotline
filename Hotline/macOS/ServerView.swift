@@ -392,6 +392,16 @@ struct ServerView: View {
             ListItemView(icon: menuItem.image, title: menuItem.name, unread: false).tag(menuItem.type)
           }
         }
+        else if menuItem.type == .files {
+          ListItemView(icon: menuItem.image, title: menuItem.name, unread: false).tag(menuItem.type)
+            .overlay(alignment: .trailing) {
+              if case .searching(_, _) = model.fileSearchStatus {
+                ProgressView()
+                  .controlSize(.mini)
+                  .padding(.trailing, 4)
+              }
+            }
+        }
         else {
           ListItemView(icon: menuItem.image, title: menuItem.name, unread: false).tag(menuItem.type)
         }
@@ -700,3 +710,4 @@ struct TransferItemView: View {
     .help(formattedProgressHelp())
   }
 }
+

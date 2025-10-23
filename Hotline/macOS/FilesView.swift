@@ -213,6 +213,48 @@ struct FilesView: View {
   @State private var selection: FileInfo?
   @State private var fileDetails: FileDetails?
   @State private var uploadFileSelectorDisplayed: Bool = false
+  @State private var searchText: String = ""
+
+  private var isShowingSearchResults: Bool {
+    switch model.fileSearchStatus {
+    case .idle:
+      return !model.fileSearchResults.isEmpty
+    case .cancelled(_):
+      return !model.fileSearchResults.isEmpty
+    default:
+      return true
+    }
+  }
+
+  private var displayedFiles: [FileInfo] {
+    isShowingSearchResults ? model.fileSearchResults : model.files
+  }
+
+  private var searchStatusMessage: String? {
+    switch model.fileSearchStatus {
+    case .searching(let processed, let pending):
+      let scanned = processed == 1 ? "folder" : "folders"
+      return "Searched \(processed) \(scanned)..."
+    case .completed(let processed):
+      let count = model.fileSearchResults.count
+      let folderWord = processed == 1 ? "folder" : "folders"
+      if count == 0 {
+        return "No files found in \(processed) \(folderWord)"
+      }
+      return "\(count) file\(count == 1 ? "" : "s") found in \(processed) \(folderWord)"
+    case .cancelled(let processed):
+      if model.fileSearchResults.isEmpty {
+        return nil
+      }
+      let count = model.fileSearchResults.count
+      let folderWord = processed == 1 ? "folder" : "folders"
+      return "Search cancelled"
+    case .failed(let message):
+      return "Search failed: \(message)"
+    case .idle:
+      return nil
+    }
+  }
     
   private func openPreviewWindow(_ previewInfo: PreviewFileInfo) {
     switch previewInfo.previewType {
@@ -278,7 +320,7 @@ struct FilesView: View {
   
   var body: some View {
     NavigationStack {
-      List(model.files, id: \.self, selection: $selection) { file in
+      List(displayedFiles, id: \.self, selection: $selection) { file in
         if file.isFolder {
           FolderView(file: file, depth: 0).tag(file.id)
         }
@@ -383,8 +425,9 @@ struct FilesView: View {
           .frame(maxWidth: .infinity)
         }
       }
+      .searchable(text: $searchText, placement: .automatic, prompt: "Search")
       .toolbar {
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItemGroup(placement: .automatic) {
           Button {
             if let selectedFile = selection, selectedFile.isPreviewable {
               previewFile(selectedFile)
@@ -394,9 +437,7 @@ struct FilesView: View {
           }
           .help("Preview")
           .disabled(selection == nil || selection?.isPreviewable == false)
-        }
-        
-        ToolbarItem(placement: .primaryAction) {
+
           Button {
             if let selectedFile = selection {
               getFileInfo(selectedFile)
@@ -406,9 +447,7 @@ struct FilesView: View {
           }
           .help("Get Info")
           .disabled(selection == nil)
-        }
-        
-        ToolbarItem(placement: .primaryAction) {
+
           Button {
             uploadFileSelectorDisplayed = true
           } label: {
@@ -416,9 +455,7 @@ struct FilesView: View {
           }
           .help("Upload")
           .disabled(model.access?.contains(.canUploadFiles) != true)
-        }
-        
-        ToolbarItem(placement: .primaryAction) {
+
           Button {
             if let selectedFile = selection {
               downloadFile(selectedFile)
@@ -464,6 +501,86 @@ struct FilesView: View {
         print(error)
       }
     })
+    .onSubmit(of: .search) {
+      let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty else {
+        model.cancelFileSearch()
+        return
+      }
+      searchText = trimmed
+      model.startFileSearch(query: trimmed)
+    }
+    .onChange(of: searchText) { _, newValue in
+      if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if isShowingSearchResults {
+          model.cancelFileSearch()
+        }
+      }
+    }
+    .onChange(of: model.fileSearchQuery) { _, newValue in
+      if newValue != searchText {
+        searchText = newValue
+      }
+    }
+    .onAppear {
+      if searchText != model.fileSearchQuery {
+        searchText = model.fileSearchQuery
+      }
+    }
+    .safeAreaInset(edge: .top) {
+      if isShowingSearchResults, let message = searchStatusMessage {
+        HStack {
+          Spacer()
+          
+          if case .searching(_, _) = model.fileSearchStatus {
+            ProgressView()
+              .controlSize(.small)
+              .tint(.red)
+          }
+          else if case .completed = model.fileSearchStatus {
+            Image(systemName: "checkmark.circle.fill")
+              .resizable()
+              .symbolRenderingMode(.palette)
+              .foregroundStyle(.white, .fileComplete)
+              .aspectRatio(contentMode: .fit)
+              .frame(width: 16, height: 16)
+          }
+          else if case .failed = model.fileSearchStatus {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .resizable()
+              .symbolRenderingMode(.multicolor)
+              .aspectRatio(contentMode: .fit)
+              .frame(width: 16, height: 16)
+          }
+          
+          Text(message)
+            .font(.body)
+            .foregroundStyle(.white)
+          
+          Spacer()
+        }
+//        .overlay(alignment: .leading) {
+//          Button {
+//            model.cancelFileSearch(clearResults: true)
+//          } label: {
+//            Image(systemName: "xmark.circle.fill")
+//              .resizable()
+//              .scaledToFit()
+//              .foregroundStyle(.white)
+//              .opacity(0.8)
+//          }
+//          .buttonStyle(.plain)
+//        }
+        .padding(.horizontal, 8)
+        .padding(.leading, 4)
+        .padding(.vertical, 8)
+        .background {
+          Color(nsColor: .controlAccentColor)
+            .clipShape(.capsule(style: .continuous))
+        }
+        .padding(.horizontal, 8)
+      }
+    }
   }
 }
 

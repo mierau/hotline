@@ -1,5 +1,29 @@
 import SwiftUI
 
+struct FileSearchConfig: Equatable {
+  var initialBurstCount: Int = 8
+  var initialDelay: TimeInterval = 0.05
+  var backoffMultiplier: Double = 1.6
+  var maxDelay: TimeInterval = 1.5
+  var maxDepth: Int = 40
+  var loopRepetitionLimit: Int = 4
+}
+
+enum FileSearchStatus: Equatable {
+  case idle
+  case searching(processed: Int, pending: Int)
+  case completed(processed: Int)
+  case cancelled(processed: Int)
+  case failed(String)
+
+  var isActive: Bool {
+    if case .searching = self {
+      return true
+    }
+    return false
+  }
+}
+
 @Observable
 class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelegate, HotlineFilePreviewClientDelegate, HotlineFileUploadClientDelegate, HotlineFolderDownloadClientDelegate {
   let id: UUID = UUID()
@@ -131,6 +155,13 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   var messageBoardLoaded: Bool = false
   var files: [FileInfo] = []
   var filesLoaded: Bool = false
+  var fileSearchResults: [FileInfo] = []
+  var fileSearchStatus: FileSearchStatus = .idle
+  var fileSearchQuery: String = ""
+  var fileSearchConfig = FileSearchConfig()
+  var fileSearchScannedFolders: Int = 0
+  @ObservationIgnored private var fileSearchSession: FileSearchSession? = nil
+  @ObservationIgnored private var fileSearchResultKeys: Set<String> = []
   var news: [NewsInfo] = []
   private var newsLookup: [String:NewsInfo] = [:]
   var newsLoaded: Bool = false
@@ -209,6 +240,9 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   @MainActor func disconnect() {
     self.client.disconnect()
     self.bannerClient?.cancel()
+    self.fileSearchSession?.cancel()
+    self.fileSearchSession = nil
+    self.resetFileSearchState()
   }
   
   @MainActor func sendAgree() {
@@ -264,9 +298,9 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     self.client.sendPostMessageBoard(text: text)
   }
     
-  @MainActor func getFileList(path: [String] = []) async -> [FileInfo] {
+  @MainActor func getFileList(path: [String] = [], suppressErrors: Bool = false) async -> [FileInfo] {
     return await withCheckedContinuation { [weak self] continuation in
-      self?.client.sendGetFileList(path: path) { [weak self] files in
+      self?.client.sendGetFileList(path: path, suppressErrors: suppressErrors) { [weak self] files in
         let parentFile = self?.findFile(in: self?.files ?? [], at: path)
         
         var newFiles: [FileInfo] = []
@@ -287,6 +321,92 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
         }
       }
     }
+  }
+  
+  @MainActor func startFileSearch(query: String) {
+    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      cancelFileSearch()
+      return
+    }
+
+    fileSearchSession?.cancel()
+    resetFileSearchState()
+    fileSearchQuery = trimmed
+    fileSearchStatus = .searching(processed: 0, pending: 0)
+    fileSearchScannedFolders = 0
+
+    let session = FileSearchSession(hotline: self, query: trimmed, config: fileSearchConfig)
+    fileSearchSession = session
+
+    Task { await session.start() }
+  }
+
+  @MainActor func cancelFileSearch(clearResults: Bool = true) {
+    guard let session = fileSearchSession else {
+      if clearResults {
+        resetFileSearchState()
+      } else if !fileSearchResults.isEmpty {
+        fileSearchStatus = .cancelled(processed: fileSearchScannedFolders)
+      }
+      return
+    }
+
+    session.cancel()
+    fileSearchSession = nil
+    if clearResults {
+      resetFileSearchState()
+    }
+    else {
+      fileSearchStatus = .cancelled(processed: fileSearchScannedFolders)
+    }
+  }
+
+  @MainActor fileprivate func searchSession(_ session: FileSearchSession, didEmit matches: [FileInfo], processed: Int, pending: Int) {
+    guard fileSearchSession === session else {
+      return
+    }
+
+    var appended: [FileInfo] = []
+    for match in matches {
+      let key = searchPathKey(for: match.path)
+      if fileSearchResultKeys.insert(key).inserted {
+        appended.append(match)
+      }
+    }
+
+    if !appended.isEmpty {
+      fileSearchResults.append(contentsOf: appended)
+    }
+
+    fileSearchScannedFolders = processed
+    fileSearchStatus = .searching(processed: processed, pending: pending)
+  }
+
+  @MainActor fileprivate func searchSessionDidFinish(_ session: FileSearchSession, processed: Int, pending: Int, completed: Bool) {
+    guard fileSearchSession === session else {
+      return
+    }
+
+    fileSearchScannedFolders = processed
+    fileSearchSession = nil
+    if completed {
+      fileSearchStatus = .completed(processed: processed)
+    } else {
+      fileSearchStatus = .cancelled(processed: processed)
+    }
+  }
+
+  private func resetFileSearchState() {
+    fileSearchResults = []
+    fileSearchResultKeys.removeAll(keepingCapacity: true)
+    fileSearchStatus = .idle
+    fileSearchQuery = ""
+    fileSearchScannedFolders = 0
+  }
+
+  private func searchPathKey(for path: [String]) -> String {
+    path.joined(separator: "\u{001F}")
   }
   
   @MainActor func getNewsArticle(id articleID: UInt, at path: [String], flavor: String) async -> String? {
@@ -809,6 +929,10 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
       self.serverName = nil
       self.access = nil
       
+      self.fileSearchSession?.cancel()
+      self.fileSearchSession = nil
+      self.resetFileSearchState()
+
       self.users = []
       self.chat = []
       self.messageBoard = []
@@ -1154,5 +1278,172 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
               
       return child.type == .article && child.articleID == childArticleID
     }
+  }
+}
+
+@MainActor
+final class FileSearchSession {
+  private struct FolderTask {
+    let path: [String]
+    let depth: Int
+  }
+
+  private weak var hotline: Hotline?
+  private let queryTokens: [String]
+  private let config: FileSearchConfig
+
+  private var queue: [FolderTask] = []
+  private var visited: Set<String> = []
+  private var loopHistogram: [String: Int] = [:]
+
+  private var processedCount: Int = 0
+  private var currentDelay: TimeInterval
+  private var isCancelled = false
+
+  init(hotline: Hotline, query: String, config: FileSearchConfig) {
+    self.hotline = hotline
+    self.queryTokens = query.lowercased().split(separator: " ").map(String.init)
+    self.config = config
+    self.currentDelay = config.initialDelay
+  }
+
+  func start() async {
+    guard let hotline else {
+      return
+    }
+
+    await Task.yield()
+
+    if !hotline.filesLoaded {
+      let rootFiles = await hotline.getFileList(path: [], suppressErrors: true)
+      processedCount = max(processedCount, 1)
+      processListing(rootFiles, depth: 0)
+    }
+    else {
+      processedCount = max(processedCount, 1)
+      processListing(hotline.files, depth: 0)
+    }
+
+    while !queue.isEmpty && !isCancelled {
+      await Task.yield()
+
+      let task = queue.removeFirst()
+      if shouldSkip(path: task.path, depth: task.depth) {
+        hotline.searchSession(self, didEmit: [], processed: processedCount, pending: queue.count)
+        continue
+      }
+
+      visited.insert(pathKey(for: task.path))
+
+      let children = await hotline.getFileList(path: task.path, suppressErrors: true)
+      processedCount += 1
+
+      if isCancelled {
+        break
+      }
+
+      processListing(children, depth: task.depth)
+
+      await applyBackoff()
+    }
+
+    hotline.searchSessionDidFinish(self, processed: processedCount, pending: queue.count, completed: !isCancelled)
+  }
+
+  func cancel() {
+    isCancelled = true
+  }
+
+  private func processListing(_ items: [FileInfo], depth: Int) {
+    guard let hotline else {
+      return
+    }
+
+    var matches: [FileInfo] = []
+
+    for file in items {
+      if nameMatchesQuery(file.name) {
+        matches.append(file)
+      }
+
+      if file.isFolder {
+        enqueueFolder(file, depth: depth + 1)
+      }
+    }
+
+    hotline.searchSession(self, didEmit: matches, processed: processedCount, pending: queue.count)
+  }
+
+  private func enqueueFolder(_ folder: FileInfo, depth: Int) {
+    guard !isCancelled else { return }
+    guard depth <= config.maxDepth else { return }
+
+    let path = folder.path
+    let key = pathKey(for: path)
+    guard !visited.contains(key) else { return }
+
+    if exceedsLoopThreshold(for: path) {
+      return
+    }
+
+    queue.append(FolderTask(path: path, depth: depth))
+  }
+
+  private func shouldSkip(path: [String], depth: Int) -> Bool {
+    if isCancelled {
+      return true
+    }
+
+    if depth > config.maxDepth {
+      return true
+    }
+
+    let key = pathKey(for: path)
+    if visited.contains(key) {
+      return true
+    }
+
+    return false
+  }
+
+  private func nameMatchesQuery(_ name: String) -> Bool {
+    guard !queryTokens.isEmpty else { return false }
+    let lowercased = name.lowercased()
+    return queryTokens.allSatisfy { lowercased.contains($0) }
+  }
+
+  private func exceedsLoopThreshold(for path: [String]) -> Bool {
+    guard config.loopRepetitionLimit > 0 else { return false }
+    guard let last = path.last else { return false }
+    let parent = path.dropLast()
+
+    guard let previousIndex = parent.lastIndex(of: last) else {
+      return false
+    }
+
+    let suffix = Array(path[previousIndex...])
+    let key = suffix.joined(separator: "\u{001F}")
+    let count = (loopHistogram[key] ?? 0) + 1
+    loopHistogram[key] = count
+    return count > config.loopRepetitionLimit
+  }
+
+  private func pathKey(for path: [String]) -> String {
+    path.joined(separator: "\u{001F}")
+  }
+
+  private func applyBackoff() async {
+    guard !isCancelled else { return }
+
+    if processedCount > config.initialBurstCount {
+      currentDelay = min(config.maxDelay, max(config.initialDelay, currentDelay * config.backoffMultiplier))
+    }
+
+    guard currentDelay > 0 else {
+      return
+    }
+
+    let nanoseconds = UInt64(currentDelay * 1_000_000_000)
+    try? await Task.sleep(nanoseconds: nanoseconds)
   }
 }

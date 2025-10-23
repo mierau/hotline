@@ -89,7 +89,13 @@ class HotlineClient: NetSocketDelegate {
   private var serverAddress: String? = nil
   private var serverPort: UInt16? = nil
   
-  private var transactionLog: [UInt32:(HotlineTransactionType, ((HotlineTransaction, HotlineTransactionError?) -> Void)?)] = [:]
+  private struct TransactionContext {
+    let type: HotlineTransactionType
+    let callback: ((HotlineTransaction, HotlineTransactionError?) -> Void)?
+    let suppressErrors: Bool
+  }
+
+  private var transactionLog: [UInt32: TransactionContext] = [:]
   
   private var socket: NetSocket?
   private var stage: HotlineClientStage = .handshake
@@ -208,15 +214,15 @@ class HotlineClient: NetSocketDelegate {
   
   // MARK: - Packets
   
-  @MainActor private func sendPacket(_ t: HotlineTransaction, callback: ((HotlineTransaction, HotlineTransactionError?) -> Void)? = nil) {
+  @MainActor private func sendPacket(_ t: HotlineTransaction, suppressErrors: Bool = false, callback: ((HotlineTransaction, HotlineTransactionError?) -> Void)? = nil) {
     guard let socket = self.socket else {
       return
     }
     
     print("HotlineClient => \(t.id) \(t.type)")
     
-    if callback != nil {
-      self.transactionLog[t.id] = (t.type, callback)
+    if callback != nil || suppressErrors {
+      self.transactionLog[t.id] = TransactionContext(type: t.type, callback: callback, suppressErrors: suppressErrors)
     }
     
     socket.write(t.encoded())
@@ -375,22 +381,22 @@ class HotlineClient: NetSocketDelegate {
       return
     }
     
+    let context = self.transactionLog[packet.id]
+    self.transactionLog[packet.id] = nil
+
     if packet.errorCode != 0 {
       let errorField: HotlineTransactionField? = packet.getField(type: .errorText)
       print("HotlineClient 😵 \(packet.errorCode): \(errorField?.getString() ?? "")")
-      self.delegate?.hotlineReceivedErrorMessage(code: packet.errorCode, message: errorField?.getString())
+      if context?.suppressErrors != true {
+        self.delegate?.hotlineReceivedErrorMessage(code: packet.errorCode, message: errorField?.getString())
+      }
     }
-        
-    guard let replyCallbackInfo = self.transactionLog[packet.id] else {
-      print("Hmm, no reply waiting though")
-      return
+
+    if let context {
+      print("HotlineClient reply in response to \(context.type)")
     }
     
-    self.transactionLog[packet.id] = nil
-    
-    print("HotlineClient reply in response to \(replyCallbackInfo.0)")
-    
-    let replyCallback = replyCallbackInfo.1
+    let replyCallback = context?.callback
     
     guard packet.errorCode == 0 else {
       let errorField: HotlineTransactionField? = packet.getField(type: .errorText)
@@ -630,13 +636,13 @@ class HotlineClient: NetSocketDelegate {
     }
   }
   
-  @MainActor func sendGetFileList(path: [String] = [], callback: (([HotlineFile]) -> Void)? = nil) {
+  @MainActor func sendGetFileList(path: [String] = [], suppressErrors: Bool = false, callback: (([HotlineFile]) -> Void)? = nil) {
     var t = HotlineTransaction(type: .getFileNameList)
     if !path.isEmpty {
       t.setFieldPath(type: .filePath, val: path)
     }
     
-    self.sendPacket(t) { reply, err in
+    self.sendPacket(t, suppressErrors: suppressErrors) { reply, err in
       guard err == nil else {
         callback?([])
         return
