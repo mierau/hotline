@@ -255,6 +255,16 @@ struct FilesView: View {
       return nil
     }
   }
+  
+  private var searchStatusPath: String? {
+    guard let path = model.fileSearchCurrentPath else {
+      return nil
+    }
+    if path.isEmpty {
+      return "/"
+    }
+    return "/" + path.joined(separator: "/") + "/"
+  }
     
   private func openPreviewWindow(_ previewInfo: PreviewFileInfo) {
     switch previewInfo.previewType {
@@ -529,56 +539,64 @@ struct FilesView: View {
     }
     .safeAreaInset(edge: .top) {
       if isShowingSearchResults, let message = searchStatusMessage {
-        HStack {
-          Spacer()
-          
+        HStack(alignment: .center, spacing: 6) {
           if case .searching(_, _) = model.fileSearchStatus {
             ProgressView()
               .controlSize(.small)
-              .tint(.red)
+              .accentColor(.white)
+              .tint(.white)
           }
           else if case .completed = model.fileSearchStatus {
             Image(systemName: "checkmark.circle.fill")
               .resizable()
-              .symbolRenderingMode(.palette)
-              .foregroundStyle(.white, .fileComplete)
+              .symbolRenderingMode(.monochrome)
+              .foregroundStyle(.white)
               .aspectRatio(contentMode: .fit)
               .frame(width: 16, height: 16)
           }
           else if case .failed = model.fileSearchStatus {
             Image(systemName: "exclamationmark.triangle.fill")
               .resizable()
-              .symbolRenderingMode(.multicolor)
+              .symbolRenderingMode(.monochrome)
+              .foregroundStyle(.white)
               .aspectRatio(contentMode: .fit)
               .frame(width: 16, height: 16)
           }
           
           Text(message)
+            .lineLimit(1)
             .font(.body)
             .foregroundStyle(.white)
           
           Spacer()
+          
+          if let pathMessage = searchStatusPath {
+            Text(pathMessage)
+              .lineLimit(1)
+              .truncationMode(.tail)
+              .font(.footnote)
+//              .fontWeight(.semibold)
+              .foregroundStyle(.white)
+              .opacity(0.5)
+              .padding(.top, 2)
+          }
         }
-//        .overlay(alignment: .leading) {
-//          Button {
-//            model.cancelFileSearch(clearResults: true)
-//          } label: {
-//            Image(systemName: "xmark.circle.fill")
-//              .resizable()
-//              .scaledToFit()
-//              .foregroundStyle(.white)
-//              .opacity(0.8)
-//          }
-//          .buttonStyle(.plain)
-//        }
-        .padding(.horizontal, 8)
-        .padding(.leading, 4)
+        .padding(.trailing, 14)
+        .padding(.leading, 8)
         .padding(.vertical, 8)
         .background {
-          Color(nsColor: .controlAccentColor)
-            .clipShape(.capsule(style: .continuous))
+          Group {
+            if case .completed = model.fileSearchStatus {
+              Color.fileComplete
+            }
+            else {
+              Color(nsColor: .controlAccentColor)
+            }
+          }
+          .clipShape(.capsule(style: .continuous))
         }
         .padding(.horizontal, 8)
+        .padding(.top, 8)
       }
     }
   }

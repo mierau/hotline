@@ -416,8 +416,9 @@ struct TrackerView: View {
             // Not expanded, expand it (which also fetches)
             self.setExpanded(true, for: bookmark)
           }
+          return
         }
-        return
+        break
       default:
         break
       }

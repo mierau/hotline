@@ -1,10 +1,10 @@
 import SwiftUI
 
 struct FileSearchConfig: Equatable {
-  var initialBurstCount: Int = 8
-  var initialDelay: TimeInterval = 0.05
-  var backoffMultiplier: Double = 1.6
-  var maxDelay: TimeInterval = 1.5
+  var initialBurstCount: Int = 15
+  var initialDelay: TimeInterval = 0.02
+  var backoffMultiplier: Double = 1.1
+  var maxDelay: TimeInterval = 1.3
   var maxDepth: Int = 40
   var loopRepetitionLimit: Int = 4
 }
@@ -160,6 +160,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   var fileSearchQuery: String = ""
   var fileSearchConfig = FileSearchConfig()
   var fileSearchScannedFolders: Int = 0
+  var fileSearchCurrentPath: [String]? = nil
   @ObservationIgnored private var fileSearchSession: FileSearchSession? = nil
   @ObservationIgnored private var fileSearchResultKeys: Set<String> = []
   var news: [NewsInfo] = []
@@ -335,6 +336,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     fileSearchQuery = trimmed
     fileSearchStatus = .searching(processed: 0, pending: 0)
     fileSearchScannedFolders = 0
+    fileSearchCurrentPath = []
 
     let session = FileSearchSession(hotline: self, query: trimmed, config: fileSearchConfig)
     fileSearchSession = session
@@ -348,12 +350,14 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
         resetFileSearchState()
       } else if !fileSearchResults.isEmpty {
         fileSearchStatus = .cancelled(processed: fileSearchScannedFolders)
+        fileSearchCurrentPath = nil
       }
       return
     }
 
     session.cancel()
     fileSearchSession = nil
+    fileSearchCurrentPath = nil
     if clearResults {
       resetFileSearchState()
     }
@@ -383,6 +387,14 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     fileSearchStatus = .searching(processed: processed, pending: pending)
   }
 
+  @MainActor fileprivate func searchSession(_ session: FileSearchSession, didFocusOn path: [String]) {
+    guard fileSearchSession === session else {
+      return
+    }
+
+    fileSearchCurrentPath = path
+  }
+
   @MainActor fileprivate func searchSessionDidFinish(_ session: FileSearchSession, processed: Int, pending: Int, completed: Bool) {
     guard fileSearchSession === session else {
       return
@@ -390,6 +402,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
 
     fileSearchScannedFolders = processed
     fileSearchSession = nil
+    fileSearchCurrentPath = nil
     if completed {
       fileSearchStatus = .completed(processed: processed)
     } else {
@@ -403,6 +416,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     fileSearchStatus = .idle
     fileSearchQuery = ""
     fileSearchScannedFolders = 0
+    fileSearchCurrentPath = nil
   }
 
   private func searchPathKey(for path: [String]) -> String {
@@ -1315,11 +1329,13 @@ final class FileSearchSession {
     await Task.yield()
 
     if !hotline.filesLoaded {
+      hotline.searchSession(self, didFocusOn: [])
       let rootFiles = await hotline.getFileList(path: [], suppressErrors: true)
       processedCount = max(processedCount, 1)
       processListing(rootFiles, depth: 0)
     }
     else {
+      hotline.searchSession(self, didFocusOn: [])
       processedCount = max(processedCount, 1)
       processListing(hotline.files, depth: 0)
     }
@@ -1333,6 +1349,7 @@ final class FileSearchSession {
         continue
       }
 
+      hotline.searchSession(self, didFocusOn: task.path)
       visited.insert(pathKey(for: task.path))
 
       let children = await hotline.getFileList(path: task.path, suppressErrors: true)
