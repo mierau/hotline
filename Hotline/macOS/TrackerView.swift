@@ -33,6 +33,7 @@ struct TrackerView: View {
   @State private var trackerServers: [Bookmark: [BookmarkServer]] = [:]
   @State private var loadingTrackers: Set<Bookmark> = []
   @State private var searchText: String = ""
+  @State private var isSearching = false
 
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
   @Binding var selection: TrackerSelection?
@@ -323,7 +324,8 @@ struct TrackerView: View {
         openWindow(id: "server", value: s)
       }
     })
-    .searchable(text: $searchText, placement: .automatic, prompt: "Search")
+    .searchable(text: $searchText, isPresented: $isSearching, placement: .automatic, prompt: "Search")
+    .background(Button("", action: { isSearching = true }).keyboardShortcut("f").hidden())
   }
   
   private var hotlineLogoImage: some View {
