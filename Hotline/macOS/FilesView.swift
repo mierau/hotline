@@ -215,6 +215,7 @@ struct FilesView: View {
   @State private var fileDetails: FileDetails?
   @State private var uploadFileSelectorDisplayed: Bool = false
   @State private var searchText: String = ""
+  @State private var isSearching: Bool = false
 
   private var isShowingSearchResults: Bool {
     switch model.fileSearchStatus {
@@ -436,7 +437,8 @@ struct FilesView: View {
           .frame(maxWidth: .infinity)
         }
       }
-      .searchable(text: $searchText, placement: .automatic, prompt: "Search")
+      .searchable(text: $searchText, isPresented: $isSearching, placement: .automatic, prompt: "Search")
+      .background(Button("", action: { isSearching = true }).keyboardShortcut("f").hidden())
       .toolbar {
         ToolbarItemGroup(placement: .automatic) {
           Button {
