@@ -36,7 +36,7 @@
 		DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6300962B24036B0034CBFD /* HotlineClient.swift */; };
 		DA65499A2BEC280E00EDB697 /* ServerMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6549992BEC280E00EDB697 /* ServerMessageView.swift */; };
 		DA65499C2BEC3FBD00EDB697 /* ServerAgreementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */; };
-		DA65499E2BEC438A00EDB697 /* NSWindowBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA65499D2BEC438A00EDB697 /* NSWindowBridge.swift */; };
+		DA65499E2BEC438A00EDB697 /* NSWindowBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA65499D2BEC438A00EDB697 /* NSWindowBridge.swift */; platformFilters = (macos, ); };
 		DA6980792BF80525003E434B /* TextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6980782BF80525003E434B /* TextView.swift */; };
 		DA69807E2BFD449B003E434B /* MessageBoardEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA69807D2BFD449B003E434B /* MessageBoardEditorView.swift */; };
 		DA6980832BFFD06C003E434B /* BookmarkDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6980822BFFD06C003E434B /* BookmarkDocument.swift */; };
@@ -75,6 +75,9 @@
 		DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */; };
 		DAC3D9832BC33FD000A727C9 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC3D9822BC33FD000A727C9 /* AppState.swift */; };
 		DAC87F072C5010E80060FADF /* HotlineExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC87F062C5010E80060FADF /* HotlineExtensions.swift */; };
+		DACCE5E12EABE4B4008CDD92 /* AppUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DACCE5E02EABE4B4008CDD92 /* AppUpdate.swift */; platformFilters = (macos, ); };
+		DACCE5E32EABE86A008CDD92 /* AppUpdateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DACCE5E22EABE86A008CDD92 /* AppUpdateView.swift */; platformFilters = (macos, ); };
+		DACCE5EF2EAC19C9008CDD92 /* SwiftUIIntrospect in Frameworks */ = {isa = PBXBuildFile; productRef = DACCE5EE2EAC19C9008CDD92 /* SwiftUIIntrospect */; };
 		DADDB28B2B22B31F0024040D /* Tracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28A2B22B31F0024040D /* Tracker.swift */; };
 		DADDB28D2B22B5920024040D /* Server.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28C2B22B5920024040D /* Server.swift */; };
 		DADDB28F2B238D850024040D /* Hotline.swift in Sources */ = {isa = PBXBuildFile; fileRef = DADDB28E2B238D850024040D /* Hotline.swift */; };
@@ -159,6 +162,8 @@
 		DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUIExtensions.swift; sourceTree = "<group>"; };
 		DAC3D9822BC33FD000A727C9 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		DAC87F062C5010E80060FADF /* HotlineExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineExtensions.swift; sourceTree = "<group>"; };
+		DACCE5E02EABE4B4008CDD92 /* AppUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdate.swift; sourceTree = "<group>"; };
+		DACCE5E22EABE86A008CDD92 /* AppUpdateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateView.swift; sourceTree = "<group>"; };
 		DADDB28A2B22B31F0024040D /* Tracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tracker.swift; sourceTree = "<group>"; };
 		DADDB28C2B22B5920024040D /* Server.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server.swift; sourceTree = "<group>"; };
 		DADDB28E2B238D850024040D /* Hotline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hotline.swift; sourceTree = "<group>"; };
@@ -178,6 +183,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DACCE5EF2EAC19C9008CDD92 /* SwiftUIIntrospect in Frameworks */,
 				DA72A0E02B4DA8CA00A0F48A /* SplitView in Frameworks */,
 				DAB4D8872B4CB3610048A05C /* MarkdownUI in Frameworks */,
 			);
@@ -191,6 +197,7 @@
 			children = (
 				DAC3D9822BC33FD000A727C9 /* AppState.swift */,
 				DA2863D92B37BF6E00A7D050 /* Preferences.swift */,
+				DACCE5E02EABE4B4008CDD92 /* AppUpdate.swift */,
 			);
 			path = State;
 			sourceTree = "<group>";
@@ -362,6 +369,7 @@
 				DA2863D72B37AD1C00A7D050 /* SettingsView.swift */,
 				DAE136B92B9D1147007D8307 /* HotlinePanelView.swift */,
 				DA55AC762BE589F700034857 /* AboutView.swift */,
+				DACCE5E22EABE86A008CDD92 /* AppUpdateView.swift */,
 				DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */,
 				DA6549992BEC280E00EDB697 /* ServerMessageView.swift */,
 				11F8288A2BF9428100216BA0 /* AccountManagerView.swift */,
@@ -388,6 +396,7 @@
 			packageProductDependencies = (
 				DAB4D8862B4CB3610048A05C /* MarkdownUI */,
 				DA72A0DF2B4DA8CA00A0F48A /* SplitView */,
+				DACCE5EE2EAC19C9008CDD92 /* SwiftUIIntrospect */,
 			);
 			productName = Hotline;
 			productReference = DA9CAFB72B126D5700CDA197 /* Hotline.app */;
@@ -420,6 +429,7 @@
 			packageReferences = (
 				DAB4D8852B4CB3610048A05C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				DA72A0DE2B4DA8CA00A0F48A /* XCRemoteSwiftPackageReference "SplitView" */,
+				DACCE5ED2EAC19C9008CDD92 /* XCRemoteSwiftPackageReference "SwiftUI-Introspect" */,
 			);
 			productRefGroup = DA9CAFB82B126D5700CDA197 /* Products */;
 			projectDirPath = "";
@@ -500,6 +510,7 @@
 				DA72A0DD2B4CD0BF00A0F48A /* NewsEditorView.swift in Sources */,
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,
 				DA57536C2B36BA1D00FAC277 /* TextDocument.swift in Sources */,
+				DACCE5E12EABE4B4008CDD92 /* AppUpdate.swift in Sources */,
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
 				DA99218E2C51AA5D0058FA6C /* HotlineDataBuilder.swift in Sources */,
 				DA872B132BDDBF78008B1012 /* HotlinePanel.swift in Sources */,
@@ -522,6 +533,7 @@
 				DA6980832BFFD06C003E434B /* BookmarkDocument.swift in Sources */,
 				DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */,
 				DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */,
+				DACCE5E32EABE86A008CDD92 /* AppUpdateView.swift in Sources */,
 				DA32CD492B2931640053B98B /* User.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -656,7 +668,7 @@
 				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				DEVELOPMENT_TEAM = 5AEEV7QB2U;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
@@ -675,7 +687,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.3;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = co.goodmake.hotline;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -696,7 +708,7 @@
 				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				DEVELOPMENT_TEAM = 5AEEV7QB2U;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
@@ -715,7 +727,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.3;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = co.goodmake.hotline;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -768,6 +780,14 @@
 				minimumVersion = 2.3.0;
 			};
 		};
+		DACCE5ED2EAC19C9008CDD92 /* XCRemoteSwiftPackageReference "SwiftUI-Introspect" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/siteline/SwiftUI-Introspect";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 26.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -780,6 +800,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DAB4D8852B4CB3610048A05C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		DACCE5EE2EAC19C9008CDD92 /* SwiftUIIntrospect */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DACCE5ED2EAC19C9008CDD92 /* XCRemoteSwiftPackageReference "SwiftUI-Introspect" */;
+			productName = SwiftUIIntrospect;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

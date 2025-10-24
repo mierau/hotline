@@ -23,3 +23,24 @@ public struct NSWindowAccessor: NSViewRepresentable {
   public func makeNSView(context: Context) -> NSView   { return NSWindowAccessorView( configCode ) }
   public func updateNSView(_ nsView: NSView, context: Context) {}
 }
+
+
+//import SwiftUI
+
+  /// A helper view you can embed once per window to run a closure
+/// with the underlying NSWindow reference.
+struct WindowConfigurator: NSViewRepresentable {
+  let configure: (NSWindow) -> Void
+  
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    DispatchQueue.main.async {
+      if let window = view.window {
+        configure(window)
+      }
+    }
+    return view
+  }
+  
+  func updateNSView(_ nsView: NSView, context: Context) { }
+}

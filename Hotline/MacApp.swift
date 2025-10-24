@@ -61,6 +61,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 //        NotificationCenter.default.removeObserver(token)
 //      }
 //    }
+
+    Task {
+      await AppUpdate.shared.checkForUpdatesOnLaunch()
+    }
   }
   
   func applicationWillTerminate(_ notification: Notification) {
@@ -78,6 +82,7 @@ struct Application: App {
   
   @State private var hotlinePanel: HotlinePanel? = nil
   @State private var selection: TrackerSelection? = nil
+  @Bindable private var update = AppUpdate.shared
 
   @FocusedValue(\.activeHotlineModel) private var activeHotline: Hotline?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
@@ -112,15 +117,43 @@ struct Application: App {
         }
       }
     }
+    .onChange(of: self.update.showWindow) {
+      if self.update.showWindow {
+        self.openWindow(id: "update")
+      }
+    }
     
     // MARK: About Box
     Window("About", id: "about") {
       AboutView()
-        .ignoresSafeArea()
-        .background(Color.hotlineRed)
+        .background(Color.hotlineRed, ignoresSafeAreaEdges: .all)
+        .windowFullScreenBehavior(.disabled)
+        .toolbar(removing: .title)
+        .gesture(WindowDragGesture())
+        .background(
+          WindowConfigurator { window in
+            window.titlebarAppearsTransparent = true
+            window.titlebarSeparatorStyle = .none
+            window.isMovableByWindowBackground = true
+            
+            if let closeButton = window.standardWindowButton(.closeButton) {
+              closeButton.isHidden = false   // make sure it’s visible
+              closeButton.isEnabled = true
+            }
+            
+            if let btn = window.standardWindowButton(.zoomButton) {
+              btn.isHidden = true
+            }
+            
+            if let btn = window.standardWindowButton(.miniaturizeButton) {
+              btn.isHidden = true
+            }
+          }
+        )
     }
     .windowResizability(.contentSize)
     .windowStyle(.hiddenTitleBar)
+    .restorationBehavior(.disabled)
     .defaultPosition(.center)
     .commandsRemoved() // Remove About that was automatically added to Window menu.
     .commands {
@@ -128,8 +161,25 @@ struct Application: App {
         Button("About Hotline") {
           openWindow(id: "about")
         }
+                
+        Button("Check for Updates...") {
+          Task {
+            await AppUpdate.shared.checkForUpdatesManually()
+          }
+        }
       }
     }
+    
+    // MARK: Update Window
+    Window("New Update", id: "update") {
+      AppUpdateView()
+        .windowFullScreenBehavior(.disabled)
+    }
+    .windowResizability(.contentSize)
+    .windowStyle(.hiddenTitleBar)
+    .restorationBehavior(.disabled)
+    .defaultPosition(.center)
+    .commandsRemoved()
     
     // MARK: Server Window
     WindowGroup(id: "server", for: Server.self) { server in
@@ -189,7 +239,7 @@ struct Application: App {
           }
         }
         Divider()
-        Button("Download Latest...") {
+        Button("Open Latest Release Page...") {
           if let url = URL(string: "https://github.com/mierau/hotline/releases/latest") {
             openURL(url)
           }
