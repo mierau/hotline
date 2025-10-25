@@ -209,7 +209,11 @@ class HotlineClient: NetSocketDelegate {
   }
   
   @MainActor func disconnect() {
+    let wasConnected = self.connectionStatus != .disconnected
     self.reset()
+    if wasConnected {
+      self.updateConnectionStatus(.disconnected)
+    }
   }
   
   // MARK: - Packets

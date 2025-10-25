@@ -1,6 +1,6 @@
 import SwiftUI
 
-fileprivate let MAX_AGREEMENT_HEIGHT: CGFloat = 280
+fileprivate let MAX_AGREEMENT_HEIGHT: CGFloat = 340
 
 struct ServerAgreementView: View {
   let text: String
@@ -42,7 +42,7 @@ struct ServerAgreementView: View {
 #elseif os(macOS)
     .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow))
 #endif
-    .overlay(
+    .overlay(alignment: .bottomTrailing) {
       ZStack(alignment: .bottomTrailing) {
         Group {
           if !expandable || expanded {
@@ -54,25 +54,22 @@ struct ServerAgreementView: View {
                 expanded = true
               }
             }, label: {
-              Color.black
-                .opacity(0.00001)
-                .frame(width: 32, height: 32)
-                .overlay(
-                  Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .resizable()
-                    .scaledToFit()
-                    .fontWeight(.semibold)
-                    .frame(width: 12, height: 12)
-                    .foregroundColor(.primary.opacity(0.8))
-                  , alignment: .center)
+              Image(systemName: "arrow.up.and.down.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .fontWeight(.semibold)
+                .frame(width: 16, height: 16)
+                .foregroundColor(.primary.opacity(0.5))
             })
             .buttonStyle(.plain)
+            .buttonBorderShape(.circle)
             .help("Expand Server Agreement")
+            .padding([.trailing, .bottom], 16)
           }
         }
       }
-      , alignment: .bottomTrailing)
-    .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
   }
 }
 

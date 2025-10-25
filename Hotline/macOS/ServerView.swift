@@ -307,9 +307,7 @@ struct ServerView: View {
             .keyboardShortcut(.cancelAction)
             
             Button("Connect") {
-              Task {
-                await connectToServer()
-              }
+              connectToServer()
             }
             
             .controlSize(.regular)

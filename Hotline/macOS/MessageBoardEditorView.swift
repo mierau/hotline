@@ -20,7 +20,7 @@ struct MessageBoardEditorView: View {
     
     let cleanedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
     
-    await model.postToMessageBoard(text: cleanedText)
+    model.postToMessageBoard(text: cleanedText)
     let _ = await model.getMessageBoard()
     
 //    let success = await model.postNewsArticle(title: title, body: text, at: path, parentID: parentID)

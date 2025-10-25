@@ -74,6 +74,7 @@
 		DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DABFCC282B1530DC009F40D2 /* FoundationExtensions.swift */; };
 		DAC002192B21630900A6C290 /* SwiftUIExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */; };
 		DAC3D9832BC33FD000A727C9 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC3D9822BC33FD000A727C9 /* AppState.swift */; };
+		DAC6B2E02EAC6236004E2CBA /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC6B2DE2EAC6236004E2CBA /* ChatStore.swift */; };
 		DAC87F072C5010E80060FADF /* HotlineExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC87F062C5010E80060FADF /* HotlineExtensions.swift */; };
 		DACCE5E12EABE4B4008CDD92 /* AppUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DACCE5E02EABE4B4008CDD92 /* AppUpdate.swift */; platformFilters = (macos, ); };
 		DACCE5E32EABE86A008CDD92 /* AppUpdateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DACCE5E22EABE86A008CDD92 /* AppUpdateView.swift */; platformFilters = (macos, ); };
@@ -161,6 +162,7 @@
 		DABFCC282B1530DC009F40D2 /* FoundationExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationExtensions.swift; sourceTree = "<group>"; };
 		DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUIExtensions.swift; sourceTree = "<group>"; };
 		DAC3D9822BC33FD000A727C9 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		DAC6B2DE2EAC6236004E2CBA /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
 		DAC87F062C5010E80060FADF /* HotlineExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineExtensions.swift; sourceTree = "<group>"; };
 		DACCE5E02EABE4B4008CDD92 /* AppUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdate.swift; sourceTree = "<group>"; };
 		DACCE5E22EABE86A008CDD92 /* AppUpdateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateView.swift; sourceTree = "<group>"; };
@@ -247,6 +249,7 @@
 				DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */,
 				DA4F2BF92B1A516F00D8ADDC /* iOS */,
 				DAE734F72B2E4126000C56F6 /* macOS */,
+				DAC6B2DF2EAC6236004E2CBA /* Managers */,
 				DA4B8F3B2EA6FB5F00CBFD53 /* State */,
 				DADDB2892B22B2C60024040D /* Models */,
 				DABFCC262B1530AE009F40D2 /* Hotline */,
@@ -327,6 +330,14 @@
 				DA6980822BFFD06C003E434B /* BookmarkDocument.swift */,
 			);
 			path = Utility;
+			sourceTree = "<group>";
+		};
+		DAC6B2DF2EAC6236004E2CBA /* Managers */ = {
+			isa = PBXGroup;
+			children = (
+				DAC6B2DE2EAC6236004E2CBA /* ChatStore.swift */,
+			);
+			path = Managers;
 			sourceTree = "<group>";
 		};
 		DADDB2892B22B2C60024040D /* Models */ = {
@@ -534,6 +545,7 @@
 				DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */,
 				DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */,
 				DACCE5E32EABE86A008CDD92 /* AppUpdateView.swift in Sources */,
+				DAC6B2E02EAC6236004E2CBA /* ChatStore.swift in Sources */,
 				DA32CD492B2931640053B98B /* User.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

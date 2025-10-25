@@ -3,6 +3,7 @@ import SwiftUI
 struct GeneralSettingsView: View {
   @State private var username: String = ""
   @State private var usernameChanged: Bool = false
+  @State private var showClearHistoryConfirmation: Bool = false
   
   let saveTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
     
@@ -24,9 +25,27 @@ struct GeneralSettingsView: View {
             preferences.username = self.username
           }
       }
+      
+      Divider()
+
+      Button(role: .destructive) {
+        showClearHistoryConfirmation = true
+      } label: {
+        Text("Clear Chat History…")
+      }
     }
     .padding()
     .frame(width: 392)
+    .confirmationDialog("Clear chat history?", isPresented: $showClearHistoryConfirmation, titleVisibility: .visible) {
+      Button("Clear Chat History", role: .destructive) {
+        Task {
+          await ChatStore.shared.clearAll()
+        }
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("This removes all saved chat logs across servers. Active chats will repopulate only with new messages.")
+    }
     .onAppear {
       self.username = preferences.username
       self.usernameChanged = false

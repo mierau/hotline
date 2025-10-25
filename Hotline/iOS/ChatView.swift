@@ -63,6 +63,22 @@ struct ChatView: View {
                   }
                   .padding()
                 }
+                else if msg.type == .signOut {
+                  HStack {
+                    Spacer()
+                    Label {
+                      Text(msg.text)
+                        .font(.footnote)
+                    } icon: {
+                      Image(systemName: "arrow.up.circle.fill")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(Color.red)
+                    .opacity(0.8)
+                    Spacer()
+                  }
+                  .padding(.vertical, 6)
+                }
                 else {
                   HStack(alignment: .firstTextBaseline) {
                     if let username = msg.username {

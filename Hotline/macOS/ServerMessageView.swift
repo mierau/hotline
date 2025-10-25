@@ -24,7 +24,7 @@ struct ServerMessageView: View {
 #elseif os(macOS)
     .background(VisualEffectView(material: .titlebar, blendingMode: .withinWindow))
 #endif
-    .clipShape(RoundedRectangle(cornerRadius: 8))
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
   }
 }
 

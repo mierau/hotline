@@ -191,8 +191,11 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   var unreadPublicChat: Bool = false
   var errorDisplayed: Bool = false
   var errorMessage: String? = nil
-  
+
   @ObservationIgnored var bannerClient: HotlineFilePreviewClient?
+  @ObservationIgnored private var chatSessionKey: ChatStore.SessionKey?
+  @ObservationIgnored private var restoredChatSessionKey: ChatStore.SessionKey?
+  @ObservationIgnored private var chatHistoryObserver: NSObjectProtocol?
   #if os(macOS)
   var bannerImage: NSImage? = nil
   #elseif os(iOS)
@@ -206,6 +209,10 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     self.trackerClient = trackerClient
     self.client = client
     self.client.delegate = self
+
+    self.chatHistoryObserver = NotificationCenter.default.addObserver(forName: ChatStore.historyClearedNotification, object: nil, queue: .main) { [weak self] _ in
+      self?.handleChatHistoryCleared()
+    }
   }
   
   // MARK: -
@@ -233,7 +240,13 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     self.serverName = server.name
     self.username = username
     self.iconID = iconID
-    
+
+    let key = sessionKey(for: server)
+    self.chatSessionKey = key
+    self.restoredChatSessionKey = nil
+    self.chat = []
+    self.restoreChatHistory(for: key)
+
     self.client.login(address: server.address, port: server.port, login: server.login, password: server.password, username: username, iconID: UInt16(iconID)) { [weak self] err, serverName, serverVersion in
       self?.serverVersion = serverVersion ?? 123
       if serverName != nil {
@@ -258,9 +271,15 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   @MainActor func disconnect() {
     self.client.disconnect()
     self.bannerClient?.cancel()
-    self.fileSearchSession?.cancel()
+   self.fileSearchSession?.cancel()
     self.fileSearchSession = nil
     self.resetFileSearchState()
+  }
+
+  deinit {
+    if let observer = chatHistoryObserver {
+      NotificationCenter.default.removeObserver(observer)
+    }
   }
   
   @MainActor func sendAgree() {
@@ -1077,12 +1096,19 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   
   @MainActor func hotlineStatusChanged(status: HotlineClientStatus) {
     print("Hotline: Connection status changed to: \(status)")
-    
+    let previousStatus = self.status
+    let previousTitle = self.serverTitle
+
     if status == .disconnected {
+      if previousStatus == .loggedIn {
+        let message = ChatMessage(text: "Disconnected", type: .signOut, date: Date())
+        self.recordChatMessage(message, persist: true, display: false)
+      }
+
       self.serverVersion = 123
       self.serverName = nil
       self.access = nil
-      
+
       self.fileSearchSession?.cancel()
       self.fileSearchSession = nil
       self.resetFileSearchState()
@@ -1095,30 +1121,34 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
       self.filesLoaded = false
       self.news = []
       self.newsLoaded = false
-      
+
       self.bannerImage = nil
       if let b = self.bannerClient {
         b.cancel()
         self.bannerClient = nil
       }
-      
+
       self.deleteAllTransfers()
+
+      self.chatSessionKey = nil
+      self.restoredChatSessionKey = nil
     }
     else if status == .loggedIn {
       if Prefs.shared.playSounds && Prefs.shared.playLoggedInSound {
         SoundEffectPlayer.shared.playSoundEffect(.loggedIn)
       }
     }
-    
+
     self.status = status
   }
   
   func hotlineGetUserInfo() -> (String, UInt16) {
     return (self.username, UInt16(self.iconID))
   }
-  
+
   func hotlineReceivedAgreement(text: String) {
-    self.chat.append(ChatMessage(text: text, type: .agreement, date: Date()))
+    let message = ChatMessage(text: text, type: .agreement, date: Date())
+    self.recordChatMessage(message, persist: false)
   }
     
   func hotlineReceivedNewsPost(message: String) {
@@ -1139,9 +1169,10 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     if Prefs.shared.playChatSound && Prefs.shared.playChatSound {
       SoundEffectPlayer.shared.playSoundEffect(.serverMessage)
     }
-    
+
     print("Hotline: received server message:\n\(message)")
-    self.chat.append(ChatMessage(text: message, type: .server, date: Date()))
+    let chatMessage = ChatMessage(text: message, type: .server, date: Date())
+    self.recordChatMessage(chatMessage)
   }
   
   func hotlineReceivedPrivateMessage(userID: UInt16, message: String) {
@@ -1173,7 +1204,8 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     if Prefs.shared.playSounds && Prefs.shared.playChatSound {
       SoundEffectPlayer.shared.playSoundEffect(.chatMessage)
     }
-    self.chat.append(ChatMessage(text: message, type: .message, date: Date()))
+    let chatMessage = ChatMessage(text: message, type: .message, date: Date())
+    self.recordChatMessage(chatMessage)
     self.unreadPublicChat = true
   }
   
@@ -1208,11 +1240,12 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   func hotlineUserDisconnected(userID: UInt16) {
     if let existingUserIndex = self.users.firstIndex(where: { $0.id == UInt(userID) }) {
       let user = self.users.remove(at: existingUserIndex)
-      
+
       if Prefs.shared.showJoinLeaveMessages {
-        self.chat.append(ChatMessage(text: "\(user.name) left", type: .status, date: Date()))
+        let chatMessage = ChatMessage(text: "\(user.name) left", type: .left, date: Date())
+        self.recordChatMessage(chatMessage)
       }
-      
+
       if Prefs.shared.playSounds && Prefs.shared.playLeaveSound {
         SoundEffectPlayer.shared.playSoundEffect(.userLogout)
       }
@@ -1356,11 +1389,71 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   }
 
   // MARK: - Utilities
-  
+
+  private func sessionKey(for server: Server) -> ChatStore.SessionKey {
+    ChatStore.SessionKey(address: server.address.lowercased(), port: server.port)
+  }
+
+  private func recordChatMessage(_ message: ChatMessage, persist: Bool = true, display: Bool = true) {
+    if display {
+      self.chat.append(message)
+    }
+
+    let shouldPersist = persist && message.type != .agreement
+    guard shouldPersist, let key = chatSessionKey else { return }
+    let entry = ChatStore.Entry(
+      id: message.id,
+      body: message.text,
+      username: message.username,
+      type: message.type.storageKey,
+      date: message.date
+    )
+    let serverName = self.serverName ?? self.server?.name
+
+    Task {
+      await ChatStore.shared.append(entry: entry, for: key, serverName: serverName)
+    }
+  }
+
+  private func restoreChatHistory(for key: ChatStore.SessionKey) {
+    if restoredChatSessionKey == key {
+      return
+    }
+
+    Task { [weak self] in
+      guard let self else { return }
+      let result = await ChatStore.shared.loadHistory(for: key)
+      await MainActor.run {
+        guard self.chatSessionKey == key, self.restoredChatSessionKey != key else { return }
+        let currentMessages = self.chat
+        let historyMessages = result.entries.compactMap { entry -> ChatMessage? in
+          guard let chatType = ChatMessageType(storageKey: entry.type) else { return nil }
+          let renderedText: String
+          if chatType == .message, let username = entry.username, !username.isEmpty {
+            renderedText = "\(username): \(entry.body)"
+          }
+          else {
+            renderedText = entry.body
+          }
+          return ChatMessage(text: renderedText, type: chatType, date: entry.date)
+        }
+        self.chat = historyMessages + currentMessages
+        self.unreadPublicChat = false
+        self.restoredChatSessionKey = key
+      }
+    }
+  }
+
+  private func handleChatHistoryCleared() {
+    self.chat = []
+    self.unreadPublicChat = false
+    self.restoredChatSessionKey = nil
+  }
+
   func updateServerTitle() {
     self.serverTitle = self.serverName ?? self.server?.name ?? server?.address ?? "Server"
   }
-  
+
   private func addOrUpdateHotlineUser(_ user: HotlineUser) {
     print("Hotline: users: \n\(self.users)")
     if let i = self.users.firstIndex(where: { $0.id == user.id }) {
@@ -1377,7 +1470,8 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
       print("Hotline: added user: \(user.name)")
       self.users.append(User(hotlineUser: user))
       if Prefs.shared.showJoinLeaveMessages {
-        self.chat.append(ChatMessage(text: "\(user.name) joined", type: .status, date: Date()))
+        let chatMessage = ChatMessage(text: "\(user.name) joined", type: .joined, date: Date())
+        self.recordChatMessage(chatMessage)
       }
     }
   }

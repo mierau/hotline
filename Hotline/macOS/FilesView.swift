@@ -234,7 +234,7 @@ struct FilesView: View {
 
   private var searchStatusMessage: String? {
     switch model.fileSearchStatus {
-    case .searching(let processed, let pending):
+    case .searching(let processed, _):
       let scanned = processed == 1 ? "folder" : "folders"
       return "Searched \(processed) \(scanned)..."
     case .completed(let processed):
@@ -248,7 +248,6 @@ struct FilesView: View {
       if model.fileSearchResults.isEmpty {
         return nil
       }
-      let count = model.fileSearchResults.count
       let folderWord = processed == 1 ? "folder" : "folders"
       return "Search cancelled"
     case .failed(let message):
