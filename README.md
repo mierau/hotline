@@ -1,7 +1,7 @@
 <img width="836" height="188" alt="GitHub Banner" src="https://github.com/user-attachments/assets/73873a25-e18f-4dfd-9454-4c71ce271054" />
 
 # Hotline
-An attempt to resurrect Hotline for modern Apple systems (iOS, macOS, etc) by completely recreating it in Swift and SwiftUI.
+An attempt to resurrect Hotline for Apple's latest operating systems (iOS, macOS, etc) by completely recreating it in Swift and SwiftUI.
 
 [Download the Latest](https://github.com/mierau/hotline/releases/latest)
 
