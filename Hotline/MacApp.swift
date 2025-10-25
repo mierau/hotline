@@ -270,15 +270,15 @@ struct Application: App {
         }
         .disabled(activeHotline?.status != .loggedIn)
         .keyboardShortcut(.init("1"), modifiers: .command)
-        Button("Show News") {
-          activeServerState?.selection = .news
-        }
-        .disabled(activeHotline?.status != .loggedIn || (activeHotline?.serverVersion ?? 0) < 151)
-        .keyboardShortcut(.init("2"), modifiers: .command)
         Button("Show Message Board") {
           activeServerState?.selection = .board
         }
         .disabled(activeHotline?.status != .loggedIn)
+        .keyboardShortcut(.init("2"), modifiers: .command)
+        Button("Show News") {
+          activeServerState?.selection = .news
+        }
+        .disabled(activeHotline?.status != .loggedIn || (activeHotline?.serverVersion ?? 0) < 151)
         .keyboardShortcut(.init("3"), modifiers: .command)
         Button("Show Files") {
           activeServerState?.selection = .files

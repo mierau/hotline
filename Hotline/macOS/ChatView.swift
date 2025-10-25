@@ -91,30 +91,42 @@ struct ChatView: View {
   @Environment(Hotline.self) private var model: Hotline
   @Environment(\.colorScheme) var colorScheme
   @Environment(\.dismiss) var dismiss
-  
-  @State var input: String = ""
+
   @State private var scrollPos: Int?
   @State private var contentHeight: CGFloat = 0
-  
+
+  @State private var searchQuery: String = ""
+  @State private var searchResults: [ChatMessage] = []
+  @State private var isSearching: Bool = false
+
   @FocusState private var focusedField: FocusedField?
-  
+
   @Namespace var bottomID
-  
-  @State private var showingExporter: Bool = false
-  
-  @State private var chatDocument: TextFile = TextFile()
-  
+
+  private var bindableModel: Bindable<Hotline> {
+    Bindable(model)
+  }
+
+//  @State private var showingExporter: Bool = false
+//
+//  @State private var chatDocument: TextFile = TextFile()
+
+  var displayedMessages: [ChatMessage] {
+    searchQuery.isEmpty ? model.chat : searchResults
+  }
+
   var body: some View {
+    @Bindable var bindModel = model
+    
     NavigationStack {
       ScrollViewReader { reader in
         VStack(alignment: .leading, spacing: 0) {
-          
+
           // MARK: Scroll View
-          GeometryReader { gm in
             ScrollView(.vertical) {
               LazyVStack(alignment: .leading, spacing: 8) {
-                
-                ForEach(model.chat) { msg in
+
+                ForEach(displayedMessages) { msg in
                   if msg.type == .agreement {
                     VStack(alignment: .center, spacing: 16) {
                       if let bannerImage = self.model.bannerImage {
@@ -168,37 +180,46 @@ struct ChatView: View {
               VStack(spacing: 0) {}.id(bottomID)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .defaultScrollAnchor(.bottom)
+//            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .defaultScrollAnchor(.bottom, for: .alignment)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
             .onChange(of: model.chat.count) {
+              // Re-run search when new messages arrive to keep filter active
+              if !searchQuery.isEmpty {
+                performSearch()
+              }
               reader.scrollTo(bottomID, anchor: .bottom)
               model.markPublicChatAsRead()
             }
             .onAppear {
               reader.scrollTo(bottomID, anchor: .bottom)
-            }
-            .onChange(of: gm.size) {
-              reader.scrollTo(bottomID, anchor: .bottom)
+              self.focusedField = .chatInput
             }
             .onChange(of: self.model.bannerImage) {
               reader.scrollTo(bottomID, anchor: .bottom)
             }
-          }
+            .onChange(of: searchQuery) {
+              reader.scrollTo(bottomID, anchor: .bottom)
+            }
+            .onChange(of: isSearching) {
+              reader.scrollTo(bottomID, anchor: .bottom)
+            }
           
           // MARK: Input Divider
           Divider()
           
           // MARK: Input Bar
           HStack(alignment: .lastTextBaseline, spacing: 0) {
-            TextField("", text: $input, axis: .vertical)
+            TextField("", text: $bindModel.chatInput, axis: .vertical)
               .focused($focusedField, equals: .chatInput)
               .textFieldStyle(.plain)
               .lineLimit(1...5)
               .multilineTextAlignment(.leading)
               .onSubmit {
-                if !self.input.isEmpty {
-                  model.sendChat(self.input, announce: NSEvent.modifierFlags.contains(.shift))
+                if !model.chatInput.isEmpty {
+                  model.sendChat(model.chatInput, announce: NSEvent.modifierFlags.contains(.shift))
                 }
-                self.input = ""
+                model.chatInput = ""
               }
               .frame(maxWidth: .infinity)
               .padding()
@@ -217,36 +238,49 @@ struct ChatView: View {
               break
             }
           }
-          .onTapGesture {
+          .onTapGesture(count: 1) {
             focusedField = .chatInput
           }
         }
       }
+      .searchable(text: $searchQuery, isPresented: $isSearching, placement: .toolbar, prompt: "Search")
+      .background(Button("", action: { isSearching = true }).keyboardShortcut("f").hidden())
     }
     .background(Color(nsColor: .textBackgroundColor))
-    //    .toolbar {
-    //      ToolbarItem(placement: .primaryAction) {
-    //        Button {
-    //          if prepareChatDocument() {
-    //            showingExporter = true
-    //          }
-    //        } label: {
-    //          Image(systemName: "square.and.arrow.up")
-    //        }.help("Save Chat...")
-    //      }
-    //    }
-    .fileExporter(isPresented: $showingExporter, document: self.chatDocument, contentType: .utf8PlainText, defaultFilename: "\(self.model.serverTitle) Chat.txt") { result in
-      switch result {
-      case .success(let url):
-        print("Saved to \(url)")
-        
-      case .failure(let error):
-        print(error.localizedDescription)
-      }
-      self.chatDocument.text = ""
+//    .navigationTitle(model.serverTitle)
+    .onChange(of: searchQuery) {
+      performSearch()
     }
+//    .toolbar {
+//      ToolbarItem(placement: .primaryAction) {
+//        Button {
+//          showingExporter = true
+//        } label: {
+//          Image(systemName: "square.and.arrow.up")
+//        }.help("Save Chat...")
+//      }
+//    }
+//    .fileExporter(isPresented: $showingExporter, document: self.chatDocument, contentType: .utf8PlainText, defaultFilename: "\(self.model.serverTitle) Chat.txt") { result in
+//      switch result {
+//      case .success(let url):
+//        print("Saved to \(url)")
+//        
+//      case .failure(let error):
+//        print(error.localizedDescription)
+//      }
+//      self.chatDocument.text = ""
+//    }
   }
-  
+
+  private func performSearch() {
+    guard !searchQuery.isEmpty else {
+      searchResults = []
+      return
+    }
+
+    searchResults = model.searchChat(query: searchQuery)
+  }
+
 //  private func prepareChatDocument() -> Bool {
 //    var text: String = String()
 //    

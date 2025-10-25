@@ -163,6 +163,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   var users: [User] = []
   var accounts: [HotlineAccount] = []
   var chat: [ChatMessage] = []
+  var chatInput: String = ""
   var messageBoard: [String] = []
   var messageBoardLoaded: Bool = false
   var files: [FileInfo] = []
@@ -1462,6 +1463,69 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     self.unreadPublicChat = false
     self.restoredChatSessionKey = nil
     self.lastPersistedMessageType = nil
+  }
+
+  @MainActor func searchChat(query: String) -> [ChatMessage] {
+    guard !query.isEmpty else {
+      return []
+    }
+
+    // Create a map of all messages by ID to deduplicate (current chat includes restored history)
+    var messageMap: [UUID: ChatMessage] = [:]
+
+    // Add current in-memory messages (includes both restored history and new messages)
+    for message in self.chat {
+      messageMap[message.id] = message
+    }
+
+    // Filter messages based on query
+    let filteredMessages = messageMap.values.filter { message in
+      // Never include agreement messages
+      if message.type == .agreement {
+        return false
+      }
+
+      // Always include disconnect messages to show session boundaries
+      let isDisconnect = message.type == .signOut
+
+      // Search in text and username
+      let matchesText = message.text.localizedCaseInsensitiveContains(query)
+      let matchesUsername = message.username?.localizedCaseInsensitiveContains(query) == true
+      let matchesQuery = matchesText || matchesUsername
+
+      return isDisconnect || matchesQuery
+    }
+
+    // Sort by date to maintain chronological order
+    let sortedMessages = filteredMessages.sorted { $0.date < $1.date }
+
+    // Remove consecutive disconnect messages to avoid visual clutter
+    var deduplicated: [ChatMessage] = []
+    var lastWasDisconnect = false
+
+    for message in sortedMessages {
+      let isDisconnect = message.type == .signOut
+
+      if isDisconnect && lastWasDisconnect {
+        // Skip consecutive disconnect messages
+        continue
+      }
+
+      deduplicated.append(message)
+      lastWasDisconnect = isDisconnect
+    }
+
+    // Remove leading disconnect message
+    if deduplicated.first?.type == .signOut {
+      deduplicated.removeFirst()
+    }
+
+    // Remove trailing disconnect message
+    if deduplicated.last?.type == .signOut {
+      deduplicated.removeLast()
+    }
+
+    return deduplicated
   }
 
   func updateServerTitle() {
