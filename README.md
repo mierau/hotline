@@ -27,6 +27,17 @@ Perhaps that’s why you can still find Hotline servers and trackers running tod
 
 And this project is an attempt to create a modern open source version of Hotline for modern Apple systems. Join in. Contribute. Run your own server! Perhaps Hotline can live on for another 25 years. :)
 
+# Goals
+- Build a Hotline client for modern Apple systems.
+- Keep the HotlineProtocol, HotlineClient, HotlineTrackerClient, and HotlineFileClient Swift code reusable so people can use it in other Swift Hotline projects.
+- Bring a modern Hotline client to iOS, iPadOS, and macOS using one codebase.
+- Ressurect the Hotline brand which has been expunged from trademark databases for over a decade. Look, I want Hotline with the classic big red H and all that on my modern Apple devices, okay? ;)
+- Document the Hotline protocol.
+- Have fun. :)
+
+# macOS Screenshots
+![CleanShot 2024-05-14 at 13 45 55@2x](https://github.com/mierau/hotline/assets/55453/44e02def-d457-4f29-ac5e-30438a7794c3)
+
 # Status
 
 | Feature                    | macOS | iOS   | iPadOS | visionOS |
@@ -55,18 +66,8 @@ And this project is an attempt to create a modern open source version of Hotline
 | File downloading           |   ✓   |       |        |          |
 | File uploading             |   ✓   |       |        |          |
 | File info                  |   ✓   |       |        |          |
+| File search                |   ✓   |       |        |          |
 | File management            |       |       |        |          |
 | Folder downloading         |   ✓   |       |        |          |
 | Folder uploading           |       |       |        |          |
 | Custom icon sets           |       |       |        |          |
-
-# Goals
-- Build a Hotline client for modern Apple systems.
-- Keep the HotlineProtocol, HotlineClient, HotlineTrackerClient, and HotlineFileClient Swift code reusable so people can use it in other Swift Hotline projects.
-- Bring a modern Hotline client to iOS, iPadOS, and macOS using one codebase.
-- Ressurect the Hotline brand that has been expunged from trademark databases for over a decade. Hey, I want Hotline proper with the classic big red H and all on my modern Apple devices, okay? ;)
-- Document the Hotline protocol.
-- Have fun. :)
-
-# macOS Screenshots
-![CleanShot 2024-05-14 at 13 45 55@2x](https://github.com/mierau/hotline/assets/55453/44e02def-d457-4f29-ac5e-30438a7794c3)
