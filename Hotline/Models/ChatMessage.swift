@@ -48,19 +48,22 @@ extension ChatMessageType {
 }
 
 struct ChatMessage: Identifiable {
-  let id = UUID()
-  
+  let id: UUID
+
   let text: String
   let type: ChatMessageType
   let date: Date
   let username: String?
+  var metadata: ChatStore.EntryMetadata?
   
   static let parser = /^\s*([^\:]+):\s*([\s\S]+)$/
   
   init(text: String, type: ChatMessageType, date: Date) {
+    self.id = UUID()
     self.type = type
     self.date = date
-    
+    self.metadata = nil
+
     if
       type == .message,
       let match = text.firstMatch(of: ChatMessage.parser) {

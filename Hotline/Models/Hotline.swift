@@ -1445,7 +1445,9 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
           else {
             renderedText = entry.body
           }
-          return ChatMessage(text: renderedText, type: chatType, date: entry.date)
+          var message = ChatMessage(text: renderedText, type: chatType, date: entry.date)
+          message.metadata = entry.metadata
+          return message
         }
         self.chat = historyMessages + currentMessages
         self.lastPersistedMessageType = historyMessages.last?.type
@@ -1530,12 +1532,12 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     guard let parent = self.findNews(in: self.news, at: path), !parent.children.isEmpty else {
       return nil
     }
-    
+
     return parent.children.first { child in
       guard let childArticleID = child.articleID else {
         return false
       }
-              
+
       return child.type == .article && child.articleID == childArticleID
     }
   }

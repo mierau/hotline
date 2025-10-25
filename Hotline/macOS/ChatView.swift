@@ -69,58 +69,21 @@ struct ChatDisconnectedMessageView: View {
 
 struct ChatMessageView: View {
   let message: ChatMessage
-  
+
   var body: some View {
     HStack(alignment: .firstTextBaseline) {
       if let username = message.username {
-        //                        if msg.text.isImageURL() {
-        //                          HStack(alignment: .bottom) {
-        //                            Text("**\(username):** ")
-        //
-        //                            let imageURL = URL(string: msg.text)!
-        //                            AsyncImage(url: imageURL) { phase in
-        //                              switch phase {
-        //                              case .failure:
-        //                                Text(LocalizedStringKey(msg.text.convertLinksToMarkdown()))
-        //                                  .lineSpacing(4)
-        //                                  .multilineTextAlignment(.leading)
-        //                                  .textSelection(.enabled)
-        //                                  .tint(Color("Link Color"))
-        //                              case .success(let img):
-        //                                Link(destination: imageURL) {
-        //                                  img
-        //                                    .resizable()
-        //                                    .scaledToFit()
-        //                                    .frame(maxWidth: 250, maxHeight: 150, alignment: .leading)
-        //                                    .onAppear {
-        //                                      reader.scrollTo(bottomID, anchor: .bottom)
-        //                                    }
-        //                                }
-        //                              default:
-        //                                ProgressView().controlSize(.small)
-        //                              }
-        //                            }
-        //
-        //                            Spacer()
-        //                          }
-        //                        }
-        //                        else {
-        Text(LocalizedStringKey("**\(username):** \(message.text)".convertingLinksToMarkdown()))
-          .lineSpacing(4)
-          .multilineTextAlignment(.leading)
-          .textSelection(.enabled)
-          .tint(Color("Link Color"))
-        //                        }
+        Text("\(username): ").fontWeight(.semibold) + Text(message.text.markdownToAttributedString())
       }
       else {
         Text(message.text)
-          .lineSpacing(4)
-          .multilineTextAlignment(.leading)
-          .textSelection(.enabled)
-          .tint(Color("Link Color"))
       }
       Spacer()
     }
+    .lineSpacing(4)
+    .multilineTextAlignment(.leading)
+    .textSelection(.enabled)
+    .tint(Color("Link Color"))
   }
 }
 

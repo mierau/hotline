@@ -28,12 +28,23 @@ actor ChatStore {
     }
   }
 
+  struct EntryMetadata: Codable {
+    var images: [ImageMetadata]?
+
+    struct ImageMetadata: Codable {
+      let url: String
+      let width: CGFloat?
+      let height: CGFloat?
+    }
+  }
+
   struct Entry: Codable {
     let id: UUID
     let body: String
     let username: String?
     let type: String
     let date: Date
+    var metadata: EntryMetadata?
   }
 
   struct LoadResult {
@@ -78,6 +89,21 @@ actor ChatStore {
     }
     catch {
       print("ChatStore: failed to append entry —", error)
+    }
+  }
+
+  func updateMetadata(_ metadata: EntryMetadata, for entryID: UUID, key: SessionKey) async {
+    do {
+      guard var logFile = try loadLogFile(for: key) else { return }
+
+      if let index = logFile.entries.firstIndex(where: { $0.id == entryID }) {
+        logFile.entries[index].metadata = metadata
+        cache[key] = logFile
+        try persist(logFile, for: key)
+      }
+    }
+    catch {
+      print("ChatStore: failed to update metadata —", error)
     }
   }
 

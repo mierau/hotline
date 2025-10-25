@@ -244,11 +244,10 @@ struct FilesView: View {
         return "No files found in \(processed) \(folderWord)"
       }
       return "\(count) file\(count == 1 ? "" : "s") found in \(processed) \(folderWord)"
-    case .cancelled(let processed):
+    case .cancelled(_):
       if model.fileSearchResults.isEmpty {
         return nil
       }
-      let folderWord = processed == 1 ? "folder" : "folders"
       return "Search cancelled"
     case .failed(let message):
       return "Search failed: \(message)"

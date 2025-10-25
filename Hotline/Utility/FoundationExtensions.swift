@@ -8,6 +8,13 @@ enum Endianness {
 
 extension String {
   
+  func markdownToAttributedString() -> AttributedString {
+    let markdownText = self.convertingLinksToMarkdown()
+    let attr = (try? AttributedString(markdown: markdownText, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(self)
+    
+    return attr
+  }
+  
   func convertToAttributedStringWithLinks() -> AttributedString {
     let attributedString: NSMutableAttributedString = NSMutableAttributedString(string: self)
     let matches = self.ranges(of: RegularExpressions.relaxedLink)
@@ -54,17 +61,28 @@ extension String {
   }
   
   func convertingLinksToMarkdown() -> String {
-    var cp = String(self)
-    cp.replace(RegularExpressions.relaxedLink) { match -> String in
+//    var cp = String(self)
+    
+    self.replacing(RegularExpressions.relaxedLink) { match in
       let linkText = self[match.range]
-      var injectedScheme = "https://"
-      if let _ = try? RegularExpressions.supportedLinkScheme.prefixMatch(in: linkText) {
-        injectedScheme = ""
-      }
       
-      return "[\(linkText)](\(injectedScheme)\(linkText))"
+      // Only add https:// if the link doesn't already have a scheme
+      let hasScheme = (try? RegularExpressions.supportedLinkScheme.prefixMatch(in: linkText)) != nil
+      let url = hasScheme ? String(linkText) : "https://\(linkText)"
+      
+      return "[\(linkText)](\(url))"
     }
-    return cp
+    
+//    cp.replace(RegularExpressions.relaxedLink) { match -> String in
+//      let linkText = self[match.range]
+//      var injectedScheme = "https://"
+//      if let _ = try? RegularExpressions.supportedLinkScheme.prefixMatch(in: linkText) {
+//        injectedScheme = ""
+//      }
+//      
+//      return "[\(linkText)](\(injectedScheme)\(linkText))"
+//    }
+//    return cp
   }
 }
 

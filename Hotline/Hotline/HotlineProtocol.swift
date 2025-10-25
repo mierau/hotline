@@ -241,11 +241,11 @@ struct HotlineAccount: Identifiable {
           }
           
           if fieldType == .userLogin {
-            self.login = field.getObfuscatedString()!
+            self.login = field.getObfuscatedString() ?? ""
           }
           
           if fieldType == .userPassword {
-            self.password = field.getObfuscatedString()!
+            self.password = field.getObfuscatedString() ?? ""
           }
                    
           if fieldType == .userAccess, let opts = field.getUInt64(){
