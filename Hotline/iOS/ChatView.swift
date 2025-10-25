@@ -52,17 +52,6 @@ struct ChatView: View {
                   .frame(maxWidth: .infinity)
                   .padding()
                 }
-                else if msg.type == .status {
-                  HStack {
-                    Spacer()
-                    Text(msg.text)
-                      .lineLimit(1)
-                      .truncationMode(.middle)
-                      .opacity(0.3)
-                    Spacer()
-                  }
-                  .padding()
-                }
                 else if msg.type == .signOut {
                   HStack {
                     Spacer()

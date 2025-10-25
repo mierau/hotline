@@ -196,6 +196,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   @ObservationIgnored private var chatSessionKey: ChatStore.SessionKey?
   @ObservationIgnored private var restoredChatSessionKey: ChatStore.SessionKey?
   @ObservationIgnored private var chatHistoryObserver: NSObjectProtocol?
+  @ObservationIgnored private var lastPersistedMessageType: ChatMessageType?
   #if os(macOS)
   var bannerImage: NSImage? = nil
   #elseif os(iOS)
@@ -244,6 +245,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     let key = sessionKey(for: server)
     self.chatSessionKey = key
     self.restoredChatSessionKey = nil
+    self.lastPersistedMessageType = nil
     self.chat = []
     self.restoreChatHistory(for: key)
 
@@ -1132,6 +1134,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
 
       self.chatSessionKey = nil
       self.restoredChatSessionKey = nil
+      self.lastPersistedMessageType = nil
     }
     else if status == .loggedIn {
       if Prefs.shared.playSounds && Prefs.shared.playLoggedInSound {
@@ -1395,12 +1398,19 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   }
 
   private func recordChatMessage(_ message: ChatMessage, persist: Bool = true, display: Bool = true) {
+    let shouldPersist = persist && message.type != .agreement
+    if shouldPersist,
+       message.type == .signOut,
+       lastPersistedMessageType == .signOut {
+      return
+    }
+
     if display {
       self.chat.append(message)
     }
 
-    let shouldPersist = persist && message.type != .agreement
     guard shouldPersist, let key = chatSessionKey else { return }
+    self.lastPersistedMessageType = message.type
     let entry = ChatStore.Entry(
       id: message.id,
       body: message.text,
@@ -1438,6 +1448,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
           return ChatMessage(text: renderedText, type: chatType, date: entry.date)
         }
         self.chat = historyMessages + currentMessages
+        self.lastPersistedMessageType = historyMessages.last?.type
         self.unreadPublicChat = false
         self.restoredChatSessionKey = key
       }
@@ -1448,6 +1459,7 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
     self.chat = []
     self.unreadPublicChat = false
     self.restoredChatSessionKey = nil
+    self.lastPersistedMessageType = nil
   }
 
   func updateServerTitle() {

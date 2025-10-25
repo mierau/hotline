@@ -2,7 +2,6 @@ import SwiftUI
 
 enum ChatMessageType {
   case agreement
-  case status
   case joined
   case left
   case message
@@ -15,8 +14,6 @@ extension ChatMessageType {
     switch self {
     case .agreement:
       return "agreement"
-    case .status:
-      return "status"
     case .joined:
       return "joined"
     case .left:
@@ -34,8 +31,6 @@ extension ChatMessageType {
     switch storageKey {
     case "agreement":
       self = .agreement
-    case "status":
-      self = .status
     case "joined":
       self = .joined
     case "left":

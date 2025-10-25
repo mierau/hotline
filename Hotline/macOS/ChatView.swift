@@ -4,35 +4,11 @@ enum FocusedField: Int, Hashable {
   case chatInput
 }
 
-struct ChatStatusMessageView: View {
-  let message: ChatMessage
-  
-  var body: some View {
-    HStack(alignment: .center, spacing: 8) {
-      Image(systemName: "arrow.right")
-        .resizable()
-        .scaledToFit()
-        .fontWeight(.semibold)
-        .foregroundStyle(.primary)
-        .frame(width: 14, height: 14)
-      
-      Text(message.text)
-        .lineLimit(1)
-        .truncationMode(.middle)
-        .textSelection(.disabled)
-
-      Spacer()
-    }
-    .opacity(0.3)
-  }
-}
-
-
 struct ChatJoinedMessageView: View {
   let message: ChatMessage
   
   var body: some View {
-    HStack(alignment: .center, spacing: 8) {
+    HStack(alignment: .center, spacing: 4) {
       Image(systemName: "arrow.right")
         .resizable()
         .scaledToFit()
@@ -56,7 +32,7 @@ struct ChatLeftMessageView: View {
   let message: ChatMessage
   
   var body: some View {
-    HStack(alignment: .center, spacing: 8) {
+    HStack(alignment: .center, spacing: 4) {
       Image(systemName: "arrow.left")
         .resizable()
         .scaledToFit()
@@ -206,13 +182,8 @@ struct ChatView: View {
                     }
                     .padding(.vertical, 24)
                   }
-                  // MARK: Server Message
                   else if msg.type == .server {
                     ServerMessageView(message: msg.text)
-                  }
-                  // MARK: Status
-                  else if msg.type == .status {
-                    ChatStatusMessageView(message: msg)
                   }
                   else if msg.type == .joined {
                     ChatJoinedMessageView(message: msg)
@@ -313,38 +284,38 @@ struct ChatView: View {
     }
   }
   
-  private func prepareChatDocument() -> Bool {
-    var text: String = String()
-    
-    self.chatDocument.text = ""
-    for msg in model.chat {
-      if msg.type == .agreement {
-        text.append(msg.text)
-        text.append("\n\n")
-      }
-      else if msg.type == .message {
-        if let username = msg.username {
-          text.append("\(username): \(msg.text)")
-        }
-        else {
-          text.append(msg.text)
-        }
-        text.append("\n")
-      }
-      else if msg.type == .status {
-        text.append(msg.text)
-        text.append("\n")
-      }
-    }
-    
-    if text.isEmpty {
-      return false
-    }
-    
-    self.chatDocument.text = text
-    
-    return true
-  }
+//  private func prepareChatDocument() -> Bool {
+//    var text: String = String()
+//    
+//    self.chatDocument.text = ""
+//    for msg in model.chat {
+//      if msg.type == .agreement {
+//        text.append(msg.text)
+//        text.append("\n\n")
+//      }
+//      else if msg.type == .message {
+//        if let username = msg.username {
+//          text.append("\(username): \(msg.text)")
+//        }
+//        else {
+//          text.append(msg.text)
+//        }
+//        text.append("\n")
+//      }
+//      else if msg.type == .status {
+//        text.append(msg.text)
+//        text.append("\n")
+//      }
+//    }
+//    
+//    if text.isEmpty {
+//      return false
+//    }
+//    
+//    self.chatDocument.text = text
+//    
+//    return true
+//  }
 }
 
 #Preview {
