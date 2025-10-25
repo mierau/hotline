@@ -11,7 +11,9 @@ An attempt to resurrect Hotline for modern Apple systems (iOS, macOS, etc) by co
 
 | macOS                      | iOS                   | iPadOS            | visionOS          |
 |----------------------------|-----------------------|-------------------|-------------------|
-| Sonoma 14.2 or greater     | iOS 17.2 or greater   | Not yet available | Not yet available |
+| Sequoia 15.7 or greater    | iOS 18.7 or greater   | Not yet available | Not yet available |
+
+To keep this software fresh and running on Apple's latest platforms, the intention is to support the last two major OS releases from Apple. This gives people time to move to the latest major OS release while also allowing this project to make use of the latest APIs.
 
 # What is Hotline?
 
