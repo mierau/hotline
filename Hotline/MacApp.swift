@@ -189,7 +189,7 @@ struct Application: App {
       Server(name: nil, description: nil, address: "")
     }
     .modelContainer(self.modelContainer)
-    .defaultSize(width: 750, height: 700)
+    .defaultSize(width: 690, height: 760)
     .defaultPosition(.center)
     .onChange(of: activeServerState) {
       AppState.shared.activeServerState = activeServerState

@@ -254,16 +254,21 @@ final class NetSocket: NSObject, StreamDelegate {
       if setsockopt(socketHandle, SOL_SOCKET, SO_KEEPALIVE, &value, size) != 0 {
         print("NetSocket: failed to set SO_KEEPALIVE");
       }
-//      // Number of keepalives before close (including first keepalive packet)
-//      value = 5
-//      if setsockopt(socketHandle, IPPROTO_TCP, TCP_KEEPCNT, &value, size) != 0 {
-//        print("NetSocket: failed to set TCP_KEEPCNT");
-//      }
-//      // Idle time used when SO_KEEPALIVE is enabled. Sets how long connection must be idle before keepalive is sent.
-//      value = 60
-//      if setsockopt(socketHandle, IPPROTO_TCP, TCP_KEEPALIVE, &value, size) != 0 {
-//        print("NetSocket: failed to set TCP_KEEPALIVE")
-//      }
+      // Number of keepalives before close (including first keepalive packet)
+      value = 5
+      if setsockopt(socketHandle, IPPROTO_TCP, TCP_KEEPCNT, &value, size) != 0 {
+        print("NetSocket: failed to set TCP_KEEPCNT");
+      }
+      // Idle time used when SO_KEEPALIVE is enabled. Sets how long connection must be idle before keepalive is sent.
+      value = 30
+      if setsockopt(socketHandle, IPPROTO_TCP, TCP_KEEPALIVE, &value, size) != 0 {
+        print("NetSocket: failed to set TCP_KEEPALIVE")
+      }
+      // Idle time used when TCP_KEEPINTVL is enabled. Sets how long to wait between probes.
+      value = 10
+      if setsockopt(socketHandle, IPPROTO_TCP, TCP_KEEPINTVL, &value, size) != 0 {
+        print("NetSocket: failed to set TCP_KEEPINTVL")
+      }
     }
   }
 }
