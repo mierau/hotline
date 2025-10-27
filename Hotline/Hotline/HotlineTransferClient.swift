@@ -456,9 +456,9 @@ class HotlineFilePreviewClient: HotlineTransferClient {
   let serverPort: NWEndpoint.Port
   let referenceNumber: UInt32
   let referenceDataSize: UInt32
-  
+
   weak var delegate: HotlineFilePreviewClientDelegate? = nil
-  
+
   var status: HotlineTransferStatus = .unconnected {
     didSet {
       DispatchQueue.main.async {
@@ -466,156 +466,87 @@ class HotlineFilePreviewClient: HotlineTransferClient {
       }
     }
   }
-  
-  private var connection: NWConnection?
-  private var transferStage: HotlineFileTransferStage = .fileHeader
-  private var fileBytes = Data()
-  private var fileBytesTransferred: Int = 0
-  
+
+  private var downloadTask: Task<Void, Never>?
+
   init(address: String, port: UInt16, reference: UInt32, size: UInt32) {
     self.serverAddress = NWEndpoint.Host(address)
     self.serverPort = NWEndpoint.Port(rawValue: port + 1)!
     self.referenceNumber = reference
     self.referenceDataSize = size
   }
-  
+
   deinit {
-    self.invalidate()
+    downloadTask?.cancel()
   }
-  
+
   func start() {
-    guard self.status == .unconnected else {
+    guard status == .unconnected else {
       return
     }
-    
-    self.connect()
+
+    downloadTask = Task {
+      await self.download()
+    }
   }
-  
+
   func cancel() {
-    self.delegate = nil
-    
-    if self.status == .unconnected {
-      return
-    }
-    
-    self.invalidate()
-    
+    downloadTask?.cancel()
+    downloadTask = nil
+    delegate = nil
+
     print("HotlineFilePreviewClient: Cancelled preview transfer")
   }
-  
-  private func invalidate() {
-    if let c = self.connection {
-      c.stateUpdateHandler = nil
-      c.cancel()
-      
-      self.connection = nil
-    }
-    
-    self.fileBytes = Data()
-  }
-  
-  private func connect() {
-    self.connection = NWConnection(host: self.serverAddress, port: self.serverPort, using: .tcp)
-    self.connection?.stateUpdateHandler = { [weak self] (newState: NWConnection.State) in
-      switch newState {
-      case .ready:
-        self?.status = .connected
-        self?.sendMagic()
-      case .waiting(let err):
-        print("HotlineFilePreviewClient: Waiting", err)
-      case .cancelled:
-        print("HotlineFilePreviewClient: Cancelled")
-        self?.invalidate()
-      case .failed(let err):
-        print("HotlineFilePreviewClient: Connection error \(err)")
-        switch self?.status {
-        case .connecting:
-          print("HotlineFilePreviewClient: Failed to connect to file transfer server.")
-          self?.invalidate()
-          self?.status = .failed(.failedToConnect)
-        case .connected, .progress(_):
-          print("HotlineFilePreviewClient: Failed to finish transfer.")
-          self?.invalidate()
-          self?.status = .failed(.failedToDownload)
-        default:
-          break
-        }
-      default:
-        return
+
+  private func download() async {
+    status = .connecting
+
+    do {
+      // Connect to file transfer server (already includes +1 in serverPort from init)
+      let socket = try await NetSocketNew.connect(
+        host: serverAddress,
+        port: serverPort,
+        tls: .disabled
+      )
+      defer { Task { await socket.close() } }
+
+      status = .connected
+
+      // Send magic header
+      let headerData = Data(endian: .big) {
+        "HTXF".fourCharCode()
+        self.referenceNumber
+        UInt32.zero
+        UInt32.zero
       }
-    }
-    
-    self.status = .connecting
-    self.connection?.start(queue: .global())
-  }
-  
-  private func sendMagic() {
-    guard let c = connection, self.status == .connected else {
-      self.invalidate()
-      print("HotlineFileClient: invalid connection to send header.")
+      try await socket.write(headerData)
+
+      status = .progress(0.0)
+
+      // Download file data with progress updates
+      let fileData = try await socket.read(Int(referenceDataSize)) { current, total in
+        self.status = .progress(Double(current) / Double(total))
+      }
+
+      print("HotlineFilePreviewClient: Complete")
+      status = .completed
+
+      // Notify delegate on main thread
+      let reference = self.referenceNumber
+      await MainActor.run {
+        self.delegate?.hotlineFilePreviewComplete(client: self, reference: reference, data: fileData)
+      }
+
+    } catch is CancellationError {
+      // Already handled in cancel()
       return
-    }
-    
-    let headerData = Data(endian: .big) {
-      "HTXF".fourCharCode()
-      self.referenceNumber
-      UInt32.zero
-      UInt32.zero
-    }
-    
-    c.send(content: headerData, completion: .contentProcessed { [weak self] (error) in
-      guard let self = self else {
-        return
-      }
-      
-      guard error == nil else {
-        self.status = .failed(.failedToConnect)
-        self.invalidate()
-        return
-      }
-      
-      self.status = .progress(0.0)
-      self.receive()
-    })
-  }
-  
-  private func receive() {
-    guard let c = self.connection else {
-      return
-    }
-    
-    c.receive(minimumIncompleteLength: 1, maximumLength: Int(UInt16.max)) { [weak self] (data, context, isComplete, error) in
-      guard let self = self else {
-        return
-      }
-      
-      guard error == nil else {
-        self.status = .failed(.failedToDownload)
-        self.invalidate()
-        return
-      }
-      
-      if let newData = data, !newData.isEmpty {
-        self.fileBytesTransferred += newData.count
-        self.fileBytes.append(newData)
-        self.status = .progress(Double(self.fileBytesTransferred) / Double(self.referenceDataSize))
-        print("HotlineFilePreviewClient: Download progress", self.fileBytesTransferred, self.referenceDataSize, isComplete)
-      }
-      
-      if self.fileBytesTransferred < Int(self.referenceDataSize) {
-        self.receive()
-      }
-      else {
-        print("HotlineFilePreviewClient: Complete")
-        let data = self.fileBytes
-        
-        self.status = .completed
-        self.invalidate()
-        
-        let reference = self.referenceNumber
-        DispatchQueue.main.sync {
-          self.delegate?.hotlineFilePreviewComplete(client: self, reference: reference, data: data)
-        }
+    } catch {
+      print("HotlineFilePreviewClient: Download failed: \(error)")
+
+      if status == .connecting {
+        status = .failed(.failedToConnect)
+      } else {
+        status = .failed(.failedToDownload)
       }
     }
   }

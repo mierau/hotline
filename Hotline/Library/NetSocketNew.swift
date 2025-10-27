@@ -181,16 +181,17 @@ public actor NetSocketNew {
   
   /// Connect to a remote host and return a ready socket
   ///
-  /// This method establishes a TCP connection and waits until the connection is in `.ready` state.
+  /// This method establishes a TCP connection using Network framework types and waits until
+  /// the connection is in `.ready` state.
   ///
   /// - Parameters:
-  ///   - host: Hostname or IP address to connect to
-  ///   - port: Port number (0-65535)
+  ///   - host: Network framework host (e.g., `.name("example.com", nil)` or `.ipv4(...)`)
+  ///   - port: Network framework port
   ///   - tls: TLS policy (default: enabled with default settings)
   ///   - config: Socket configuration (default: standard settings)
   /// - Returns: A connected and ready `NetSocketNew`
-  /// - Throws: `NetSocketError.invalidPort` if port is invalid, or network errors
-  public static func connect(host: String, port: UInt16, tls: TLSPolicy = .enabled(), config: Config = .init()) async throws -> NetSocketNew {
+  /// - Throws: Network errors or connection failures
+  public static func connect(host: NWEndpoint.Host, port: NWEndpoint.Port, tls: TLSPolicy = .enabled(), config: Config = .init()) async throws -> NetSocketNew {
     let parameters = NWParameters.tcp
     if tls.enabled {
       let tlsOptions = NWProtocolTLS.Options()
@@ -198,16 +199,20 @@ public actor NetSocketNew {
       parameters.defaultProtocolStack.applicationProtocols.insert(tlsOptions, at: 0)
     }
 
-    guard let nwPort = NWEndpoint.Port(rawValue: port) else {
-      throw NetSocketError.invalidPort
-    }
-    
-    let conn = NWConnection(host: .name(host, nil), port: nwPort, using: parameters)
+    let conn = NWConnection(host: host, port: port, using: parameters)
     let socket = NetSocketNew(connection: conn, config: config)
     try await socket.start()
     return socket
   }
-  
+
+  /// Convenience wrapper to connect using string hostname and integer port
+  public static func connect(host: String, port: UInt16, tls: TLSPolicy = .enabled(), config: Config = .init()) async throws -> NetSocketNew {
+    guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+      throw NetSocketError.invalidPort
+    }
+    return try await connect(host: .name(host, nil), port: nwPort, tls: tls, config: config)
+  }
+
   /// Inject custom encoding/decoding logic (supports any encoder/decoder: JSON, CBOR, MessagePack, etc.)
   ///
   /// Example with JSONEncoder:
@@ -738,7 +743,46 @@ public actor NetSocketNew {
       guard !isClosed else { throw NetSocketError.closed }
     }
   }
-  
+
+  /// Read exactly N bytes with progress callbacks
+  ///
+  /// Like `read(_:)`, but reads in chunks and reports progress after each chunk.
+  /// Useful for downloading large amounts of data where you want to update UI progress.
+  ///
+  /// Example:
+  /// ```swift
+  /// let data = try await socket.read(1_000_000) { current, total in
+  ///   print("Progress: \(current)/\(total)")
+  /// }
+  /// ```
+  ///
+  /// - Parameters:
+  ///   - count: Number of bytes to read
+  ///   - chunkSize: Size of chunks to read at a time (default: 8192)
+  ///   - progress: Optional callback with (bytesReceived, totalBytes)
+  /// - Returns: Exactly `count` bytes
+  /// - Throws: `NetSocketError` if connection closes before enough data arrives
+  public func read(
+    _ count: Int,
+    chunkSize: Int = 8192,
+    progress: (@Sendable (Int, Int) -> Void)? = nil
+  ) async throws -> Data {
+    var data = Data()
+    data.reserveCapacity(count)
+    var received = 0
+
+    while received < count {
+      try Task.checkCancellation()
+      let toRead = min(chunkSize, count - received)
+      let chunk = try await read(toRead)
+      data.append(chunk)
+      received += chunk.count
+      progress?(received, count)
+    }
+
+    return data
+  }
+
   func peek(_ count: Int) async throws -> Data {
     try await ensureReadable(count)
     let slice = buffer[head..<(head + count)]
