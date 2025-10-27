@@ -755,19 +755,18 @@ struct TrackerItemView: View {
         if isExpanded && count > 0 {
           HStack(spacing: 4) {
             Text(String(count))
-            
-            Image(systemName: "globe.americas.fill")
-              .resizable()
-              .scaledToFit()
+
+            SpinningGlobeView()
+              .fontWeight(.semibold)
               .frame(width: 12, height: 12)
-              .opacity(0.5)
+//              .opacity(0.5)
           }
-          
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .foregroundStyle(.secondary)
-            .background(.quinary)
-            .clipShape(.capsule)
+
+          .padding(.horizontal, 8)
+          .padding(.vertical, 2)
+          .foregroundStyle(.secondary)
+          .background(.quinary)
+          .clipShape(.capsule)
         }
       case .server:
         Image(systemName: "bookmark.fill")

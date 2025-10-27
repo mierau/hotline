@@ -1108,7 +1108,7 @@ fileprivate extension NetSocketNew {
     let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
     guard values.isRegularFile == true else {
       throw NetSocketError.failed(underlying: NSError(
-        domain: "CleanSockets", code: 1001,
+        domain: "NetSocket", code: 1001,
         userInfo: [NSLocalizedDescriptionKey: "Not a regular file: \(url.path)"]
       ))
     }
@@ -1116,7 +1116,7 @@ fileprivate extension NetSocketNew {
     let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
     if let n = attrs[.size] as? NSNumber { return n.int64Value }
     throw NetSocketError.failed(underlying: NSError(
-      domain: "CleanSockets", code: 1002,
+      domain: "NetSocket", code: 1002,
       userInfo: [NSLocalizedDescriptionKey: "Unable to determine file size for \(url.lastPathComponent)"]
     ))
   }
