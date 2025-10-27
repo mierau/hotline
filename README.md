@@ -56,6 +56,8 @@ And this project is an attempt to create a modern open source version of Hotline
 | Display server agreement   |   ✓   |   ✓   |        |          |
 | Display server banner      |   ✓   |   ✓   |        |          |
 | Public chat                |   ✓   |   ✓   |        |          |
+| Public chat search         |   ✓   |       |        |          |
+| Public chat persistence    |   ✓   |       |        |          |
 | Private messages           |   ✓   |       |        |          |
 | User list                  |   ✓   |   ✓   |        |          |
 | User icons                 |   ✓   |   ✓   |        |          |
