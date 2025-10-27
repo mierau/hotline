@@ -1,6 +1,6 @@
 
 //  NetSocketNew.swift
-//  Created by Dustin Mierau @mierau
+//  Created by Dustin Mierau • @mierau
 
 import Foundation
 import Network
@@ -433,6 +433,28 @@ public actor NetSocketNew {
     }
     try await write(bytes)
   }
+  
+  /// Write a boolean as a single byte (0 or 1)
+  /// - Parameter value: Boolean value
+  public func write(_ value: Bool) async throws {
+    try await write(value ? UInt8(0x01) : UInt8(0x00))
+  }
+  
+  /// Write a Float as its IEEE 754 bit pattern
+  /// - Parameters:
+  ///   - value: Float value
+  ///   - endian: Byte order (default: big-endian)
+  public func write(_ value: Float, endian: Endian = .big) async throws {
+    try await write(value.bitPattern, endian: endian)
+  }
+  
+  /// Write a Double as its IEEE 754 bit pattern
+  /// - Parameters:
+  ///   - value: Double value
+  ///   - endian: Byte order (default: big-endian)
+  public func write(_ value: Double, endian: Endian = .big) async throws {
+    try await write(value.bitPattern, endian: endian)
+  }
 
   /// Write a string to the socket, optionally length-prefixed
   ///
@@ -511,7 +533,7 @@ public actor NetSocketNew {
       length = Int(v)
     }
     if length > cfg.maxFrameBytes { throw NetSocketError.framingExceeded(max: cfg.maxFrameBytes) }
-    return try await readExactly(length)
+    return try await read(length)
   }
 
   /// Send an encodable value as a length-prefixed frame
@@ -568,7 +590,7 @@ public actor NetSocketNew {
   /// - Throws: `NetSocketError` if insufficient data or connection closed
   public func read<T: FixedWidthInteger>(_ type: T.Type = T.self, endian: Endian = .big) async throws -> T {
     let size = MemoryLayout<T>.size
-    let data = try await readExactly(size)
+    let data = try await read(size)
     let value: T = data.withUnsafeBytes { raw in
       raw.load(as: T.self)
     }
@@ -585,8 +607,8 @@ public actor NetSocketNew {
   ///   - encoding: Text encoding (default: UTF-8)
   /// - Returns: Decoded string
   /// - Throws: `NetSocketError` if decoding fails or insufficient data
-  public func readString(length: Int, encoding: String.Encoding = .utf8) async throws -> String {
-    let data = try await readExactly(length)
+  public func read(_ length: Int, encoding: String.Encoding = .utf8) async throws -> String {
+    let data = try await read(length)
     guard let s = String(data: data, encoding: encoding) else { throw NetSocketError.decodeFailed(NSError()) }
     return s
   }
@@ -599,12 +621,57 @@ public actor NetSocketNew {
   ///   - includeDelimiter: Whether to include delimiter in result (default: false)
   /// - Returns: String read from stream (delimiter consumed but not included unless specified)
   /// - Throws: `NetSocketError` if decoding fails, max bytes exceeded, or connection closed
-  public func readString(until delimiter: Delimiter, maxBytes: Int? = nil, includeDelimiter: Bool = false) async throws -> String {
-    let bytes = try await readUntil(delimiter: delimiter.data, maxBytes: maxBytes, includeDelimiter: includeDelimiter)
+  public func read(until delimiter: Delimiter, maxBytes: Int? = nil, includeDelimiter: Bool = false) async throws -> String {
+    let bytes = try await read(past: delimiter.data, maxBytes: maxBytes, includeDelimiter: includeDelimiter)
     guard let s = String(data: bytes, encoding: .utf8) else { throw NetSocketError.decodeFailed(NSError()) }
     return s
   }
-  
+
+  /// Read a pascal string (1-byte length prefix followed by string data)
+  ///
+  /// This method reads a single byte for the length, then reads that many bytes and attempts
+  /// to decode them as a string. It tries multiple encodings for compatibility with legacy
+  /// protocols like Hotline: UTF-8, Shift-JIS, Windows-1251, and falls back to MacRoman.
+  ///
+  /// - Returns: The decoded string, or nil if length is 0
+  /// - Throws: `NetSocketError` if reading fails or no encoding succeeds
+  public func readPascalString() async throws -> String? {
+    let length = try await read(UInt8.self)
+    guard length > 0 else { return nil }
+
+    let data = try await read(Int(length))
+
+    // Try auto-detection with common encodings
+    let allowedEncodings = [
+      String.Encoding.utf8.rawValue,
+      String.Encoding.shiftJIS.rawValue,
+      String.Encoding.unicode.rawValue,
+      String.Encoding.windowsCP1251.rawValue
+    ]
+
+    var decodedString: NSString?
+    let detected = NSString.stringEncoding(
+      for: data,
+      encodingOptions: [.allowLossyKey: false],
+      convertedString: &decodedString,
+      usedLossyConversion: nil
+    )
+
+    if allowedEncodings.contains(detected), let str = decodedString as? String {
+      return str
+    }
+
+    // Fallback to MacRoman for classic Mac compatibility
+    guard let str = String(data: data, encoding: .macOSRoman) else {
+      throw NetSocketError.decodeFailed(NSError(
+        domain: "NetSocketNew",
+        code: -1,
+        userInfo: [NSLocalizedDescriptionKey: "Failed to decode pascal string with any known encoding"]
+      ))
+    }
+    return str
+  }
+
   /// Read data until a delimiter is found
   ///
   /// Searches the buffer for the delimiter pattern and returns all data up to (and optionally including)
@@ -616,12 +683,12 @@ public actor NetSocketNew {
   ///   - includeDelimiter: Whether to include delimiter in result (default: false)
   /// - Returns: Data read from stream
   /// - Throws: `NetSocketError.framingExceeded` if max bytes exceeded, or connection errors
-  public func readUntil(delimiter: Data, maxBytes: Int? = nil, includeDelimiter: Bool = false) async throws -> Data {
+  public func read(past delimiter: Data, maxBytes: Int? = nil, includeDelimiter: Bool = false) async throws -> Data {
     while true {
       try Task.checkCancellation()
       if let r = search(delimiter: delimiter) {
         let consumeLen = r.upperBound - head
-        let data = try await readExactly(consumeLen)
+        let data = try await read(consumeLen)
         return includeDelimiter ? data : data.dropLast(delimiter.count)
       }
       if let maxBytes, availableBytes >= maxBytes {
@@ -640,7 +707,7 @@ public actor NetSocketNew {
   /// - Parameter count: Number of bytes to read
   /// - Returns: Exactly `count` bytes
   /// - Throws: `NetSocketError.insufficientData` if connection closes before enough data arrives
-  public func readExactly(_ count: Int) async throws -> Data {
+  public func read(_ count: Int) async throws -> Data {
     try await ensureReadable(count)
     let start = head
     let end = head + count
@@ -659,7 +726,7 @@ public actor NetSocketNew {
   }
   
   /// Skip until delimiter is found (discards delimiter too)
-  public func skipUntil(delimiter: Data) async throws {
+  public func skip(past delimiter: Data) async throws {
     while true {
       try Task.checkCancellation()
       if let r = search(delimiter: delimiter) {
@@ -887,7 +954,7 @@ public extension NetSocketNew {
     while remaining > 0 {
       try Task.checkCancellation()
       let n = Int(min(Int64(chunkSize), remaining))
-      let chunk = try await readExactly(n) // reuses your internal buffer, bounded by n
+      let chunk = try await read(n) // reuses your internal buffer, bounded by n
       fh.write(chunk)
       remaining -= Int64(n)
       written   += Int64(n)
@@ -969,7 +1036,7 @@ public extension NetSocketNew {
       while remaining > 0 {
         try Task.checkCancellation()
         let n = Int(min(Int64(chunkSize), remaining))
-        let chunk = try await readExactly(n)
+        let chunk = try await read(n)
         fh.write(chunk)
         remaining -= Int64(n)
         written += Int64(n)
@@ -1025,379 +1092,143 @@ fileprivate extension NetSocketNew {
   }
 }
 
-/// Errors that can occur during binary encoding/decoding
-public enum BinaryError: Error, CustomStringConvertible, Sendable {
-  /// Attempted to read past end of data
-  case outOfBounds(need: Int, have: Int)
-  /// String encoding/decoding failed
-  case badStringEncoding
-  /// Invalid value encountered
-  case invalidValue(String)
+// MARK: - Stream-based Encoding/Decoding
 
-  public var description: String {
-    switch self {
-    case .outOfBounds(let need, let have): return "Out of bounds: need \(need), have \(have)"
-    case .badStringEncoding: return "String decoding failed"
-    case .invalidValue(let s): return "Invalid value: \(s)"
-    }
-  }
-}
-
-/// Protocol for types that can encode themselves to binary format
-public protocol BinaryEncodable: Sendable {
-  /// Encode this value to a ByteWriter
-  /// - Parameters:
-  ///   - w: Writer to encode to
-  ///   - endian: Byte order for multi-byte values
-  func encode(to w: inout ByteWriter, endian: Endian)
-}
-
-/// Protocol for types that can decode themselves from binary format
-public protocol BinaryDecodable: Sendable {
-  /// Decode a value from a ByteReader
-  /// - Parameters:
-  ///   - r: Reader to decode from
-  ///   - endian: Byte order for multi-byte values
-  init(from r: inout ByteReader, endian: Endian) throws
-}
-
-/// Convenience typealias for types that are both encodable and decodable
-public typealias BinaryCodable = BinaryEncodable & BinaryDecodable
-
-extension UInt8: BinaryCodable {
-  public func encode(to w: inout ByteWriter, endian: Endian) {
-    w.write(self, endian: endian)
-  }
-  public init(from r: inout ByteReader, endian: Endian) throws {
-    self = try r.read(UInt8.self, endian: endian)
-  }
-}
-
-extension UInt16: BinaryCodable {
-  public func encode(to w: inout ByteWriter, endian: Endian) {
-    w.write(self, endian: endian)
-  }
-  public init(from r: inout ByteReader, endian: Endian) throws {
-    self = try r.read(UInt16.self, endian: endian)
-  }
-}
-
-extension UInt32: BinaryCodable {
-  public func encode(to w: inout ByteWriter, endian: Endian) {
-    w.write(self, endian: endian)
-  }
-  public init(from r: inout ByteReader, endian: Endian) throws {
-    self = try r.read(UInt32.self, endian: endian)
-  }
-}
-
-/// A writer for building binary data structures
+/// Protocol for types that can encode themselves to binary data
 ///
-/// ByteWriter provides methods to serialize integers, floats, strings, and arrays into binary format.
-/// All multi-byte values are written in the specified endianness.
+/// Types conforming to `NetSocketEncodable` produce binary data that can be sent over
+/// a socket. Unlike writing field-by-field to the socket, encodable types build complete
+/// binary messages that are sent in a single write operation for efficiency.
 ///
 /// Example:
 /// ```swift
-/// var w = ByteWriter()
-/// w.write(UInt16(100), endian: .big)
-/// try w.write("Hello", prefix: .u16(.big))
-/// let data = w.finalize()
+/// struct MyMessage: NetSocketEncodable {
+///   let id: UInt32
+///   let name: String
+///
+///   func encode(endian: Endian) throws -> Data {
+///     var data = Data()
+///     // Encode fields to data...
+///     return data
+///   }
+/// }
+///
+/// try await socket.send(message)
 /// ```
-public struct ByteWriter: Sendable {
-  /// The accumulated binary data
-  public private(set) var data = Data()
-
-  public init() {}
-
-  /// Write a fixed-width integer
-  /// - Parameters:
-  ///   - v: Integer value
-  ///   - endian: Byte order (default: big-endian)
-  public mutating func write<T: FixedWidthInteger>(_ v: T, endian: Endian = .big) {
-    var x = v
-    switch endian {
-    case .big: x = T(bigEndian: v)
-    case .little: x = T(littleEndian: v)
-    }
-    withUnsafeBytes(of: x) { data.append(contentsOf: $0) }
-  }
-
-  /// Write a boolean as a single byte (0 or 1)
-  /// - Parameter value: Boolean value
-  public mutating func write(_ value: Bool) {
-    data.append(value ? 1 : 0)
-  }
-
-  /// Write a Float as its IEEE 754 bit pattern
-  /// - Parameters:
-  ///   - value: Float value
-  ///   - endian: Byte order (default: big-endian)
-  public mutating func write(_ value: Float, endian: Endian = .big) {
-    write(value.bitPattern, endian: endian)
-  }
-
-  /// Write a Double as its IEEE 754 bit pattern
-  /// - Parameters:
-  ///   - value: Double value
-  ///   - endian: Byte order (default: big-endian)
-  public mutating func write(_ value: Double, endian: Endian = .big) {
-    write(value.bitPattern, endian: endian)
-  }
-
-  /// Write raw bytes, optionally with a length prefix
-  /// - Parameters:
-  ///   - bytes: Data to write
-  ///   - prefix: Optional length prefix
-  ///   - endian: Byte order for length prefix (ignored if prefix is nil)
-  /// - Throws: `BinaryError.invalidValue` if data size exceeds prefix capacity
-  public mutating func write(_ bytes: Data, prefix: LengthPrefix? = nil, endian: Endian = .big) throws {
-    if let prefix {
-      // Validate size fits in prefix type
-      switch prefix {
-      case .u8 where bytes.count > Int(UInt8.max):
-        throw BinaryError.invalidValue("Data size \(bytes.count) exceeds u8 max (255)")
-      case .u16 where bytes.count > Int(UInt16.max):
-        throw BinaryError.invalidValue("Data size \(bytes.count) exceeds u16 max (65535)")
-      case .u32 where bytes.count > Int(UInt32.max):
-        throw BinaryError.invalidValue("Data size \(bytes.count) exceeds u32 max")
-      default:
-        break
-      }
-      
-      switch prefix {
-      case .u8:  data.append(UInt8(truncatingIfNeeded: bytes.count))
-      case .u16(let e): write(UInt16(bytes.count), endian: e)
-      case .u32(let e): write(UInt32(bytes.count), endian: e)
-      case .u64(let e): write(UInt64(bytes.count), endian: e)
-      }
-    }
-    data.append(bytes)
-  }
-  
-  /// Write a length-prefixed string
-  /// - Parameters:
-  ///   - string: String to write
-  ///   - prefix: Length prefix type (default: u16 big-endian)
-  ///   - encoding: Text encoding (default: UTF-8)
-  /// - Throws: `BinaryError.badStringEncoding` if encoding fails, or size validation errors
-  public mutating func write(_ string: String, prefix: LengthPrefix = .u16(), encoding: String.Encoding = .utf8) throws {
-    guard let d = string.data(using: encoding) else {
-      throw BinaryError.badStringEncoding
-    }
-    try write(d, prefix: prefix)
-  }
-
-  /// Write an array of encodable elements with element count prefix
+public protocol NetSocketEncodable: Sendable {
+  /// Encode this value to binary data
   ///
-  /// The prefix contains the **number of elements**, not the byte size. Each element is
-  /// encoded by calling its `encode(to:endian:)` method.
+  /// Implementations should build a complete binary message and return it as Data.
+  /// The data will be sent to the socket in a single write operation.
   ///
-  /// - Parameters:
-  ///   - array: Array of elements to write
-  ///   - prefix: Length prefix for element count (default: u32 big-endian)
-  ///   - endian: Byte order for multi-byte values within elements
-  /// - Throws: `BinaryError.invalidValue` if array count exceeds prefix capacity
-  public mutating func write<Element: BinaryEncodable>(_ array: [Element], prefix: LengthPrefix = .u32(), endian: Endian = .big) throws {
-    // Validate array count fits in prefix type
-    switch prefix {
-    case .u8 where array.count > Int(UInt8.max):
-      throw BinaryError.invalidValue("Array count \(array.count) exceeds u8 max (255)")
-    case .u16 where array.count > Int(UInt16.max):
-      throw BinaryError.invalidValue("Array count \(array.count) exceeds u16 max (65535)")
-    case .u32 where array.count > Int(UInt32.max):
-      throw BinaryError.invalidValue("Array count \(array.count) exceeds u32 max")
-    default:
-      break
-    }
-    
-    // Number of elements, not byte length:
-    switch prefix {
-    case .u8:  data.append(UInt8(array.count))
-    case .u16(let e): write(UInt16(array.count), endian: e)
-    case .u32(let e): write(UInt32(array.count), endian: e)
-    case .u64(let e): write(UInt64(array.count), endian: e)
-    }
-    for el in array { el.encode(to: &self, endian: endian) }
-  }
-  
-  /// Get the final binary data
-  /// - Returns: All accumulated binary data
-  public func finalize() -> Data { data }
+  /// - Parameter endian: Byte order for multi-byte values
+  /// - Returns: Encoded binary data ready to send
+  /// - Throws: Encoding errors
+  func encode(endian: Endian) throws -> Data
 }
 
-/// A reader for parsing binary data structures
+/// Protocol for types that can decode themselves directly from a socket stream
 ///
-/// ByteReader provides methods to deserialize integers, floats, strings, and arrays from binary format.
-/// The reader maintains an offset that automatically advances as data is read.
+/// Types conforming to `NetSocketDecodable` read field-by-field directly from the socket
+/// using async reads. This enables true streaming without buffering entire messages.
+///
+/// **Important**: If decoding throws after consuming some bytes (e.g., validation fails),
+/// the socket will be left with those bytes consumed. In practice, this usually means the
+/// connection should be closed. For most protocols this is acceptable since decode errors
+/// indicate corrupt data or protocol violations.
 ///
 /// Example:
 /// ```swift
-/// var r = ByteReader(data: binaryData)
-/// let value = try r.read(UInt16.self, endian: .big)
-/// let text = try r.readString(prefix: .u16(.big))
+/// struct MyMessage: NetSocketDecodable {
+///   let id: UInt32
+///   let name: String
+///
+///   init(from socket: NetSocketNew, endian: Endian) async throws {
+///     self.id = try await socket.read(UInt32.self, endian: endian)
+///     let nameLen = try await socket.read(UInt16.self, endian: endian)
+///     let nameData = try await socket.readExactly(Int(nameLen))
+///     guard let name = String(data: nameData, encoding: .utf8) else {
+///       throw NetSocketError.decodeFailed(NSError())
+///     }
+///     self.name = name
+///   }
+/// }
+///
+/// let message = try await socket.receive(MyMessage.self)
 /// ```
-public struct ByteReader: Sendable {
-  /// The binary data being read
-  public let data: Data
-  /// Current read position
-  public private(set) var offset: Int = 0
-
-  public init(data: Data) { self.data = data }
-
-  @inline(__always)
-  private mutating func take(_ count: Int) throws -> UnsafeRawBufferPointer {
-    guard offset + count <= data.count else { throw BinaryError.outOfBounds(need: count, have: data.count - offset) }
-    let start = data.startIndex + offset
-    offset += count
-    return data[start..<(start + count)].withUnsafeBytes { $0 }
-  }
-
-  /// Read a fixed-width integer
-  /// - Parameters:
-  ///   - type: Integer type to read
-  ///   - endian: Byte order (default: big-endian)
-  /// - Returns: Decoded integer value
-  /// - Throws: `BinaryError.outOfBounds` if insufficient data
-  public mutating func read<T: FixedWidthInteger>(_ type: T.Type = T.self, endian: Endian = .big) throws -> T {
-    let size = MemoryLayout<T>.size
-    let raw = try take(size)
-    let v = raw.load(as: T.self)
-    switch endian {
-    case .big: return T(bigEndian: v)
-    case .little: return T(littleEndian: v)
-    }
-  }
-  
-  /// Read a boolean (0 = false, non-zero = true)
-  /// - Returns: Boolean value
-  /// - Throws: `BinaryError.outOfBounds` if insufficient data
-  public mutating func readBool() throws -> Bool {
-    let b: UInt8 = try read()
-    return b != 0
-  }
-
-  /// Read a Float from its IEEE 754 bit pattern
-  /// - Parameters:
-  ///   - type: Float type (for type inference)
-  ///   - endian: Byte order (default: big-endian)
-  /// - Returns: Float value
-  /// - Throws: `BinaryError.outOfBounds` if insufficient data
-  public mutating func read(_ type: Float.Type = Float.self, endian: Endian = .big) throws -> Float {
-    let bits: UInt32 = try read(endian: endian)
-    return Float(bitPattern: bits)
-  }
-
-  /// Read a Double from its IEEE 754 bit pattern
-  /// - Parameters:
-  ///   - type: Double type (for type inference)
-  ///   - endian: Byte order (default: big-endian)
-  /// - Returns: Double value
-  /// - Throws: `BinaryError.outOfBounds` if insufficient data
-  public mutating func read(_ type: Double.Type = Double.self, endian: Endian = .big) throws -> Double {
-    let bits: UInt64 = try read(endian: endian)
-    return Double(bitPattern: bits)
-  }
-
-  /// Read a fixed number of raw bytes
-  /// - Parameter count: Number of bytes to read
-  /// - Returns: Data containing exactly `count` bytes
-  /// - Throws: `BinaryError.outOfBounds` if insufficient data
-  public mutating func readData(count: Int) throws -> Data {
-    let raw = try take(count)
-    return Data(raw)
-  }
-
-  /// Read length-prefixed raw bytes
-  /// - Parameters:
-  ///   - prefix: Length prefix type
-  ///   - endian: Byte order for length prefix
-  /// - Returns: Data of the specified length
-  /// - Throws: `BinaryError` if prefix value is invalid or insufficient data
-  public mutating func readData(prefix: LengthPrefix, endian: Endian = .big) throws -> Data {
-    let len: Int
-    switch prefix {
-    case .u8:  len = Int(try read(UInt8.self))
-    case .u16(let e): len = Int(try read(UInt16.self, endian: e))
-    case .u32(let e): len = Int(try read(UInt32.self, endian: e))
-    case .u64(let e):
-      let v: UInt64 = try read(UInt64.self, endian: e)
-      if v > Int.max { throw BinaryError.invalidValue("u64 length too large") }
-      len = Int(v)
-    }
-    return try readData(count: len)
-  }
-
-  /// Read a length-prefixed string
-  /// - Parameters:
-  ///   - prefix: Length prefix type (default: u16 big-endian)
-  ///   - encoding: Text encoding (default: UTF-8)
-  /// - Returns: Decoded string
-  /// - Throws: `BinaryError` if decoding fails or insufficient data
-  public mutating func readString(prefix: LengthPrefix = .u16(),
-                                  encoding: String.Encoding = .utf8) throws -> String {
-    let d = try readData(prefix: prefix)
-    guard let s = String(data: d, encoding: encoding) else { throw BinaryError.badStringEncoding }
-    return s
-  }
-
-  /// Read an array of decodable elements
+public protocol NetSocketDecodable: Sendable {
+  /// Decode a value by reading directly from the socket stream
   ///
-  /// The prefix contains the **number of elements**, not the byte size.
+  /// This initializer should read all necessary fields from the socket using
+  /// methods like `read(_:endian:)`, `readExactly(_:)`, `readString(length:)`, etc.
+  ///
+  /// The socket handles waiting for data to arrive, so you can read field by field
+  /// without worrying about buffering.
   ///
   /// - Parameters:
-  ///   - type: Element type to decode
-  ///   - prefix: Length prefix for element count (default: u32 big-endian)
-  ///   - endian: Byte order for multi-byte values within elements
-  /// - Returns: Array of decoded elements
-  /// - Throws: `BinaryError` if count is invalid, decoding fails, or insufficient data
-  public mutating func readArray<Element: BinaryDecodable>(_ type: Element.Type,
-                                                           prefix: LengthPrefix = .u32(),
-                                                           endian: Endian = .big) throws -> [Element] {
-    let count: Int
-    switch prefix {
-    case .u8:  count = Int(try read(UInt8.self))
-    case .u16(let e): count = Int(try read(UInt16.self, endian: e))
-    case .u32(let e): count = Int(try read(UInt32.self, endian: e))
-    case .u64(let e):
-      let v: UInt64 = try read(UInt64.self, endian: e)
-      if v > Int.max { throw BinaryError.invalidValue("array count too large") }
-      count = Int(v)
-    }
-    var out: [Element] = []
-    out.reserveCapacity(count)
-    for _ in 0..<count {
-      out.append(try Element(from: &self, endian: endian))
-    }
-    return out
-  }
-
-  /// Whether the reader has reached the end of the data
-  public var isAtEnd: Bool { offset >= data.count }
+  ///   - socket: Socket to read from
+  ///   - endian: Byte order for multi-byte values
+  /// - Throws: Network errors, insufficient data, or custom decoding errors
+  init(from socket: NetSocketNew, endian: Endian) async throws
 }
 
 public extension NetSocketNew {
-  /// Send a binary-encodable value as a length-prefixed frame
+  /// Send an encodable value to the socket
+  ///
+  /// The type encodes itself to binary data, which is then sent in a single write operation.
+  ///
+  /// Example:
+  /// ```swift
+  /// struct MyMessage: NetSocketEncodable {
+  ///   let id: UInt32
+  ///   let name: String
+  ///
+  ///   func encode(endian: Endian) throws -> Data {
+  ///     var data = Data()
+  ///     // Build binary message...
+  ///     return data
+  ///   }
+  /// }
+  ///
+  /// try await socket.send(message)
+  /// ```
+  ///
   /// - Parameters:
-  ///   - value: Value conforming to BinaryEncodable
+  ///   - value: Value conforming to NetSocketEncodable
   ///   - endian: Byte order (default: big-endian)
-  ///   - prefix: Length prefix type (default: u32 big-endian)
   /// - Throws: Encoding or network errors
-  func sendBinary<T: BinaryEncodable>(_ value: T, endian: Endian = .big, prefix: LengthPrefix = .u32()) async throws {
-    var w = ByteWriter()
-    value.encode(to: &w, endian: endian)
-    try await sendFrame(w.finalize(), prefix: prefix)
+  func send<T: NetSocketEncodable>(_ value: T, endian: Endian = .big) async throws {
+    let data = try value.encode(endian: endian)
+    try await write(data)
   }
 
-  /// Receive and decode a binary value from a length-prefixed frame
+  /// Receive and decode a value directly from the socket stream (no length prefix)
+  ///
+  /// The type reads field-by-field from the socket as needed, enabling true streaming
+  /// without buffering entire messages. Useful for protocols where message size isn't
+  /// known upfront or for progressive decoding.
+  ///
+  /// Example:
+  /// ```swift
+  /// struct ServerEntry: NetSocketDecodable {
+  ///   let id: UInt32
+  ///   let name: String
+  ///
+  ///   init(from socket: NetSocketNew, endian: Endian) async throws {
+  ///     self.id = try await socket.read(UInt32.self, endian: endian)
+  ///     // Read variable-length string...
+  ///   }
+  /// }
+  ///
+  /// let entry = try await socket.receive(ServerEntry.self)
+  /// ```
+  ///
   /// - Parameters:
-  ///   - type: Type conforming to BinaryDecodable
+  ///   - type: Type conforming to NetSocketDecodable
   ///   - endian: Byte order (default: big-endian)
-  ///   - prefix: Length prefix type (default: u32 big-endian)
   /// - Returns: Decoded value
   /// - Throws: Decoding or network errors
-  func receiveBinary<T: BinaryDecodable>(_ type: T.Type, endian: Endian = .big, prefix: LengthPrefix = .u32()) async throws -> T {
-    let data = try await receiveFrame(prefix: prefix)
-    var r = ByteReader(data: data)
-    return try T(from: &r, endian: endian)
+  func receive<T: NetSocketDecodable>(_ type: T.Type, endian: Endian = .big) async throws -> T {
+    return try await T(from: self, endian: endian)
   }
 }

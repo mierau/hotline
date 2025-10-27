@@ -164,20 +164,40 @@ struct HotlineUserAccessOptions: OptionSet {
   static let canSendMessages = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(40))
 }
 
-struct HotlineServer: Identifiable, Hashable {
+struct HotlineServer: Identifiable, Hashable, NetSocketDecodable {
   let id = UUID()
   let address: String
   let port: UInt16
   let users: UInt16
   let name: String?
   let description: String?
-  
+
   static func == (lhs: HotlineServer, rhs: HotlineServer) -> Bool {
     return lhs.id == rhs.id
   }
-  
+
   func hash(into hasher: inout Hasher) {
     hasher.combine(self.id)
+  }
+  
+  init(from socket: NetSocketNew, endian: Endian) async throws {
+    // Read IP address (4 individual bytes)
+    let ip1 = try await socket.read(UInt8.self)
+    let ip2 = try await socket.read(UInt8.self)
+    let ip3 = try await socket.read(UInt8.self)
+    let ip4 = try await socket.read(UInt8.self)
+    self.address = "\(ip1).\(ip2).\(ip3).\(ip4)"
+
+    // Read port and user count (big-endian)
+    self.port = try await socket.read(UInt16.self, endian: endian)
+    self.users = try await socket.read(UInt16.self, endian: endian)
+
+    // Skip 2 unused bytes
+    _ = try await socket.read(2)
+
+    // Read pascal strings (auto-detects encoding)
+    self.name = try await socket.readPascalString()
+    self.description = try await socket.readPascalString()
   }
 }
 
@@ -216,7 +236,6 @@ struct HotlineAccount: Identifiable {
     self.persisted = false
   }
 
-  
   mutating func decodeFields(from data: [UInt8]) {
     var fieldData = data
     
@@ -967,6 +986,39 @@ enum HotlineTransactionType: UInt16 {
   case postNewsArticle = 410
   case deleteNewsArticle = 411
   case connectionKeepAlive = 500
-  
+
   case unknown = 15000
 }
+
+// MARK: - NetSocketDecodable Conformance
+//
+//extension HotlineTrackerServer: NetSocketDecodable {
+//  /// Decode a tracker server entry directly from the socket stream
+//  ///
+//  /// Wire format:
+//  /// - IP address: 4 bytes (individual octets)
+//  /// - Port: UInt16 (big-endian)
+//  /// - User count: UInt16 (big-endian)
+//  /// - Unused: 2 bytes
+//  /// - Server name: Pascal string (1-byte length + data)
+//  /// - Server description: Pascal string (1-byte length + data)
+//  init(from socket: NetSocketNew, endian: Endian) async throws {
+//    // Read IP address (4 individual bytes)
+//    let ip1 = try await socket.read(UInt8.self)
+//    let ip2 = try await socket.read(UInt8.self)
+//    let ip3 = try await socket.read(UInt8.self)
+//    let ip4 = try await socket.read(UInt8.self)
+//    self.address = "\(ip1).\(ip2).\(ip3).\(ip4)"
+//
+//    // Read port and user count (big-endian)
+//    self.port = try await socket.read(UInt16.self, endian: endian)
+//    self.users = try await socket.read(UInt16.self, endian: endian)
+//
+//    // Skip 2 unused bytes
+//    _ = try await socket.read(2)
+//
+//    // Read pascal strings (auto-detects encoding)
+//    self.name = try await socket.readPascalString()
+//    self.description = try await socket.readPascalString()
+//  }
+//}

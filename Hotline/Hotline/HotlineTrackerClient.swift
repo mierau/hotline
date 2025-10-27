@@ -83,7 +83,7 @@ class HotlineTrackerClient {
     try await socket.write(Data(HotlineTrackerClient.MagicPacket))
 
     // Receive magic response (6 bytes: 'HTRK' + version)
-    let magicResponse = try await socket.readExactly(6)
+    let magicResponse = try await socket.read(6)
     let magic = magicResponse[0..<4]
     let version = UInt16(magicResponse[4]) << 8 | UInt16(magicResponse[5])
 
@@ -121,52 +121,33 @@ class HotlineTrackerClient {
 
         print("HotlineTrackerClient: Batch #\(batchCount) - type: \(messageType), dataLen: \(dataLength), count1: \(serverCount), count2: \(serverCount2)")
 
-        // Calculate actual listing data length (excludes the two server count fields)
-        let listingLength = Int(dataLength) - 4
-        print("HotlineTrackerClient: About to read \(listingLength) bytes of listing data...")
-
-        // Receive listing data
-        let listingData = try await socket.readExactly(listingLength)
-        print("HotlineTrackerClient: Successfully read \(listingData.count) bytes")
-
-        // Parse and yield servers one at a time for true progressive streaming
-        var bytes = Array(listingData)
+        // Parse servers directly from socket stream (no buffering!)
         let trackerSeparatorRegex = /^[-]+$/
         var batchEntriesParsed = 0
         var batchServersYielded = 0
 
         for _ in 0..<Int(serverCount2) {
-          guard
-            let ip1 = bytes.consumeUInt8(),
-            let ip2 = bytes.consumeUInt8(),
-            let ip3 = bytes.consumeUInt8(),
-            let ip4 = bytes.consumeUInt8(),
-            let port = bytes.consumeUInt16(),
-            let userCount = bytes.consumeUInt16(),
-            bytes.consume(2), // Skip unused bytes
-            let serverName = bytes.consumePString(),
-            let serverDescription = bytes.consumePString()
-          else {
-            print("HotlineTrackerClient: Insufficient data for entry #\(batchEntriesParsed + 1)")
+          do {
+            // Decode server entry directly from socket stream
+            let server = try await socket.receive(HotlineServer.self)
+
+            batchEntriesParsed += 1
+            totalEntriesParsed += 1
+
+            // Filter out separator entries (servers with names like "-------")
+            let isSeparator = server.name.map {
+              (try? trackerSeparatorRegex.prefixMatch(in: $0)) != nil
+            } ?? false
+
+            if !isSeparator {
+              // Convert wire format to domain model
+              continuation.yield(server)
+              batchServersYielded += 1
+              totalYielded += 1
+            }
+          } catch {
+            print("HotlineTrackerClient: Failed to decode entry #\(batchEntriesParsed + 1): \(error)")
             break
-          }
-
-          batchEntriesParsed += 1
-          totalEntriesParsed += 1
-
-          // Filter out separator entries (servers with names like "-------")
-          let isSeparator = (try? trackerSeparatorRegex.prefixMatch(in: serverName)) != nil
-          if !isSeparator {
-            let server = HotlineServer(
-              address: "\(ip1).\(ip2).\(ip3).\(ip4)",
-              port: port,
-              users: userCount,
-              name: serverName,
-              description: serverDescription
-            )
-            continuation.yield(server)
-            batchServersYielded += 1
-            totalYielded += 1
           }
         }
 
@@ -202,62 +183,5 @@ class HotlineTrackerClient {
       group.cancelAll()
       return result
     }
-  }
-
-  /// Parse tracker listing data into array of servers
-  /// - Parameters:
-  ///   - data: Raw listing data
-  ///   - serverCount: Expected number of entries (including separators)
-  /// - Returns: Tuple of (servers array, total entries parsed including separators)
-  /// - Throws: Parsing errors
-  private func parseListing(_ data: Data, serverCount: Int) throws -> (servers: [HotlineServer], entriesParsed: Int) {
-    // Server record format:
-    // - IP address (4 bytes)
-    // - Port number (2 bytes)
-    // - Number of users (2 bytes)
-    // - Unused (2 bytes)
-    // - Name size (1 byte)
-    // - Name (name size)
-    // - Description size (1 byte)
-    // - Description (description size)
-
-    var bytes = Array(data)
-    let trackerSeparatorRegex = /^[-]+$/
-    var servers: [HotlineServer] = []
-    var entriesParsed = 0
-
-    for _ in 0..<serverCount {
-      guard
-        let ip1 = bytes.consumeUInt8(),
-        let ip2 = bytes.consumeUInt8(),
-        let ip3 = bytes.consumeUInt8(),
-        let ip4 = bytes.consumeUInt8(),
-        let port = bytes.consumeUInt16(),
-        let userCount = bytes.consumeUInt16(),
-        bytes.consume(2), // Skip unused bytes
-        let serverName = bytes.consumePString(),
-        let serverDescription = bytes.consumePString()
-      else {
-        print("HotlineTrackerClient: Insufficient data for server #\(entriesParsed + 1)")
-        break
-      }
-
-      entriesParsed += 1
-
-      // Filter out separator entries (servers with names like "-------")
-      let isSeparator = (try? trackerSeparatorRegex.prefixMatch(in: serverName)) != nil
-      if !isSeparator {
-        let server = HotlineServer(
-          address: "\(ip1).\(ip2).\(ip3).\(ip4)",
-          port: port,
-          users: userCount,
-          name: serverName,
-          description: serverDescription
-        )
-        servers.append(server)
-      }
-    }
-
-    return (servers: servers, entriesParsed: entriesParsed)
   }
 }
