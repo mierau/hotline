@@ -341,13 +341,16 @@ final class Bookmark {
     var fetchedBookmarks: [BookmarkServer] = []
 
     let client = HotlineTrackerClient()
-    if let fetchedServers: [HotlineServer] = try? await client.fetchServers(address: self.address, port: self.port) {
-      for fetchedServer in fetchedServers {
+    do {
+      for try await fetchedServer in client.fetchServers(address: self.address, port: self.port) {
+        print("FETCHED SERVER", fetchedServer)
         if let serverName = fetchedServer.name {
           let server = Server(name: serverName, description: fetchedServer.description, address: fetchedServer.address, port: Int(fetchedServer.port), users: Int(fetchedServer.users))
           fetchedBookmarks.append(BookmarkServer(server: server))
         }
       }
+    } catch {
+      print("Failed to fetch servers from tracker: \(error)")
     }
 
     return fetchedBookmarks

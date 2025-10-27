@@ -221,20 +221,35 @@ class Hotline: Equatable, HotlineClientDelegate, HotlineFileDownloadClientDelega
   
   @MainActor func getServerList(tracker: String, port: Int = HotlinePorts.DefaultTrackerPort) async -> [Server] {
     var servers: [Server] = []
-    
-    if let fetchedServers: [HotlineServer] = try? await self.trackerClient.fetchServers(address: tracker, port: port) {
-      for s in fetchedServers {
-        if let serverName = s.name {
-          servers.append(Server(name: serverName, description: s.description, address: s.address, port: Int(s.port), users: Int(s.users)))
+    print("Hotline.getServerList: Starting fetch from \(tracker):\(port)")
+
+    do {
+      for try await hotlineServer in self.trackerClient.fetchServers(address: tracker, port: port) {
+        if let serverName = hotlineServer.name {
+          servers.append(Server(
+            name: serverName,
+            description: hotlineServer.description,
+            address: hotlineServer.address,
+            port: Int(hotlineServer.port),
+            users: Int(hotlineServer.users)
+          ))
+          if servers.count % 10 == 0 {
+            print("Hotline.getServerList: Collected \(servers.count) servers so far...")
+          }
         }
       }
+    } catch {
+      print("Hotline.getServerList: Error - \(error)")
     }
-    
+
+    print("Hotline.getServerList: Returning \(servers.count) servers")
     return servers
   }
   
   @MainActor func disconnectTracker() {
-    self.trackerClient.close()
+    // No-op: HotlineTrackerClient now uses async/await and manages
+    // connections internally. Each fetchServers() call opens and closes
+    // its own connection automatically.
   }
   
   @MainActor func login(server: Server, username: String, iconID: Int, callback: ((Bool) -> Void)? = nil) {

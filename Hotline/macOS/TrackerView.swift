@@ -32,6 +32,7 @@ struct TrackerView: View {
   @State private var expandedTrackers: Set<Bookmark> = []
   @State private var trackerServers: [Bookmark: [BookmarkServer]] = [:]
   @State private var loadingTrackers: Set<Bookmark> = []
+  @State private var fetchTasks: [Bookmark: Task<Void, Never>] = [:]
   @State private var searchText: String = ""
   @State private var isSearching = false
 
@@ -67,6 +68,7 @@ struct TrackerView: View {
 
   private func filteredServers(for bookmark: Bookmark) -> [BookmarkServer] {
     let servers = self.trackerServers[bookmark] ?? []
+    print("TrackerView.filteredServers: Looking up servers for \(bookmark.name), found \(servers.count) servers")
 
     guard !self.searchText.isEmpty else {
       return servers
@@ -90,7 +92,8 @@ struct TrackerView: View {
         TrackerItemView(
           bookmark: bookmark,
           isExpanded: self.expandedTrackers.contains(bookmark),
-          isLoading: self.loadingTrackers.contains(bookmark)
+          isLoading: self.loadingTrackers.contains(bookmark),
+          count: self.trackerServers[bookmark]?.count ?? 0
         ) {
           self.toggleExpanded(for: bookmark)
         }
@@ -410,10 +413,12 @@ struct TrackerView: View {
       case .bookmark(let bookmark):
         if bookmark.type == .tracker {
           if self.expandedTrackers.contains(bookmark) {
-            // Already expanded, just refresh the servers
-            Task {
+            // Already expanded, cancel old fetch and start new one
+            self.fetchTasks[bookmark]?.cancel()
+            let task = Task {
               await self.fetchServers(for: bookmark)
             }
+            self.fetchTasks[bookmark] = task
           } else {
             // Not expanded, expand it (which also fetches)
             self.setExpanded(true, for: bookmark)
@@ -430,10 +435,12 @@ struct TrackerView: View {
     for bookmark in self.bookmarks {
       if bookmark.type == .tracker {
         if self.expandedTrackers.contains(bookmark) {
-          // Already expanded, just refresh the servers
-          Task {
+          // Already expanded, cancel old fetch and start new one
+          self.fetchTasks[bookmark]?.cancel()
+          let task = Task {
             await self.fetchServers(for: bookmark)
           }
+          self.fetchTasks[bookmark] = task
         } else {
           // Not expanded, expand it (which also fetches)
           self.setExpanded(true, for: bookmark)
@@ -446,13 +453,19 @@ struct TrackerView: View {
     guard bookmark.type == .tracker else { return }
 
     if self.expandedTrackers.contains(bookmark) {
+      // Collapse: cancel ongoing fetch and clear data
+      self.fetchTasks[bookmark]?.cancel()
+      self.fetchTasks[bookmark] = nil
       self.expandedTrackers.remove(bookmark)
       self.trackerServers[bookmark] = nil
+      self.loadingTrackers.remove(bookmark)
     } else {
+      // Expand: start fetch task
       self.expandedTrackers.insert(bookmark)
-      Task {
+      let task = Task {
         await self.fetchServers(for: bookmark)
       }
+      self.fetchTasks[bookmark] = task
     }
   }
 
@@ -461,21 +474,32 @@ struct TrackerView: View {
 
     if expanded && !self.expandedTrackers.contains(bookmark) {
       self.expandedTrackers.insert(bookmark)
-      Task {
+      let task = Task {
         await self.fetchServers(for: bookmark)
       }
+      self.fetchTasks[bookmark] = task
     } else if !expanded && self.expandedTrackers.contains(bookmark) {
+      // Cancel ongoing fetch and clear data
+      self.fetchTasks[bookmark]?.cancel()
+      self.fetchTasks[bookmark] = nil
       self.expandedTrackers.remove(bookmark)
       self.trackerServers[bookmark] = nil
+      self.loadingTrackers.remove(bookmark)
     }
   }
 
   private func fetchServers(for bookmark: Bookmark) async {
+    print("TrackerView.fetchServers: Starting fetch for bookmark: \(bookmark.name)")
     self.loadingTrackers.insert(bookmark)
     let servers = await bookmark.fetchServers()
+    print("TrackerView.fetchServers: Got \(servers.count) servers from bookmark.fetchServers()")
     await MainActor.run {
+      print("TrackerView.fetchServers: Assigning \(servers.count) servers to trackerServers[\(bookmark.name)]")
       self.trackerServers[bookmark] = servers
       self.loadingTrackers.remove(bookmark)
+      self.fetchTasks[bookmark] = nil  // Clean up completed task
+      print("TrackerView.fetchServers: trackerServers now has \(self.trackerServers.count) entries")
+      print("TrackerView.fetchServers: Verification - trackerServers[\(bookmark.name)] now has \(self.trackerServers[bookmark]?.count ?? -1) servers")
     }
   }
 }
@@ -694,6 +718,7 @@ struct TrackerItemView: View {
   let bookmark: Bookmark
   let isExpanded: Bool
   let isLoading: Bool
+  let count: Int
   let onToggleExpanded: () -> Void
 
   var body: some View {
@@ -727,6 +752,23 @@ struct TrackerItemView: View {
             .controlSize(.small)
         }
         Spacer(minLength: 0)
+        if isExpanded && count > 0 {
+          HStack(spacing: 4) {
+            Text(String(count))
+            
+            Image(systemName: "globe.americas.fill")
+              .resizable()
+              .scaledToFit()
+              .frame(width: 12, height: 12)
+              .opacity(0.5)
+          }
+          
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .foregroundStyle(.secondary)
+            .background(.quinary)
+            .clipShape(.capsule)
+        }
       case .server:
         Image(systemName: "bookmark.fill")
           .resizable()

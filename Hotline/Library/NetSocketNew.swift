@@ -313,7 +313,9 @@ public actor NetSocketNew {
   
   private nonisolated func startReceiveLoop() {
     func loop(_ connection: NWConnection, chunk: Int, owner: NetSocketNew) {
+      print("NetSocketNew: Calling connection.receive() to request more data...")
       connection.receive(minimumIncompleteLength: 1, maximumLength: chunk) { data, _, isComplete, error in
+        print("NetSocketNew: Receive callback - data: \(data?.count ?? 0) bytes, isComplete: \(isComplete), error: \(String(describing: error))")
         if let error {
           Task { await owner.handleReceiveError(error) }
           return
@@ -344,9 +346,10 @@ public actor NetSocketNew {
   }
   
   private func append(_ data: Data) {
+    print("NetSocketNew: Received \(data.count) bytes from network, buffer now has \(buffer.count - head + data.count) available")
     buffer.append(data)
     if buffer.count - head > cfg.maxBufferBytes {
-      // Hard stop: drop connection rather than OOM’ing.
+      // Hard stop: drop connection rather than OOM'ing.
       isClosed = true
       connection.cancel()
       failAllWaiters(NetSocketError.framingExceeded(max: cfg.maxBufferBytes))
@@ -363,14 +366,32 @@ public actor NetSocketNew {
   
   // MARK: Close
 
-  /// Close the connection
+  /// Close the connection gracefully
   ///
-  /// Cancels the underlying network connection and wakes all pending read/write operations
-  /// with a `NetSocketError.closed` error. This method is idempotent.
+  /// Performs a graceful shutdown of the underlying network connection (e.g., TCP FIN)
+  /// and wakes all pending read/write operations with a `NetSocketError.closed` error.
+  /// This method is idempotent - subsequent calls are ignored.
+  ///
+  /// Use `forceClose()` for immediate non-graceful termination (e.g., TCP RST).
   public func close() {
     guard !isClosed else { return }
     isClosed = true
     connection.cancel()
+    resumeDataWaiters()
+    resumeReadyWaiters(with: .failure(NetSocketError.closed))
+  }
+
+  /// Force close the connection immediately (non-graceful)
+  ///
+  /// Performs an immediate non-graceful shutdown of the underlying network connection
+  /// (e.g., TCP RST). Use this when you need to terminate the connection immediately
+  /// without waiting for graceful closure. For normal shutdown, use `close()` instead.
+  ///
+  /// This method is idempotent - subsequent calls are ignored.
+  public func forceClose() {
+    guard !isClosed else { return }
+    isClosed = true
+    connection.forceCancel()
     resumeDataWaiters()
     resumeReadyWaiters(with: .failure(NetSocketError.closed))
   }
@@ -597,6 +618,7 @@ public actor NetSocketNew {
   /// - Throws: `NetSocketError.framingExceeded` if max bytes exceeded, or connection errors
   public func readUntil(delimiter: Data, maxBytes: Int? = nil, includeDelimiter: Bool = false) async throws -> Data {
     while true {
+      try Task.checkCancellation()
       if let r = search(delimiter: delimiter) {
         let consumeLen = r.upperBound - head
         let data = try await readExactly(consumeLen)
@@ -639,6 +661,7 @@ public actor NetSocketNew {
   /// Skip until delimiter is found (discards delimiter too)
   public func skipUntil(delimiter: Data) async throws {
     while true {
+      try Task.checkCancellation()
       if let r = search(delimiter: delimiter) {
         head = r.upperBound  // Skip to end of delimiter
         compactIfNeeded()
@@ -660,8 +683,9 @@ public actor NetSocketNew {
   private var availableBytes: Int { buffer.count - head }
   
   private func waitForData() async throws {
+    try Task.checkCancellation()
     try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-      if availableBytes > 0 || isClosed { cont.resume(); return }
+      if isClosed { cont.resume(); return }
       dataWaiters.append(cont)
     }
   }
@@ -669,6 +693,7 @@ public actor NetSocketNew {
   private func ensureReadable(_ count: Int) async throws {
     try await ensureReady()
     while availableBytes < count {
+      try Task.checkCancellation()
       if isClosed { throw NetSocketError.insufficientData(expected: count, got: availableBytes) }
       try await waitForData()
     }
@@ -945,7 +970,7 @@ public extension NetSocketNew {
         try Task.checkCancellation()
         let n = Int(min(Int64(chunkSize), remaining))
         let chunk = try await readExactly(n)
-        try fh.write(chunk)
+        fh.write(chunk)
         remaining -= Int64(n)
         written += Int64(n)
         progress?(.init(sent: written, total: length))
