@@ -307,6 +307,7 @@ struct Application: App {
     .windowToolbarStyle(.unifiedCompact(showsTitle: true))
     .defaultSize(width: 350, height: 150)
     .defaultPosition(.center)
+    .restorationBehavior(.disabled)
     
     // MARK: Text Preview Window
     WindowGroup(id: "preview-text", for: PreviewFileInfo.self) { $info in
@@ -317,6 +318,7 @@ struct Application: App {
     .windowToolbarStyle(.unifiedCompact(showsTitle: true))
     .defaultSize(width: 450, height: 550)
     .defaultPosition(.center)
+    .restorationBehavior(.disabled)
   }
 
   func connect(to item: TrackerSelection) {
