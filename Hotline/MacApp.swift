@@ -192,26 +192,12 @@ struct Application: App {
     .defaultSize(width: 690, height: 760)
     .defaultPosition(.center)
     .onChange(of: activeServerState) {
-      AppState.shared.activeServerState = activeServerState
-    }
-    .onChange(of: activeHotline) {
-      AppState.shared.activeHotline = activeHotline
-    }
-    .onChange(of: activeHotline?.serverTitle) {
-      if let hotline = activeHotline {
-        AppState.shared.activeServerName = hotline.serverTitle
-      }
-    }
-    .onChange(of: activeHotline?.bannerImage) {
       withAnimation {
-        AppState.shared.activeServerBanner = activeHotline?.bannerImage
+        AppState.shared.activeServerState = activeServerState
       }
     }
     .onChange(of: activeHotline) {
       AppState.shared.activeHotline = activeHotline
-      if let hotline = activeHotline {
-        AppState.shared.activeServerName = hotline.serverTitle
-      }
     }
     .commands {
       CommandGroup(replacing: .newItem) {

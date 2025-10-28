@@ -4,16 +4,9 @@ struct HotlinePanelView: View {
   @Environment(\.openWindow) var openWindow
   @Environment(\.colorScheme) var colorScheme
 
-  private var colorArt: ColorArt? {
-    if let banner = AppState.shared.activeServerBanner {
-      return ColorArt(image: banner, scaledSize: NSSize(width: 100, height: 100))
-    }
-    return nil
-  }
-
   var body: some View {
     VStack(spacing: 0) {
-      Image(nsImage: AppState.shared.activeServerBanner ?? NSImage(named: "Default Banner")!)
+      Image(nsImage: AppState.shared.activeServerState?.serverBanner ?? NSImage(named: "Default Banner")!)
         .interpolation(.high)
         .resizable()
         .scaledToFill()
@@ -123,8 +116,8 @@ struct HotlinePanelView: View {
       .padding(.top, 12)
       .padding(.bottom, 12)
       .padding([.leading, .trailing], 12)
-      .background(colorArt.map { Color(nsColor: $0.backgroundColor) } ?? Color(nsColor: .controlBackgroundColor))
-      .foregroundStyle(colorArt.map { Color(nsColor: $0.primaryColor) } ?? Color.primary)
+      .background(AppState.shared.activeServerState?.bannerColors.map { Color(nsColor: $0.backgroundColor) } ?? Color(nsColor: .controlBackgroundColor))
+      .foregroundStyle(AppState.shared.activeServerState?.bannerColors.map { Color(nsColor: $0.primaryColor) } ?? Color.primary)
 //      .background(Color.red.opacity(0.5).blendMode(.multiply))
       
 //      GroupBox {

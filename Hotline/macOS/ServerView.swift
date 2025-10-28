@@ -6,11 +6,14 @@ import AppKit
 class ServerState: Equatable {
   var id: UUID = UUID()
   var selection: ServerNavigationType
-  
+  var serverName: String? = nil
+  var serverBanner: NSImage? = nil
+  var bannerColors: ColorArt? = nil
+
   init(selection: ServerNavigationType) {
     self.selection = selection
   }
-  
+
   static func == (lhs: ServerState, rhs: ServerState) -> Bool {
     return lhs.id == rhs.id
   }
@@ -104,7 +107,7 @@ extension FocusedValues {
     get { self[ActiveHotlineModelFocusedValueKey.self] }
     set { self[ActiveHotlineModelFocusedValueKey.self] = newValue }
   }
-  
+
   var activeServerState: ServerState? {
     get { self[ActiveServerStateFocusedValueKey.self] }
     set { self[ActiveServerStateFocusedValueKey.self] = newValue }
@@ -237,6 +240,19 @@ struct ServerView: View {
     }
     .onDisappear {
       model.disconnect()
+    }
+    .onChange(of: model.serverTitle) { oldTitle, newTitle in
+      state.serverName = newTitle
+    }
+    .onChange(of: model.bannerImage) { oldBanner, newBanner in
+      withAnimation {
+        state.serverBanner = newBanner
+        if let banner = newBanner {
+          state.bannerColors = ColorArt(image: banner, scaledSize: NSSize(width: 100, height: 100))
+        } else {
+          state.bannerColors = nil
+        }
+      }
     }
     .alert(model.errorMessage ?? "Server Error", isPresented: $model.errorDisplayed) {
       Button("OK") {}

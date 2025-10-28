@@ -32,13 +32,20 @@ import SwiftUI
 
 fileprivate let kColorThresholdMinimumPercentage: CGFloat = 0.001
 
-struct ColorArt {
+struct ColorArt: Equatable {
   let backgroundColor: NSColor
   let primaryColor: NSColor
   let secondaryColor: NSColor
   let detailColor: NSColor
   let scaledImage: NSImage
-  
+
+  static func == (lhs: ColorArt, rhs: ColorArt) -> Bool {
+    return lhs.backgroundColor == rhs.backgroundColor &&
+           lhs.primaryColor == rhs.primaryColor &&
+           lhs.secondaryColor == rhs.secondaryColor &&
+           lhs.detailColor == rhs.detailColor
+  }
+
   init?(image: NSImage, scaledSize: NSSize = .zero) {
     let finalImage = Self.scaleImage(image, size: scaledSize)
     self.scaledImage = finalImage
