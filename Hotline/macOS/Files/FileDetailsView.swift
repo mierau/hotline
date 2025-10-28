@@ -112,15 +112,15 @@ struct FileDetailsView: View {
   static let byteFormatter = ByteCountFormatter()
   
   private func formattedFileSize(_ fileSize: UInt) -> String {
-    FileView.byteFormatter.allowedUnits = [.useAll]
-    FileView.byteFormatter.countStyle = .file
-    return FileView.byteFormatter.string(fromByteCount: Int64(fileSize))
+    FileItemView.byteFormatter.allowedUnits = [.useAll]
+    FileItemView.byteFormatter.countStyle = .file
+    return FileItemView.byteFormatter.string(fromByteCount: Int64(fileSize))
   }
   
   // Format byte count Int into string like: 23.4M (24,601,664 bytes)
   private func formattedSize(byteCount: Int) -> String {
     let formattedByteCount = FileDetailsView.byteCountSizeFormatter.string(from: NSNumber(value:byteCount)) ?? "0"
-    return "\(FileView.byteFormatter.string(fromByteCount: Int64(byteCount))) (\(formattedByteCount) bytes)"
+    return "\(FileItemView.byteFormatter.string(fromByteCount: Int64(byteCount))) (\(formattedByteCount) bytes)"
   }
   
   private func isEdited() -> Bool {

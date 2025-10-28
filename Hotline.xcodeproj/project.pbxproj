@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726072BE0672A000C1DA7 /* FileDetails.swift */; };
-		11A7260A2BE0675A000C1DA7 /* FileDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726092BE06759000C1DA7 /* FileDetailsView.swift */; };
+		11A7260A2BE0675A000C1DA7 /* FileDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726092BE06759000C1DA7 /* FileDetailsView.swift */; platformFilters = (macos, ); };
 		11F8288B2BF9428100216BA0 /* AccountManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11F8288A2BF9428100216BA0 /* AccountManagerView.swift */; };
 		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; platformFilter = ios; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; platformFilter = ios; };
@@ -27,6 +27,11 @@
 		DA4B8F3A2EA6FB3C00CBFD53 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */; platformFilter = ios; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
+		DA52689C2EB0738B00DCB941 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA52689B2EB0738B00DCB941 /* GeneralSettingsView.swift */; platformFilters = (macos, ); };
+		DA52689E2EB073A400DCB941 /* IconSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA52689D2EB073A400DCB941 /* IconSettingsView.swift */; platformFilters = (macos, ); };
+		DA5268A02EB073BC00DCB941 /* SoundSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA52689F2EB073BC00DCB941 /* SoundSettingsView.swift */; platformFilters = (macos, ); };
+		DA5268A32EB0741B00DCB941 /* FolderItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268A22EB0741B00DCB941 /* FolderItemView.swift */; platformFilters = (macos, ); };
+		DA5268A52EB0743000DCB941 /* FileItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268A42EB0743000DCB941 /* FileItemView.swift */; platformFilters = (macos, ); };
 		DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */; platformFilters = (macos, ); };
 		DA55AC752BE4888300034857 /* InstantMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC742BE4888300034857 /* InstantMessage.swift */; };
 		DA55AC772BE589F700034857 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC762BE589F700034857 /* AboutView.swift */; platformFilters = (macos, ); };
@@ -118,6 +123,11 @@
 		DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		DA52689B2EB0738B00DCB941 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
+		DA52689D2EB073A400DCB941 /* IconSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconSettingsView.swift; sourceTree = "<group>"; };
+		DA52689F2EB073BC00DCB941 /* SoundSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSettingsView.swift; sourceTree = "<group>"; };
+		DA5268A22EB0741B00DCB941 /* FolderItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderItemView.swift; sourceTree = "<group>"; };
+		DA5268A42EB0743000DCB941 /* FileItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileItemView.swift; sourceTree = "<group>"; };
 		DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncLinkPreview.swift; sourceTree = "<group>"; };
 		DA55AC742BE4888300034857 /* InstantMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstantMessage.swift; sourceTree = "<group>"; };
 		DA55AC762BE589F700034857 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
@@ -228,6 +238,67 @@
 				DA0D69902B1E894800C71DF5 /* FilesView.swift */,
 			);
 			path = iOS;
+			sourceTree = "<group>";
+		};
+		DA52689A2EB0737400DCB941 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				DA2863D72B37AD1C00A7D050 /* SettingsView.swift */,
+				DA52689B2EB0738B00DCB941 /* GeneralSettingsView.swift */,
+				DA52689D2EB073A400DCB941 /* IconSettingsView.swift */,
+				DA52689F2EB073BC00DCB941 /* SoundSettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		DA5268A12EB073E600DCB941 /* Files */ = {
+			isa = PBXGroup;
+			children = (
+				DAE735002B2E71F2000C56F6 /* FilesView.swift */,
+				DA5268A42EB0743000DCB941 /* FileItemView.swift */,
+				DA5268A22EB0741B00DCB941 /* FolderItemView.swift */,
+				11A726092BE06759000C1DA7 /* FileDetailsView.swift */,
+				DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */,
+				DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */,
+			);
+			path = Files;
+			sourceTree = "<group>";
+		};
+		DA5268A62EB0762300DCB941 /* Board */ = {
+			isa = PBXGroup;
+			children = (
+				DAE734FC2B2E65E9000C56F6 /* MessageBoardView.swift */,
+				DA69807D2BFD449B003E434B /* MessageBoardEditorView.swift */,
+			);
+			path = Board;
+			sourceTree = "<group>";
+		};
+		DA5268A72EB0812E00DCB941 /* Accounts */ = {
+			isa = PBXGroup;
+			children = (
+				11F8288A2BF9428100216BA0 /* AccountManagerView.swift */,
+			);
+			path = Accounts;
+			sourceTree = "<group>";
+		};
+		DA5268A82EB081AF00DCB941 /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				DAE734FE2B2E6750000C56F6 /* ChatView.swift */,
+				DA6549992BEC280E00EDB697 /* ServerMessageView.swift */,
+				DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		DA5268A92EB081DE00DCB941 /* News */ = {
+			isa = PBXGroup;
+			children = (
+				DAE735042B3218D8000C56F6 /* NewsView.swift */,
+				DA2D98112BF29D5F0027E4BD /* NewsItemView.swift */,
+				DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */,
+			);
+			path = News;
 			sourceTree = "<group>";
 		};
 		DA9CAFAE2B126D5700CDA197 = {
@@ -370,26 +441,18 @@
 		DAE734F72B2E4126000C56F6 /* macOS */ = {
 			isa = PBXGroup;
 			children = (
-				DAE734FA2B2E41F9000C56F6 /* TrackerView.swift */,
-				DAE734F82B2E4185000C56F6 /* ServerView.swift */,
-				DAE734FE2B2E6750000C56F6 /* ChatView.swift */,
-				DAE735042B3218D8000C56F6 /* NewsView.swift */,
-				DA2D98112BF29D5F0027E4BD /* NewsItemView.swift */,
-				DA72A0DC2B4CD0BF00A0F48A /* NewsEditorView.swift */,
-				DAE735022B30C0BB000C56F6 /* MessageView.swift */,
-				DAE734FC2B2E65E9000C56F6 /* MessageBoardView.swift */,
-				DA69807D2BFD449B003E434B /* MessageBoardEditorView.swift */,
-				DAE735002B2E71F2000C56F6 /* FilesView.swift */,
-				DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */,
-				DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */,
-				11A726092BE06759000C1DA7 /* FileDetailsView.swift */,
-				DA2863D72B37AD1C00A7D050 /* SettingsView.swift */,
-				DAE136B92B9D1147007D8307 /* HotlinePanelView.swift */,
 				DA55AC762BE589F700034857 /* AboutView.swift */,
 				DACCE5E22EABE86A008CDD92 /* AppUpdateView.swift */,
-				DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */,
-				DA6549992BEC280E00EDB697 /* ServerMessageView.swift */,
-				11F8288A2BF9428100216BA0 /* AccountManagerView.swift */,
+				DAE136B92B9D1147007D8307 /* HotlinePanelView.swift */,
+				DAE734FA2B2E41F9000C56F6 /* TrackerView.swift */,
+				DAE734F82B2E4185000C56F6 /* ServerView.swift */,
+				DAE735022B30C0BB000C56F6 /* MessageView.swift */,
+				DA5268A82EB081AF00DCB941 /* Chat */,
+				DA5268A62EB0762300DCB941 /* Board */,
+				DA5268A92EB081DE00DCB941 /* News */,
+				DA5268A12EB073E600DCB941 /* Files */,
+				DA5268A72EB0812E00DCB941 /* Accounts */,
+				DA52689A2EB0737400DCB941 /* Settings */,
 			);
 			path = macOS;
 			sourceTree = "<group>";
@@ -486,6 +549,7 @@
 				DA6300972B24036B0034CBFD /* HotlineClient.swift in Sources */,
 				DA43205E2B1D615600FC8843 /* ServerView.swift in Sources */,
 				DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */,
+				DA52689E2EB073A400DCB941 /* IconSettingsView.swift in Sources */,
 				DAC3D9832BC33FD000A727C9 /* AppState.swift in Sources */,
 				DA65499C2BEC3FBD00EDB697 /* ServerAgreementView.swift in Sources */,
 				DAB4D8802B4C8E9A0048A05C /* URLAdditions.swift in Sources */,
@@ -503,6 +567,7 @@
 				DA55AC772BE589F700034857 /* AboutView.swift in Sources */,
 				DA72A0E22B4DAA4000A0F48A /* NewsArticle.swift in Sources */,
 				DAE734FB2B2E41F9000C56F6 /* TrackerView.swift in Sources */,
+				DA5268A32EB0741B00DCB941 /* FolderItemView.swift in Sources */,
 				DAE136BA2B9D1147007D8307 /* HotlinePanelView.swift in Sources */,
 				11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */,
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
@@ -524,8 +589,10 @@
 				DA69807E2BFD449B003E434B /* MessageBoardEditorView.swift in Sources */,
 				DAE735012B2E71F2000C56F6 /* FilesView.swift in Sources */,
 				DA55AC792BE6A1AD00034857 /* RegularExpressions.swift in Sources */,
+				DA5268A02EB073BC00DCB941 /* SoundSettingsView.swift in Sources */,
 				11A7260A2BE0675A000C1DA7 /* FileDetailsView.swift in Sources */,
 				DA72A0DD2B4CD0BF00A0F48A /* NewsEditorView.swift in Sources */,
+				DA52689C2EB0738B00DCB941 /* GeneralSettingsView.swift in Sources */,
 				DABFCC292B1530DC009F40D2 /* FoundationExtensions.swift in Sources */,
 				DA57536C2B36BA1D00FAC277 /* TextDocument.swift in Sources */,
 				DACCE5E12EABE4B4008CDD92 /* AppUpdate.swift in Sources */,
@@ -544,6 +611,7 @@
 				DAB4D8842B4CABEF0048A05C /* DataAdditions.swift in Sources */,
 				DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */,
 				DAE735052B3218D8000C56F6 /* NewsView.swift in Sources */,
+				DA5268A52EB0743000DCB941 /* FileItemView.swift in Sources */,
 				DAE734F92B2E4185000C56F6 /* ServerView.swift in Sources */,
 				DA2D98122BF29D5F0027E4BD /* NewsItemView.swift in Sources */,
 				DADDB28B2B22B31F0024040D /* Tracker.swift in Sources */,

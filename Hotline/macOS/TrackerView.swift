@@ -105,6 +105,7 @@ struct TrackerView: View {
               .moveDisabled(true)
               .deleteDisabled(true)
               .tag(TrackerSelection.bookmarkServer(trackedServer))
+              .padding(.leading, 16 + 8 + 10)
           }
         }
       }
@@ -180,18 +181,6 @@ struct TrackerView: View {
       case .bookmarkServer(let bookmarkServer):
         openWindow(id: "server", value: bookmarkServer.server)
       }
-      
-//      if clickedItem.type == .tracker {
-//        if NSEvent.modifierFlags.contains(.option) {
-//          trackerSheetBookmark = clickedItem
-//        }
-//        else {
-//          clickedItem.expanded.toggle()
-//        }
-//      }
-//      else if let server = clickedItem.server {
-//        openWindow(id: "server", value: server)
-//      }
     }
     .fileExporter(isPresented: $bookmarkExportActive, document: bookmarkExport, contentTypes: [.data], defaultFilename: "\(bookmarkExport?.bookmark.name ?? "Hotline Bookmark").hlbm", onCompletion: { result in
       switch result {
@@ -208,38 +197,26 @@ struct TrackerView: View {
       switch self.selection {
       case .bookmark(let bookmark):
         if bookmark.type == .tracker {
-          self.expandedTrackers.insert(bookmark)
+          self.setExpanded(true, for: bookmark)
           return .handled
         }
       default:
         break
       }
       
-//      if
-//        let bookmark = selection,
-//        bookmark.type == .tracker {
-//        bookmark.expanded = true
-//        return .handled
-//      }
       return .ignored
     }
     .onKeyPress(.leftArrow) {
       switch self.selection {
       case .bookmark(let bookmark):
         if bookmark.type == .tracker {
-          self.expandedTrackers.remove(bookmark)
+          self.setExpanded(false, for: bookmark)
           return .handled
         }
       default:
         break
       }
       
-//      if
-//        let bookmark = selection,
-//        bookmark.type == .tracker {
-//        bookmark.expanded = false
-//        return .handled
-//      }
       return .ignored
     }
     .onDrop(of: [UTType.fileURL], isTargeted: $fileDropActive) { providers, dropPoint in
@@ -354,8 +331,7 @@ struct TrackerView: View {
     
     Button {
       NSPasteboard.general.clearContents()
-      let displayAddress = server.port == HotlinePorts.DefaultServerPort ?
-      server.address : "\(server.address):\(server.port)"
+      let displayAddress = (server.port == HotlinePorts.DefaultServerPort) ? server.address : "\(server.address):\(server.port)"
       NSPasteboard.general.setString(displayAddress, forType: .string)
     } label: {
       Label("Copy Address", systemImage: "doc.on.doc")
@@ -451,22 +427,7 @@ struct TrackerView: View {
   
   func toggleExpanded(for bookmark: Bookmark) {
     guard bookmark.type == .tracker else { return }
-
-    if self.expandedTrackers.contains(bookmark) {
-      // Collapse: cancel ongoing fetch and clear data
-      self.fetchTasks[bookmark]?.cancel()
-      self.fetchTasks[bookmark] = nil
-      self.expandedTrackers.remove(bookmark)
-      self.trackerServers[bookmark] = nil
-      self.loadingTrackers.remove(bookmark)
-    } else {
-      // Expand: start fetch task
-      self.expandedTrackers.insert(bookmark)
-      let task = Task {
-        await self.fetchServers(for: bookmark)
-      }
-      self.fetchTasks[bookmark] = task
-    }
+    self.setExpanded(!self.expandedTrackers.contains(bookmark), for: bookmark)
   }
 
   func setExpanded(_ expanded: Bool, for bookmark: Bookmark) {
@@ -678,8 +639,6 @@ struct TrackerBookmarkServerView: View {
 
   var body: some View {
     HStack(alignment: .center, spacing: 6) {
-      Spacer()
-        .frame(width: 14 + 8 + 16)
       Image("Server")
         .resizable()
         .scaledToFit()
@@ -720,6 +679,7 @@ struct TrackerItemView: View {
   let isLoading: Bool
   let count: Int
   let onToggleExpanded: () -> Void
+  @Environment(\.appearsActive) private var appearsActive
 
   var body: some View {
     HStack(alignment: .center, spacing: 6) {
@@ -759,22 +719,20 @@ struct TrackerItemView: View {
             SpinningGlobeView()
               .fontWeight(.semibold)
               .frame(width: 12, height: 12)
-//              .opacity(0.5)
           }
-
-          .padding(.horizontal, 8)
+          .padding(.horizontal, 6)
           .padding(.vertical, 2)
           .foregroundStyle(.secondary)
-          .background(.quinary)
+//          .background(.quinary)
           .clipShape(.capsule)
         }
       case .server:
         Image(systemName: "bookmark.fill")
           .resizable()
-          .renderingMode(.template)
-          .aspectRatio(contentMode: .fit)
+          .scaledToFit()
+          .foregroundStyle(Color.secondary)
           .frame(width: 11, height: 11, alignment: .center)
-          .opacity(0.5)
+          .opacity(0.75)
           .padding(.leading, 3)
           .padding(.trailing, 2)
         Image("Server")
