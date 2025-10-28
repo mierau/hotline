@@ -3,7 +3,14 @@ import SwiftUI
 struct HotlinePanelView: View {
   @Environment(\.openWindow) var openWindow
   @Environment(\.colorScheme) var colorScheme
-  
+
+  private var colorArt: ColorArt? {
+    if let banner = AppState.shared.activeServerBanner {
+      return ColorArt(image: banner, scaledSize: NSSize(width: 100, height: 100))
+    }
+    return nil
+  }
+
   var body: some View {
     VStack(spacing: 0) {
       Image(nsImage: AppState.shared.activeServerBanner ?? NSImage(named: "Default Banner")!)
@@ -34,7 +41,7 @@ struct HotlinePanelView: View {
         .buttonStyle(.plain)
         .frame(width: 20, height: 20)
         .help("Hotline Servers")
-        
+
         Button {
           AppState.shared.activeServerState?.selection = .chat
         }
@@ -47,7 +54,7 @@ struct HotlinePanelView: View {
         .frame(width: 20, height: 20)
         .disabled(AppState.shared.activeServerState == nil)
         .help("Public Chat")
-        
+
         Button {
           AppState.shared.activeServerState?.selection = .board
         }
@@ -60,7 +67,7 @@ struct HotlinePanelView: View {
         .frame(width: 20, height: 20)
         .disabled(AppState.shared.activeServerState == nil)
         .help("Message Board")
-        
+
         Button {
           AppState.shared.activeServerState?.selection = .news
         }
@@ -73,7 +80,7 @@ struct HotlinePanelView: View {
         .frame(width: 20, height: 20)
         .disabled(AppState.shared.activeServerState == nil || (AppState.shared.activeHotline?.serverVersion ?? 0) < 151)
         .help("News")
-        
+
         Button {
           AppState.shared.activeServerState?.selection = .files
         }
@@ -86,9 +93,9 @@ struct HotlinePanelView: View {
         .frame(width: 20, height: 20)
         .disabled(AppState.shared.activeServerState == nil)
         .help("Files")
-        
+
         Spacer()
-        
+
         if AppState.shared.activeHotline?.access?.contains(.canOpenUsers) == true {
           Button {
             AppState.shared.activeServerState?.selection = .accounts
@@ -103,7 +110,7 @@ struct HotlinePanelView: View {
           .disabled(AppState.shared.activeServerState == nil)
           .help("Accounts")
         }
-        
+
         SettingsLink(label: {
           Image("Section Settings")
             .resizable()
@@ -116,6 +123,8 @@ struct HotlinePanelView: View {
       .padding(.top, 12)
       .padding(.bottom, 12)
       .padding([.leading, .trailing], 12)
+      .background(colorArt.map { Color(nsColor: $0.backgroundColor) } ?? Color(nsColor: .controlBackgroundColor))
+      .foregroundStyle(colorArt.map { Color(nsColor: $0.primaryColor) } ?? Color.primary)
 //      .background(Color.red.opacity(0.5).blendMode(.multiply))
       
 //      GroupBox {

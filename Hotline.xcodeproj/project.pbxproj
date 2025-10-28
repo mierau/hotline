@@ -32,6 +32,7 @@
 		DA5268A02EB073BC00DCB941 /* SoundSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA52689F2EB073BC00DCB941 /* SoundSettingsView.swift */; platformFilters = (macos, ); };
 		DA5268A32EB0741B00DCB941 /* FolderItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268A22EB0741B00DCB941 /* FolderItemView.swift */; platformFilters = (macos, ); };
 		DA5268A52EB0743000DCB941 /* FileItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268A42EB0743000DCB941 /* FileItemView.swift */; platformFilters = (macos, ); };
+		DA5268AB2EB11EA300DCB941 /* ColorArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268AA2EB11EA300DCB941 /* ColorArt.swift */; };
 		DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */; platformFilters = (macos, ); };
 		DA55AC752BE4888300034857 /* InstantMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC742BE4888300034857 /* InstantMessage.swift */; };
 		DA55AC772BE589F700034857 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC762BE589F700034857 /* AboutView.swift */; platformFilters = (macos, ); };
@@ -128,6 +129,7 @@
 		DA52689F2EB073BC00DCB941 /* SoundSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSettingsView.swift; sourceTree = "<group>"; };
 		DA5268A22EB0741B00DCB941 /* FolderItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderItemView.swift; sourceTree = "<group>"; };
 		DA5268A42EB0743000DCB941 /* FileItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileItemView.swift; sourceTree = "<group>"; };
+		DA5268AA2EB11EA300DCB941 /* ColorArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorArt.swift; sourceTree = "<group>"; };
 		DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncLinkPreview.swift; sourceTree = "<group>"; };
 		DA55AC742BE4888300034857 /* InstantMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstantMessage.swift; sourceTree = "<group>"; };
 		DA55AC762BE589F700034857 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
@@ -397,6 +399,7 @@
 			isa = PBXGroup;
 			children = (
 				DABFCC282B1530DC009F40D2 /* FoundationExtensions.swift */,
+				DA5268AA2EB11EA300DCB941 /* ColorArt.swift */,
 				DAC002182B21630900A6C290 /* SwiftUIExtensions.swift */,
 				DA7725402B21435B006C5ABB /* ObservableScrollView.swift */,
 				DAE735062B3251B3000C56F6 /* SoundEffects.swift */,
@@ -554,6 +557,7 @@
 				DA65499C2BEC3FBD00EDB697 /* ServerAgreementView.swift in Sources */,
 				DAB4D8802B4C8E9A0048A05C /* URLAdditions.swift in Sources */,
 				DA2863DD2B3E8B7000A7D050 /* FilePreview.swift in Sources */,
+				DA5268AB2EB11EA300DCB941 /* ColorArt.swift in Sources */,
 				DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */,
 				DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */,
 				DAE734FF2B2E6750000C56F6 /* ChatView.swift in Sources */,

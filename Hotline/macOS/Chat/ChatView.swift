@@ -192,8 +192,9 @@ struct ChatView: View {
               model.markPublicChatAsRead()
             }
             .onAppear {
-              reader.scrollTo(bottomID, anchor: .bottom)
               self.focusedField = .chatInput
+              model.markPublicChatAsRead()
+              reader.scrollTo(bottomID, anchor: .bottom)
             }
             .onChange(of: self.model.bannerImage) {
               reader.scrollTo(bottomID, anchor: .bottom)
