@@ -42,25 +42,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
       }
     }
-    
-//    if FileManager.default.ubiquityIdentityToken == nil {
-//      print("iCloud Unavailable")
-//      
-//      // We mark CloudKit has available now since we're not waiting on
-//      // a server sync or anything.
-//      AppState.shared.cloudKitReady = true
-//    }
-//    else {
-//      print("iCloud Available")
-//      
-//      self.cloudKitObserverToken = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification, object: nil, queue: OperationQueue.main) { [weak self] note in
-//        print("iCloud Changed!")
-//        AppState.shared.cloudKitReady = true
-//
-//        guard let token = self?.cloudKitObserverToken else { return }
-//        NotificationCenter.default.removeObserver(token)
-//      }
-//    }
 
     Task {
       await AppUpdate.shared.checkForUpdatesOnLaunch()
