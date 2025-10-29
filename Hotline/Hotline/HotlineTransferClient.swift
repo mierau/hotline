@@ -477,7 +477,7 @@ class HotlineFilePreviewClient: HotlineTransferClient {
   }
 
   deinit {
-    downloadTask?.cancel()
+    self.downloadTask?.cancel()
   }
 
   func start() {
@@ -485,32 +485,32 @@ class HotlineFilePreviewClient: HotlineTransferClient {
       return
     }
 
-    downloadTask = Task {
+    self.downloadTask = Task {
       await self.download()
     }
   }
 
   func cancel() {
-    downloadTask?.cancel()
-    downloadTask = nil
-    delegate = nil
+    self.downloadTask?.cancel()
+    self.downloadTask = nil
+    self.delegate = nil
 
     print("HotlineFilePreviewClient: Cancelled preview transfer")
   }
 
   private func download() async {
-    status = .connecting
+    self.status = .connecting
 
     do {
       // Connect to file transfer server (already includes +1 in serverPort from init)
       let socket = try await NetSocketNew.connect(
-        host: serverAddress,
-        port: serverPort,
+        host: self.serverAddress,
+        port: self.serverPort,
         tls: .disabled
       )
       defer { Task { await socket.close() } }
 
-      status = .connected
+      self.status = .connected
 
       // Send magic header
       let headerData = Data(endian: .big) {
@@ -521,10 +521,10 @@ class HotlineFilePreviewClient: HotlineTransferClient {
       }
       try await socket.write(headerData)
 
-      status = .progress(0.0)
+      self.status = .progress(0.0)
 
       // Download file data with progress updates
-      let fileData = try await socket.read(Int(referenceDataSize)) { current, total in
+      let fileData = try await socket.read(Int(self.referenceDataSize)) { current, total in
         self.status = .progress(Double(current) / Double(total))
       }
 
@@ -543,10 +543,10 @@ class HotlineFilePreviewClient: HotlineTransferClient {
     } catch {
       print("HotlineFilePreviewClient: Download failed: \(error)")
 
-      if status == .connecting {
-        status = .failed(.failedToConnect)
+      if self.status == .connecting {
+        self.status = .failed(.failedToConnect)
       } else {
-        status = .failed(.failedToDownload)
+        self.status = .failed(.failedToDownload)
       }
     }
   }
