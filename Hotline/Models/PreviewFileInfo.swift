@@ -6,7 +6,8 @@ struct PreviewFileInfo: Identifiable, Codable {
   var port: Int
   var size: Int
   var name: String
-  
+  var useTLS: Bool = false
+
   var type: String? = nil
   var creator: String? = nil
   

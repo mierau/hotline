@@ -9,6 +9,7 @@ struct ServerBookmarkSheet: View {
   @State private var serverAddress: String = ""
   @State private var serverLogin: String = ""
   @State private var serverPassword: String = ""
+  @State private var useTLS: Bool = false
 
   init(_ editingBookmark: Bookmark) {
     _bookmark = .init(initialValue: editingBookmark)
@@ -16,6 +17,7 @@ struct ServerBookmarkSheet: View {
     _serverAddress = .init(initialValue: editingBookmark.displayAddress)
     _serverLogin = .init(initialValue: editingBookmark.login ?? "")
     _serverPassword = .init(initialValue: editingBookmark.password ?? "")
+    _useTLS = .init(initialValue: editingBookmark.useTLS)
   }
 
   var body: some View {
@@ -37,6 +39,12 @@ struct ServerBookmarkSheet: View {
           Text("Password")
         }
       }
+
+      Section {
+        Toggle(isOn: $useTLS) {
+          Text("Use TLS")
+        }
+      }
     }
     .formStyle(.grouped)
     .frame(width: 350)
@@ -55,6 +63,7 @@ struct ServerBookmarkSheet: View {
             self.bookmark.port = port
             self.bookmark.login = login.isEmpty ? nil : login
             self.bookmark.password = password.isEmpty ? nil : password
+            self.bookmark.useTLS = self.useTLS
 
             self.dismiss()
           }

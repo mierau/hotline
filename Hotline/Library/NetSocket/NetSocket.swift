@@ -151,10 +151,16 @@ public actor NetSocket {
   ///   - host: Network framework host (e.g., `.name("example.com", nil)` or `.ipv4(...)`)
   ///   - port: Network framework port
   ///   - config: Socket configuration (default: standard settings)
-  ///   - parameters: NWParameters (default: .tcp)
+  ///   - tls: TLS policy (default: disabled)
   /// - Returns: A connected and ready `NetSocket`
   /// - Throws: Network errors or connection failures
-  public static func connect(host: NWEndpoint.Host, port: NWEndpoint.Port, config: Config = .init(), parameters: NWParameters = .tcp) async throws -> NetSocket {
+  public static func connect(host: NWEndpoint.Host, port: NWEndpoint.Port, config: Config = .init(), tls: TLSPolicy = .disabled) async throws -> NetSocket {
+    let parameters: NWParameters
+    if tls.enabled {
+      parameters = NWParameters(tls: Self.createTLSOptions(policy: tls))
+    } else {
+      parameters = .tcp
+    }
     let conn = NWConnection(host: host, port: port, using: parameters)
     let socket = NetSocket(connection: conn, config: config)
     try await socket.start()
@@ -162,12 +168,35 @@ public actor NetSocket {
   }
 
   /// Convenience wrapper to connect using string hostname and integer port
-  public static func connect(host: String, port: UInt16, config: Config = .init()) async throws -> NetSocket {
+  public static func connect(host: String, port: UInt16, config: Config = .init(), tls: TLSPolicy = .disabled) async throws -> NetSocket {
     guard let nwPort = NWEndpoint.Port(rawValue: port) else {
       throw NetSocketError.invalidPort
     }
 
-    return try await self.connect(host: NWEndpoint.Host(host), port: nwPort, config: config)
+    return try await self.connect(host: NWEndpoint.Host(host), port: nwPort, config: config, tls: tls)
+  }
+
+  /// Create TLS options configured to allow self-signed certificates
+  private static func createTLSOptions(policy: TLSPolicy) -> NWProtocolTLS.Options {
+    let tlsOptions = NWProtocolTLS.Options()
+
+    // Allow any custom configuration
+    policy.configure?(tlsOptions)
+
+    // Set minimum TLS version
+    sec_protocol_options_set_min_tls_protocol_version(tlsOptions.securityProtocolOptions, .TLSv12)
+
+    // Configure to accept self-signed certificates by setting a permissive verify block
+    sec_protocol_options_set_verify_block(
+      tlsOptions.securityProtocolOptions,
+      { _, _, completion in
+        // Accept all certificates (including self-signed)
+        completion(true)
+      },
+      DispatchQueue.global()
+    )
+
+    return tlsOptions
   }
   
   // MARK: Close

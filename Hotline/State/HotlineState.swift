@@ -313,7 +313,8 @@ class HotlineState: Equatable {
       let client = try await HotlineClient.connect(
         host: server.address,
         port: UInt16(server.port),
-        login: loginInfo
+        login: loginInfo,
+        useTLS: server.useTLS
       )
       print("HotlineState.login(): HotlineClient.connect() returned")
 
@@ -531,7 +532,8 @@ class HotlineState: Equatable {
           address: address,
           port: UInt16(port),
           reference: result.referenceNumber,
-          size: UInt32(result.transferSize)
+          size: UInt32(result.transferSize),
+          useTLS: server.useTLS
         )
 
         let fileURL = try await previewClient.preview()
@@ -1019,7 +1021,8 @@ class HotlineState: Equatable {
         address: address,
         port: UInt16(port),
         reference: referenceNumber,
-        size: UInt32(result.transferSize)
+        size: UInt32(result.transferSize),
+        useTLS: server.useTLS
       )
 
       // Create and store the download task
@@ -1140,7 +1143,8 @@ class HotlineState: Equatable {
         port: UInt16(port),
         reference: referenceNumber,
         size: UInt32(result.transferSize),
-        itemCount: result.itemCount
+        itemCount: result.itemCount,
+        useTLS: server.useTLS
       )
 
       // Create and store the download task
@@ -1274,7 +1278,8 @@ class HotlineState: Equatable {
         folderURL: folderURL,
         address: address,
         port: UInt16(port),
-        reference: referenceNumber
+        reference: referenceNumber,
+        useTLS: server.useTLS
       ) else {
         print("HotlineState: Failed to create folder upload client")
         return
@@ -1409,7 +1414,8 @@ class HotlineState: Equatable {
         fileURL: fileURL,
         address: address,
         port: UInt16(port),
-        reference: referenceNumber
+        reference: referenceNumber,
+        useTLS: server.useTLS
       ) else {
         print("HotlineState: Failed to create upload client")
         return
@@ -1502,7 +1508,8 @@ class HotlineState: Equatable {
         address: address,
         port: port,
         size: result.transferSize,
-        name: fileName
+        name: fileName,
+        useTLS: server.useTLS
       )
 
       callback?(info)

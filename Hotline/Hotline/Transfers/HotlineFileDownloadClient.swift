@@ -27,9 +27,10 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
   private let serverAddress: String
   private let serverPort: UInt16
   private let referenceNumber: UInt32
-  
+  private let useTLS: Bool
+
   private let config: Configuration
-  
+
   private var transferSize: Int
   private let transferTotal: Int
   private var transferProgress: Progress
@@ -42,13 +43,15 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
     port: UInt16,
     reference: UInt32,
     size: UInt32,
+    useTLS: Bool = false,
     configuration: Configuration = .init()
   ) {
     self.serverAddress = address
     self.serverPort = port
     self.referenceNumber = reference
+    self.useTLS = useTLS
     self.config = configuration
-    
+
     self.transferTotal = Int(size)
     self.transferSize = 0
     self.transferProgress = Progress(totalUnitCount: Int64(self.transferTotal))
@@ -133,9 +136,11 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
     try progressHandler?(.connecting)
     
     // Connect to transfer server
+    let tlsPolicy: TLSPolicy = self.useTLS ? .enabled() : .disabled
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: tlsPolicy
     )
     defer { Task { await socket.close() } }
     self.socket = socket

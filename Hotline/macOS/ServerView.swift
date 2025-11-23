@@ -86,6 +86,7 @@ struct ServerView: View {
   @State private var connectAddress: String = ""
   @State private var connectLogin: String = ""
   @State private var connectPassword: String = ""
+  @State private var connectUseTLS: Bool = false
   @State private var connectionDisplayed: Bool = false
 //  @State private var accountsShown: Bool = false
   
@@ -205,7 +206,8 @@ struct ServerView: View {
       self.connectAddress = self.server.address
       self.connectLogin = self.server.login
       self.connectPassword = self.server.password
-      
+      self.connectUseTLS = self.server.useTLS
+
       // Connect to server automatically unless the option key is held down.
       if !NSEvent.modifierFlags.contains(.option) {
         self.connectToServer()
@@ -226,7 +228,7 @@ struct ServerView: View {
   }
   
   private var connectForm: some View {
-    ConnectView(address: self.$connectAddress, login: self.$connectLogin, password: self.$connectPassword) {
+    ConnectView(address: self.$connectAddress, login: self.$connectLogin, password: self.$connectPassword, useTLS: self.$connectUseTLS) {
       self.connectToServer()
     }
     .focusSection()
@@ -240,6 +242,9 @@ struct ServerView: View {
     }
     .onChange(of: self.connectPassword) {
       self.server.password = self.connectPassword
+    }
+    .onChange(of: self.connectUseTLS) {
+      self.server.useTLS = self.connectUseTLS
     }
   }
   

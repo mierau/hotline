@@ -10,11 +10,12 @@ public class HotlineFilePreviewClient {
   private let transferSize: UInt32
   private let fileType: String?
   private let fileCreator: String?
+  private let useTLS: Bool
 
   private var downloadClient: HotlineFileDownloadClient?
   private var previewTask: Task<URL, Error>?
   private var temporaryFileURL: URL?
-  
+
   public init(
     fileName: String,
     address: String,
@@ -22,7 +23,8 @@ public class HotlineFilePreviewClient {
     reference: UInt32,
     size: UInt32,
     fileType: String? = nil,
-    fileCreator: String? = nil
+    fileCreator: String? = nil,
+    useTLS: Bool = false
   ) {
     self.fileName = fileName
     self.serverAddress = address
@@ -31,6 +33,7 @@ public class HotlineFilePreviewClient {
     self.transferSize = size
     self.fileType = fileType
     self.fileCreator = fileCreator
+    self.useTLS = useTLS
   }
 
   // MARK: - API
@@ -91,9 +94,11 @@ public class HotlineFilePreviewClient {
 
     // Connect to transfer server
     print("HotlineFilePreviewClient[\(self.referenceNumber)]: Connecting to \(self.serverAddress):\(self.serverPort + 1)")
+    let tlsPolicy: TLSPolicy = self.useTLS ? .enabled() : .disabled
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: tlsPolicy
     )
     defer { Task { await socket.close() } }
 
