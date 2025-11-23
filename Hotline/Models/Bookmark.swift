@@ -35,7 +35,8 @@ final class Bookmark {
   var name: String = ""
   var address: String = ""
   var port: Int = HotlinePorts.DefaultServerPort
-  
+  var useTLS: Bool = false
+
   @Attribute(.allowsCloudEncryption)
   var login: String?
 
@@ -70,7 +71,7 @@ final class Bookmark {
       return nil
 
     case .server:
-      return Server(name: self.name, description: nil, address: self.address, port: self.port, login: self.login, password: self.password)
+      return Server(name: self.name, description: nil, address: self.address, port: self.port, login: self.login, password: self.password, useTLS: self.useTLS)
     }
   }
   
@@ -80,11 +81,12 @@ final class Bookmark {
     Bookmark(type: .tracker, name: "Featured Servers", address: "hltracker.com", port: HotlinePorts.DefaultTrackerPort)
   ]
   
-  init(type: BookmarkType, name: String, address: String, port: Int, login: String? = nil, password: String? = nil) {
+  init(type: BookmarkType, name: String, address: String, port: Int, login: String? = nil, password: String? = nil, useTLS: Bool = false) {
     self.type = type
     self.name = name
     self.address = address
     self.port = port
+    self.useTLS = useTLS
 
     self.login = login
     self.password = password

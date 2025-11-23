@@ -130,6 +130,9 @@ public actor HotlineClient {
   private var serverInfo: HotlineServerInfo?
   private var isConnected: Bool = true
 
+  /// Whether this connection uses TLS (for passing to transfer clients)
+  public let useTLS: Bool
+
   /// Information about the connected server (name and version)
   public var server: HotlineServerInfo? {
     return serverInfo
@@ -160,7 +163,7 @@ public actor HotlineClient {
   /// Connect to a Hotline server and log in
   ///
   /// This method:
-  /// 1. Establishes TCP connection
+  /// 1. Establishes TCP connection (optionally with TLS)
   /// 2. Performs handshake
   /// 3. Logs in with provided credentials
   /// 4. Starts event streaming and keep-alive
@@ -169,21 +172,23 @@ public actor HotlineClient {
   ///   - host: Server hostname or IP address
   ///   - port: Server port (default: 5500)
   ///   - login: Login credentials and user info
-  ///   - tls: TLS policy (default: disabled for Hotline)
+  ///   - useTLS: Whether to use TLS encryption (default: false)
   /// - Returns: Connected and logged-in client
   /// - Throws: `HotlineClientError` if connection or login fails
   public static func connect(
     host: String,
     port: UInt16 = 5500,
-    login: HotlineLogin
+    login: HotlineLogin,
+    useTLS: Bool = false
   ) async throws -> HotlineClient {
-    print("HotlineClient.connect(): Starting connection to \(host):\(port) as '\(login.username)'")
+    print("HotlineClient.connect(): Starting connection to \(host):\(port) as '\(login.username)' (TLS: \(useTLS))")
 
     // Connect socket
     print("HotlineClient.connect(): Connecting socket...")
     let socket: NetSocket
+    let tlsPolicy: TLSPolicy = useTLS ? .enabled() : .disabled
     do {
-      socket = try await NetSocket.connect(host: host, port: port)
+      socket = try await NetSocket.connect(host: host, port: port, tls: tlsPolicy)
     }
     catch let socketError as NetSocketError {
       if case .failed(_) = socketError {
@@ -226,7 +231,7 @@ public actor HotlineClient {
 
     // Create client
     print("HotlineClient.connect(): Creating client instance")
-    let client = HotlineClient(socket: socket)
+    let client = HotlineClient(socket: socket, useTLS: useTLS)
 
     // Start receive loop
     print("HotlineClient.connect(): Starting receive loop")
@@ -247,8 +252,9 @@ public actor HotlineClient {
     return client
   }
 
-  private init(socket: NetSocket) {
+  private init(socket: NetSocket, useTLS: Bool) {
     self.socket = socket
+    self.useTLS = useTLS
 
     // Set up event stream
     var continuation: AsyncStream<HotlineEvent>.Continuation!

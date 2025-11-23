@@ -7,7 +7,8 @@ struct ConnectView: View {
   @Binding var address: String
   @Binding var login: String
   @Binding var password: String
-  
+  @Binding var useTLS: Bool
+
   var action: (() -> Void)? = nil
   
   @State private var bookmarkSheetPresented: Bool = false
@@ -52,6 +53,10 @@ struct ConnectView: View {
           Text("Password")
         }
         .focused($focusedField, equals: .password)
+
+        Toggle(isOn: self.$useTLS) {
+          Text("Use TLS")
+        }
       }
       .formStyle(.grouped)
       .fixedSize(horizontal: false, vertical: true)
@@ -135,7 +140,7 @@ struct ConnectView: View {
               let password: String? = self.password.isBlank ? nil : self.password
               
               if !host.isEmpty {
-                let newBookmark = Bookmark(type: .server, name: name, address: host, port: port, login: login, password: password)
+                let newBookmark = Bookmark(type: .server, name: name, address: host, port: port, login: login, password: password, useTLS: self.useTLS)
                 Bookmark.add(newBookmark, context: modelContext)
               }
             }

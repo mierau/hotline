@@ -4,11 +4,12 @@ struct Server: Codable {
   var name: String?
   var description: String?
   var users: Int
-  
+
   var address: String
   var port: Int
   var login: String
   var password: String
+  var useTLS: Bool
   
   var displayAddress: String {
     if self.port == HotlinePorts.DefaultServerPort {
@@ -24,7 +25,7 @@ struct Server: Codable {
     }
   }
   
-  init(name: String?, description: String?, address: String, port: Int = HotlinePorts.DefaultServerPort, users: Int = 0, login: String? = nil, password: String? = nil) {
+  init(name: String?, description: String?, address: String, port: Int = HotlinePorts.DefaultServerPort, users: Int = 0, login: String? = nil, password: String? = nil, useTLS: Bool = false) {
     self.name = name
     self.description = description
     self.address = address.lowercased()
@@ -32,26 +33,28 @@ struct Server: Codable {
     self.users = users
     self.login = login ?? ""
     self.password = password ?? ""
+    self.useTLS = useTLS
   }
   
   init?(url: URL) {
-    guard url.scheme?.lowercased() == "hotline" else {
+    guard url.scheme?.lowercased() == "hotline" || url.scheme?.lowercased() == "hotlines" else {
       return nil
     }
-    
+
     guard let host = url.host(percentEncoded: false) else {
       return nil
     }
-    
+
     self.name = nil
     self.description = nil
     self.users = 0
-    
+
     self.address = host.lowercased()
     self.port = url.port ?? HotlinePorts.DefaultServerPort
-    
+
     self.login = url.user(percentEncoded: false) ?? ""
     self.password = url.password(percentEncoded: false) ?? ""
+    self.useTLS = url.scheme?.lowercased() == "hotlines"
   }
   
   static func parseServerAddressAndPort(_ address: String) -> (String, Int) {
@@ -107,7 +110,7 @@ extension Server: Identifiable {
 
 extension Server: Equatable {
   static func == (lhs: Server, rhs: Server) -> Bool {
-    return (lhs.address == rhs.address) && (lhs.port == rhs.port) && (lhs.login == rhs.login) && (lhs.password == rhs.password)
+    return (lhs.address == rhs.address) && (lhs.port == rhs.port) && (lhs.login == rhs.login) && (lhs.password == rhs.password) && (lhs.useTLS == rhs.useTLS)
   }
 }
 

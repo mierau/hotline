@@ -13,6 +13,7 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
   private let serverAddress: String
   private let serverPort: UInt16
   private let referenceNumber: UInt32
+  private let useTLS: Bool
 
   private let transferTotal: Int // Total byte size of all files in folder.
   private let folderItemCount: Int // Total numbner of items in the folder hierarchy.
@@ -20,7 +21,7 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
   private var socket: NetSocket?
   private var downloadTask: Task<URL, Error>?
   private var folderProgress: Progress?
-  
+
   private var estimator: TransferRateEstimator
 
   public init(
@@ -28,14 +29,16 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
     port: UInt16,
     reference: UInt32,
     size: UInt32,
-    itemCount: Int
+    itemCount: Int,
+    useTLS: Bool = false
   ) {
     self.serverAddress = address
     self.serverPort = port
     self.referenceNumber = reference
+    self.useTLS = useTLS
     self.transferTotal = Int(size)
     self.folderItemCount = itemCount
-    
+
     self.estimator = TransferRateEstimator(total: self.transferTotal)
   }
 
@@ -96,9 +99,11 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
     progressHandler?(.connecting)
 
     // Connect to transfer server
+    let tlsPolicy: TLSPolicy = self.useTLS ? .enabled() : .disabled
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: tlsPolicy
     )
     self.socket = socket
     defer { Task { await socket.close() } }

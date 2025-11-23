@@ -61,7 +61,8 @@ final class FilePreviewState {
           reference: self.info.id,
           size: UInt32(self.info.size),
           fileType: self.info.type,
-          fileCreator: self.info.creator
+          fileCreator: self.info.creator,
+          useTLS: self.info.useTLS
         )
         self.previewClient = client
 

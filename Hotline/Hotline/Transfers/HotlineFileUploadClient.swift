@@ -12,6 +12,7 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
   private let serverPort: UInt16
   private let referenceNumber: UInt32
   private let fileURL: URL
+  private let useTLS: Bool
 
   private let config: Configuration
 
@@ -27,6 +28,7 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
     address: String,
     port: UInt16,
     reference: UInt32,
+    useTLS: Bool = false,
     configuration: Configuration = .init()
   ) {
     // Validate file and get total size
@@ -42,6 +44,7 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
     self.serverPort = port
     self.referenceNumber = reference
     self.fileURL = fileURL
+    self.useTLS = useTLS
     self.config = configuration
 
     self.transferTotal = Int(payloadSize)
@@ -111,9 +114,11 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
     }
 
     // Connect to transfer server
+    let tlsPolicy: TLSPolicy = self.useTLS ? .enabled() : .disabled
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: tlsPolicy
     )
     defer { Task { await socket.close() } }
     self.socket = socket

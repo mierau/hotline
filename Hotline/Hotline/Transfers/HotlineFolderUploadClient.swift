@@ -26,6 +26,7 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
   private let serverPort: UInt16
   private let referenceNumber: UInt32
   private let folderURL: URL
+  private let useTLS: Bool
 
   private let config: Configuration
 
@@ -42,6 +43,7 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
     address: String,
     port: UInt16,
     reference: UInt32,
+    useTLS: Bool = false,
     configuration: Configuration = .init()
   ) {
     guard FileManager.default.fileExists(atPath: folderURL.path(percentEncoded: false)) else {
@@ -58,6 +60,7 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
     self.serverPort = port
     self.referenceNumber = reference
     self.folderURL = folderURL
+    self.useTLS = useTLS
     self.config = configuration
 
     print("HotlineFolderUploadClientNew[\(reference)]: Preparing to upload folder '\(folderURL.lastPathComponent)'")
@@ -141,9 +144,11 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
     progressHandler?(.connecting)
 
     // Connect to transfer server
+    let tlsPolicy: TLSPolicy = self.useTLS ? .enabled() : .disabled
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: tlsPolicy
     )
     
     self.socket = socket
