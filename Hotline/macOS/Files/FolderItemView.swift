@@ -100,7 +100,7 @@ struct FolderItemView: View {
     )
     .onChange(of: file.expanded) {
       loading = false
-      if file.expanded && file.fileSize > 0 {
+      if file.expanded {
         Task {
           loading = true
           let _ = try? await model.getFileList(path: file.path)
