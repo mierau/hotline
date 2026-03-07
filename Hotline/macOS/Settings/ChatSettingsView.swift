@@ -14,6 +14,43 @@ struct ChatSettingsView: View {
       Toggle("Show Connections in Chat", isOn: $preferences.showJoinLeaveMessages)
 
       Section("Highlighted Words") {
+        HStack(spacing: 8) {
+          let mentionWord = HighlightWord(word: preferences.username, color: preferences.mentionHighlightColor)
+          Text(preferences.username)
+            .foregroundStyle(Color(nsColor: mentionWord.nsForegroundColor))
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(
+              RoundedRectangle(cornerRadius: 3)
+                .fill(Color(nsColor: mentionWord.nsBackgroundColor))
+            )
+
+          Spacer()
+
+          HighlightColorPicker(
+            highlightWord: mentionWord,
+            isExpanded: self.expandedWord == "__mentions__",
+            onToggle: {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                self.expandedWord = self.expandedWord == "__mentions__" ? nil : "__mentions__"
+              }
+            },
+            onSelect: { colorKey in
+              Prefs.shared.mentionHighlightColor = colorKey
+              withAnimation(.easeInOut(duration: 0.2)) {
+                self.expandedWord = nil
+              }
+            }
+          )
+
+          if self.expandedWord != "__mentions__" {
+            Toggle("", isOn: $preferences.highlightMentions)
+              .labelsHidden()
+              .toggleStyle(.switch)
+              .controlSize(.mini)
+          }
+        }
+
         if !preferences.watchWords.isEmpty {
           ForEach(Array(preferences.watchWords.enumerated()), id: \.element) { index, highlightWord in
             HStack(spacing: 8) {
@@ -46,19 +83,22 @@ struct ChatSettingsView: View {
                 }
               )
 
-              Button {
-                Prefs.shared.watchWords.removeAll { $0 == highlightWord }
-              } label: {
-                Image(systemName: "xmark")
-                  .font(.caption)
-                  .foregroundStyle(.tertiary)
+              if self.expandedWord != highlightWord.word {
+                Button {
+                  Prefs.shared.watchWords.removeAll { $0 == highlightWord }
+                } label: {
+                  Image(systemName: "xmark")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
               }
-              .buttonStyle(.plain)
             }
           }
         }
         HStack {
-          TextField("Add word or phrase", text: self.$newWatchWord)
+          TextField(text: self.$newWatchWord, prompt: Text("Word or phrase")) {}
+            .labelsHidden()
             .textFieldStyle(.roundedBorder)
             .onSubmit {
               self.addWatchWord()

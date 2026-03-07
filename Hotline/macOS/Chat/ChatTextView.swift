@@ -324,8 +324,12 @@ struct ChatTextView: NSViewRepresentable {
             )
             guard foundRange.location != NSNotFound, foundRange.location < NSMaxRange(charRange) else { break }
 
-            layoutManager.addTemporaryAttribute(.backgroundColor, value: watchBg, forCharacterRange: foundRange)
-            layoutManager.addTemporaryAttribute(.foregroundColor, value: watchFg, forCharacterRange: foundRange)
+            // Skip matches inside username prefixes
+            let isInUsername = storage.attribute(BottomAnchoredTextView.skipHighlightKey, at: foundRange.location, effectiveRange: nil) != nil
+            if !isInUsername {
+              layoutManager.addTemporaryAttribute(.backgroundColor, value: watchBg, forCharacterRange: foundRange)
+              layoutManager.addTemporaryAttribute(.foregroundColor, value: watchFg, forCharacterRange: foundRange)
+            }
 
             searchRange.location = NSMaxRange(foundRange)
             searchRange.length = NSMaxRange(charRange) - searchRange.location
@@ -428,11 +432,13 @@ struct ChatTextView: NSViewRepresentable {
       paraStyle.headIndent = 16
       paraStyle.lineSpacing = 3
       paraStyle.paragraphSpacing = 8
-      
+
+      let isOwnMessage = msg.username?.lowercased() == Prefs.shared.username.lowercased()
+
       // Replace newlines with line separators so the entire message stays
       // in one paragraph, keeping headIndent on all lines after the first.
       let bodyText = msg.text.replacingOccurrences(of: "\n", with: "\u{2028}")
-      
+
       if let username = msg.username {
         let usernameColor: NSColor = msg.isAdmin
           ? (NSColor(named: "Hotline Red") ?? .systemRed)
@@ -443,10 +449,11 @@ struct ChatTextView: NSViewRepresentable {
             .font: self.semiboldFont,
             .foregroundColor: usernameColor,
             .paragraphStyle: paraStyle,
+            BottomAnchoredTextView.skipHighlightKey: true,
           ]
         )
         result.append(usernameAttr)
-        
+
         let bodyAttr = bodyText.toNSAttributedStringWithMarkdownAndLinks(
           baseFont: self.baseFont,
           linkColor: self.linkColor,
@@ -461,7 +468,12 @@ struct ChatTextView: NSViewRepresentable {
         )
         result.append(bodyAttr)
       }
-      
+
+      // Skip watch word highlighting on the user's own messages entirely
+      if isOwnMessage {
+        result.addAttribute(BottomAnchoredTextView.skipHighlightKey, value: true, range: NSRange(location: 0, length: result.length))
+      }
+
       return result
     }
     
@@ -482,6 +494,7 @@ struct ChatTextView: NSViewRepresentable {
           .font: self.baseFont,
           .foregroundColor: color,
           .paragraphStyle: paraStyle,
+          BottomAnchoredTextView.skipHighlightKey: true,
         ]
       )
     }
@@ -503,6 +516,7 @@ struct ChatTextView: NSViewRepresentable {
           .font: self.baseFont,
           .foregroundColor: color,
           .paragraphStyle: paraStyle,
+          BottomAnchoredTextView.skipHighlightKey: true,
         ]
       )
     }
@@ -578,6 +592,7 @@ struct ChatTextView: NSViewRepresentable {
 class BottomAnchoredTextView: NSTextView, NSTextViewDelegate {
   static let serverMessageKey = NSAttributedString.Key("serverMessageBackground")
   static let chatDividerKey = NSAttributedString.Key("chatDividerLine")
+  static let skipHighlightKey = NSAttributedString.Key("skipHighlight")
   private var hoveredLinkRange: NSRange?
 
   var openURLAction: ((URL) -> Void)?

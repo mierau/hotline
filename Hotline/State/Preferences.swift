@@ -66,6 +66,8 @@ enum PrefsKeys: String {
   case showWatchWordNotifications = "show watch word notifications"
   case showTransferNotifications = "show transfer notifications"
   case showMentionNotifications = "show mention notifications"
+  case highlightMentions = "highlight mentions"
+  case mentionHighlightColor = "mention highlight color"
   case showBannerToolbar = "show banner toolbar"
   case showJoinLeaveMessages = "show join leave messages"
   case downloadFolderBookmark = "download folder bookmark"
@@ -99,6 +101,8 @@ class Prefs {
       PrefsKeys.showTransferNotifications.rawValue: true,
       PrefsKeys.showWatchWordNotifications.rawValue: true,
       PrefsKeys.showMentionNotifications.rawValue: true,
+      PrefsKeys.highlightMentions.rawValue: true,
+      PrefsKeys.mentionHighlightColor.rawValue: "primary",
       PrefsKeys.showBannerToolbar.rawValue: true,
       PrefsKeys.showJoinLeaveMessages.rawValue: true,
       PrefsKeys.filesViewMode.rawValue: "grid",
@@ -124,6 +128,8 @@ class Prefs {
     self.showTransferNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showTransferNotifications.rawValue)
     self.showWatchWordNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showWatchWordNotifications.rawValue)
     self.showMentionNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showMentionNotifications.rawValue)
+    self.highlightMentions = UserDefaults.standard.bool(forKey: PrefsKeys.highlightMentions.rawValue)
+    self.mentionHighlightColor = UserDefaults.standard.string(forKey: PrefsKeys.mentionHighlightColor.rawValue)!
     self.showBannerToolbar = UserDefaults.standard.bool(forKey: PrefsKeys.showBannerToolbar.rawValue)
     self.showJoinLeaveMessages = UserDefaults.standard.bool(forKey: PrefsKeys.showJoinLeaveMessages.rawValue)
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
@@ -218,6 +224,14 @@ class Prefs {
 
   var showMentionNotifications: Bool {
     didSet { UserDefaults.standard.set(self.showMentionNotifications, forKey: PrefsKeys.showMentionNotifications.rawValue) }
+  }
+
+  var highlightMentions: Bool {
+    didSet { UserDefaults.standard.set(self.highlightMentions, forKey: PrefsKeys.highlightMentions.rawValue) }
+  }
+
+  var mentionHighlightColor: String {
+    didSet { UserDefaults.standard.set(self.mentionHighlightColor, forKey: PrefsKeys.mentionHighlightColor.rawValue) }
   }
 
   var showBannerToolbar: Bool {

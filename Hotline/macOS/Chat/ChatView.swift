@@ -24,6 +24,17 @@ struct ChatView: View {
     self.debouncedQuery.isEmpty ? self.model.chat : self.searchResults
   }
 
+  private var effectiveWatchWords: [HighlightWord] {
+    var words = Prefs.shared.watchWords
+    if Prefs.shared.highlightMentions {
+      let username = Prefs.shared.username
+      if !username.isEmpty {
+        words.insert(HighlightWord(word: username, color: Prefs.shared.mentionHighlightColor), at: 0)
+      }
+    }
+    return words
+  }
+
   private var bannerView: some View {
     ZStack {
       if self.stableBannerIsAnimated {
@@ -59,7 +70,7 @@ struct ChatView: View {
       ChatTextView(
         messages: self.displayedMessages,
         searchQuery: self.debouncedQuery,
-        watchWords: Prefs.shared.watchWords,
+        watchWords: self.effectiveWatchWords,
         isFiltered: !self.debouncedQuery.isEmpty,
         cachedText: self.model.chatRenderedText,
         cachedCount: self.model.chatRenderedCount,
