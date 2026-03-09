@@ -1,17 +1,14 @@
 <img width="836" height="188" alt="GitHub Banner" src="https://github.com/user-attachments/assets/73873a25-e18f-4dfd-9454-4c71ce271054" />
 
 # Hotline
-A modern remake of Hotline for macOS
+A modern remake of Hotline for macOS.
 
 [Download the Latest](https://github.com/mierau/hotline/releases/latest)
 
-# Requirements
+**Required:** Sequoia 15.7 and up.  
+iOS, iPadOS, and visionOS are still in the works.
 
 To keep this software fresh and running on Apple's latest platforms, the intention is to support the last two major OS releases from Apple. This gives people time to move to the latest major OS release while also allowing this project to make use of the latest APIs.
-
-| macOS                      | iOS                   | iPadOS            | visionOS          |
-|----------------------------|-----------------------|-------------------|-------------------|
-| Sequoia 15.7 or greater    | Not yet available     | Not yet available | Not yet available |
 
 ---
 
@@ -35,15 +32,7 @@ Perhaps that’s why you can still find Hotline servers and trackers running tod
 
 And this project is an attempt to create a modern open source version of Hotline for modern Apple systems. Join in. Contribute. Run your own server! Perhaps Hotline can live on for another 25 years. :)
 
-# Goals
-- Build a Hotline client for modern Apple systems.
-- Keep the HotlineProtocol, HotlineClient, HotlineTrackerClient, and HotlineFileClient Swift code reusable so people can use it in other Swift Hotline projects.
-- Bring a modern Hotline client to iOS, iPadOS, and macOS using one codebase.
-- Ressurect the Hotline brand which has been expunged from trademark databases for over a decade. Look, I want Hotline with the classic big red H and all that on my modern Apple devices, okay? ;)
-- Document the Hotline protocol.
-- Have fun. :)
-
-# Run Your Own Hotline Server
+# Run a Hotline Server
 This project (so far) does not include server software. This is a client for connecting to and participating on Hotline servers. If you would like to host your own Hotline server (and you should—it's free!), please checkout the very capable Mobius project: https://github.com/jhalter/mobius
 
 # Status
@@ -81,6 +70,16 @@ This project (so far) does not include server software. This is a client for con
 | Folder downloading         |   ✓   |       |        |          |
 | Folder uploading           |   ✓   |       |        |          |
 | Custom icon sets           |       |       |        |          |
+
+---
+
+# Goals
+- Build a Hotline client for modern Apple systems.
+- Keep the HotlineProtocol, HotlineClient, HotlineTrackerClient, and HotlineFileClient Swift code reusable so people can use it in other Swift Hotline projects.
+- Bring a modern Hotline client to iOS, iPadOS, and macOS using one codebase.
+- Ressurect the Hotline brand which has been expunged from trademark databases for over a decade. Look, I want Hotline with the classic big red H and all that on my modern Apple devices, okay? ;)
+- Document the Hotline protocol.
+- Have fun. :)
 
 ---
 
