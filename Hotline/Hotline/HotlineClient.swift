@@ -575,7 +575,7 @@ public actor HotlineClient {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .sendInstantMessage)
     transaction.setFieldUInt16(type: .userID, val: userID)
     transaction.setFieldUInt32(type: .options, val: 1)
-    transaction.setFieldString(type: .data, val: message, encoding: encoding)
+    transaction.setFieldString(type: .data, val: message.convertingLineEndings(to: .cr), encoding: encoding)
 
     try await socket.send(transaction, endian: .big)
   }
