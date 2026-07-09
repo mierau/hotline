@@ -413,7 +413,7 @@ struct ServerView: View {
   }
   
   var serverView: some View {
-    NavigationSplitView {
+    NavigationSplitView(columnVisibility: self.$state.columnVisibility) {
       self.navigationList
         .navigationSplitViewColumnWidth(200)
 //        .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
