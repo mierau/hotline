@@ -5,6 +5,7 @@ class ServerState: Equatable {
   var id: UUID = UUID()
   var selection: ServerNavigationType
   var serverName: String? = nil
+  var columnVisibility: NavigationSplitViewVisibility = .all
   var accountsShown: Bool = false
   var broadcastShown: Bool = false
   var fileNavigationPath: [String]? = nil
