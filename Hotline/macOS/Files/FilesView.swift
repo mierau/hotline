@@ -468,28 +468,11 @@ struct FilesView: View {
       }
     }
     .onDrop(of: [.fileURL], isTargeted: self.$dragOver) { items in
-      guard self.model.access?.contains(.canUploadFiles) == true,
-            let item = items.first,
-            let identifier = item.registeredTypeIdentifiers.first else {
+      guard self.model.access?.contains(.canUploadFiles) == true else {
         return false
       }
 
-      item.loadItem(forTypeIdentifier: identifier, options: nil) { (urlData, error) in
-        DispatchQueue.main.async {
-          if let urlData = urlData as? Data,
-             let fileURL = URL(dataRepresentation: urlData, relativeTo: nil, isAbsolute: true) {
-            let didStartAccessing = fileURL.startAccessingSecurityScopedResource()
-            defer {
-              if didStartAccessing {
-                fileURL.stopAccessingSecurityScopedResource()
-              }
-            }
-            actions.upload(file: fileURL, to: self.folderPath)
-          }
-        }
-      }
-
-      return true
+      return actions.upload(droppedItems: items, to: self.folderPath)
     }
     .contextMenu(forSelectionType: FileInfo.self) { items in
       let file = items.first
