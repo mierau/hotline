@@ -26,7 +26,6 @@ struct SpinningGlobeView: View {
   ]
 
   @State private var currentFrameIndex = 0
-  @State private var animationTask: Task<Void, Never>?
 
   init(frameDelay: TimeInterval = 0.25) {
     self.frameDelay = frameDelay
@@ -34,29 +33,15 @@ struct SpinningGlobeView: View {
 
   var body: some View {
     Image(systemName: globeFrames[currentFrameIndex])
-      .onAppear {
-        startAnimation()
+      .task {
+        while !Task.isCancelled {
+          try? await Task.sleep(for: .seconds(frameDelay))
+
+          guard !Task.isCancelled else { break }
+
+          currentFrameIndex = (currentFrameIndex + 1) % globeFrames.count
+        }
       }
-      .onDisappear {
-        stopAnimation()
-      }
-  }
-
-  private func startAnimation() {
-    animationTask = Task {
-      while !Task.isCancelled {
-        try? await Task.sleep(nanoseconds: UInt64(frameDelay * 1_000_000_000))
-
-        guard !Task.isCancelled else { break }
-
-        currentFrameIndex = (currentFrameIndex + 1) % globeFrames.count
-      }
-    }
-  }
-
-  private func stopAnimation() {
-    animationTask?.cancel()
-    animationTask = nil
   }
 }
 

@@ -44,6 +44,7 @@
 		DA501BEE2EBEC42E001714F8 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = DA501BED2EBEC42E001714F8 /* Kingfisher */; };
 		DA501BF02EBED848001714F8 /* BonjourState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA501BEF2EBED848001714F8 /* BonjourState.swift */; };
 		DA501BF22EBEF415001714F8 /* BonjourServerRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA501BF12EBEF415001714F8 /* BonjourServerRow.swift */; };
+		DA51B6CA306EE8D30001164B /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = DA51B6C9306EE8D30001164B /* Textual */; };
 		DA52689C2EB0738B00DCB941 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA52689B2EB0738B00DCB941 /* GeneralSettingsView.swift */; platformFilters = (macos, ); };
 		DA5268A02EB073BC00DCB941 /* SoundSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA52689F2EB073BC00DCB941 /* SoundSettingsView.swift */; platformFilters = (macos, ); };
 		DA5268A32EB0741B00DCB941 /* FolderItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268A22EB0741B00DCB941 /* FolderItemView.swift */; platformFilters = (macos, ); };
@@ -298,6 +299,7 @@
 				DACCE5EF2EAC19C9008CDD92 /* SwiftUIIntrospect in Frameworks */,
 				DA72A0E02B4DA8CA00A0F48A /* SplitView in Frameworks */,
 				DAB4D8872B4CB3610048A05C /* MarkdownUI in Frameworks */,
+				DA51B6CA306EE8D30001164B /* Textual in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -667,6 +669,7 @@
 				DA72A0DF2B4DA8CA00A0F48A /* SplitView */,
 				DACCE5EE2EAC19C9008CDD92 /* SwiftUIIntrospect */,
 				DA501BED2EBEC42E001714F8 /* Kingfisher */,
+				DA51B6C9306EE8D30001164B /* Textual */,
 			);
 			productName = Hotline;
 			productReference = DA9CAFB72B126D5700CDA197 /* Hotline.app */;
@@ -705,6 +708,7 @@
 				DA72A0DE2B4DA8CA00A0F48A /* XCRemoteSwiftPackageReference "SplitView" */,
 				DACCE5ED2EAC19C9008CDD92 /* XCRemoteSwiftPackageReference "SwiftUI-Introspect" */,
 				DA501BEC2EBEC42E001714F8 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				DA51B6C8306EE8D30001164B /* XCRemoteSwiftPackageReference "textual" */,
 			);
 			productRefGroup = DA9CAFB82B126D5700CDA197 /* Products */;
 			projectDirPath = "";
@@ -1191,6 +1195,14 @@
 				minimumVersion = 8.6.1;
 			};
 		};
+		DA51B6C8306EE8D30001164B /* XCRemoteSwiftPackageReference "textual" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/textual";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.5.0;
+			};
+		};
 		DA72A0DE2B4DA8CA00A0F48A /* XCRemoteSwiftPackageReference "SplitView" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/stevengharris/SplitView";
@@ -1222,6 +1234,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DA501BEC2EBEC42E001714F8 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
+		};
+		DA51B6C9306EE8D30001164B /* Textual */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DA51B6C8306EE8D30001164B /* XCRemoteSwiftPackageReference "textual" */;
+			productName = Textual;
 		};
 		DA72A0DF2B4DA8CA00A0F48A /* SplitView */ = {
 			isa = XCSwiftPackageProductDependency;
