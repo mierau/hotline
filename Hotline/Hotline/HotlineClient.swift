@@ -224,7 +224,7 @@ public actor HotlineClient {
         )
       }
 
-      let errorCode = handshakeResponse.withUnsafeBytes { $0.load(fromByteOffset: 4, as: UInt32.self) }
+      let errorCode = handshakeResponse.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 4, as: UInt32.self) }
       guard errorCode.bigEndian == 0 else {
         print("HotlineClient.connect(): Handshake failed with error code \(errorCode)")
         throw HotlineClientError.connectionFailed(

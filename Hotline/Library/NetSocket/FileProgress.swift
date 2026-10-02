@@ -6,19 +6,21 @@ import Foundation
 
 public extension NetSocket {
   
-  /// Progress information for file uploads/downloads
+  /// Progress of a file transfer
   struct FileProgress: Sendable {
-    /// Number of bytes sent/received so far
+    /// Bytes sent or received so far
     public let sent: Int
-    /// Total file size (may be nil if unknown)
+    /// Total bytes, if known
     public let total: Int?
-    /// Size of most recent packet
+    /// Bytes in the most recent chunk
+    ///
+    /// Progress streams drop updates when the consumer falls behind, so use `sent` for totals.
     public let now: Int
-    /// Total progress so far (0.0 to 1.0)
+    /// `sent / total` from 0 to 1, or 0 if the total isn't known
     public let progress: Double
-    /// Smoothed transfer rate in bytes per second (EMA), if enough samples collected
+    /// Smoothed transfer rate in bytes per second, once there are enough samples
     public let bytesPerSecond: Double?
-    /// Estimated time remaining (seconds) based on smoothed rate, if available
+    /// Estimated seconds remaining, once the rate is known
     public let estimatedTimeRemaining: TimeInterval?
     
     public init(sent: Int, total: Int?, now: Int = 0, bytesPerSecond: Double? = nil, estimatedTimeRemaining: TimeInterval? = nil) {
@@ -37,19 +39,7 @@ public extension NetSocket {
       self.estimatedTimeRemaining = estimatedTimeRemaining
     }
     
-    /// Format transfer speed in human-readable format
-    ///
-    /// Automatically selects appropriate unit (B/sec, KB/sec, MB/sec, GB/sec)
-    /// based on the magnitude of the speed.
-    ///
-    /// - Returns: Formatted string like "45KB/sec", "5B/sec", "12.5MB/sec", or nil if speed unavailable
-    ///
-    /// Example:
-    /// ```swift
-    /// if let speedString = progress.formattedSpeed {
-    ///   print(speedString)  // "2.5MB/sec"
-    /// }
-    /// ```
+    /// The transfer rate as a short string like "45KB/sec" or "2.5MB/sec", or nil if it isn't known yet
     public var formattedSpeed: String? {
       guard let bytesPerSecond = bytesPerSecond, bytesPerSecond > 0 else { return nil }
       

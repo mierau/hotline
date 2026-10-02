@@ -5,26 +5,26 @@
 import Foundation
 import Network
 
-/// Byte order for multi-byte integer values in binary protocols
+/// Byte order for multi-byte integers
 public enum Endian {
-  /// Big-endian (network byte order, most significant byte first)
+  /// Most significant byte first (network byte order)
   case big
-  /// Little-endian (least significant byte first)
+  /// Least significant byte first
   case little
 }
 
-/// Delimiter patterns for text-based protocols
+/// Bytes that end a record in line- or null-terminated protocols
 public enum Delimiter {
-  /// Custom single byte delimiter
+  /// Any single byte
   case byte(UInt8)
-  /// Null terminator (0x00)
+  /// 0x00
   case zeroByte
-  /// Line feed (\n, 0x0A)
+  /// `\n` (0x0A)
   case lineFeed
-  /// Carriage return + line feed (\r\n, 0x0D 0x0A)
+  /// `\r\n` (0x0D 0x0A)
   case carriageReturnLineFeed
 
-  /// Binary representation of this delimiter
+  /// The delimiter's bytes
   var data: Data {
     switch self {
     case .byte(let b): return Data([b])
@@ -35,43 +35,50 @@ public enum Delimiter {
   }
 }
 
-/// TLS/SSL encryption policy for socket connections
+/// Whether a connection uses TLS, and how it's set up
 public struct TLSPolicy: Sendable {
-  /// Create a TLS-enabled policy with optional custom configuration
-  /// - Parameter configure: Optional closure to customize TLS options
+  /// Use TLS, optionally adjusting its options before connecting
   public static func enabled(_ configure: (@Sendable (NWProtocolTLS.Options) -> Void)? = nil) -> TLSPolicy {
     TLSPolicy(enabled: true, configure: configure)
   }
 
-  /// Create a policy with TLS disabled (plaintext connection)
+  /// Plain TCP
   public static var disabled: TLSPolicy { TLSPolicy(enabled: false, configure: nil) }
 
-  /// Whether TLS is enabled
+  /// Whether TLS is on
   public let enabled: Bool
-  /// Optional TLS configuration closure
+  /// Adjusts the TLS options before connecting
   public let configure: (@Sendable (NWProtocolTLS.Options) -> Void)?
 }
 
 // MARK: - Errors
 
-/// Errors that can occur during socket operations
+/// Errors thrown by `NetSocket`
 public enum NetSocketError: Error, CustomStringConvertible, Sendable {
-  /// Socket is not yet in ready state
+  /// The connection isn't ready yet
   case notReady
-  /// Connection has been closed
+  /// The connection is closed, by us or the peer
   case closed
-  /// Invalid port number provided
+  /// The port number is out of range
   case invalidPort
-  /// Network operation failed with underlying error
+  /// The underlying connection failed
   case failed(underlying: Error)
-  /// Not enough data available to fulfill read request
+  /// The connection closed partway through a read of `expected` bytes
   case insufficientData(expected: Int, got: Int)
-  /// Frame size exceeds configured maximum
+  /// `max` bytes arrived without a delimiter, or without being read
   case framingExceeded(max: Int)
-  /// Failed to decode data
+  /// Received data couldn't be decoded
   case decodeFailed(Error)
-  /// Failed to encode data
+  /// Data couldn't be encoded for sending
   case encodeFailed(Error)
+  /// A string can't be represented in the requested encoding
+  case stringEncodingFailed(String.Encoding)
+  /// Received bytes aren't valid in the requested encoding
+  case stringDecodingFailed(String.Encoding)
+  /// The file to send isn't a regular file, or its size can't be read
+  case invalidFile(URL)
+  /// The file being sent ended before the expected length
+  case fileEndedEarly(expected: Int, got: Int)
 
   public var description: String {
     switch self {
@@ -83,42 +90,43 @@ public enum NetSocketError: Error, CustomStringConvertible, Sendable {
     case .framingExceeded(let max): return "Frame length exceeded maximum \(max)."
     case .decodeFailed(let e): return "Decoding failed: \(e)"
     case .encodeFailed(let e): return "Encoding failed: \(e)"
+    case .stringEncodingFailed(let encoding): return "Can't encode string as \(encoding)."
+    case .stringDecodingFailed(let encoding): return "Received bytes aren't valid \(encoding)."
+    case .invalidFile(let url): return "Not a readable file: \(url.path(percentEncoded: false))."
+    case .fileEndedEarly(let exp, let got): return "File ended after \(got) of \(exp) bytes."
     }
   }
 }
 
-/// An async TCP socket with automatic buffering
+/// A TCP connection with buffered async reads and writes
 ///
-/// NetSocket provides:
-/// - Async connection management
-/// - Automatic receive buffering with memory compaction
-/// - Type-safe reading/writing of integers, strings, and custom types
-/// - File upload/download with progress tracking
+/// Reads wait until enough data has arrived, so binary protocols can be parsed one field at a
+/// time. There are reads and writes for integers, strings, delimited records,
+/// `NetSocketDecodable`/`NetSocketEncodable` types, and whole files.
 ///
-/// Example usage:
 /// ```swift
 /// let socket = try await NetSocket.connect(host: "example.com", port: 80)
-/// try await socket.write("Hello\n".data(using: .utf8)!)
-/// let response = try await socket.read(until: .lineFeed)
+/// try await socket.write("GET / HTTP/1.0\r\n\r\n")
+/// let status = try await socket.read(until: .carriageReturnLineFeed)
 /// ```
 public actor NetSocket {
-  /// Configuration options for the socket
+  /// Socket options
   public struct Config: Sendable {
-    /// Size of chunks to receive from network at once (default: 64 KB)
+    /// Most bytes to take from the network per receive (default: 64 KB)
     public var receiveChunk: Int = 64 * 1024
     /// Stop receiving once this many unread bytes are buffered (default: 1 MB)
     ///
     /// Receiving resumes when reads drain the buffer below half of this, or when a read needs
-    /// more than is buffered. Meanwhile TCP flow control slows the sender down.
+    /// more than is buffered. While paused, TCP flow control slows the sender.
     public var receiveHighWaterMark: Int = 1024 * 1024
-    /// Maximum bytes to buffer before disconnecting (default: 8 MB)
+    /// Disconnect if more than this many unread bytes are buffered (default: 8 MB)
     ///
-    /// Backpressure keeps the buffer near `receiveHighWaterMark`, so this is only reached by a
-    /// single read larger than the limit or a delimiter that never arrives.
+    /// Backpressure keeps the buffer near `receiveHighWaterMark`, so this only happens for a
+    /// single read larger than the limit, or a delimiter that never arrives.
     public var maxBufferBytes: Int = 8 * 1024 * 1024
-    /// Enable TCP-level keepalive to detect dead connections (default: false)
+    /// Turn on TCP keepalive to detect dead connections (default: false)
     public var enableKeepAlive: Bool = false
-    /// Idle time in seconds before sending the first keepalive probe (default: 60)
+    /// Seconds of idle time before the first keepalive probe (default: 60)
     public var keepAliveIdleTime: Int = 60
     public init() {}
   }
@@ -166,18 +174,13 @@ public actor NetSocket {
 
   // MARK: Connect
   
-  /// Connect to a remote host and return a ready socket
-  ///
-  /// This method establishes a TCP connection using Network framework types and waits until
-  /// the connection is in `.ready` state.
+  /// Connect to a host and wait until the connection is ready
   ///
   /// - Parameters:
-  ///   - host: Network framework host (e.g., `.name("example.com", nil)` or `.ipv4(...)`)
-  ///   - port: Network framework port
-  ///   - config: Socket configuration (default: standard settings)
-  ///   - parameters: NWParameters (default: .tcp)
-  /// - Returns: A connected and ready `NetSocket`
-  /// - Throws: Network errors or connection failures
+  ///   - host: For example `.name("example.com", nil)` or an IP address
+  ///   - parameters: Plain TCP by default. Keepalive settings from `config` are applied to it.
+  /// - Throws: `NetSocketError.failed` if the connection is refused or fails, or
+  ///   `CancellationError` if the task is cancelled first
   public static func connect(host: NWEndpoint.Host, port: NWEndpoint.Port, config: Config = .init(), parameters: NWParameters = .tcp) async throws -> NetSocket {
     if config.enableKeepAlive {
       if let tcpOptions = parameters.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
@@ -197,7 +200,7 @@ public actor NetSocket {
     return socket
   }
 
-  /// Convenience wrapper to connect using string hostname and integer port
+  /// Connect using a host name or IP address string
   public static func connect(host: String, port: UInt16, config: Config = .init()) async throws -> NetSocket {
     guard let nwPort = NWEndpoint.Port(rawValue: port) else {
       throw NetSocketError.invalidPort
@@ -208,25 +211,18 @@ public actor NetSocket {
   
   // MARK: Close
 
-  /// Close the connection gracefully
+  /// Close the connection
   ///
-  /// Performs a graceful shutdown of the underlying network connection (e.g., TCP FIN)
-  /// and wakes all pending read/write operations with a `NetSocketError.closed` error.
-  /// Any unread buffered data is discarded. This method is idempotent - subsequent calls are ignored.
-  ///
-  /// Use `forceClose()` for immediate non-graceful termination (e.g., TCP RST).
+  /// Pending reads and writes fail with `NetSocketError.closed`, and unread data is discarded.
+  /// Calling it again does nothing. See `forceClose()` to skip waiting for unsent data.
   public func close() {
     self.shutdown(.closed)
     self.discardBuffer()
   }
 
-  /// Force close the connection immediately (non-graceful)
+  /// Close the connection immediately, without waiting for unsent data
   ///
-  /// Performs an immediate non-graceful shutdown of the underlying network connection
-  /// (e.g., TCP RST). Use this when you need to terminate the connection immediately
-  /// without waiting for graceful closure. For normal shutdown, use `close()` instead.
-  ///
-  /// Any unread buffered data is discarded. This method is idempotent - subsequent calls are ignored.
+  /// Otherwise the same as `close()`.
   public func forceClose() {
     self.shutdown(.closed, force: true)
     self.discardBuffer()
@@ -234,12 +230,9 @@ public actor NetSocket {
 
   // MARK: Send Data
 
-  /// Write raw data to the socket
+  /// Send bytes, returning once the network stack has taken them
   ///
-  /// Sends data and waits for confirmation that it has been processed by the network stack.
-  ///
-  /// - Parameter data: Raw bytes to send
-  /// - Throws: `NetSocketError` if connection is not ready or send fails
+  /// - Returns: The number of bytes sent
   @discardableResult
   public func write(_ data: Data) async throws -> Int {
     try await ensureReady()
@@ -251,12 +244,7 @@ public actor NetSocket {
     }
   }
 
-  /// Write a fixed-width integer to the socket
-  ///
-  /// - Parameters:
-  ///   - value: The integer value to write
-  ///   - endian: Byte order (default: big-endian)
-  /// - Throws: `NetSocketError` if write fails
+  /// Send a fixed-width integer in the given byte order
   @discardableResult
   public func write<T: FixedWidthInteger>(_ value: T, endian: Endian = .big) async throws -> Int {
     var v = value
@@ -273,59 +261,44 @@ public actor NetSocket {
     return bytes.count
   }
   
-  /// Write a boolean as a single byte (0 or 1)
-  /// - Parameter value: Boolean value
+  /// Send a Bool as one byte, 1 or 0
   @discardableResult
   public func write(_ value: Bool) async throws -> Int {
     return try await write(UInt8(value ? 0x01 : 0x00))
   }
   
-  /// Write a Float as its IEEE 754 bit pattern
-  /// - Parameters:
-  ///   - value: Float value
-  ///   - endian: Byte order (default: big-endian)
+  /// Send a Float's IEEE 754 bit pattern
   @discardableResult
   public func write(_ value: Float, endian: Endian = .big) async throws -> Int {
     return try await write(value.bitPattern, endian: endian)
   }
   
-  /// Write a Double as its IEEE 754 bit pattern
-  /// - Parameters:
-  ///   - value: Double value
-  ///   - endian: Byte order (default: big-endian)
+  /// Send a Double's IEEE 754 bit pattern
   @discardableResult
   public func write(_ value: Double, endian: Endian = .big) async throws -> Int {
     return try await write(value.bitPattern, endian: endian)
   }
 
-  /// Write a string to the socket, optionally length-prefixed
+  /// Send a string's bytes in the given encoding, with no length prefix or terminator
   ///
-  /// - Parameters:
-  ///   - string: String to write
-  ///   - encoding: Text encoding (default: UTF-8)
-  ///   - allowLossyConversion: Allow lossy encoding if necessary (default: false)
-  /// - Throws: `NetSocketError` if encoding fails or write fails
+  /// - Throws: `NetSocketError.stringEncodingFailed` if the string can't be represented in
+  ///   `encoding` and `allowLossyConversion` is false
   @discardableResult
   public func write(_ string: String, encoding: String.Encoding = .utf8, allowLossyConversion: Bool = false) async throws -> Int {
     guard let data = string.data(using: encoding, allowLossyConversion: allowLossyConversion) else {
-      throw NetSocketError.encodeFailed(NSError(domain: "StringEncoding", code: -1))
+      throw NetSocketError.stringEncodingFailed(encoding)
     }
     return try await write(data)
   }
 
   // MARK: Receive Data
 
-  /// Read data until a delimiter is found
+  /// Read up to the next occurrence of `delimiter`
   ///
-  /// Searches the buffer for the delimiter pattern and returns all data up to (and optionally including)
-  /// the delimiter. The delimiter is always consumed from the stream.
+  /// The delimiter is always consumed, but only included in the result if `includeDelimiter` is true.
   ///
-  /// - Parameters:
-  ///   - delimiter: Binary delimiter pattern to search for
-  ///   - maxBytes: Maximum bytes to read before throwing (default: no limit)
-  ///   - includeDelimiter: Whether to include delimiter in result (default: false)
-  /// - Returns: Data read from stream
-  /// - Throws: `NetSocketError.framingExceeded` if max bytes exceeded, or connection errors
+  /// - Parameter maxBytes: Throw `NetSocketError.framingExceeded` if this many bytes arrive
+  ///   without a delimiter
   public func read(past delimiter: Data, maxBytes: Int? = nil, includeDelimiter: Bool = false) async throws -> Data {
     while true {
       try Task.checkCancellation()
@@ -342,13 +315,8 @@ public actor NetSocket {
     }
   }
 
-  /// Read exactly N bytes from the socket
+  /// Read exactly `count` bytes, waiting for them to arrive if needed
   ///
-  /// Waits for data to arrive if buffer doesn't contain enough bytes yet. The internal buffer
-  /// is automatically compacted after reading to prevent unbounded memory growth.
-  ///
-  /// - Parameter count: Number of bytes to read
-  /// - Returns: Exactly `count` bytes
   /// - Throws: `NetSocketError.closed` or `NetSocketError.insufficientData` if the connection
   ///   closes before `count` bytes are available
   public func read(_ count: Int) async throws -> Data {
@@ -361,18 +329,12 @@ public actor NetSocket {
     return Data(slice)
   }
   
-  /// Read a fixed-width integer from the socket
-  ///
-  /// - Parameters:
-  ///   - type: Integer type to read
-  ///   - endian: Byte order (default: big-endian)
-  /// - Returns: The integer value
-  /// - Throws: `NetSocketError` if insufficient data or connection closed
+  /// Read a fixed-width integer in the given byte order
   public func read<T: FixedWidthInteger>(_ type: T.Type = T.self, endian: Endian = .big) async throws -> T {
     let size = MemoryLayout<T>.size
     let data = try await self.read(size)
     let value: T = data.withUnsafeBytes { raw in
-      raw.load(as: T.self)
+      raw.loadUnaligned(as: T.self)
     }
     switch endian {
     case .big: return T(bigEndian: value)
@@ -380,53 +342,35 @@ public actor NetSocket {
     }
   }
 
-  /// Read a fixed-length string
+  /// Read `length` bytes and decode them as a string
   ///
-  /// - Parameters:
-  ///   - length: Number of bytes to read
-  ///   - encoding: Text encoding (default: UTF-8)
-  /// - Returns: Decoded string
-  /// - Throws: `NetSocketError` if decoding fails or insufficient data
+  /// - Throws: `NetSocketError.stringDecodingFailed` if the bytes aren't valid in `encoding`
   public func read(_ length: Int, encoding: String.Encoding = .utf8) async throws -> String {
     let data = try await self.read(length)
     guard let s = String(data: data, encoding: encoding) else {
-      throw NetSocketError.decodeFailed(NSError())
+      throw NetSocketError.stringDecodingFailed(encoding)
     }
     return s
   }
 
-  /// Read a string until a delimiter is found
+  /// Read a UTF-8 string up to the next `delimiter`
   ///
-  /// - Parameters:
-  ///   - delimiter: Delimiter pattern to search for
-  ///   - maxBytes: Maximum bytes to read before throwing (default: no limit)
-  ///   - includeDelimiter: Whether to include delimiter in result (default: false)
-  /// - Returns: String read from stream (delimiter consumed but not included unless specified)
-  /// - Throws: `NetSocketError` if decoding fails, max bytes exceeded, or connection closed
+  /// The delimiter and `maxBytes` work the same as in `read(past:maxBytes:includeDelimiter:)`.
+  ///
+  /// - Throws: `NetSocketError.stringDecodingFailed` if the bytes aren't valid UTF-8
   public func read(until delimiter: Delimiter, maxBytes: Int? = nil, includeDelimiter: Bool = false) async throws -> String {
     let bytes = try await read(past: delimiter.data, maxBytes: maxBytes, includeDelimiter: includeDelimiter)
-    guard let s = String(data: bytes, encoding: .utf8) else { throw NetSocketError.decodeFailed(NSError()) }
+    guard let s = String(data: bytes, encoding: .utf8) else { throw NetSocketError.stringDecodingFailed(.utf8) }
     return s
   }
 
-  /// Read exactly N bytes with progress callbacks
+  /// Read exactly `count` bytes in chunks, calling `progress` with (bytes so far, total) after each one
   ///
-  /// Like `read(_:)`, but reads in chunks and reports progress after each chunk.
-  /// Useful for downloading large amounts of data where you want to update UI progress.
-  ///
-  /// Example:
   /// ```swift
-  /// let data = try await socket.read(1_000_000) { current, total in
-  ///   print("Progress: \(current)/\(total)")
+  /// let data = try await socket.read(1_000_000) { received, total in
+  ///   print("\(received) of \(total)")
   /// }
   /// ```
-  ///
-  /// - Parameters:
-  ///   - count: Number of bytes to read
-  ///   - chunkSize: Size of chunks to read at a time (default: 8192)
-  ///   - progress: Optional callback with (bytesReceived, totalBytes)
-  /// - Returns: Exactly `count` bytes
-  /// - Throws: `NetSocketError` if connection closes before enough data arrives
   public func read(
     _ count: Int,
     chunkSize: Int = 8192,
@@ -450,8 +394,10 @@ public actor NetSocket {
   
   // MARK: Peek Data
   
+  /// Bytes received but not read yet
   public var availableBytes: Int { self.buffer.count - self.head }
 
+  /// The next `count` bytes without consuming them, or nil if fewer are buffered
   public func peek(_ count: Int) -> Data? {
     guard self.availableBytes >= count else {
       return nil
@@ -461,6 +407,7 @@ public actor NetSocket {
     return Data(slice) // Don't advance head
   }
   
+  /// Up to `count` buffered bytes, without consuming them
   public func peek(upto count: Int) -> Data {
     let amount = min(self.availableBytes, count)
     guard amount > 0 else {
@@ -471,6 +418,7 @@ public actor NetSocket {
     return Data(slice)
   }
   
+  /// The next `count` bytes without consuming them, waiting for them to arrive if needed
   public func peek(awaiting count: Int) async throws -> Data {
     try await self.ensureReadable(count)
     let slice = self.buffer[self.head..<(self.head + count)]
@@ -479,9 +427,9 @@ public actor NetSocket {
   
   // MARK: Skip Data
   
-  /// Skip/discard exactly N bytes from the stream
+  /// Discard exactly `count` bytes
   ///
-  /// Bytes are discarded as they arrive, so `count` can exceed `maxBufferBytes`.
+  /// Bytes are dropped as they arrive, so `count` can be larger than `maxBufferBytes`.
   ///
   /// - Throws: `NetSocketError.closed` if the connection closes before `count` bytes arrive
   public func skip(_ count: Int) async throws {
@@ -496,7 +444,7 @@ public actor NetSocket {
     }
   }
   
-  /// Skip until delimiter is found (discards delimiter too)
+  /// Discard everything up to and including the next occurrence of `delimiter`
   public func skip(past delimiter: Data) async throws {
     while true {
       try Task.checkCancellation()
@@ -512,19 +460,10 @@ public actor NetSocket {
   
   // MARK: Files
   
-  /// Upload a file from a URL, yielding progress as an AsyncSequence.
+  /// Send a file's contents, reporting progress as it goes
   ///
-  /// The transfer starts as soon as the stream is created. Each yielded value reports
-  /// the total bytes sent so far and the known total; a slow consumer only sees the
-  /// most recent value, and always the final one. Cancel the consuming task to cancel
-  /// the transfer.
-  ///
-  /// This method handles opening and closing the file handle automatically.
-  ///
-  /// - Parameters:
-  ///   - url: File URL to upload.
-  ///   - chunkSize: Size of each read chunk.
-  /// - Returns: An `AsyncThrowingStream` of `FileProgress` updates.
+  /// Opens and closes the file itself. The progress stream works the same as in
+  /// `writeFile(from:length:chunkSize:)`.
   func writeFile(from url: URL, chunkSize: Int = 256 * 1024) -> AsyncThrowingStream<FileProgress, Error> {
     // This stream wrapper manages the FileHandle's lifetime.
     return AsyncThrowingStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
@@ -538,10 +477,10 @@ public actor NetSocket {
         
         // 1. Open file and get length (blocking I/O, done off-actor)
         do {
-          total = Int(try NetSocket.fileLength(at: url))
+          total = try NetSocket.fileLength(at: url)
           fh = try FileHandle(forReadingFrom: url)
         } catch {
-          continuation.finish(throwing: NetSocketError.failed(underlying: error))
+          continuation.finish(throwing: error)
           return
         }
         
@@ -576,20 +515,13 @@ public actor NetSocket {
     }
   }
   
-  /// Upload a file from an open FileHandle, yielding progress as an AsyncSequence.
+  /// Send `length` bytes from an open file, reporting progress as it goes
   ///
-  /// The transfer starts as soon as the stream is created. Each yielded value reports
-  /// the total bytes sent so far and the known total; a slow consumer only sees the
-  /// most recent value, and always the final one. Cancel the consuming task to cancel
-  /// the transfer.
+  /// The transfer starts when the stream is created, not when it's iterated. Each value carries
+  /// the running total. A consumer that falls behind gets the latest value, and always the last
+  /// one. Cancel the consuming task to stop the transfer. The caller opens and closes `fileHandle`.
   ///
-  /// **Note:** The caller is responsible for opening and closing the `fileHandle`.
-  ///
-  /// - Parameters:
-  ///   - fileHandle: Open `FileHandle` for reading.
-  ///   - length: Exact number of bytes to send (total file size).
-  ///   - chunkSize: Size of each read chunk.
-  /// - Returns: An `AsyncThrowingStream` of `FileProgress` updates.
+  /// The stream throws `NetSocketError.fileEndedEarly` if the file is shorter than `length`.
   func writeFile(from fileHandle: FileHandle, length: Int, chunkSize: Int = 256 * 1024) -> AsyncThrowingStream<FileProgress, Error> {
     precondition(length >= 0, "length must be >= 0")
     
@@ -620,10 +552,7 @@ public actor NetSocket {
             // Read from disk
             guard let chunk = try fileHandle.read(upToCount: toRead), !chunk.isEmpty else {
               if estimator.transferred < length {
-                throw NetSocketError.failed(underlying: NSError(
-                  domain: "NetSocket", code: 9001,
-                  userInfo: [NSLocalizedDescriptionKey: "File read ended prematurely. Expected \(length) bytes, got \(estimator.transferred)."]
-                ))
+                throw NetSocketError.fileEndedEarly(expected: length, got: estimator.transferred)
               }
               break
             }
@@ -648,18 +577,10 @@ public actor NetSocket {
     }
   }
   
-  /// Receive a file of known length and yield progress updates as an AsyncSequence.
+  /// Receive `length` bytes into an open file, reporting progress as it goes
   ///
-  /// The transfer starts as soon as the stream is created. Each yielded value reports
-  /// the total bytes written so far and the known total; a slow consumer only sees the
-  /// most recent value, and always the final one. Cancel the consuming task to cancel
-  /// the transfer.
-  ///
-  /// - Parameters:
-  ///   - fileHandle: Open `FileHandle` for writing (caller must close).
-  ///   - length: Exact number of bytes expected.
-  ///   - chunkSize: Size of each read chunk.
-  /// - Returns: An `AsyncThrowingStream` of `FileProgress` updates.
+  /// The progress stream and cancellation work the same as in `writeFile(from:length:chunkSize:)`.
+  /// The caller opens and closes `fileHandle`.
   func receiveFile(to fileHandle: FileHandle, length: Int, chunkSize: Int = 256 * 1024) -> AsyncThrowingStream<FileProgress, Error> {
     precondition(length >= 0, "length must be >= 0")
     
@@ -707,34 +628,16 @@ public actor NetSocket {
     }
   }
   
-  /// Download a file of known length and write it to disk in chunks
+  /// Receive `length` bytes into a file at `url`, without holding the whole file in memory
   ///
-  /// This method does **not** read a length prefix. The caller must provide the expected
-  /// file size (e.g., from protocol metadata). The file is streamed directly to disk to
-  /// avoid loading it entirely into memory.
-  ///
-  /// Supports atomic writes: when enabled, data is written to a temporary `.part` file and
-  /// renamed on success. If an error occurs, the temporary file is automatically cleaned up.
+  /// `length` has to come from the protocol; nothing is read from the socket to find it. With
+  /// `atomic`, data goes to a temporary `.part` file next to `url`, which is renamed into place
+  /// when complete and deleted if the transfer fails.
   ///
   /// - Parameters:
-  ///   - url: Destination file URL
-  ///   - length: Exact number of bytes to read (must match what's on the wire)
-  ///   - chunkSize: Chunk size for reading/writing (default: 256 KB)
-  ///   - overwrite: Whether to overwrite existing file (default: true)
-  ///   - atomic: Write to temporary file and rename on success (default: true)
-  ///   - progress: Optional progress callback
-  /// - Returns: Total bytes written (equals `length` on success)
-  /// - Throws: File I/O or network errors. On atomic writes, partial files are cleaned up.
-  ///
-  /// Example:
-  /// ```swift
-  /// // Hotline protocol: file size comes from transaction header
-  /// let transaction = try await socket.receive(HotlineTransaction.self)
-  /// try await socket.receiveFile(
-  ///     to: destinationURL,
-  ///     length: transaction.fileSize
-  /// )
-  /// ```
+  ///   - overwrite: Replace an existing file at `url`
+  ///   - progress: Called after each chunk is written
+  /// - Returns: The number of bytes written, which is `length` on success
   @discardableResult
   func receiveFile(
     to url: URL,
@@ -875,10 +778,10 @@ public actor NetSocket {
     }
   }
 
-  /// Tear the connection down exactly once and fail anyone waiting on it.
+  /// End the connection: cancel it, stop state updates, and fail anything waiting on it
   ///
-  /// Every way a connection ends (our close, the peer closing, a receive error, a failed
-  /// state, or a buffer overflow) comes through here, so the NWConnection is always cancelled.
+  /// Every way a connection ends goes through here: close(), the peer closing, a receive error,
+  /// a failed state, or a buffer overflow. Later calls do nothing.
   private func shutdown(_ error: NetSocketError, force: Bool = false) {
     guard !self.isClosed else { return }
     self.isClosed = true
@@ -908,7 +811,7 @@ public actor NetSocket {
     while self.availableBytes < count {
       try Task.checkCancellation()
       if self.isClosed {
-        // Nothing left reads as a closed connection; a partial value means the stream was cut short.
+        // Closed with nothing buffered is a clean end of stream; anything less than `count` was cut short.
         if self.availableBytes == 0 {
           throw NetSocketError.closed
         }
@@ -965,23 +868,19 @@ public actor NetSocket {
     return nil
   }
   
-  private static func fileLength(at url: URL) throws -> Int64 {
+  private static func fileLength(at url: URL) throws -> Int {
     let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
     guard values.isRegularFile == true else {
-      throw NetSocketError.failed(underlying: NSError(
-        domain: "NetSocket", code: 1001,
-        userInfo: [NSLocalizedDescriptionKey: "Not a regular file: \(url.path)"]
-      ))
+      throw NetSocketError.invalidFile(url)
     }
-    if let s = values.fileSize { return Int64(s) }
-    let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
-    if let n = attrs[.size] as? NSNumber {
-      return n.int64Value
+    if let size = values.fileSize {
+      return size
     }
-    throw NetSocketError.failed(underlying: NSError(
-      domain: "NetSocket", code: 1002,
-      userInfo: [NSLocalizedDescriptionKey: "Unable to determine file size for \(url.lastPathComponent)"]
-    ))
+    let attrs = try FileManager.default.attributesOfItem(atPath: url.path(percentEncoded: false))
+    if let size = attrs[.size] as? NSNumber {
+      return size.intValue
+    }
+    throw NetSocketError.invalidFile(url)
   }
   
   private func waitUntilReady() async throws {
@@ -1078,140 +977,58 @@ private extension Data {
 
 // MARK: - NetSocketEncodable
 
-/// Protocol for types that can encode themselves to binary data
+/// A message that encodes itself into bytes, sent in one write by `NetSocket.send(_:endian:)`
 ///
-/// Types conforming to `NetSocketEncodable` produce binary data that can be sent over
-/// a socket. Unlike writing field-by-field to the socket, encodable types build complete
-/// binary messages that are sent in a single write operation for efficiency.
-///
-/// Example:
 /// ```swift
-/// struct MyMessage: NetSocketEncodable {
+/// struct Ping: NetSocketEncodable {
 ///   let id: UInt32
-///   let name: String
 ///
 ///   func encode(endian: Endian) throws -> Data {
-///     var data = Data()
-///     // Encode fields to data...
-///     return data
+///     let value = endian == .big ? id.bigEndian : id.littleEndian
+///     return withUnsafeBytes(of: value) { Data($0) }
 ///   }
 /// }
 ///
-/// try await socket.send(message)
+/// try await socket.send(Ping(id: 1))
 /// ```
 public protocol NetSocketEncodable: Sendable {
-  /// Encode this value to binary data
-  ///
-  /// Implementations should build a complete binary message and return it as Data.
-  /// The data will be sent to the socket in a single write operation.
-  ///
-  /// - Parameter endian: Byte order for multi-byte values
-  /// - Returns: Encoded binary data ready to send
-  /// - Throws: Encoding errors
+  /// The whole message as bytes, with multi-byte values in `endian` order
   func encode(endian: Endian) throws -> Data
 }
 
-/// Protocol for types that can decode themselves directly from a socket stream
+/// A message that decodes itself by reading its fields straight from the socket
 ///
-/// Types conforming to `NetSocketDecodable` read field-by-field directly from the socket
-/// using async reads. This enables true streaming without buffering entire messages.
+/// Reads wait for data to arrive, so a message can be parsed one field at a time without
+/// knowing its size up front. If decoding throws partway through, the bytes it already read
+/// are gone and the stream is out of sync, so the connection should usually be closed.
 ///
-/// **Important**: If decoding throws after consuming some bytes (e.g., validation fails),
-/// the socket will be left with those bytes consumed. In practice, this usually means the
-/// connection should be closed. For most protocols this is acceptable since decode errors
-/// indicate corrupt data or protocol violations.
-///
-/// Example:
 /// ```swift
-/// struct MyMessage: NetSocketDecodable {
+/// struct Greeting: NetSocketDecodable {
 ///   let id: UInt32
 ///   let name: String
 ///
 ///   init(from socket: NetSocket, endian: Endian) async throws {
 ///     self.id = try await socket.read(UInt32.self, endian: endian)
-///     let nameLen = try await socket.read(UInt16.self, endian: endian)
-///     let nameData = try await socket.readExactly(Int(nameLen))
-///     guard let name = String(data: nameData, encoding: .utf8) else {
-///       throw NetSocketError.decodeFailed(NSError())
-///     }
-///     self.name = name
+///     let nameLength = try await socket.read(UInt16.self, endian: endian)
+///     self.name = try await socket.read(Int(nameLength), encoding: .utf8)
 ///   }
 /// }
 ///
-/// let message = try await socket.receive(MyMessage.self)
+/// let greeting = try await socket.receive(Greeting.self)
 /// ```
 public protocol NetSocketDecodable: Sendable {
-  /// Decode a value by reading directly from the socket stream
-  ///
-  /// This initializer should read all necessary fields from the socket using
-  /// methods like `read(_:endian:)`, `readExactly(_:)`, `readString(length:)`, etc.
-  ///
-  /// The socket handles waiting for data to arrive, so you can read field by field
-  /// without worrying about buffering.
-  ///
-  /// - Parameters:
-  ///   - socket: Socket to read from
-  ///   - endian: Byte order for multi-byte values
-  /// - Throws: Network errors, insufficient data, or custom decoding errors
+  /// Read this value's fields from `socket`, with multi-byte values in `endian` order
   init(from socket: NetSocket, endian: Endian) async throws
 }
 
 public extension NetSocket {
-  /// Send an encodable value to the socket
-  ///
-  /// The type encodes itself to binary data, which is then sent in a single write operation.
-  ///
-  /// Example:
-  /// ```swift
-  /// struct MyMessage: NetSocketEncodable {
-  ///   let id: UInt32
-  ///   let name: String
-  ///
-  ///   func encode(endian: Endian) throws -> Data {
-  ///     var data = Data()
-  ///     // Build binary message...
-  ///     return data
-  ///   }
-  /// }
-  ///
-  /// try await socket.send(message)
-  /// ```
-  ///
-  /// - Parameters:
-  ///   - value: Value conforming to NetSocketEncodable
-  ///   - endian: Byte order (default: big-endian)
-  /// - Throws: Encoding or network errors
+  /// Encode `value` and send it in one write
   func send<T: NetSocketEncodable>(_ value: T, endian: Endian = .big) async throws {
     let data = try value.encode(endian: endian)
     try await self.write(data)
   }
 
-  /// Receive and decode a value directly from the socket stream (no length prefix)
-  ///
-  /// The type reads field-by-field from the socket as needed, enabling true streaming
-  /// without buffering entire messages. Useful for protocols where message size isn't
-  /// known upfront or for progressive decoding.
-  ///
-  /// Example:
-  /// ```swift
-  /// struct ServerEntry: NetSocketDecodable {
-  ///   let id: UInt32
-  ///   let name: String
-  ///
-  ///   init(from socket: NetSocket, endian: Endian) async throws {
-  ///     self.id = try await socket.read(UInt32.self, endian: endian)
-  ///     // Read variable-length string...
-  ///   }
-  /// }
-  ///
-  /// let entry = try await socket.receive(ServerEntry.self)
-  /// ```
-  ///
-  /// - Parameters:
-  ///   - type: Type conforming to NetSocketDecodable
-  ///   - endian: Byte order (default: big-endian)
-  /// - Returns: Decoded value
-  /// - Throws: Decoding or network errors
+  /// Read a `T` by letting it decode its own fields from the socket
   func receive<T: NetSocketDecodable>(_ type: T.Type, endian: Endian = .big) async throws -> T {
     return try await T(from: self, endian: endian)
   }

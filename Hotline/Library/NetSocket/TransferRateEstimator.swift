@@ -4,57 +4,51 @@
 
 import Foundation
 
-/// Transfer rate estimator using exponential moving average (EMA)
+/// Estimates transfer speed and time remaining with an exponential moving average
 ///
-/// Tracks transfer speed and estimates time remaining. Designed to smooth out
-/// network jitter and provide stable estimates after collecting enough samples.
+/// Speed and time remaining are only reported after `minElapsedTime` seconds or `minSamples`
+/// updates, whichever comes first, since the first few samples are noisy.
 ///
-/// Example:
 /// ```swift
 /// var estimator = TransferRateEstimator(total: fileSize)
-///
-/// while transferring {
-///   let chunk = try await receiveData()
+/// for chunk in chunks {
 ///   let progress = estimator.update(bytes: chunk.count)
-///   print("Speed: \(progress.bytesPerSecond ?? 0) B/s, ETA: \(progress.estimatedTimeRemaining ?? 0)s")
+///   print(progress.formattedSpeed ?? "--")
 /// }
 /// ```
 public struct TransferRateEstimator {
-  /// Total bytes to transfer (nil if unknown)
+  /// Total bytes to transfer, if known
   public let total: Int?
   
-  /// Exponential moving average of transfer rate (bytes/second)
+  /// Moving average of the transfer rate, in bytes per second
   private var emaBytesPerSecond: Double = 0
   
-  /// Smoothing factor for EMA (0 < alpha ≤ 1)
-  /// Higher = more responsive to recent changes, lower = more smoothing
+  /// Smoothing factor in (0, 1]; higher follows recent changes more closely
   private let alpha: Double
   
-  /// Number of samples collected
+  /// Rate samples taken so far
   private var sampleCount: Int = 0
   
-  /// Timestamp of first sample (for elapsed time calculation)
+  /// Time of the first update
   private var startTime: ContinuousClock.Instant?
   
-  /// Timestamp of last update (for calculating sample duration)
+  /// Time of the previous update
   private var lastUpdateTime: ContinuousClock.Instant?
   
-  /// Minimum elapsed time before trusting estimates (seconds)
+  /// Seconds before estimates are reported
   private let minElapsedTime: TimeInterval
   
-  /// Minimum number of samples before trusting estimates
+  /// Samples before estimates are reported
   private let minSamples: Int
   
-  /// Current number of bytes transferred
+  /// Bytes transferred so far
   public private(set) var transferred: Int = 0
   
-  /// Create a new transfer rate estimator
-  ///
   /// - Parameters:
-  ///   - total: Total bytes to transfer (nil if unknown)
-  ///   - alpha: EMA smoothing factor (default: 0.2). Range: 0.0-1.0
-  ///   - minElapsedTime: Minimum elapsed time before estimates are reliable (default: 2.0s)
-  ///   - minSamples: Minimum samples before estimates are reliable (default: 4)
+  ///   - total: Total bytes to transfer, if known
+  ///   - alpha: Smoothing factor in (0, 1] (default: 0.2)
+  ///   - minElapsedTime: Seconds before estimates are reported (default: 2)
+  ///   - minSamples: Updates before estimates are reported (default: 8)
   public init(
     total: Int? = nil,
     alpha: Double = 0.2,
@@ -70,17 +64,15 @@ public struct TransferRateEstimator {
     self.minSamples = minSamples
   }
   
+  /// Record that the transfer has reached `total` bytes
   @discardableResult
   public mutating func update(total: Int) -> NetSocket.FileProgress {
     return self.update(bytes: max(0, total - self.transferred))
   }
   
-  /// Update the estimator with a new data sample
+  /// Record `bytes` more transferred since the last update
   ///
-  /// Automatically calculates the duration since the last update.
-  ///
-  /// - Parameter bytes: Number of bytes transferred in this sample
-  /// - Returns: Current progress with speed and ETA estimates
+  /// - Returns: Progress so far, with speed and time remaining once enough samples are in
   @discardableResult
   public mutating func update(bytes: Int) -> NetSocket.FileProgress {
     let clock = ContinuousClock()
