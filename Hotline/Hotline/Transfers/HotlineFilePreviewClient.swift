@@ -166,9 +166,7 @@ public class HotlineFilePreviewClient {
             ))
           }
         } else {
-          if forkSize > 0 {
-            let _ = try await socket.read(forkSize)
-          }
+          try await socket.skip(forkSize)
         }
       }
     } else {

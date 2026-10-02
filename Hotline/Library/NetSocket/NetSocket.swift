@@ -349,8 +349,8 @@ public actor NetSocket {
   ///
   /// - Parameter count: Number of bytes to read
   /// - Returns: Exactly `count` bytes
-  /// - Throws: `NetSocketError.closed` if the connection closed with nothing left to read, or
-  ///   `NetSocketError.insufficientData` if it closed partway through the requested bytes
+  /// - Throws: `NetSocketError.closed` or `NetSocketError.insufficientData` if the connection
+  ///   closes before `count` bytes are available
   public func read(_ count: Int) async throws -> Data {
     try await self.ensureReadable(count)
     let start = self.head
@@ -479,12 +479,21 @@ public actor NetSocket {
   
   // MARK: Skip Data
   
-  /// Skip/discard exactly N bytes from the stream without allocating memory
+  /// Skip/discard exactly N bytes from the stream
+  ///
+  /// Bytes are discarded as they arrive, so `count` can exceed `maxBufferBytes`.
+  ///
+  /// - Throws: `NetSocketError.closed` if the connection closes before `count` bytes arrive
   public func skip(_ count: Int) async throws {
-    guard count > 0 else { return }
-    try await self.ensureReadable(count)
-    self.head += count
-    self.didConsume()
+    var skipped = 0
+    while skipped < count {
+      try await self.ensureReadable(1)
+      // Only advance over bytes that are already buffered, same as read.
+      let n = min(count - skipped, self.availableBytes)
+      self.head += n
+      skipped += n
+      self.didConsume()
+    }
   }
   
   /// Skip until delimiter is found (discards delimiter too)

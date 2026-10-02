@@ -112,8 +112,7 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
     
     let fm = FileManager.default
     var fileHandle: FileHandle?
-    var resourceForkData: Data?
-    
+
     try progressHandler?(.preparing)
     
     // Determine the download name
@@ -160,6 +159,9 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
     // Connected
     try progressHandler?(.connected)
 
+    // Bytes of the flattened file received so far, across headers and all forks.
+    var received = headerData.count
+
     do {
       // Process each fork
       for _ in 0..<Int(header.forkCount) {
@@ -168,15 +170,17 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
         guard let forkHeader = HotlineFileForkHeader(from: forkHeaderData) else {
           throw HotlineTransferClientError.failedToTransfer
         }
+        received += forkHeaderData.count
+        let forkSize = Int(forkHeader.dataSize)
 
         // Handle whichever fork is being sent.
         if forkHeader.isInfoFork {
           // Read info fork
-          let infoData = try await socket.read(Int(forkHeader.dataSize))
+          let infoData = try await socket.read(forkSize)
           guard let info = HotlineFileInfoFork(from: infoData) else {
             throw HotlineTransferClientError.failedToTransfer
           }
-          self.transferSize += infoData.count
+          received += infoData.count
 
           // Prepare temporary file for atomic write
           try? fm.removeItem(at: destinationURL)
@@ -190,7 +194,7 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
           self.transferProgress.publish()
 
           // Update progress
-          try self.updateProgress(sent: infoData.count)
+          try self.updateProgress(sent: received)
         }
         else if forkHeader.isDataFork {
           guard let fh = fileHandle else {
@@ -198,24 +202,27 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
           }
 
           // Stream data fork to disk
-          let updates = await socket.receiveFile(to: fh, length: Int(forkHeader.dataSize))
-          for try await p in updates {
-            try self.updateProgress(sent: p.sent)
-            try progressHandler?(.transfer(name: destinationFilename, size: self.transferSize, total: self.transferTotal, progress: self.transferProgress.fractionCompleted, speed: p.bytesPerSecond, estimate: p.estimatedTimeRemaining))
-          }
+          try await self.receiveFork(from: socket, to: fh, length: forkSize, startingAt: received, name: destinationFilename, progressHandler: progressHandler)
+          received += forkSize
         }
         else if forkHeader.isResourceFork {
-          // Read resource fork into memory
-          let rsrcData = try await socket.read(Int(forkHeader.dataSize))
-          resourceForkData = rsrcData
-          try self.updateProgress(sent: Int(rsrcData.count))
+          // The file is created when the info fork arrives.
+          guard fileHandle != nil else {
+            throw HotlineTransferClientError.failedToTransfer
+          }
+
+          // Stream resource fork to disk, so its size isn't limited by memory
+          let resourceHandle = try fm.openResourceForkForWriting(at: destinationURL)
+          defer { try? resourceHandle.close() }
+          try await self.receiveFork(from: socket, to: resourceHandle, length: forkSize, startingAt: received, name: destinationFilename, progressHandler: progressHandler)
+          received += forkSize
 
         } else {
           // Skip unsupported fork
-          let dataSize = Int(forkHeader.dataSize)
-          try await socket.skip(dataSize)
-          
-          try self.updateProgress(sent: dataSize)
+          try await socket.skip(forkSize)
+          received += forkSize
+
+          try self.updateProgress(sent: received)
         }
         
         try progressHandler?(.transfer(name: destinationFilename, size: self.transferSize, total: self.transferTotal, progress: self.transferProgress.fractionCompleted, speed: nil, estimate: nil))
@@ -227,11 +234,6 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
       try fileHandle?.close()
       fileHandle = nil
 
-      // Write resource fork if present
-      if let rsrcData = resourceForkData, !rsrcData.isEmpty {
-        try writeResourceFork(data: rsrcData, to: destinationURL)
-      }
-      
       // See if we've been cancelled
       try self.checkCancelled()
 
@@ -252,16 +254,22 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
     }
   }
 
-  // MARK: - Utility
-
-  private func writeResourceFork(data: Data, to url: URL) throws {
-    var resolvedURL = url
-    resolvedURL.resolveSymlinksInPath()
-
-    let resourceURL = resolvedURL.urlForResourceFork()
-    try data.write(to: resourceURL)
-
-    print("HotlineFileDownloadClient[\(self.referenceNumber)]: Wrote resource fork (\(data.count) bytes)")
+  /// Stream one fork to disk, reporting progress for the whole file.
+  ///
+  /// - Parameter received: Bytes of the file received before this fork
+  private func receiveFork(
+    from socket: NetSocket,
+    to handle: FileHandle,
+    length: Int,
+    startingAt received: Int,
+    name: String,
+    progressHandler: (@Sendable (HotlineTransferProgress) throws -> Void)?
+  ) async throws {
+    let updates = await socket.receiveFile(to: handle, length: length)
+    for try await p in updates {
+      try self.updateProgress(sent: received + p.sent)
+      try progressHandler?(.transfer(name: name, size: self.transferSize, total: self.transferTotal, progress: self.transferProgress.fractionCompleted, speed: p.bytesPerSecond, estimate: p.estimatedTimeRemaining))
+    }
   }
 }
 

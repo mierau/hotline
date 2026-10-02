@@ -480,6 +480,22 @@ extension FileManager {
     return handle
   }
 
+  /// Open an existing file's resource fork for writing, creating the fork if needed.
+  ///
+  /// `FileHandle(forWritingTo:)` can't be used here because the fork doesn't exist until it's created.
+  ///
+  /// - Parameter url: The file whose resource fork to open
+  /// - Returns: FileHandle open for writing; the caller must close it
+  /// - Throws: `POSIXError` if the fork can't be opened (e.g., the volume doesn't support resource forks)
+  func openResourceForkForWriting(at url: URL) throws -> FileHandle {
+    let path = url.resolvingSymlinksInPath().urlForResourceFork().path(percentEncoded: false)
+    let fd = Darwin.open(path, O_WRONLY | O_CREAT, 0o644)
+    guard fd >= 0 else {
+      throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+    }
+    return FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+  }
+
   func getFlattenedFileSize(_ fileURL: URL) -> UInt64? {
     var fileIsDirectory: ObjCBool = false
     let filePath: String = fileURL.path(percentEncoded: false)
