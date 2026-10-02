@@ -104,7 +104,6 @@
 		DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */; platformFilters = (macos, ); };
 		DAB4D8822B4C8FED0048A05C /* FileIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D8812B4C8FED0048A05C /* FileIconView.swift */; };
 		DAB4D8842B4CABEF0048A05C /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D8832B4CABEF0048A05C /* Extensions.swift */; };
-		DAB4D8872B4CB3610048A05C /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = DAB4D8862B4CB3610048A05C /* MarkdownUI */; };
 		DABAFBEA2EC58C170015E889 /* AccountDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DABAFBE92EC58C170015E889 /* AccountDetailsView.swift */; };
 		DABAFBEC2EC599700015E889 /* BroadcastMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DABAFBEB2EC5996B0015E889 /* BroadcastMessageSheet.swift */; };
 		DABE8BF42B55DC0A00884D28 /* transfer-complete.aiff in Resources */ = {isa = PBXBuildFile; fileRef = DABE8BF32B55DC0A00884D28 /* transfer-complete.aiff */; };
@@ -298,7 +297,6 @@
 				DA501BEE2EBEC42E001714F8 /* Kingfisher in Frameworks */,
 				DACCE5EF2EAC19C9008CDD92 /* SwiftUIIntrospect in Frameworks */,
 				DA72A0E02B4DA8CA00A0F48A /* SplitView in Frameworks */,
-				DAB4D8872B4CB3610048A05C /* MarkdownUI in Frameworks */,
 				DA51B6CA306EE8D30001164B /* Textual in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -665,7 +663,6 @@
 			);
 			name = Hotline;
 			packageProductDependencies = (
-				DAB4D8862B4CB3610048A05C /* MarkdownUI */,
 				DA72A0DF2B4DA8CA00A0F48A /* SplitView */,
 				DACCE5EE2EAC19C9008CDD92 /* SwiftUIIntrospect */,
 				DA501BED2EBEC42E001714F8 /* Kingfisher */,
@@ -704,7 +701,6 @@
 			);
 			mainGroup = DA9CAFAE2B126D5700CDA197;
 			packageReferences = (
-				DAB4D8852B4CB3610048A05C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				DA72A0DE2B4DA8CA00A0F48A /* XCRemoteSwiftPackageReference "SplitView" */,
 				DACCE5ED2EAC19C9008CDD92 /* XCRemoteSwiftPackageReference "SwiftUI-Introspect" */,
 				DA501BEC2EBEC42E001714F8 /* XCRemoteSwiftPackageReference "Kingfisher" */,
@@ -1211,14 +1207,6 @@
 				minimumVersion = 3.5.0;
 			};
 		};
-		DAB4D8852B4CB3610048A05C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.3.0;
-			};
-		};
 		DACCE5ED2EAC19C9008CDD92 /* XCRemoteSwiftPackageReference "SwiftUI-Introspect" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/siteline/SwiftUI-Introspect";
@@ -1244,11 +1232,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DA72A0DE2B4DA8CA00A0F48A /* XCRemoteSwiftPackageReference "SplitView" */;
 			productName = SplitView;
-		};
-		DAB4D8862B4CB3610048A05C /* MarkdownUI */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = DAB4D8852B4CB3610048A05C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
-			productName = MarkdownUI;
 		};
 		DACCE5EE2EAC19C9008CDD92 /* SwiftUIIntrospect */ = {
 			isa = XCSwiftPackageProductDependency;

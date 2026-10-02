@@ -1,5 +1,5 @@
 import SwiftUI
-import MarkdownUI
+import Textual
 import UniformTypeIdentifiers
 
 private struct SoftScrollEdgeEffect: ViewModifier {
@@ -397,10 +397,8 @@ struct MessageView: View {
   @ViewBuilder
   private func messageCardBody(_ msg: InstantMessage) -> some View {
     HStack(spacing: 0) {
-      Markdown(self.messageBodyText(msg).convertingLinksToMarkdown())
-        .markdownTheme(.basic)
-        .textSelection(.enabled)
-        .lineSpacing(6)
+      StructuredText(markdown: self.messageBodyText(msg).convertingLinksToMarkdown())
+        .textual.textSelection(.enabled)
 
       Spacer(minLength: 0)
     }

@@ -1,5 +1,5 @@
 import SwiftUI
-import MarkdownUI
+import Textual
 import SplitView
 
 struct NewsView: View {
@@ -372,10 +372,8 @@ struct NewsView: View {
             .padding(.top, 16)
           
           if let newsText = self.articleText {
-            Markdown(newsText.convertingLinksToMarkdown())
-              .markdownTheme(.basic)
-              .textSelection(.enabled)
-              .lineSpacing(6)
+            StructuredText(markdown: newsText.convertingLinksToMarkdown())
+              .textual.textSelection(.enabled)
               .padding(.top, 16)
           }
         }
