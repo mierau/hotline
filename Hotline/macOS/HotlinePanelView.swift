@@ -37,10 +37,13 @@ struct HotlinePanelView: View {
       
       self.bannerView
         .id("banner image view")
-        .animation(.default, value: self.bannerFileURL)
+        // Black behind server banners. Without one, the default artwork behind the panel shows through.
         .background {
-          Color.black
+          if self.bannerFileURL != nil {
+            Color.black
+          }
         }
+        .animation(.default, value: self.bannerFileURL)
         // Keep the banner above the button row so nothing from the glass bars draws over it.
         .zIndex(1)
 
@@ -60,6 +63,15 @@ struct HotlinePanelView: View {
 //        }
 //      }
 //      .padding([.leading, .bottom, .trailing], 4.0)
+    }
+    // The default artwork fills the whole panel, so the glass bars sit right on it. A server's banner
+    // and the button row's background cover it.
+    .background(alignment: .top) {
+      Image("Default Banner")
+        .resizable()
+        .interpolation(.high)
+        .scaledToFill()
+        .allowsHitTesting(false)
     }
     // Glass swallows clicks, so dragging by the window background stops working over the
     // button bars. Drag explicitly instead; buttons still get their own clicks. The panel never
@@ -125,21 +137,27 @@ struct HotlinePanelView: View {
         .glassEffect(.clear.interactive(), in: .capsule)
       }
     }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 6)
+    // The same 8 pt between the bars and the window's edges as below the banner, which makes the
+    // 52 pt row HotlinePanel is sized for.
+    .padding(8)
     .background(self.barBackground)
+    .animation(.default, value: self.bannerFileURL)
     .animation(.default, value: self.backgroundColor)
     .animation(.snappy(duration: 0.25), value: self.selectedButton)
   }
 
   /// The banner's background color at the top, lightening toward the bottom of the window.
-  /// Without a banner, just the plain window background.
+  /// Nothing without a server banner, so the default artwork shows through, and the plain window
+  /// background for a banner whose colors couldn't be read.
   ///
   /// White blended with soft light lightens the color while keeping its hue and saturation,
   /// rather than washing it out the way a plain white overlay would.
   @ViewBuilder
   private var barBackground: some View {
-    if self.activeHotline?.bannerColors != nil {
+    if self.bannerFileURL == nil {
+      Color.clear
+    }
+    else if self.activeHotline?.bannerColors != nil {
       self.backgroundColor
         .overlay {
           LinearGradient(colors: [.white.opacity(0), .white.opacity(0.5)], startPoint: .top, endPoint: .bottom)
@@ -314,18 +332,19 @@ struct HotlinePanelView: View {
 
   private var bannerView: some View {
     ZStack {
-      if self.bannerIsAnimated {
+      if self.bannerFileURL == nil {
+        self.defaultBanner
+      }
+      else if self.bannerIsAnimated {
         KFAnimatedImage
           .url(self.bannerFileURL)
-          .placeholder {
-            Image("Default Banner")
-          }
           .cacheMemoryOnly()
           .cacheOriginalImage()
           .scaledToFill()
           .frame(width: 468, height: 60)
           .frame(minWidth: 468, maxWidth: 468, minHeight: 60, maxHeight: 60)
           .clipped()
+          .allowsHitTesting(false)
           .transition(.opacity)
           .id("animated banner \(self.bannerFileURL?.absoluteString ?? "")")
       }
@@ -334,22 +353,32 @@ struct HotlinePanelView: View {
           .url(self.bannerFileURL)
           .resizable()
           .interpolation(.high)
-          .placeholder {
-            Image("Default Banner")
-          }
           .cacheMemoryOnly()
           .cacheOriginalImage()
           .scaledToFill()
           .frame(width: 468, height: 60)
           .frame(minWidth: 468, maxWidth: 468, minHeight: 60, maxHeight: 60)
           .clipped()
+          .allowsHitTesting(false)
           .transition(.opacity)
           .id("static banner \(self.bannerFileURL?.absoluteString ?? "")")
       }
     }
-    .allowsHitTesting(false)
     .animation(.default, value: self.bannerIsAnimated)
     .animation(.default, value: self.bannerFileURL)
+  }
+
+  /// Without a server banner, the default artwork behind the panel shows here, with the H spinning on it.
+  private var defaultBanner: some View {
+    SpinningBannerLogo()
+      .frame(width: 44, height: 60)
+      // Centered at x 436 pt, where the old artwork had its H, and 5 pt below the middle of the
+      // banner, so it sits halfway between the top of the panel and the top of the button bars.
+      .offset(y: 5)
+      .padding(.leading, 414)
+      .frame(width: 468, height: 60, alignment: .leading)
+      .transition(.opacity)
+      .id("default banner")
   }
 }
 

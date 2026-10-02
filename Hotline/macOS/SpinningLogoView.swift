@@ -241,3 +241,221 @@ struct InteractiveSpinningLogo: View {
       )
   }
 }
+
+// MARK: - Banner Logo
+
+/// The red Hotline H for the default banner, as a slowly spinning 3D model on a transparent background.
+struct SpinningBannerLogo: NSViewRepresentable {
+  func makeNSView(context: Context) -> BannerLogoView {
+    BannerLogoView()
+  }
+
+  func updateNSView(_ nsView: BannerLogoView, context: Context) {}
+}
+
+final class BannerLogoView: SCNView, SCNSceneRendererDelegate {
+  /// One full turn, in seconds.
+  private static let spinDuration: TimeInterval = 12
+  /// Turned slightly to show its left side, the way the old banner artwork drew the H.
+  private static let restingAngle: CGFloat = -20 * .pi / 180
+  private static let spinKey = "spin"
+
+  private var spinNode: SCNNode?
+
+  init() {
+    super.init(frame: .zero, options: nil)
+    self.backgroundColor = .clear
+    self.antialiasingMode = .multisampling4X
+    // A slow spin looks just as smooth at 30 fps, at well under half the cost of 60.
+    self.preferredFramesPerSecond = 30
+    self.setAccessibilityElement(false)
+
+    guard let (scene, spinNode, camera) = Self.makeScene() else {
+      return
+    }
+    self.scene = scene
+    self.pointOfView = camera
+    self.spinNode = spinNode
+    spinNode.eulerAngles.y = Self.restingAngle
+
+    if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      self.startSteadySpin()
+    }
+
+    // SceneKit takes a moment to draw its first frame (up to about 160 ms in a fresh launch), so
+    // start invisible and fade in once it has, rather than popping in.
+    self.alphaValue = 0
+    self.delegate = self
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+  // MARK: Fading In
+
+  // Called on SceneKit's rendering thread after every frame, until the first one fades in.
+  nonisolated func renderer(_ renderer: any SCNSceneRenderer, didRenderScene scene: SCNScene, atTime time: TimeInterval) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.delegate != nil else {
+        return
+      }
+      self.delegate = nil
+      NSAnimationContext.runAnimationGroup { context in
+        context.duration = 0.3
+        self.animator().alphaValue = 1
+      }
+    }
+  }
+
+  // MARK: Spinning
+
+  private static var steadySpin: SCNAction {
+    .repeatForever(.rotateBy(x: 0, y: .pi * 2, z: 0, duration: Self.spinDuration))
+  }
+
+  private func startSteadySpin() {
+    self.spinNode?.runAction(Self.steadySpin, forKey: Self.spinKey)
+  }
+
+  /// A few quick turns that ease back into the regular spin.
+  private func spinQuickly() {
+    guard let spinNode = self.spinNode, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+      return
+    }
+
+    // Start at 2.5 turns a second and let the extra speed fall away exponentially, so it settles
+    // into the regular spin without a jolt. After 5 seconds less than 1% of the extra is left.
+    let steadySpeed = 2 * Double.pi / Self.spinDuration
+    let fastSpeed = 2.5 * 2 * Double.pi
+    let falloff = 1.0
+    let duration = 5 * falloff
+    func angle(at time: Double) -> Double {
+      steadySpeed * time + (fastSpeed - steadySpeed) * falloff * (1 - exp(-time / falloff))
+    }
+    let totalAngle = angle(at: duration)
+
+    // One relative rotation with a custom timing curve, so the steady spin can pick up right where it ends.
+    let boost = SCNAction.rotateBy(x: 0, y: CGFloat(totalAngle), z: 0, duration: duration)
+    boost.timingFunction = { progress in
+      Float(angle(at: Double(progress) * duration) / totalAngle)
+    }
+
+    let backToSlowerFrameRate = SCNAction.run { [weak self] _ in
+      DispatchQueue.main.async { [weak self] in
+        self?.preferredFramesPerSecond = 30
+      }
+    }
+
+    // Smooth while it's fast. The steady spin follows inside SceneKit, so there's no hitch between
+    // them, and a click during the boost replaces the whole sequence.
+    self.preferredFramesPerSecond = 60
+    spinNode.runAction(.sequence([boost, backToSlowerFrameRate, Self.steadySpin]), forKey: Self.spinKey)
+  }
+
+  // MARK: Clicks
+
+  // The panel never becomes key, so take the first click instead of ignoring it.
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+    true
+  }
+
+  // A click spins the logo. Pressing and moving drags the panel, like the rest of the banner.
+  override func mouseDown(with event: NSEvent) {
+    guard let window = self.window else {
+      return
+    }
+    let start = event.locationInWindow
+    while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+      if next.type == .leftMouseUp {
+        self.spinQuickly()
+        return
+      }
+      let location = next.locationInWindow
+      if hypot(location.x - start.x, location.y - start.y) > 3 {
+        window.performDrag(with: event)
+        return
+      }
+    }
+  }
+
+  // MARK: Visibility
+
+  // Only render while the panel is actually on screen.
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeOcclusionStateNotification, object: nil)
+    if let window = self.window {
+      NotificationCenter.default.addObserver(self, selector: #selector(self.occlusionChanged), name: NSWindow.didChangeOcclusionStateNotification, object: window)
+    }
+    self.occlusionChanged()
+  }
+
+  @objc private func occlusionChanged() {
+    // Pausing the view alone doesn't stop the spin's action, so SceneKit kept drawing (about 2.5% CPU)
+    // while hidden. Pausing the node stops it too, and the last frame stays up for when the panel
+    // comes back.
+    let visible = self.window?.occlusionState.contains(.visible) == true
+    self.spinNode?.isPaused = !visible
+    self.isPlaying = visible
+  }
+
+  private static func makeScene() -> (scene: SCNScene, spinNode: SCNNode, camera: SCNNode)? {
+    guard let url = Bundle.main.url(forResource: "Logo", withExtension: "obj"),
+          let scene = try? SCNScene(url: url) else {
+      return nil
+    }
+    scene.background.contents = NSColor.clear
+
+    // Stand the model upright (the OBJ lies flat on the XZ plane) inside a node we can spin.
+    let containerNode = SCNNode()
+    for node in scene.rootNode.childNodes.filter({ $0.light == nil }) {
+      node.removeFromParentNode()
+      containerNode.addChildNode(node)
+    }
+    containerNode.eulerAngles.x = -.pi / 2
+    let spinNode = SCNNode()
+    spinNode.addChildNode(containerNode)
+    scene.rootNode.addChildNode(spinNode)
+
+    // The red of the old artwork's H, with a small glint that slides across the faces as it turns.
+    let material = SCNMaterial()
+    material.lightingModel = .blinn
+    material.diffuse.contents = NSColor(srgbRed: 0.82, green: 0.0, blue: 0.004, alpha: 1)
+    material.specular.contents = NSColor(white: 0.45, alpha: 1)
+    material.shininess = 0.75
+    containerNode.enumerateChildNodes { node, _ in
+      node.geometry?.materials = [material]
+    }
+
+    // Framed so the H is about as tall as the one in the old artwork.
+    let camera = SCNNode()
+    camera.camera = SCNCamera()
+    camera.camera!.fieldOfView = 28
+    camera.position = SCNVector3(0, 0, 17)
+    scene.rootNode.addChildNode(camera)
+
+    // Key light up and to the right in front, so the left sides fall into shadow like the old artwork.
+    let key = SCNNode()
+    key.light = SCNLight()
+    key.light!.type = .omni
+    key.light!.intensity = 1150
+    key.position = SCNVector3(4, 5, 9)
+    scene.rootNode.addChildNode(key)
+
+    // Dim fill, so faces turned away are deep red instead of black.
+    let fill = SCNNode()
+    fill.light = SCNLight()
+    fill.light!.type = .ambient
+    fill.light!.intensity = 100
+    scene.rootNode.addChildNode(fill)
+
+    // Faint rim light from behind on the left, so edges catch light as they come around.
+    let rim = SCNNode()
+    rim.light = SCNLight()
+    rim.light!.type = .directional
+    rim.light!.intensity = 300
+    rim.eulerAngles = SCNVector3(-0.3, -2.4, 0)
+    scene.rootNode.addChildNode(rim)
+
+    return (scene, spinNode, camera)
+  }
+}

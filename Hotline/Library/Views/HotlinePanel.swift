@@ -1,10 +1,10 @@
 import Cocoa
 import SwiftUI
 
-/// The 60 pt banner plus the button row, which is 48 pt with the macOS 26 glass bars and 44 pt before.
+/// The 60 pt banner plus the button row, which is 52 pt with the macOS 26 glass bars and 44 pt before.
 fileprivate let HOTLINE_PANEL_SIZE: CGSize = {
   if #available(macOS 26.0, *) {
-    return CGSize(width: 468, height: 60 + 48)
+    return CGSize(width: 468, height: 60 + 52)
   }
   return CGSize(width: 468, height: 60 + 44)
 }()
@@ -32,7 +32,7 @@ class HotlinePanel: NSPanel {
     // Disable state restoration for this utility panel
     self.isRestorable = false
 
-    self.standardWindowButton(.closeButton)?.isHidden = false
+    self.standardWindowButton(.closeButton)?.isHidden = true
     self.standardWindowButton(.zoomButton)?.isHidden = true
     self.standardWindowButton(.miniaturizeButton)?.isHidden = true
     
@@ -69,5 +69,13 @@ class HotlinePanel: NSPanel {
   
   override var canBecomeMain: Bool {
     return false
+  }
+
+  // Since the panel is never key, macOS would draw it like an inactive window, with flat glass.
+  // AppKit asks this private method whether a window should look key, so answering yes keeps the
+  // glass lit without taking key status from the server windows. If a later macOS stops asking,
+  // the panel just goes back to looking inactive.
+  @objc func hasKeyAppearance() -> Bool {
+    return true
   }
 }
