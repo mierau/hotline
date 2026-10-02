@@ -127,6 +127,7 @@ struct Application: App {
 
   @FocusedValue(\.activeHotlineModel) private var activeHotline: HotlineState?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
+  @FocusedValue(\.focusedAppWindow) private var focusedAppWindow: FocusedAppWindow?
   
   private var modelContainer: ModelContainer = {
     let schema = Schema([
@@ -158,6 +159,7 @@ struct Application: App {
     Window("Servers", id: "servers") {
       TrackerView(selection: $selection)
         .frame(minWidth: 250, minHeight: 250)
+        .focusedSceneValue(\.focusedAppWindow, .servers)
     }
     .modelContainer(self.modelContainer)
     .defaultSize(width: 700, height: 550)
@@ -308,10 +310,14 @@ struct Application: App {
     .defaultPosition(.center)
     .modelContainer(self.modelContainer)
     .onChange(of: activeServerState) {
-      AppState.shared.activeServerState = self.activeServerState
+      // Only track server windows coming forward. Focusing another kind of window keeps the
+      // last server as the one the banner toolbar controls; ServerView reports when it closes.
+      if let hotline = self.activeHotline, let state = self.activeServerState {
+        AppState.shared.serverWindowFocused(hotline: hotline, state: state)
+      }
     }
-    .onChange(of: activeHotline) {
-      AppState.shared.activeHotline = self.activeHotline
+    .onChange(of: focusedAppWindow) {
+      AppState.shared.focusedWindow = self.focusedAppWindow
     }
     .commands {
       CommandGroup(replacing: .newItem) {
@@ -411,6 +417,7 @@ struct Application: App {
     Window("Settings", id: "settings") {
       SettingsView()
         .frame(width: 570, height: 500)
+        .focusedSceneValue(\.focusedAppWindow, .settings)
     }
     .windowResizability(.contentSize)
     .commandsRemoved()
@@ -419,6 +426,7 @@ struct Application: App {
     Window("Transfers", id: "transfers") {
       TransfersView()
         .frame(minWidth: 500, minHeight: 200)
+        .focusedSceneValue(\.focusedAppWindow, .transfers)
     }
     .defaultSize(width: 500, height: 400)
     .defaultPosition(.topTrailing)

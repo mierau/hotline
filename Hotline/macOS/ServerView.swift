@@ -218,6 +218,8 @@ struct ServerView: View {
       }
     }
     .onDisappear {
+      AppState.shared.serverWindowClosed(state: self.state)
+
       // disconnect() only handles a finished connection, so also stop one still in progress.
       self.connectTask?.cancel()
       self.connectTask = nil
@@ -276,6 +278,16 @@ struct ServerView: View {
     }
     .focusedSceneValue(\.activeHotlineModel, model)
     .focusedSceneValue(\.activeServerState, state)
+    .focusedSceneValue(\.focusedAppWindow, .server)
+    .background {
+      NSWindowAccessor { window in
+        // This also runs with nil as views leave the window, like when connecting replaces the
+        // connect form, so only record a real window. It's weak, so it clears when the window closes.
+        if let window {
+          self.state.window = window
+        }
+      }
+    }
   }
   
   private var connectForm: some View {

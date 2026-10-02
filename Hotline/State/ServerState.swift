@@ -9,6 +9,9 @@ class ServerState: Equatable {
   var broadcastShown: Bool = false
   var fileNavigationPath: [String]? = nil
   var fileFolderPath: [String] = []
+
+  /// The window showing this server, so the banner toolbar can bring it forward.
+  @ObservationIgnored weak var window: NSWindow? = nil
 //  var serverBanner: NSImage? = nil
 //  var bannerBackgroundColor: Color? = nil
 
