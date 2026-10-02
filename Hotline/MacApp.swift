@@ -24,6 +24,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
   func applicationDidFinishLaunching(_ notification: Notification) {
     AppLaunchState.shared.launchState = .launched
 
+    if Prefs.shared.playSounds {
+      SoundEffects.prepare()
+    }
+
     let center = UNUserNotificationCenter.current()
     center.delegate = self
     center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
