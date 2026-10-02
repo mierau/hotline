@@ -168,8 +168,10 @@ public actor NetSocket {
 
   deinit {
     // Safety net for owners that drop the socket without closing it.
-    self.stateContinuation?.finish()
-    self.connection.cancel()
+    if !self.isClosed {
+      self.stateContinuation?.finish()
+      self.connection.cancel()
+    }
   }
 
   // MARK: Connect
