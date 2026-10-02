@@ -89,6 +89,7 @@ struct ServerView: View {
   @State private var composeMessageUser: User? = nil
   @State private var contextMenuUserInfo: HotlineUserClientInfo? = nil
   @State private var disconnectUserTarget: User? = nil
+  @State private var connectTask: Task<Void, Never>? = nil
 //  @State private var accountsShown: Bool = false
   
   static var menuItems: [ServerMenuItem] = [
@@ -217,6 +218,9 @@ struct ServerView: View {
       }
     }
     .onDisappear {
+      // disconnect() only handles a finished connection, so also stop one still in progress.
+      self.connectTask?.cancel()
+      self.connectTask = nil
       Task {
         await self.model.disconnect()
       }
@@ -503,7 +507,7 @@ struct ServerView: View {
     // Set status here so it's immediate (not waiting to enter task).
     self.model.status = .connecting
 
-    Task { @MainActor in
+    self.connectTask = Task { @MainActor in
       do {
         try await self.model.login(
           server: server,

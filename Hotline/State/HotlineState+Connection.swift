@@ -69,6 +69,12 @@ extension HotlineState {
       )
       print("HotlineState.login(): HotlineClient.connect() returned")
 
+      // The window may have closed just as the connection finished.
+      if Task.isCancelled {
+        await client.disconnect()
+        throw CancellationError()
+      }
+
       self.client = client
       print("HotlineState.login(): Client stored")
 
@@ -96,6 +102,17 @@ extension HotlineState {
         try await self.completeLogin()
       }
 
+    }
+    catch let error where Task.isCancelled {
+      // Cancelled because the window closed. A cancelled request can surface as any error
+      // (even HotlineClientError.timeout), so check the task rather than the error type.
+      print("HotlineState.login(): Cancelled")
+      if let client = self.client {
+        await client.disconnect()
+        self.client = nil
+      }
+      self.status = .disconnected
+      throw error
     }
     catch let clientError as HotlineClientError {
       switch clientError {
