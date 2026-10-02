@@ -495,9 +495,10 @@ public actor NetSocket {
   
   /// Upload a file from a URL, yielding progress as an AsyncSequence.
   ///
-  /// Iterating this sequence drives the transfer. Each yielded value reports
-  /// the total bytes sent so far and the known total. Cancel the consuming
-  /// task to cancel the transfer.
+  /// The transfer starts as soon as the stream is created. Each yielded value reports
+  /// the total bytes sent so far and the known total; a slow consumer only sees the
+  /// most recent value, and always the final one. Cancel the consuming task to cancel
+  /// the transfer.
   ///
   /// This method handles opening and closing the file handle automatically.
   ///
@@ -507,7 +508,7 @@ public actor NetSocket {
   /// - Returns: An `AsyncThrowingStream` of `FileProgress` updates.
   func writeFile(from url: URL, chunkSize: Int = 256 * 1024) -> AsyncThrowingStream<FileProgress, Error> {
     // This stream wrapper manages the FileHandle's lifetime.
-    return AsyncThrowingStream(bufferingPolicy: .bufferingOldest(1)) { continuation in
+    return AsyncThrowingStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
       // Capture self (the actor) to use in detached task
       let actor = self
       
@@ -558,9 +559,10 @@ public actor NetSocket {
   
   /// Upload a file from an open FileHandle, yielding progress as an AsyncSequence.
   ///
-  /// Iterating this sequence drives the transfer. Each yielded value reports
-  /// the total bytes sent so far and the known total. Cancel the consuming
-  /// task to cancel the transfer.
+  /// The transfer starts as soon as the stream is created. Each yielded value reports
+  /// the total bytes sent so far and the known total; a slow consumer only sees the
+  /// most recent value, and always the final one. Cancel the consuming task to cancel
+  /// the transfer.
   ///
   /// **Note:** The caller is responsible for opening and closing the `fileHandle`.
   ///
@@ -579,7 +581,7 @@ public actor NetSocket {
       }
     }
     
-    return AsyncThrowingStream(bufferingPolicy: .bufferingOldest(1)) { continuation in
+    return AsyncThrowingStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
       let task = Task { [weak self] in
         guard let self else {
           continuation.finish()
@@ -629,9 +631,10 @@ public actor NetSocket {
   
   /// Receive a file of known length and yield progress updates as an AsyncSequence.
   ///
-  /// Iterating this sequence drives the transfer. Each yielded value reports
-  /// the total bytes written so far and the known total. Cancel the consuming
-  /// task to cancel the transfer.
+  /// The transfer starts as soon as the stream is created. Each yielded value reports
+  /// the total bytes written so far and the known total; a slow consumer only sees the
+  /// most recent value, and always the final one. Cancel the consuming task to cancel
+  /// the transfer.
   ///
   /// - Parameters:
   ///   - fileHandle: Open `FileHandle` for writing (caller must close).
@@ -648,7 +651,7 @@ public actor NetSocket {
       }
     }
     
-    return AsyncThrowingStream(bufferingPolicy: .bufferingOldest(1)) { continuation in
+    return AsyncThrowingStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
       let task = Task { [weak self] in
         guard let self else {
           continuation.finish()
