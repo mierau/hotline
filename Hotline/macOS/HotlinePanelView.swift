@@ -6,6 +6,7 @@ struct HotlinePanelView: View {
   @Environment(\.colorScheme) var colorScheme
   @Environment(\.appState) private var appState
   @Namespace private var selectionNamespace
+  @State private var hoveredButton: PanelButton? = nil
 
   private var activeServerState: ServerState? {
     self.appState.activeServerState
@@ -241,6 +242,22 @@ struct HotlinePanelView: View {
           // One highlight per bar: it slides between buttons in a bar, and fades between bars.
           .matchedGeometryEffect(id: button.bar, in: self.selectionNamespace)
           .transition(.opacity.combined(with: .scale(scale: 0.8)))
+      }
+      else if self.hoveredButton == button && !disabled {
+        // A lighter version of the selection capsule, so the selected button still stands out.
+        Capsule()
+          .fill(.quaternary.opacity(0.6))
+          .transition(.opacity)
+      }
+    }
+    .onHover { hovering in
+      withAnimation(.easeOut(duration: 0.12)) {
+        if hovering {
+          self.hoveredButton = button
+        }
+        else if self.hoveredButton == button {
+          self.hoveredButton = nil
+        }
       }
     }
     .disabled(disabled)
