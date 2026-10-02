@@ -127,9 +127,10 @@ public actor NetSocket {
   private var head = 0 // start of unread bytes
   private let config: Config
   
-  // Waiters for data/ready
-  private var dataWaiters: [CheckedContinuation<Void, Error>] = []
-  private var readyWaiters: [CheckedContinuation<Void, Error>] = []
+  // Waiters for data/ready, keyed by ID so a cancelled task can remove its own
+  private var dataWaiters: [Int: CheckedContinuation<Void, Error>] = [:]
+  private var readyWaiters: [Int: CheckedContinuation<Void, Error>] = [:]
+  private var nextWaiterID = 0
 
   // Serialized state update stream
   private var stateContinuation: AsyncStream<NWConnection.State>.Continuation?
@@ -888,14 +889,7 @@ public actor NetSocket {
   }
   
   private func waitForData() async throws {
-    try Task.checkCancellation()
-    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-      if self.isClosed {
-        cont.resume(throwing: NetSocketError.closed)
-        return
-      }
-      self.dataWaiters.append(cont)
-    }
+    try await self.suspend(.data)
   }
   
   private func compactIfNeeded() {
@@ -953,26 +947,57 @@ public actor NetSocket {
   
   private func waitUntilReady() async throws {
     guard !self.ready else { return }
-    guard !self.isClosed else { throw NetSocketError.closed }
-    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-      self.readyWaiters.append(cont)
+    try await self.suspend(.ready)
+  }
+
+  private enum WaitReason {
+    case data
+    case ready
+  }
+
+  /// Suspend until data arrives or the connection becomes ready.
+  ///
+  /// Throws `CancellationError` as soon as the calling task is cancelled, and
+  /// `NetSocketError.closed` if the connection has already closed.
+  private func suspend(_ reason: WaitReason) async throws {
+    let id = self.nextWaiterID
+    self.nextWaiterID += 1
+
+    try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+        if Task.isCancelled {
+          cont.resume(throwing: CancellationError())
+        } else if self.isClosed {
+          cont.resume(throwing: NetSocketError.closed)
+        } else {
+          switch reason {
+          case .data: self.dataWaiters[id] = cont
+          case .ready: self.readyWaiters[id] = cont
+          }
+        }
+      }
+    } onCancel: {
+      // Runs off the actor, so hop back on. A no-op if the waiter was already resumed.
+      Task { await self.cancelWaiter(id) }
     }
   }
-  
+
+  private func cancelWaiter(_ id: Int) {
+    let waiter = self.dataWaiters.removeValue(forKey: id) ?? self.readyWaiters.removeValue(forKey: id)
+    waiter?.resume(throwing: CancellationError())
+  }
+
   private func resumeReadyWaiters(with result: Result<Void, Error>) {
-    let waiters = self.readyWaiters
+    let waiters = self.readyWaiters.values
     self.readyWaiters.removeAll()
     for w in waiters {
-      switch result {
-      case .success: w.resume()
-      case .failure(let e): w.resume(throwing: e)
-      }
+      w.resume(with: result)
     }
   }
-  
+
   private func failAllWaiters(_ error: Error) {
     self.resumeReadyWaiters(with: .failure(error))
-    let waiters = self.dataWaiters
+    let waiters = self.dataWaiters.values
     self.dataWaiters.removeAll()
     for w in waiters {
       w.resume(throwing: error)
@@ -990,7 +1015,7 @@ public actor NetSocket {
   }
   
   private func resumeDataWaiters() {
-    let waiters = dataWaiters
+    let waiters = dataWaiters.values
     dataWaiters.removeAll()
     for w in waiters { w.resume() }
   }
