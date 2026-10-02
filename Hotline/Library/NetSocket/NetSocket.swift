@@ -106,7 +106,15 @@ public actor NetSocket {
   public struct Config: Sendable {
     /// Size of chunks to receive from network at once (default: 64 KB)
     public var receiveChunk: Int = 64 * 1024
+    /// Stop receiving once this many unread bytes are buffered (default: 1 MB)
+    ///
+    /// Receiving resumes when reads drain the buffer below half of this, or when a read needs
+    /// more than is buffered. Meanwhile TCP flow control slows the sender down.
+    public var receiveHighWaterMark: Int = 1024 * 1024
     /// Maximum bytes to buffer before disconnecting (default: 8 MB)
+    ///
+    /// Backpressure keeps the buffer near `receiveHighWaterMark`, so this is only reached by a
+    /// single read larger than the limit or a delimiter that never arrives.
     public var maxBufferBytes: Int = 8 * 1024 * 1024
     /// Enable TCP-level keepalive to detect dead connections (default: false)
     public var enableKeepAlive: Bool = false
@@ -126,6 +134,7 @@ public actor NetSocket {
   private var buffer = Data()
   private var head = 0 // start of unread bytes
   private let config: Config
+  private var receivePaused = false // no receive outstanding because the buffer is full
   
   // Waiters for data/ready, keyed by ID so a cancelled task can remove its own
   private var dataWaiters: [Int: CheckedContinuation<Void, Error>] = [:]
@@ -348,7 +357,7 @@ public actor NetSocket {
     let end = self.head + count
     let slice = self.buffer[start..<end]
     self.head = end
-    self.compactIfNeeded()
+    self.didConsume()
     return Data(slice)
   }
   
@@ -475,7 +484,7 @@ public actor NetSocket {
     guard count > 0 else { return }
     try await self.ensureReadable(count)
     self.head += count
-    self.compactIfNeeded()
+    self.didConsume()
   }
   
   /// Skip until delimiter is found (discards delimiter too)
@@ -484,7 +493,7 @@ public actor NetSocket {
       try Task.checkCancellation()
       if let r = self.search(delimiter: delimiter) {
         self.head = r.upperBound  // Skip to end of delimiter
-        self.compactIfNeeded()
+        self.didConsume()
         return
       }
       // Throws once the connection has closed and no more data can arrive.
@@ -797,34 +806,47 @@ public actor NetSocket {
     // Kick off receive loop after .start
     self.connection.start(queue: queue)
     try await self.waitUntilReady()
-    self.startReceiveLoop()
+    self.receiveNext()
   }
-  
-  private func startReceiveLoop() {
-    @Sendable func loop(_ connection: NWConnection, chunk: Int, owner: NetSocket, connID: String) {
-      connection.receive(minimumIncompleteLength: 1, maximumLength: chunk) { [weak owner] data, _, isComplete, error in
-        Task {
-          guard let o = owner else {
-            return
-          }
-          
-          // Buffer data before handling an error or EOF so it can still be read.
-          if let data, !data.isEmpty {
-            await o.append(data, connID: connID)
-          }
-          if let error {
-            await o.shutdown(.failed(underlying: error))
-            return
-          }
-          if isComplete {
-            await o.shutdown(.closed)
-            return
-          }
-          loop(connection, chunk: chunk, owner: o, connID: connID)
-        }
+
+  /// Ask the connection for the next chunk. Only one receive is ever outstanding.
+  private func receiveNext() {
+    guard !self.isClosed else { return }
+    self.connection.receive(minimumIncompleteLength: 1, maximumLength: self.config.receiveChunk) { [weak self] data, _, isComplete, error in
+      Task {
+        await self?.handleReceive(data: data, isComplete: isComplete, error: error)
       }
     }
-    loop(connection, chunk: self.config.receiveChunk, owner: self, connID: connectionID)
+  }
+
+  private func handleReceive(data: Data?, isComplete: Bool, error: NWError?) {
+    // Buffer data before handling an error or EOF so it can still be read.
+    if let data, !data.isEmpty {
+      self.append(data, connID: self.connectionID)
+    }
+    if let error {
+      self.shutdown(.failed(underlying: error))
+      return
+    }
+    if isComplete {
+      self.shutdown(.closed)
+      return
+    }
+
+    // Backpressure: stop pulling from the network while the reader catches up.
+    if self.availableBytes >= self.config.receiveHighWaterMark {
+      self.receivePaused = true
+    } else {
+      self.receiveNext()
+    }
+  }
+
+  /// Resume receiving after a pause. `force` is for a read that needs more than is buffered.
+  private func resumeReceivingIfNeeded(force: Bool = false) {
+    guard self.receivePaused else { return }
+    guard force || self.availableBytes < self.config.receiveHighWaterMark / 2 else { return }
+    self.receivePaused = false
+    self.receiveNext()
   }
   
   private func handleStateUpdate(_ state: NWConnection.State) {
@@ -889,9 +911,17 @@ public actor NetSocket {
   }
   
   private func waitForData() async throws {
+    // A read needs more than is buffered, so make sure data is flowing even above the high-water mark.
+    self.resumeReceivingIfNeeded(force: true)
     try await self.suspend(.data)
   }
   
+  /// Call after advancing `head`.
+  private func didConsume() {
+    self.compactIfNeeded()
+    self.resumeReceivingIfNeeded()
+  }
+
   private func compactIfNeeded() {
     // Avoid unbounded memory as head advances
     if self.head > 64 * 1024 && self.head > self.buffer.count / 2 {
