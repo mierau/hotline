@@ -312,17 +312,9 @@ struct TransferRow: View {
             .foregroundStyle(.fileComplete)
         }
         else {
-          if self.transfer.progress == 0 {
-            ProgressView()
-              .progressViewStyle(.linear)
-              .controlSize(.large)
-          }
-          else {
-            ProgressView(value: self.transfer.progress, total: 1.0)
-              .progressViewStyle(.linear)
-              .controlSize(.large)
-          }
-          
+          ProgressView(value: self.transfer.progress, total: 1.0)
+            .progressViewStyle(.linear)
+            .controlSize(.large)
         }
       }
     }

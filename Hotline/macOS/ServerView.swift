@@ -585,18 +585,10 @@ struct ServerTransferRow: View {
       Spacer(minLength: 0)
       
       if !self.transfer.done {
-        if self.transfer.progress == 0.0 {
-          ProgressView()
-            .progressViewStyle(.linear)
-            .controlSize(.extraLarge)
-            .frame(maxWidth: 40)
-        }
-        else {
-          ProgressView(value: min(max(self.transfer.progress, 0.0), 1.0), total: 1.0)
-            .progressViewStyle(.linear)
-            .controlSize(.extraLarge)
-            .frame(maxWidth: 40)
-        }
+        ProgressView(value: min(max(self.transfer.progress, 0.0), 1.0), total: 1.0)
+          .progressViewStyle(.linear)
+          .controlSize(.extraLarge)
+          .frame(maxWidth: 40)
       }
       
       if self.hovered {
