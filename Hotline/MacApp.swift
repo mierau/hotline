@@ -24,9 +24,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
   func applicationDidFinishLaunching(_ notification: Notification) {
     AppLaunchState.shared.launchState = .launched
 
-    if Prefs.shared.playSounds {
-      SoundEffects.prepare()
-    }
+    SoundEffects.prepare()
 
     let center = UNUserNotificationCenter.current()
     center.delegate = self
