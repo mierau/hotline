@@ -119,7 +119,7 @@ public actor NetSocket {
   private let connection: NWConnection
   private let queue = DispatchQueue(label: "NetSocket.NWConnection")
   private var ready = false
-  private var isClosed = false
+  private var isClosed = false  // Set once by shutdown(); the connection has been cancelled
   private let connectionID: String  // For logging
   
   // Buffer with compaction
@@ -147,7 +147,13 @@ public actor NetSocket {
       self.connectionID = "unknown"
     }
   }
-  
+
+  deinit {
+    // Safety net for owners that drop the socket without closing it.
+    self.stateContinuation?.finish()
+    self.connection.cancel()
+  }
+
   // MARK: Connect
   
   /// Connect to a remote host and return a ready socket
@@ -171,7 +177,13 @@ public actor NetSocket {
     }
     let conn = NWConnection(host: host, port: port, using: parameters)
     let socket = NetSocket(connection: conn, config: config)
-    try await socket.start()
+    do {
+      try await socket.start()
+    } catch {
+      // Network keeps a refused (.waiting) connection alive and retries it, so cancel it here.
+      await socket.close()
+      throw error
+    }
     return socket
   }
 
@@ -194,13 +206,7 @@ public actor NetSocket {
   ///
   /// Use `forceClose()` for immediate non-graceful termination (e.g., TCP RST).
   public func close() {
-    guard !isClosed else { return }
-    isClosed = true
-    stateContinuation?.finish()
-    stateTask?.cancel()
-    connection.cancel()
-    resumeDataWaiters()
-    resumeReadyWaiters(with: .failure(NetSocketError.closed))
+    self.shutdown(.closed)
   }
 
   /// Force close the connection immediately (non-graceful)
@@ -211,13 +217,7 @@ public actor NetSocket {
   ///
   /// This method is idempotent - subsequent calls are ignored.
   public func forceClose() {
-    guard !isClosed else { return }
-    isClosed = true
-    stateContinuation?.finish()
-    stateTask?.cancel()
-    connection.forceCancel()
-    resumeDataWaiters()
-    resumeReadyWaiters(with: .failure(NetSocketError.closed))
+    self.shutdown(.closed, force: true)
   }
 
   // MARK: Send Data
@@ -782,23 +782,10 @@ public actor NetSocket {
     }
 
     self.stateTask = Task { [weak self] in
-      guard let self else { return }
       for await state in stream {
-        switch state {
-        case .ready:
-          await self.setReady()
-          await self.resumeReadyWaiters(with: .success(()))
-        case .failed(let error):
-          await self.failAllWaiters(NetSocketError.failed(underlying: error))
-          await self.setClosed()
-        case .waiting(let error):
-          await self.resumeReadyWaiters(with: .failure(NetSocketError.failed(underlying: error)))
-        case .cancelled:
-          await self.failAllWaiters(NetSocketError.closed)
-          await self.setClosed()
-        default:
-          break
-        }
+        // Bind self per update so this task never keeps the socket alive between updates.
+        guard let self else { return }
+        await self.handleStateUpdate(state)
       }
     }
 
@@ -817,14 +804,14 @@ public actor NetSocket {
           }
           
           if let error {
-            await o.handleReceiveError(error)
+            await o.shutdown(.failed(underlying: error))
             return
           }
           if let data, !data.isEmpty {
             await o.append(data, connID: connID)
           }
           if isComplete {
-            await o.handleEOF()
+            await o.shutdown(.closed)
             return
           }
           loop(connection, chunk: chunk, owner: o, connID: connID)
@@ -834,24 +821,42 @@ public actor NetSocket {
     loop(connection, chunk: self.config.receiveChunk, owner: self, connID: connectionID)
   }
   
-  private func handleReceiveError(_ error: Error) {
+  private func handleStateUpdate(_ state: NWConnection.State) {
+    switch state {
+    case .ready:
+      self.ready = true
+      self.resumeReadyWaiters(with: .success(()))
+    case .failed(let error):
+      self.shutdown(.failed(underlying: error))
+    case .waiting(let error):
+      // Fails a pending connect(), which then closes the socket.
+      self.resumeReadyWaiters(with: .failure(NetSocketError.failed(underlying: error)))
+    case .cancelled:
+      self.shutdown(.closed)
+    default:
+      break
+    }
+  }
+
+  /// Tear the connection down exactly once and fail anyone waiting on it.
+  ///
+  /// Every way a connection ends (our close, the peer closing, a receive error, a failed
+  /// state, or a buffer overflow) comes through here, so the NWConnection is always cancelled.
+  private func shutdown(_ error: NetSocketError, force: Bool = false) {
+    guard !self.isClosed else { return }
     self.isClosed = true
-    self.failAllWaiters(NetSocketError.failed(underlying: error))
+    self.stateContinuation?.finish()
+    self.stateContinuation = nil
+    self.stateTask?.cancel()
+    self.stateTask = nil
+    if force {
+      self.connection.forceCancel()
+    } else {
+      self.connection.cancel()
+    }
+    self.failAllWaiters(error)
   }
-  
-  private func handleEOF() {
-    self.isClosed = true
-    self.failAllWaiters(NetSocketError.closed)
-  }
-  
-  private func setReady() {
-    self.ready = true
-  }
-  
-  private func setClosed() {
-    self.isClosed = true
-  }
-  
+
   private func ensureReady() async throws {
     if self.isClosed {
       throw NetSocketError.closed
@@ -876,7 +881,7 @@ public actor NetSocket {
     try Task.checkCancellation()
     try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
       if self.isClosed {
-        cont.resume()
+        cont.resume(throwing: NetSocketError.closed)
         return
       }
       self.dataWaiters.append(cont)
@@ -932,6 +937,7 @@ public actor NetSocket {
   
   private func waitUntilReady() async throws {
     guard !self.ready else { return }
+    guard !self.isClosed else { throw NetSocketError.closed }
     try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
       self.readyWaiters.append(cont)
     }
@@ -961,9 +967,7 @@ public actor NetSocket {
     buffer.append(data)
     if buffer.count - head > config.maxBufferBytes {
       // Hard stop: drop connection rather than OOM'ing.
-      isClosed = true
-      connection.cancel()
-      failAllWaiters(NetSocketError.framingExceeded(max: config.maxBufferBytes))
+      shutdown(.framingExceeded(max: config.maxBufferBytes))
       return
     }
     resumeDataWaiters()

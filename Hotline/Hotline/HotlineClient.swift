@@ -203,34 +203,39 @@ public actor HotlineClient {
     print("HotlineClient.connect(): Socket connected")
 
     // Perform handshake
-    print("HotlineClient.connect(): Sending handshake...")
-    try await socket.write(Data(endian: .big, {
-      "TRTP".fourCharCode() // 'TRTP' protocol ID
-      "HOTL".fourCharCode() // 'HOTL' sub-protocol ID
-      UInt16(0x0001) // Version
-      UInt16(0x0002) // Sub-version
-    }))
-    let handshakeResponse = try await socket.read(8)
-    print("HotlineClient.connect(): Handshake response received")
+    do {
+      print("HotlineClient.connect(): Sending handshake...")
+      try await socket.write(Data(endian: .big, {
+        "TRTP".fourCharCode() // 'TRTP' protocol ID
+        "HOTL".fourCharCode() // 'HOTL' sub-protocol ID
+        UInt16(0x0001) // Version
+        UInt16(0x0002) // Sub-version
+      }))
+      let handshakeResponse = try await socket.read(8)
+      print("HotlineClient.connect(): Handshake response received")
 
-    // Verify handshake
-    guard handshakeResponse.prefix(4) == Data([0x54, 0x52, 0x54, 0x50]) else {
-      print("HotlineClient.connect(): Invalid handshake response")
-      throw HotlineClientError.connectionFailed(
-        NSError(domain: "HotlineClient", code: -1, userInfo: [
-          NSLocalizedDescriptionKey: "Invalid handshake response"
-        ])
-      )
-    }
+      // Verify handshake
+      guard handshakeResponse.prefix(4) == Data([0x54, 0x52, 0x54, 0x50]) else {
+        print("HotlineClient.connect(): Invalid handshake response")
+        throw HotlineClientError.connectionFailed(
+          NSError(domain: "HotlineClient", code: -1, userInfo: [
+            NSLocalizedDescriptionKey: "Invalid handshake response"
+          ])
+        )
+      }
 
-    let errorCode = handshakeResponse.withUnsafeBytes { $0.load(fromByteOffset: 4, as: UInt32.self) }
-    guard errorCode.bigEndian == 0 else {
-      print("HotlineClient.connect(): Handshake failed with error code \(errorCode)")
-      throw HotlineClientError.connectionFailed(
-        NSError(domain: "HotlineClient", code: Int(errorCode), userInfo: [
-          NSLocalizedDescriptionKey: "Handshake failed with error code \(errorCode)"
-        ])
-      )
+      let errorCode = handshakeResponse.withUnsafeBytes { $0.load(fromByteOffset: 4, as: UInt32.self) }
+      guard errorCode.bigEndian == 0 else {
+        print("HotlineClient.connect(): Handshake failed with error code \(errorCode)")
+        throw HotlineClientError.connectionFailed(
+          NSError(domain: "HotlineClient", code: Int(errorCode), userInfo: [
+            NSLocalizedDescriptionKey: "Handshake failed with error code \(errorCode)"
+          ])
+        )
+      }
+    } catch {
+      await socket.close()
+      throw error
     }
 
     // Create client
@@ -243,7 +248,14 @@ public actor HotlineClient {
 
     // Perform login
     print("HotlineClient.connect(): Performing login")
-    let serverInfo = try await client.performLogin(login)
+    let serverInfo: HotlineServerInfo
+    do {
+      serverInfo = try await client.performLogin(login)
+    } catch {
+      // Stops the receive loop and closes the socket.
+      await client.disconnect()
+      throw error
+    }
     await client.setServerInfo(serverInfo)
     await client.setLoginInfo(login)
     await client.setServerVersion(serverInfo.version)
