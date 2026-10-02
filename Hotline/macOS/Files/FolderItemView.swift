@@ -109,21 +109,25 @@ struct FolderItemView: View {
       }
     }
     .onDrop(of: [.fileURL], isTargeted: $dragOver) { items in
-      guard let item = items.first,
-            let identifier = item.registeredTypeIdentifiers.first else {
-        return false
-      }
-      
-      item.loadItem(forTypeIdentifier: identifier, options: nil) { (urlData, error) in
-        DispatchQueue.main.async {
-          if let urlData = urlData as? Data,
-             let fileURL = URL(dataRepresentation: urlData, relativeTo: nil, isAbsolute: true) {
-            self.uploadFile(file: fileURL)
+      var handled = false
+
+      for item in items {
+        guard let identifier = item.registeredTypeIdentifiers.first else {
+          continue
+        }
+
+        handled = true
+        item.loadItem(forTypeIdentifier: identifier, options: nil) { (urlData, error) in
+          DispatchQueue.main.async {
+            if let urlData = urlData as? Data,
+               let fileURL = URL(dataRepresentation: urlData, relativeTo: nil, isAbsolute: true) {
+              self.uploadFile(file: fileURL)
+            }
           }
         }
       }
-      
-      return true
+
+      return handled
     }
     
     if file.expanded {

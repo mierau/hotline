@@ -49,14 +49,16 @@ struct FileActions {
     return try? await model.getFileDetails(file.name, path: file.path)
   }
 
-  func upload(file fileURL: URL, to path: [String]) {
+  func upload(file fileURL: URL, to path: [String], complete: (() -> Void)? = nil) {
     var fileIsDirectory: ObjCBool = false
     guard FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false), isDirectory: &fileIsDirectory) else {
+      complete?()
       return
     }
 
     if fileIsDirectory.boolValue {
       model.uploadFolder(url: fileURL, path: path, complete: { _ in
+        complete?()
         Task {
           try? await model.getFileList(path: path)
         }
@@ -64,11 +66,45 @@ struct FileActions {
     }
     else {
       model.uploadFile(url: fileURL, path: path) { _ in
+        complete?()
         Task {
           try? await model.getFileList(path: path)
         }
       }
     }
+  }
+
+  /// Uploads every file URL carried by a set of dropped item providers to `path`.
+  /// Returns false when none of the providers carry anything we can load.
+  func upload(droppedItems items: [NSItemProvider], to path: [String]) -> Bool {
+    var handled = false
+
+    for item in items {
+      guard let identifier = item.registeredTypeIdentifiers.first else {
+        continue
+      }
+
+      handled = true
+      item.loadItem(forTypeIdentifier: identifier, options: nil) { (urlData, error) in
+        DispatchQueue.main.async {
+          guard let urlData = urlData as? Data,
+                let fileURL = URL(dataRepresentation: urlData, relativeTo: nil, isAbsolute: true) else {
+            return
+          }
+
+          // Access has to outlive the transfer, so it is released by the upload's
+          // completion rather than when this block returns.
+          let didStartAccessing = fileURL.startAccessingSecurityScopedResource()
+          self.upload(file: fileURL, to: path) {
+            if didStartAccessing {
+              fileURL.stopAccessingSecurityScopedResource()
+            }
+          }
+        }
+      }
+    }
+
+    return handled
   }
 
   func newFolder(name: String, parent: FileInfo?) {

@@ -154,27 +154,11 @@ struct FilesGridView: View {
     .focusable()
     .focusEffectDisabled()
     .onDrop(of: [.fileURL], isTargeted: self.$dragOver) { items in
-      guard self.model.access?.contains(.canUploadFiles) == true,
-            let item = items.first,
-            let identifier = item.registeredTypeIdentifiers.first else {
+      guard self.model.access?.contains(.canUploadFiles) == true else {
         return false
       }
 
-      item.loadItem(forTypeIdentifier: identifier, options: nil) { (urlData, error) in
-        DispatchQueue.main.async {
-          if let urlData = urlData as? Data,
-             let fileURL = URL(dataRepresentation: urlData, relativeTo: nil, isAbsolute: true) {
-            let didStartAccessing = fileURL.startAccessingSecurityScopedResource()
-            defer {
-              if didStartAccessing {
-                fileURL.stopAccessingSecurityScopedResource()
-              }
-            }
-            self.actions.upload(file: fileURL, to: self.folderPath)
-          }
-        }
-      }
-      return true
+      return self.actions.upload(droppedItems: items, to: self.folderPath)
     }
     .task(id: self.folderLoading) {
       if self.folderLoading {
@@ -282,27 +266,11 @@ struct FilesGridView: View {
     if file.isFolder {
       view
         .onDrop(of: [.fileURL], isTargeted: self.dropTargetBinding(for: file)) { items in
-          guard self.model.access?.contains(.canUploadFiles) == true,
-                let item = items.first,
-                let identifier = item.registeredTypeIdentifiers.first else {
+          guard self.model.access?.contains(.canUploadFiles) == true else {
             return false
           }
 
-          item.loadItem(forTypeIdentifier: identifier, options: nil) { (urlData, error) in
-            DispatchQueue.main.async {
-              if let urlData = urlData as? Data,
-                 let fileURL = URL(dataRepresentation: urlData, relativeTo: nil, isAbsolute: true) {
-                let didStartAccessing = fileURL.startAccessingSecurityScopedResource()
-                defer {
-                  if didStartAccessing {
-                    fileURL.stopAccessingSecurityScopedResource()
-                  }
-                }
-                self.actions.upload(file: fileURL, to: file.path)
-              }
-            }
-          }
-          return true
+          return self.actions.upload(droppedItems: items, to: file.path)
         }
     }
     else {
