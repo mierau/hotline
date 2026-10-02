@@ -202,11 +202,12 @@ public actor NetSocket {
   ///
   /// Performs a graceful shutdown of the underlying network connection (e.g., TCP FIN)
   /// and wakes all pending read/write operations with a `NetSocketError.closed` error.
-  /// This method is idempotent - subsequent calls are ignored.
+  /// Any unread buffered data is discarded. This method is idempotent - subsequent calls are ignored.
   ///
   /// Use `forceClose()` for immediate non-graceful termination (e.g., TCP RST).
   public func close() {
     self.shutdown(.closed)
+    self.discardBuffer()
   }
 
   /// Force close the connection immediately (non-graceful)
@@ -215,9 +216,10 @@ public actor NetSocket {
   /// (e.g., TCP RST). Use this when you need to terminate the connection immediately
   /// without waiting for graceful closure. For normal shutdown, use `close()` instead.
   ///
-  /// This method is idempotent - subsequent calls are ignored.
+  /// Any unread buffered data is discarded. This method is idempotent - subsequent calls are ignored.
   public func forceClose() {
     self.shutdown(.closed, force: true)
+    self.discardBuffer()
   }
 
   // MARK: Send Data
@@ -325,8 +327,8 @@ public actor NetSocket {
       if let maxBytes, availableBytes >= maxBytes {
         throw NetSocketError.framingExceeded(max: maxBytes)
       }
+      // Throws once the connection has closed and no more data can arrive.
       try await waitForData()
-      guard !isClosed || availableBytes > 0 else { throw NetSocketError.closed }
     }
   }
 
@@ -337,7 +339,8 @@ public actor NetSocket {
   ///
   /// - Parameter count: Number of bytes to read
   /// - Returns: Exactly `count` bytes
-  /// - Throws: `NetSocketError.insufficientData` if connection closes before enough data arrives
+  /// - Throws: `NetSocketError.closed` if the connection closed with nothing left to read, or
+  ///   `NetSocketError.insufficientData` if it closed partway through the requested bytes
   public func read(_ count: Int) async throws -> Data {
     try await self.ensureReadable(count)
     let start = self.head
@@ -483,10 +486,8 @@ public actor NetSocket {
         self.compactIfNeeded()
         return
       }
+      // Throws once the connection has closed and no more data can arrive.
       try await self.waitForData()
-      guard !self.isClosed else {
-        throw NetSocketError.closed
-      }
     }
   }
   
@@ -803,12 +804,13 @@ public actor NetSocket {
             return
           }
           
+          // Buffer data before handling an error or EOF so it can still be read.
+          if let data, !data.isEmpty {
+            await o.append(data, connID: connID)
+          }
           if let error {
             await o.shutdown(.failed(underlying: error))
             return
-          }
-          if let data, !data.isEmpty {
-            await o.append(data, connID: connID)
           }
           if isComplete {
             await o.shutdown(.closed)
@@ -867,12 +869,17 @@ public actor NetSocket {
   }
   
   private func ensureReadable(_ count: Int) async throws {
-    try await self.ensureReady()
+    // Check the buffer before the connection state: bytes the peer sent before closing stay readable.
     while self.availableBytes < count {
       try Task.checkCancellation()
       if self.isClosed {
+        // Nothing left reads as a closed connection; a partial value means the stream was cut short.
+        if self.availableBytes == 0 {
+          throw NetSocketError.closed
+        }
         throw NetSocketError.insufficientData(expected: count, got: self.availableBytes)
       }
+      try await self.ensureReady()
       try await self.waitForData()
     }
   }
@@ -894,6 +901,12 @@ public actor NetSocket {
       self.buffer.removeSubrange(0..<self.head)
       self.head = 0
     }
+  }
+
+  /// Drop unread data so nothing more can be read after our own close().
+  private func discardBuffer() {
+    self.buffer = Data()
+    self.head = 0
   }
   
   private func search(delimiter: Data) -> Range<Int>? {
