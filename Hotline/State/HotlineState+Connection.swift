@@ -306,6 +306,13 @@ extension HotlineState {
     self.accountsLoaded = false
     self.bannerImage = nil
     self.bannerColors = nil
+    self.bannerImageFormat = .unknown
+    // Drop the banner file too, so the toolbar shows the default banner and the next login
+    // downloads it again (downloadBanner() skips the download while a file is set).
+    if let bannerFileURL = self.bannerFileURL {
+      try? FileManager.default.removeItem(at: bannerFileURL)
+      self.bannerFileURL = nil
+    }
 
     print("HotlineState: Resetting file search...")
     self.resetFileSearchState()
