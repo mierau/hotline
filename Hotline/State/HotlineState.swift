@@ -438,6 +438,13 @@ class HotlineState: Equatable {
   #elseif os(iOS)
   var bannerImage: UIImage? = nil
   #endif
+  /// Loads the banner cached from an earlier visit, to show while connecting.
+  @ObservationIgnored var bannerCacheTask: Task<Void, Never>? = nil
+  /// Whether this connection has downloaded the server's banner yet.
+  @ObservationIgnored var bannerDownloaded: Bool = false
+  /// A downloaded banner that couldn't be cached, shown from its download until it's replaced or
+  /// the connection ends.
+  @ObservationIgnored var bannerTemporaryFileURL: URL? = nil
 
   // Transfers (now stored globally in AppState)
   /// Returns all transfers associated with this server

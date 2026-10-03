@@ -40,6 +40,9 @@ extension HotlineState {
     self.status = .connecting
     print("HotlineState.login(): Status set to connecting")
 
+    // Show cached banner while connecting.
+    self.showCachedBanner(for: server)
+
     // Set up chat session
     let key = self.sessionKey(for: server)
     self.chatSessionKey = key
@@ -111,6 +114,7 @@ extension HotlineState {
         await client.disconnect()
         self.client = nil
       }
+      self.clearBanner()
       self.status = .disconnected
       throw error
     }
@@ -129,6 +133,7 @@ extension HotlineState {
         await client.disconnect()
         self.client = nil
       }
+      self.clearBanner()
       self.status = .disconnected
       throw clientError
     }
@@ -138,6 +143,7 @@ extension HotlineState {
         await client.disconnect()
         self.client = nil
       }
+      self.clearBanner()
       self.status = .disconnected
       self.displayError(error)
       throw error
@@ -261,9 +267,6 @@ extension HotlineState {
 
     print("HotlineState: Cancelling banner and downloads...")
 
-    self.bannerDownloadTask?.cancel()
-    self.bannerDownloadTask = nil
-
     // Cancel file search
     self.fileSearchSession?.cancel()
     self.fileSearchSession = nil
@@ -304,15 +307,8 @@ extension HotlineState {
     self.pendingNavigation = nil
     self.accounts = []
     self.accountsLoaded = false
-    self.bannerImage = nil
-    self.bannerColors = nil
-    self.bannerImageFormat = .unknown
-    // Drop the banner file too, so the toolbar shows the default banner and the next login
-    // downloads it again (downloadBanner() skips the download while a file is set).
-    if let bannerFileURL = self.bannerFileURL {
-      try? FileManager.default.removeItem(at: bannerFileURL)
-      self.bannerFileURL = nil
-    }
+    // Back to the default banner. The server's banner stays cached for next time.
+    self.clearBanner()
 
     print("HotlineState: Resetting file search...")
     self.resetFileSearchState()
@@ -324,6 +320,11 @@ extension HotlineState {
     print("HotlineState: Disconnected")
   }
 
+  // MARK: - Banner
+
+  /// Downloads the server's banner, and caches it for next time. While connecting, the toolbar
+  /// shows the banner cached from last time, so this only changes what's on screen when the server
+  /// has a new banner (which fades in) or no longer has one (back to the default).
   @MainActor
   func downloadBanner(force: Bool = false) {
     guard self.serverVersion >= 150 else {
@@ -333,11 +334,8 @@ extension HotlineState {
     if force {
       self.bannerDownloadTask?.cancel()
       self.bannerDownloadTask = nil
-      self.bannerImage = nil
-      self.bannerImageFormat = .unknown
-      self.bannerFileURL = nil
-      self.bannerColors = nil
-    } else if self.bannerDownloadTask != nil || self.bannerFileURL != nil {
+    }
+    else if self.bannerDownloadTask != nil || self.bannerDownloaded {
       return
     }
 
@@ -346,68 +344,208 @@ extension HotlineState {
         self?.bannerDownloadTask = nil
       }
 
-      guard let self else { return }
-      guard let client = self.client,
-            let server = self.server,
-            let result = try? await client.downloadBanner(),
-            let address = server.address as String?,
-            let port = server.port as Int?
-      else {
+      guard let self,
+            let client = self.client,
+            let server = self.server else {
         return
       }
 
+      // An error reply means the server has no banner. Anything else, like a timeout, might be
+      // temporary, so keep showing the cached banner.
+      let transfer: (referenceNumber: UInt32, transferSize: Int)?
       do {
-        print("HotlineState: Banner download info - reference: \(result.referenceNumber), transferSize: \(result.transferSize)")
-
-        let previewClient = HotlineFilePreviewClient(
-          fileName: "banner",
-          address: address,
-          port: UInt16(port),
-          reference: result.referenceNumber,
-          size: UInt32(result.transferSize)
-        )
-
-        let fileURL = try await previewClient.preview()
-
-        if let oldFileURL = self.bannerFileURL {
-          try? FileManager.default.removeItem(at: oldFileURL)
-        }
-
-        guard self.client != nil else { return }
-
-        let data = try Data(contentsOf: fileURL)
-        let format = data.detectedImageFormat
-
-        print("HotlineState: Banner download complete, data size: \(data.count) bytes")
-
-#if os(macOS)
-        guard let nsImage = NSImage(data: data) else {
-          print("HotlineState: Failed to create NSImage from banner data")
-          return
-        }
-        let swiftUIImage = Image(nsImage: nsImage)
-        let colors = ColorArt.analyze(image: nsImage)
-#elseif os(iOS)
-        guard let uiImage = UIImage(data: data) else {
-          print("HotlineState: Failed to create UIImage from banner data")
-          return
-        }
-        let swiftUIImage = Image(uiImage: uiImage)
-        let colors: ColorArt? = nil
-#endif
-
-        // Set all banner properties together so SwiftUI coalesces into one layout pass
-        self.bannerImageFormat = format
-        self.bannerFileURL = fileURL
-        self.bannerImage = swiftUIImage
-        self.bannerColors = colors
-
-      } catch {
-        print("HotlineState: Banner download failed: \(error)")
+        transfer = try await client.downloadBanner()
       }
+      catch HotlineClientError.serverError {
+        transfer = nil
+      }
+      catch {
+        print("HotlineState: Banner request failed: \(error)")
+        return
+      }
+
+      guard let transfer else {
+        print("HotlineState: Server has no banner")
+        await self.forgetBanner(for: server)
+        return
+      }
+
+      print("HotlineState: Banner download info - reference: \(transfer.referenceNumber), transferSize: \(transfer.transferSize)")
+
+      let previewClient = HotlineFilePreviewClient(
+        fileName: "banner",
+        address: server.address,
+        port: UInt16(server.port),
+        reference: transfer.referenceNumber,
+        size: UInt32(transfer.transferSize)
+      )
+
+      let downloadURL: URL
+      let data: Data
+      do {
+        downloadURL = try await previewClient.preview()
+        data = try Data(contentsOf: downloadURL)
+      }
+      catch {
+        print("HotlineState: Banner download failed: \(error)")
+        previewClient.cleanup()
+        return
+      }
+
+      print("HotlineState: Banner download complete, data size: \(data.count) bytes")
+
+      // Keep it for next time. When it's the same banner as last time, this is the file that's
+      // already showing.
+      let cachedURL = await BannerCache.shared.store(data, forAddress: server.address, port: server.port)
+      if cachedURL != nil {
+        previewClient.cleanup()
+      }
+      let fileURL = cachedURL ?? downloadURL
+
+      guard !Task.isCancelled, self.client != nil else {
+        if cachedURL == nil {
+          previewClient.cleanup()
+        }
+        return
+      }
+      self.bannerDownloaded = true
+
+      // The same banner as last time is the one already showing, so nothing changes on screen.
+      guard fileURL.path(percentEncoded: false) != self.bannerFileURL?.path(percentEncoded: false) else {
+        return
+      }
+
+      guard let banner = await Self.loadBanner(at: fileURL) else {
+        print("HotlineState: Banner isn't an image that can be shown")
+        if cachedURL == nil {
+          previewClient.cleanup()
+        }
+        await self.forgetBanner(for: server)
+        return
+      }
+
+      guard !Task.isCancelled, self.client != nil else {
+        if cachedURL == nil {
+          previewClient.cleanup()
+        }
+        return
+      }
+
+      // In place of the cached banner, if one was showing. The toolbar fades between them.
+      self.showBanner(banner, temporary: cachedURL == nil)
     }
 
     self.bannerDownloadTask = task
+  }
+
+  /// Shows the banner cached from an earlier visit to the server, if there is one.
+  @MainActor
+  private func showCachedBanner(for server: Server) {
+    self.bannerCacheTask?.cancel()
+    self.bannerCacheTask = Task { @MainActor [weak self] in
+      guard let fileURL = await BannerCache.shared.banner(forAddress: server.address, port: server.port),
+            let banner = await Self.loadBanner(at: fileURL),
+            let self,
+            !Task.isCancelled,
+            // The download is newer. It can't normally finish first, but if it did, it wins.
+            !self.bannerDownloaded else {
+        return
+      }
+      self.showBanner(banner)
+    }
+  }
+
+  /// Stops loading the banner and goes back to the default one, for when the connection ends.
+  @MainActor
+  func clearBanner() {
+    self.bannerCacheTask?.cancel()
+    self.bannerCacheTask = nil
+    self.bannerDownloadTask?.cancel()
+    self.bannerDownloadTask = nil
+    self.bannerDownloaded = false
+    self.hideBanner()
+  }
+
+  /// For a server that no longer has a banner, or has one that can't be shown: forgets the cached
+  /// one and goes back to the default.
+  @MainActor
+  private func forgetBanner(for server: Server) async {
+    await BannerCache.shared.removeBanner(forAddress: server.address, port: server.port)
+    guard !Task.isCancelled, self.client != nil else {
+      return
+    }
+    self.bannerDownloaded = true
+    self.hideBanner()
+  }
+
+  /// A banner ready to show, with the colors the toolbar takes from it.
+  struct LoadedBanner {
+    let fileURL: URL
+    let format: Data.ImageFormat
+    #if os(macOS)
+    let image: NSImage
+    let colors: ColorArt?
+    #elseif os(iOS)
+    let image: UIImage
+    #endif
+  }
+
+  /// Reads and decodes a banner and works out its colors, off the main thread. Nil if it isn't an
+  /// image.
+  nonisolated static func loadBanner(at fileURL: URL) async -> LoadedBanner? {
+    await Task.detached(priority: .userInitiated) {
+      guard let data = try? Data(contentsOf: fileURL) else {
+        return nil
+      }
+      #if os(macOS)
+      guard let image = NSImage(data: data) else {
+        return nil
+      }
+      return LoadedBanner(fileURL: fileURL, format: data.detectedImageFormat, image: image, colors: ColorArt.analyze(image: image))
+      #elseif os(iOS)
+      guard let image = UIImage(data: data) else {
+        return nil
+      }
+      return LoadedBanner(fileURL: fileURL, format: data.detectedImageFormat, image: image)
+      #endif
+    }.value
+  }
+
+  /// Shows a banner in place of whatever was showing. A temporary banner's file is deleted once
+  /// it's replaced or the connection ends.
+  @MainActor
+  private func showBanner(_ banner: LoadedBanner, temporary: Bool = false) {
+    let previousTemporaryFileURL = self.bannerTemporaryFileURL
+
+    // Set all banner properties together so SwiftUI coalesces into one layout pass
+    self.bannerImageFormat = banner.format
+    self.bannerFileURL = banner.fileURL
+    #if os(macOS)
+    self.bannerImage = Image(nsImage: banner.image)
+    self.bannerColors = banner.colors
+    #elseif os(iOS)
+    self.bannerImage = banner.image
+    #endif
+
+    self.bannerTemporaryFileURL = temporary ? banner.fileURL : nil
+    if let previousTemporaryFileURL, previousTemporaryFileURL != banner.fileURL {
+      try? FileManager.default.removeItem(at: previousTemporaryFileURL)
+    }
+  }
+
+  @MainActor
+  private func hideBanner() {
+    self.bannerImageFormat = .unknown
+    self.bannerFileURL = nil
+    self.bannerImage = nil
+    #if os(macOS)
+    self.bannerColors = nil
+    #endif
+
+    if let temporaryFileURL = self.bannerTemporaryFileURL {
+      self.bannerTemporaryFileURL = nil
+      try? FileManager.default.removeItem(at: temporaryFileURL)
+    }
   }
 
   // MARK: - Event Loop

@@ -10,6 +10,7 @@
 		11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726072BE0672A000C1DA7 /* FileDetails.swift */; };
 		11A7260A2BE0675A000C1DA7 /* FileDetailsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726092BE06759000C1DA7 /* FileDetailsSheet.swift */; platformFilters = (macos, ); };
 		11F8288B2BF9428100216BA0 /* AccountManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11F8288A2BF9428100216BA0 /* AccountManagerView.swift */; };
+		443438BC804C8366ED678933 /* BannerCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0396E4EF8544986A8B51D08E /* BannerCache.swift */; };
 		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; platformFilter = ios; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; platformFilter = ios; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; platformFilter = ios; };
@@ -148,6 +149,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0396E4EF8544986A8B51D08E /* BannerCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BannerCache.swift; sourceTree = "<group>"; };
 		11A726072BE0672A000C1DA7 /* FileDetails.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileDetails.swift; sourceTree = "<group>"; };
 		11A726092BE06759000C1DA7 /* FileDetailsSheet.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileDetailsSheet.swift; sourceTree = "<group>"; };
 		11F8288A2BF9428100216BA0 /* AccountManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManagerView.swift; sourceTree = "<group>"; };
@@ -279,7 +281,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		F8A74500A72D340F8B339DB1 /* Exceptions for "QuickDraw" folder in "Hotline" target */ = {
+		F8A74500A72D340F8B339DB1 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				QuickDrawViewer/README.md,
@@ -289,8 +291,8 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		4862DCD4AE1AB6E7CAD61D80 /* QuickDraw */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (F8A74500A72D340F8B339DB1 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = QuickDraw; sourceTree = "<group>"; };
 		DA5A6EF32F44F26500060F18 /* HotlineTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = HotlineTests; sourceTree = "<group>"; };
-		4862DCD4AE1AB6E7CAD61D80 /* QuickDraw */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (F8A74500A72D340F8B339DB1 /* Exceptions for "QuickDraw" folder in "Hotline" target */, ); explicitFileTypes = {}; explicitFolders = (); path = QuickDraw; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -586,6 +588,7 @@
 			children = (
 				DAE735062B3251B3000C56F6 /* SoundEffects.swift */,
 				DAC6B2DE2EAC6236004E2CBA /* ChatStore.swift */,
+				0396E4EF8544986A8B51D08E /* BannerCache.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -882,6 +885,7 @@
 				DA5268B32EB6806E00DCB941 /* HotlineFileDownloadClient.swift in Sources */,
 				DACCE5E32EABE86A008CDD92 /* AppUpdateView.swift in Sources */,
 				DAC6B2E02EAC6236004E2CBA /* ChatStore.swift in Sources */,
+				443438BC804C8366ED678933 /* BannerCache.swift in Sources */,
 				DAC0E4232EC78E1100E999DB /* UserClientInfoSheet.swift in Sources */,
 				DA32CD492B2931640053B98B /* User.swift in Sources */,
 			);
