@@ -112,6 +112,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
   }
 }
 
+
 @main
 struct Application: App {
   @Environment(\.scenePhase) private var scenePhase
@@ -326,6 +327,14 @@ struct Application: App {
         }
         .keyboardShortcut(.init("K"), modifiers: .command)
       }
+      CommandGroup(replacing: .sidebar) {
+        Button("Show Sidebar") {
+          withAnimation {
+            activeServerState?.columnVisibility = .all
+          }
+        }
+        .keyboardShortcut("S", modifiers: [.command, .option])
+      }
       CommandGroup(before: .singleWindowList) {
         Button("Toolbar") {
           self.toggleBannerWindow()
@@ -517,4 +526,3 @@ struct Application: App {
     }
   }
 }
-
