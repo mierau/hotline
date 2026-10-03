@@ -78,9 +78,10 @@ struct FilePreviewImageView: View {
         if let info = info {
           ToolbarItem(placement: .primaryAction) {
             Button {
-              if let fileURL = preview?.fileURL,
-                 let data = try? Data(contentsOf: fileURL) {
-                let _ = data.saveAsFileToDownloads(filename: info.name)
+              // Copy the file rather than its data, so it keeps its HFS type code. A PICT named
+              // without an extension is only recognizable by that.
+              if let fileURL = preview?.fileURL {
+                FileManager.default.copyToDownloads(from: fileURL, using: info.name, bounceDock: true)
               }
             } label: {
               Label("Download Image...", systemImage: "arrow.down")
@@ -115,6 +116,7 @@ struct FilePreviewImageView: View {
     }
     .onDisappear {
       preview?.cancel()
+      preview?.cleanup()
       dismiss()
     }
     .onChange(of: preview?.state) {

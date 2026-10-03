@@ -11,6 +11,12 @@ struct PreviewFileInfo: Identifiable, Codable {
   var creator: String? = nil
   
   var previewType: FilePreviewType {
+    #if os(macOS)
+    if PICTImage.isPICT(name: self.name, hfsType: self.type) {
+      return .pict
+    }
+    #endif
+
     let fileExtension = (self.name as NSString).pathExtension
     if let fileType = UTType(filenameExtension: fileExtension) {
       if fileType.isSubtype(of: .image) {

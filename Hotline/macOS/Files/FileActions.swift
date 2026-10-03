@@ -111,6 +111,9 @@ struct FileActions {
       openWindow(id: "preview-quicklook", value: previewInfo)
     case .unknown:
       openWindow(id: "preview-quicklook", value: previewInfo)
+    case .pict:
+      // Quick Look can't draw most PICTs, so they get our own image preview.
+      openWindow(id: "preview-image", value: previewInfo)
     }
   }
 }

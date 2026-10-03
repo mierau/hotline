@@ -5,6 +5,7 @@ enum FilePreviewType: Equatable {
   case unknown
   case image
   case text
+  case pict
 }
 
 /// State for a file preview download
@@ -80,6 +81,18 @@ final class FilePreviewState {
             }
           }
         }
+
+        // macOS can't draw most PICTs, so decode them ourselves before showing the preview.
+        // Big pictures take a moment, so do it off the main thread.
+        #if os(macOS)
+        if self.previewType == .pict {
+          let pdf = await Task.detached(priority: .userInitiated) {
+            PICTImage.pdfData(fromFileAt: url)
+          }.value
+          try Task.checkCancellation()
+          self.image = pdf.flatMap { PICTImage.image(fromPDF: $0) }
+        }
+        #endif
 
         self.state = .loaded
         self.progress = 1.0

@@ -278,8 +278,19 @@
 		DAF5BC6B2EC2727100551E4D /* ConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		F8A74500A72D340F8B339DB1 /* Exceptions for "QuickDraw" folder in "Hotline" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				QuickDrawViewer/README.md,
+			);
+			target = DA9CAFB62B126D5700CDA197 /* Hotline */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		DA5A6EF32F44F26500060F18 /* HotlineTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = HotlineTests; sourceTree = "<group>"; };
+		4862DCD4AE1AB6E7CAD61D80 /* QuickDraw */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (F8A74500A72D340F8B339DB1 /* Exceptions for "QuickDraw" folder in "Hotline" target */, ); explicitFileTypes = {}; explicitFolders = (); path = QuickDraw; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -526,6 +537,7 @@
 				DA6980822BFFD06C003E434B /* BookmarkDocument.swift */,
 				DA501BE02EBE844F001714F8 /* Views */,
 				DA5268B62EB916AB00DCB941 /* NetSocket */,
+				4862DCD4AE1AB6E7CAD61D80 /* QuickDraw */,
 				DABFCC272B1530BE009F40D2 /* Utility */,
 			);
 			path = Library;
@@ -660,6 +672,9 @@
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				4862DCD4AE1AB6E7CAD61D80 /* QuickDraw */,
 			);
 			name = Hotline;
 			packageProductDependencies = (
