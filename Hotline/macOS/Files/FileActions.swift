@@ -111,16 +111,7 @@ struct FileActions {
   }
 
   private func openPreviewWindow(_ previewInfo: PreviewFileInfo) {
-    switch previewInfo.previewType {
-    case .image:
-      openWindow(id: "preview-quicklook", value: previewInfo)
-    case .text:
-      openWindow(id: "preview-quicklook", value: previewInfo)
-    case .unknown:
-      openWindow(id: "preview-quicklook", value: previewInfo)
-    case .pict:
-      // Quick Look can't draw most PICTs, so they get our own image preview.
-      openWindow(id: "preview-image", value: previewInfo)
-    }
+    // PICTs too, which the preview draws itself, as Quick Look can't draw most of them.
+    openWindow(id: "preview-quicklook", value: previewInfo)
   }
 }

@@ -82,15 +82,17 @@ public class HotlineFilePreviewClient {
     // Create temporary file path in system temp directory.
     // If the file has no extension but we know the type code,
     // add the appropriate extension so QuickLook can identify it.
-    let tempDir = FileManager.default.temporaryDirectory
     var previewFileName = self.fileName
     if (previewFileName as NSString).pathExtension.isEmpty,
        let fileType = self.fileType?.lowercased(),
        let ext = FileManager.HFSTypeToExtension[fileType] {
       previewFileName = "\(previewFileName).\(ext)"
     }
-    let uniqueFileName = "\(UUID().uuidString)_\(previewFileName)"
-    let tempFileURL = tempDir.appendingPathComponent(uniqueFileName)
+    // In a folder of its own, so it keeps its name, which is the one it goes by when it's shared or
+    // dragged out of a preview, without meeting another file of the same name.
+    let tempFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: tempFolder, withIntermediateDirectories: true)
+    let tempFileURL = tempFolder.appendingPathComponent(previewFileName)
     self.temporaryFileURL = tempFileURL
 
     progressHandler?(.connecting)
@@ -157,7 +159,7 @@ public class HotlineFilePreviewClient {
           let updates = await socket.receiveFile(to: fileHandle, length: forkSize)
           for try await p in updates {
             progressHandler?(.transfer(
-              name: uniqueFileName,
+              name: previewFileName,
               size: p.sent,
               total: forkSize,
               progress: forkSize > 0 ? Double(p.sent) / Double(forkSize) : 0.0,
@@ -181,7 +183,7 @@ public class HotlineFilePreviewClient {
           let totalSent = p.sent + 4
           let totalSize = Int(self.transferSize)
           progressHandler?(.transfer(
-            name: uniqueFileName,
+            name: previewFileName,
             size: totalSent,
             total: totalSize,
             progress: totalSize > 0 ? Double(totalSent) / Double(totalSize) : 0.0,
@@ -202,8 +204,21 @@ public class HotlineFilePreviewClient {
     self.temporaryFileURL = nil
     
     // Delete the temp file
-    try? FileManager.default.removeItem(at: tempURL)
+    Self.removeDownload(at: tempURL)
     
     print("HotlineFilePreviewClient[\(self.referenceNumber)]: Cleaned up temp file")
+  }
+
+  /// Deletes a file this downloaded, and the folder of its own it was put in. For a file that's
+  /// kept after the preview's done with it, rather than cleaned up with it.
+  public static func removeDownload(at url: URL) {
+    let folder = url.deletingLastPathComponent()
+    // Only ever one of those folders, never the temporary folder they're in.
+    guard UUID(uuidString: folder.lastPathComponent) != nil,
+          folder.deletingLastPathComponent().resolvingSymlinksInPath().path(percentEncoded: false) == FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path(percentEncoded: false) else {
+      try? FileManager.default.removeItem(at: url)
+      return
+    }
+    try? FileManager.default.removeItem(at: folder)
   }
 }

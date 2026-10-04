@@ -107,8 +107,6 @@
 		DAA98C7B2F4CFF0B002C6334 /* ChatSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA98C7A2F4CFF0B002C6334 /* ChatSettingsView.swift */; };
 		DAAEE66B2B3FBC2100A5BA07 /* TransferInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66A2B3FBC2100A5BA07 /* TransferInfo.swift */; };
 		DAAEE66D2B475F1400A5BA07 /* PreviewFileInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66C2B475F1400A5BA07 /* PreviewFileInfo.swift */; };
-		DAAEE66F2B47625600A5BA07 /* FilePreviewImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */; platformFilters = (macos, ); };
-		DAB4D87B2B4B78310048A05C /* FileImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87A2B4B78310048A05C /* FileImageView.swift */; platformFilters = (macos, ); };
 		DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */; platformFilters = (macos, ); };
 		DAB4D8822B4C8FED0048A05C /* FileIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D8812B4C8FED0048A05C /* FileIconView.swift */; };
 		DAB4D8842B4CABEF0048A05C /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB4D8832B4CABEF0048A05C /* Extensions.swift */; };
@@ -257,8 +255,6 @@
 		DAA98C7A2F4CFF0B002C6334 /* ChatSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSettingsView.swift; sourceTree = "<group>"; };
 		DAAEE66A2B3FBC2100A5BA07 /* TransferInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferInfo.swift; sourceTree = "<group>"; };
 		DAAEE66C2B475F1400A5BA07 /* PreviewFileInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFileInfo.swift; sourceTree = "<group>"; };
-		DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewImageView.swift; sourceTree = "<group>"; };
-		DAB4D87A2B4B78310048A05C /* FileImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileImageView.swift; sourceTree = "<group>"; };
 		DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewTextView.swift; sourceTree = "<group>"; };
 		DAB4D8812B4C8FED0048A05C /* FileIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileIconView.swift; sourceTree = "<group>"; };
 		DAB4D8832B4CABEF0048A05C /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
@@ -395,7 +391,6 @@
 			children = (
 				DA501BE12EBE9018001714F8 /* GroupedIconView.swift */,
 				DA872B122BDDBF78008B1012 /* HotlinePanel.swift */,
-				DAB4D87A2B4B78310048A05C /* FileImageView.swift */,
 				DAB4D8812B4C8FED0048A05C /* FileIconView.swift */,
 				DA3429B62EBAB1750010784E /* QuickLookPreviewView.swift */,
 				DAC6B2E32EAFE92F004E2CBA /* SpinningGlobeView.swift */,
@@ -442,7 +437,6 @@
 				DAA98C402F479C32002C6334 /* FileActions.swift */,
 				DA32F1CB2EC4175F00B243BC /* NewFolderPopover.swift */,
 				11A726092BE06759000C1DA7 /* FileDetailsSheet.swift */,
-				DAAEE66E2B47625600A5BA07 /* FilePreviewImageView.swift */,
 				DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */,
 				DA3429B82EBAB2130010784E /* FilePreviewQuickLookView.swift */,
 			);
@@ -833,7 +827,6 @@
 				11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */,
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
 				DA5268B82EB916AF00DCB941 /* TransferRateEstimator.swift in Sources */,
-				DAB4D87B2B4B78310048A05C /* FileImageView.swift in Sources */,
 				DA3429B52EBA8A450010784E /* FilePreviewState.swift in Sources */,
 				DA6980792BF80525003E434B /* BetterTextEditor.swift in Sources */,
 				DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */,
@@ -878,7 +871,6 @@
 				DAB4D8822B4C8FED0048A05C /* FileIconView.swift in Sources */,
 				DA65499A2BEC280E00EDB697 /* ServerMessageView.swift in Sources */,
 				DA501BF02EBED848001714F8 /* BonjourState.swift in Sources */,
-				DAAEE66F2B47625600A5BA07 /* FilePreviewImageView.swift in Sources */,
 				DAA98C792F4CFEF5002C6334 /* NotificationSettingsView.swift in Sources */,
 				DAA98C7B2F4CFF0B002C6334 /* ChatSettingsView.swift in Sources */,
 				DA872B152BDDEE1A008B1012 /* VisualEffectView.swift in Sources */,

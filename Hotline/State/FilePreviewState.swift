@@ -23,6 +23,11 @@ final class FilePreviewState {
 
   var state: LoadState = .unloaded
   var progress: Double = 0.0
+  /// How many bytes have come, of how many.
+  var transferred: Int = 0
+  var total: Int = 0
+  /// About how long the rest will take, once the transfer can tell.
+  var timeRemaining: TimeInterval? = nil
 
   var fileURL: URL? = nil
 
@@ -44,6 +49,7 @@ final class FilePreviewState {
 
   init(info: PreviewFileInfo) {
     self.info = info
+    self.total = info.size
   }
 
   // MARK: - API
@@ -69,14 +75,19 @@ final class FilePreviewState {
 
         self.state = .loading
         self.progress = 0.0
+        self.transferred = 0
+        self.timeRemaining = nil
 
         let url = try await client.preview { [weak self] progress in
           guard let self else { return }
 
           Task { @MainActor in
             switch progress {
-            case .transfer(name: _, size: _, total: _, progress: let p, speed: _, estimate: _):
+            case .transfer(name: _, size: let size, total: let total, progress: let p, speed: _, estimate: let estimate):
               self.progress = p
+              self.transferred = size
+              self.total = total
+              self.timeRemaining = estimate
             default:
               break
             }

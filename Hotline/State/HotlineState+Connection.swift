@@ -532,7 +532,7 @@ extension HotlineState {
 
     self.bannerTemporaryFileURL = temporary ? banner.fileURL : nil
     if let previousTemporaryFileURL, previousTemporaryFileURL != banner.fileURL {
-      try? FileManager.default.removeItem(at: previousTemporaryFileURL)
+      HotlineFilePreviewClient.removeDownload(at: previousTemporaryFileURL)
     }
   }
 
@@ -547,7 +547,7 @@ extension HotlineState {
 
     if let temporaryFileURL = self.bannerTemporaryFileURL {
       self.bannerTemporaryFileURL = nil
-      try? FileManager.default.removeItem(at: temporaryFileURL)
+      HotlineFilePreviewClient.removeDownload(at: temporaryFileURL)
     }
   }
 

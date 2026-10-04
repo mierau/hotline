@@ -441,17 +441,6 @@ struct Application: App {
     .defaultPosition(.topTrailing)
     .keyboardShortcut(.init("T"), modifiers: [.shift, .command])
         
-    // MARK: Image Preview Window
-    WindowGroup(id: "preview-image", for: PreviewFileInfo.self) { $info in
-      FilePreviewImageView(info: $info)
-    }
-    .windowResizability(.contentSize)
-    .windowStyle(.titleBar)
-    .windowToolbarStyle(.unifiedCompact(showsTitle: true))
-    .defaultSize(width: 350, height: 150)
-    .defaultPosition(.center)
-    .restorationBehavior(.disabled)
-    
     // MARK: Text Preview Window
     WindowGroup(id: "preview-text", for: PreviewFileInfo.self) { $info in
       FilePreviewTextView(info: $info)
@@ -477,7 +466,7 @@ struct Application: App {
     .windowManagerRole(.associated)
     .windowResizability(.automatic)
     .windowStyle(.titleBar)
-    .windowToolbarStyle(.unifiedCompact(showsTitle: true))
+    .windowToolbarStyle(.unified(showsTitle: true))
     .defaultSize(width: 450, height: 550)
     .defaultPosition(.center)
     .restorationBehavior(.disabled)
