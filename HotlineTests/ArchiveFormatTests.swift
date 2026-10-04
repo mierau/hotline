@@ -130,6 +130,147 @@ struct ArchiveFormatTests {
       try await ArchiveKind.binHex.entries(size: file.count, read: TestServer(file).read)
     }
   }
+
+  // MARK: - Disc images
+
+  @Test func readsAnHFSDisc() async throws {
+    // Small nodes, so it takes a few leaves, each linked to the next.
+    let disc = TestDisc.hfs([
+      .file("Read Me", in: 2, type: "TEXT", data: 100, resource: 20),
+      .folder("Data", id: 16, in: 2),
+      .file("Level 1", in: 16, type: "LEVL", data: 300),
+      .file("Level 2", in: 16, type: "LEVL", data: 310),
+      .file("Level 3", in: 16, type: "LEVL", data: 320),
+      .file("Notes/Ideas", in: 2, type: "TEXT", data: 20),
+    ])
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    #expect(Set(entries) == [
+      ArchiveEntry(path: "Read Me", isFolder: false, size: 120, type: "TEXT"),
+      ArchiveEntry(path: "Data", isFolder: true, size: 0),
+      ArchiveEntry(path: "Data/Level 1", isFolder: false, size: 300, type: "LEVL"),
+      ArchiveEntry(path: "Data/Level 2", isFolder: false, size: 310, type: "LEVL"),
+      ArchiveEntry(path: "Data/Level 3", isFolder: false, size: 320, type: "LEVL"),
+      ArchiveEntry(path: "Notes:Ideas", isFolder: false, size: 20, type: "TEXT"),
+    ])
+  }
+
+  @Test func readsAnHFSPlusDiscInAPartitionMap() async throws {
+    let disc = TestDisc.inPartitionMap(TestDisc.hfsPlus([
+      .folder("Café ☕", id: 16, in: 2),
+      .file("Menu", in: 16, type: "TEXT", data: 5_000_000_000, resource: 10),
+    ]))
+    let server = TestServer(disc)
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: server.read)
+    #expect(Set(entries) == [
+      ArchiveEntry(path: "Café ☕", isFolder: true, size: 0),
+      ArchiveEntry(path: "Café ☕/Menu", isFolder: false, size: 5_000_000_010, type: "TEXT"),
+    ])
+    // Its start, then its catalog, and nothing else.
+    #expect(server.reads.count == 2)
+    #expect(server.reads[0].offset == 0)
+  }
+
+  @Test func readsADiskCopyImage() async throws {
+    // Disk Copy 4.2's header: the disk's name, its sizes and checks, its format, and 0x0100.
+    var header = Data([10]) + macRoman("Read Me 1") + Data(count: 54) + Data(count: 16) + Data([0x22, 0x24])
+    header += bytes(UInt16(0x0100))
+    let disc = header + TestDisc.hfs([.file("Read Me", in: 2, type: "TEXT", data: 100)])
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    #expect(entries.map(\.path) == ["Read Me"])
+  }
+
+  @Test func leavesOutWhatTheFinderHides() async throws {
+    let disc = TestDisc.hfsPlus([
+      .file("Read Me", in: 2, type: "TEXT", data: 10),
+      .file("Desktop DB", in: 2, type: "BTFL", data: 10, hidden: true),
+      .file(".DS_Store", in: 2, type: "", data: 10),
+      .folder("Hidden", id: 16, in: 2, hidden: true),
+      .file("Inside", in: 16, type: "TEXT", data: 10),
+      .folder("Trash", id: 17, in: 2),
+      .file("Old Draft", in: 17, type: "TEXT", data: 10),
+    ])
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    #expect(entries.map(\.path) == ["Read Me"])
+  }
+
+  @Test func readsACatalogInPieces() async throws {
+    let disc = TestDisc.hfsPlus([.folder("Data", id: 16, in: 2), .file("Read Me", in: 16, type: "TEXT", data: 10)], pieces: 3)
+    let server = TestServer(disc)
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: server.read)
+    #expect(Set(entries) == [
+      ArchiveEntry(path: "Data", isFolder: true, size: 0),
+      ArchiveEntry(path: "Data/Read Me", isFolder: false, size: 10, type: "TEXT"),
+    ])
+    // Its start, then each piece of its catalog.
+    #expect(server.reads.count == 4)
+  }
+
+  @Test func turnsDownACatalogInTooManyPieces() async throws {
+    let disc = TestDisc.hfsPlus([.file("Read Me", in: 2, type: "TEXT", data: 10)], pieces: 5)
+    await #expect(throws: ArchiveReadError.self) {
+      try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    }
+  }
+
+  @Test func turnsDownACatalogWithPiecesItsHeaderDoesNotList() async throws {
+    let disc = TestDisc.hfsPlus([.file("Read Me", in: 2, type: "TEXT", data: 10)], pieces: 3, listedPieces: 2)
+    await #expect(throws: ArchiveReadError.self) {
+      try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    }
+  }
+
+  @Test func readsAPCDiscByItsJolietNames() async throws {
+    let disc = TestISO.disc(TestISO.mixes, joliet: true)
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    #expect(Set(entries) == TestISO.mixesEntries)
+  }
+
+  @Test func readsAPCDiscWithoutLongNames() async throws {
+    let disc = TestISO.disc([.folder("DATA"), .file("README.TXT;1", size: 100), .file("DATA/LEVEL1.MAP;1", size: 300), .file("NOTES.;1", size: 20)], joliet: false)
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    #expect(Set(entries) == [
+      ArchiveEntry(path: "DATA", isFolder: true, size: 0),
+      ArchiveEntry(path: "README.TXT", isFolder: false, size: 100),
+      ArchiveEntry(path: "DATA/LEVEL1.MAP", isFolder: false, size: 300),
+      ArchiveEntry(path: "NOTES", isFolder: false, size: 20),
+    ])
+  }
+
+  @Test func readsADiscSavedInRawSectors() async throws {
+    let disc = TestISO.raw(TestISO.disc(TestISO.mixes, joliet: true))
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    #expect(Set(entries) == TestISO.mixesEntries)
+  }
+
+  @Test func readsAMacDiscSavedInRawSectors() async throws {
+    var volume = TestDisc.hfs([.file("Read Me", in: 2, type: "TEXT", data: 100)])
+    volume += Data(count: (2048 - volume.count % 2048) % 2048)
+    let disc = TestISO.raw(volume)
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    #expect(entries == [ArchiveEntry(path: "Read Me", isFolder: false, size: 100, type: "TEXT")])
+  }
+
+  @Test func turnsDownAPCDiscWhoseFolderIsElsewhere() async throws {
+    // The path table's second folder, after the disc's own, 10 bytes in, said to be past the end.
+    var disc = TestISO.disc(TestISO.mixes, joliet: true)
+    disc.replaceSubrange((20 * 2048 + 12)..<(20 * 2048 + 16), with: withUnsafeBytes(of: UInt32(50_000).littleEndian) { Data($0) })
+    await #expect(throws: ArchiveReadError.self) {
+      try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    }
+  }
+
+  @Test func leavesOutHiddenFilesOnAPCDisc() async throws {
+    let disc = TestISO.disc([.file("Read Me.txt", size: 10), .file("Autorun.inf", size: 10, hidden: true)], joliet: true)
+    let entries = try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    #expect(entries.map(\.path) == ["Read Me.txt"])
+  }
+
+  @Test func turnsDownADiscWithoutAMacVolume() async throws {
+    let disc = Data(count: 200_000)
+    await #expect(throws: ArchiveReadError.self) {
+      try await ArchiveKind.diskImage.entries(size: disc.count, read: TestServer(disc).read)
+    }
+  }
 }
 
 /// A server with a file on it, sending what's asked for as a download resumed at an offset does.
@@ -267,5 +408,258 @@ private extension BinHex {
       }
     }
     return lines + Data(":\r".utf8)
+  }
+}
+
+/// A Mac disc, as it is in an image of it: a volume header, and a catalog, as a B-tree, with a
+/// record for the volume's folder, one saying what's at its ID, and one for each thing on it.
+private enum TestDisc {
+  enum Item {
+    case folder(String, id: UInt32, in: UInt32, hidden: Bool = false)
+    case file(String, in: UInt32, type: String, data: UInt64, resource: UInt64 = 0, hidden: Bool = false)
+  }
+
+  static func hfs(_ items: [Item]) -> Data {
+    let records = self.records(items) { name, parent in
+      let name = macRoman(name)
+      var key = Data([UInt8(6 + name.count), 0]) + bytes(parent) + Data([UInt8(name.count)]) + name
+      key += Data(count: key.count % 2)
+      return key
+    } folder: { id, flags in
+      Data([1, 0]) + bytes(UInt16(0), UInt16(0), id) + Data(count: 12) + Data(count: 8) + bytes(flags) + Data(count: 6 + 32)
+    } file: { type, flags, data, resource in
+      var record = Data([2, 0, 0, 0]) + self.code(type) + macRoman("ttxt") + bytes(flags) + Data(count: 6)
+      record += bytes(UInt32(0), UInt16(0), UInt32(data), UInt32(0), UInt16(0), UInt32(resource), UInt32(0))
+      return record + Data(count: 12 + 16 + 2 + 24 + 4)
+    } thread: { parent in
+      Data([3, 0]) + Data(count: 8) + bytes(parent) + Data(count: 32)
+    }
+    let catalog = self.catalog(records, nodeSize: 512)
+    // Boot blocks, then the header: 512-byte allocation blocks, from the fourth 512-byte block,
+    // where the catalog is, in one piece.
+    var header = Data(count: 512)
+    header.replaceSubrange(0..<2, with: bytes(UInt16(0x4244)))
+    header.replaceSubrange(0x14..<0x18, with: bytes(UInt32(512)))
+    header.replaceSubrange(0x1C..<0x1E, with: bytes(UInt16(4)))
+    header.replaceSubrange(0x92..<0x96, with: bytes(UInt32(catalog.count)))
+    header.replaceSubrange(0x96..<0x9A, with: bytes(UInt16(0), UInt16(catalog.count / 512)))
+    return Data(count: 1024) + header + Data(count: 512) + catalog
+  }
+
+  /// In `pieces` pieces, of which its header lists `listedPieces`, the rest being listed, on a real
+  /// disk, in another file.
+  static func hfsPlus(_ items: [Item], pieces: Int = 1, listedPieces: Int? = nil) -> Data {
+    let records = self.records(items) { name, parent in
+      let name = name.data(using: .utf16BigEndian)!
+      return bytes(UInt16(6 + name.count), parent, UInt16(name.count / 2)) + name
+    } folder: { id, flags in
+      bytes(UInt16(1), UInt16(0), UInt32(0), id) + Data(count: 20 + 16 + 8) + bytes(flags) + Data(count: 6 + 16 + 8)
+    } file: { type, flags, data, resource in
+      var record = bytes(UInt16(2), UInt16(0), UInt32(0), UInt32(100)) + Data(count: 20 + 16)
+      record += self.code(type) + macRoman("ttxt") + bytes(flags) + Data(count: 6 + 16 + 8)
+      record += bytes(data) + Data(count: 72) + bytes(resource) + Data(count: 72)
+      return record
+    } thread: { parent in
+      bytes(UInt16(3), UInt16(0), parent, UInt16(0))
+    }
+    var catalog = self.catalog(records, nodeSize: 4096)
+    // At least a node for each piece, the extra ones unused.
+    catalog += Data(count: max(0, pieces - catalog.count / 4096) * 4096)
+    let nodes = catalog.count / 4096
+
+    // The first 4096-byte block, for the header, then each piece, after a block between them.
+    var disc = Data(count: 4096)
+    var extents = Data()
+    var node = 0
+    for piece in 0..<pieces {
+      let count = nodes / pieces + (piece < nodes % pieces ? 1 : 0)
+      disc += Data(count: 4096)
+      if piece < (listedPieces ?? pieces) {
+        extents += bytes(UInt32(disc.count / 4096), UInt32(count))
+      }
+      disc += catalog.subdata(in: (node * 4096)..<((node + count) * 4096))
+      node += count
+    }
+
+    var header = Data(count: 512)
+    header.replaceSubrange(0..<2, with: bytes(UInt16(0x482B)))
+    header.replaceSubrange(40..<44, with: bytes(UInt32(4096)))
+    header.replaceSubrange(272..<280, with: bytes(UInt64(catalog.count)))
+    header.replaceSubrange(288..<(288 + extents.count), with: extents)
+    disc.replaceSubrange(1024..<1536, with: header)
+    return disc
+  }
+
+  /// In an Apple partition map, written as a CD's are: blocks of 2048 bytes, it says, but its
+  /// entries 512 bytes apart, and the volume in 512-byte blocks, from the 64th.
+  static func inPartitionMap(_ volume: Data) -> Data {
+    func entry(start: UInt32, count: UInt32, name: String, type: String) -> Data {
+      var entry = bytes(UInt16(0x504D), UInt16(0), UInt32(2), start, count)
+      entry += macRoman(name) + Data(count: 32 - name.count) + macRoman(type) + Data(count: 32 - type.count)
+      return entry + Data(count: 512 - entry.count)
+    }
+    var map = bytes(UInt16(0x4552), UInt16(2048)) + Data(count: 508)
+    map += entry(start: 1, count: 63, name: "Apple", type: "Apple_partition_map")
+    map += entry(start: 64, count: UInt32(volume.count / 512), name: "Disc", type: "Apple_HFS")
+    return map + Data(count: 64 * 512 - map.count) + volume
+  }
+
+  private static func code(_ type: String) -> Data {
+    type.isEmpty ? Data(count: 4) : macRoman(type)
+  }
+
+  /// The records, keyed, in the order the catalog has them: the volume's folder, what's at its
+  /// ID, and then what's on it.
+  private static func records(
+    _ items: [Item],
+    key: (String, UInt32) -> Data,
+    folder: (UInt32, UInt16) -> Data,
+    file: (String, UInt16, UInt64, UInt64) -> Data,
+    thread: (UInt32) -> Data
+  ) -> [Data] {
+    var records = [key("Test CD", 1) + folder(2, 0), key("", 2) + thread(1)]
+    for item in items {
+      switch item {
+      case .folder(let name, let id, let parent, let hidden):
+        records.append(key(name, parent) + folder(id, hidden ? 0x4000 : 0))
+      case .file(let name, let parent, let type, let data, let resource, let hidden):
+        records.append(key(name, parent) + file(type, hidden ? 0x4000 : 0, data, resource))
+      }
+    }
+    return records
+  }
+
+  /// A B-tree of them: a header node, then leaf nodes, as many as they take, each linked to the
+  /// next, with where each record is at the end of its node.
+  private static func catalog(_ records: [Data], nodeSize: Int) -> Data {
+    var leaves: [[Data]] = [[]]
+    for record in records {
+      let used = 14 + leaves[leaves.count - 1].reduce(0) { $0 + $1.count } + 2 * (leaves[leaves.count - 1].count + 2)
+      if used + record.count > nodeSize {
+        leaves.append([])
+      }
+      leaves[leaves.count - 1].append(record)
+    }
+    var header = bytes(UInt32(0), UInt32(0)) + Data([1, 0]) + bytes(UInt16(3), UInt16(0))
+    header += bytes(UInt16(1), UInt32(1), UInt32(records.count), UInt32(1), UInt32(leaves.count), UInt16(nodeSize))
+    var catalog = header + Data(count: nodeSize - header.count)
+    for (index, leaf) in leaves.enumerated() {
+      let next = index + 1 < leaves.count ? UInt32(index + 2) : 0
+      var node = bytes(next, UInt32(index)) + Data([0xFF, 1]) + bytes(UInt16(leaf.count), UInt16(0))
+      var offsets: [UInt16] = []
+      for record in leaf {
+        offsets.append(UInt16(node.count))
+        node += record
+      }
+      offsets.append(UInt16(node.count))
+      node += Data(count: nodeSize - node.count - 2 * offsets.count)
+      for offset in offsets.reversed() {
+        node += bytes(offset)
+      }
+      catalog += node
+    }
+    return catalog
+  }
+}
+
+/// A PC disc: its volume descriptors from the 16th sector, the primary one, maybe Joliet's, and the
+/// last, then its path table, and each folder's list of what's in it, a sector each, one after
+/// another.
+private enum TestISO {
+  enum Item {
+    case folder(String)
+    case file(String, size: UInt32, hidden: Bool = false)
+  }
+
+  static let mixes: [Item] = [
+    .folder("mixes"),
+    .folder("mixes/blue room"),
+    .file("content.html", size: 3186),
+    .file("mixes/blue room/1999.mp3", size: 7_216_313),
+    .file("mixes/blue room/Richard Hinge Generate 2000.mp3", size: 5_710_426),
+  ]
+
+  static let mixesEntries: Set<ArchiveEntry> = [
+    ArchiveEntry(path: "mixes", isFolder: true, size: 0),
+    ArchiveEntry(path: "mixes/blue room", isFolder: true, size: 0),
+    ArchiveEntry(path: "content.html", isFolder: false, size: 3186),
+    ArchiveEntry(path: "mixes/blue room/1999.mp3", isFolder: false, size: 7_216_313),
+    ArchiveEntry(path: "mixes/blue room/Richard Hinge Generate 2000.mp3", isFolder: false, size: 5_710_426),
+  ]
+
+  static func disc(_ items: [Item], joliet: Bool) -> Data {
+    let name = { (text: String) in joliet ? text.data(using: .utf16BigEndian)! : Data(text.utf8) }
+    // Folders: the disc's own, then each, after the one it's in, a sector each from the 22nd.
+    var folders = [""]
+    for case .folder(let path) in items {
+      folders.append(path)
+    }
+    let extent = { (folder: String) in UInt32(22 + folders.firstIndex(of: folder)!) }
+    let parentOf = { (path: String) in (path as NSString).deletingLastPathComponent }
+
+    var table = Data()
+    for (index, folder) in folders.enumerated() {
+      let folderName = index == 0 ? Data([0]) : name((folder as NSString).lastPathComponent)
+      let parent = index == 0 ? 1 : folders.firstIndex(of: parentOf(folder))! + 1
+      table += Data([UInt8(folderName.count), 0]) + le(extent(folder)) + le(UInt16(parent)) + folderName
+      table += Data(count: folderName.count % 2)
+    }
+
+    var lists = Data()
+    for folder in folders {
+      var list = self.record(Data([0]), extent: extent(folder), size: 2048, flags: 0x02)
+      list += self.record(Data([1]), extent: extent(folder.isEmpty ? "" : parentOf(folder)), size: 2048, flags: 0x02)
+      for item in items {
+        switch item {
+        case .folder(let path) where parentOf(path) == folder:
+          list += self.record(name((path as NSString).lastPathComponent), extent: extent(path), size: 2048, flags: 0x02)
+        case .file(let path, let size, let hidden) where parentOf(path) == folder:
+          list += self.record(name((path as NSString).lastPathComponent), extent: 100, size: size, flags: hidden ? 0x01 : 0)
+        default:
+          break
+        }
+      }
+      lists += list + Data(count: 2048 - list.count)
+    }
+
+    func descriptor(_ type: UInt8, escape: [UInt8] = []) -> Data {
+      var sector = Data([type]) + Data("CD001".utf8) + Data([1]) + Data(count: 2041)
+      sector.replaceSubrange(88..<(88 + escape.count), with: escape)
+      sector.replaceSubrange(128..<136, with: le(UInt16(2048)) + Data([0x08, 0x00]) + le(UInt32(table.count)))
+      sector.replaceSubrange(140..<144, with: le(UInt32(20)))
+      sector.replaceSubrange(156..<190, with: self.record(Data([0]), extent: 22, size: 2048, flags: 0x02))
+      return sector
+    }
+    var disc = Data(count: 16 * 2048) + descriptor(1)
+    disc += joliet ? descriptor(2, escape: [0x25, 0x2F, 0x45]) : Data([0]) + Data("CD001".utf8) + Data([1]) + Data(count: 2041)
+    disc += Data([255]) + Data("CD001".utf8) + Data([1]) + Data(count: 2041)
+    disc += Data(count: 2048)
+    disc += table + Data(count: 2 * 2048 - table.count)
+    return disc + lists + Data(count: 100 * 2048)
+  }
+
+  /// The disc as it's written, in Mode 2: each sector's sync, its place, as minutes, seconds and
+  /// frames, and its mode, a subheader, its data, and room for error correction.
+  static func raw(_ disc: Data) -> Data {
+    var raw = Data()
+    for (index, start) in stride(from: 0, to: disc.count, by: 2048).enumerated() {
+      let frame = index + 150
+      let place = [frame / 4500, frame / 75 % 60, frame % 75].map { UInt8(($0 / 10) << 4 | $0 % 10) }
+      raw += Data([0x00] + Array(repeating: 0xFF, count: 10) + [0x00]) + Data(place) + Data([2]) + Data(count: 8)
+      raw += disc.subdata(in: start..<(start + 2048)) + Data(count: 280)
+    }
+    return raw
+  }
+
+  private static func record(_ name: Data, extent: UInt32, size: UInt32, flags: UInt8) -> Data {
+    var record = Data([0, 0]) + le(extent) + bytes(extent) + le(size) + bytes(size) + Data(count: 7) + Data([flags, 0, 0])
+    record += le(UInt16(1)) + bytes(UInt16(1)) + Data([UInt8(name.count)]) + name
+    record += Data(count: record.count % 2)
+    record[0] = UInt8(record.count)
+    return record
+  }
+
+  private static func le<Number: FixedWidthInteger>(_ number: Number) -> Data {
+    withUnsafeBytes(of: number.littleEndian) { Data($0) }
   }
 }

@@ -226,6 +226,7 @@ extension FileManager {
     "sit5": "sit",
     "pact": "cpt",
     "udif": "dmg",
+    "dimg": "img",
     "cdrw": "cdr",
     
     // Fonts

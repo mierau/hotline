@@ -19,6 +19,7 @@ enum ArchiveKind: String, Codable, Sendable {
   case installerPackage
   case macBinary
   case binHex
+  case diskImage
 
   /// The kind of archive a file with that extension is, if it's one of these.
   init?(fileExtension: String) {
@@ -35,6 +36,8 @@ enum ArchiveKind: String, Codable, Sendable {
       self = .macBinary
     case "hqx":
       self = .binHex
+    case "toast", "cdr", "dsk", "img", "smi":
+      self = .diskImage
     default:
       return nil
     }
@@ -55,7 +58,14 @@ enum ArchiveKind: String, Codable, Sendable {
       return "MacBinary file"
     case .binHex:
       return "BinHex file"
+    case .diskImage:
+      return "disc image"
     }
+  }
+
+  /// How much of the start of one's read first, with how long it is, which is all some need.
+  var startLength: Int {
+    self == .diskImage ? DiskImage.startLength : 16 * 1024
   }
 
   /// What's in one `size` long, read through `read`, which gives the `length` bytes of it from
@@ -72,6 +82,8 @@ enum ArchiveKind: String, Codable, Sendable {
       return try await MacBinary.entries(size: size, read: read)
     case .binHex:
       return try await BinHex.entries(size: size, read: read)
+    case .diskImage:
+      return try await DiskImage.entries(size: size, read: read)
     }
   }
 }
@@ -131,9 +143,9 @@ extension Data {
     return name?.replacingOccurrences(of: "/", with: ":")
   }
 
-  /// A Mac type or creator code, as four letters.
+  /// A Mac type or creator code, as four letters, or nil for none, which is four zeros.
   func fourCharCode(at offset: Int) -> String? {
-    guard offset >= 0, offset + 4 <= self.count else {
+    guard offset >= 0, offset + 4 <= self.count, self.bigEndian(UInt32.self, at: offset) != 0 else {
       return nil
     }
     return String(data: self.subdata(in: (self.startIndex + offset)..<(self.startIndex + offset + 4)), encoding: .macOSRoman)

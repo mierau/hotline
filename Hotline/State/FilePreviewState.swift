@@ -140,7 +140,7 @@ final class FilePreviewState {
     // The start of it, which is where some archives have their list, with how long its data is,
     // which a download from the start says, unlike the list of files, and unlike a resumed one,
     // on some servers.
-    let start = try await hotline.readFile(name, path: path, from: 0, length: Self.archiveStartLength)
+    let start = try await hotline.readFile(name, path: path, from: 0, length: archiveKind.startLength)
     do {
       self.archive = try await archiveKind.entries(size: start.size) { offset, length in
         if offset + length <= start.data.count {
@@ -157,8 +157,6 @@ final class FilePreviewState {
     self.state = .loaded
   }
 
-  /// How much of the start of an archive is read with how long it is.
-  private static let archiveStartLength = 16 * 1024
 
   func cancel() {
     self.previewTask?.cancel()

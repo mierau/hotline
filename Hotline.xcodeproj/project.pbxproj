@@ -19,6 +19,8 @@
 		5F5812D6AF9CDCF967ACA922 /* ChatLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B2284214709C056E442BE1 /* ChatLogView.swift */; };
 		74BA695EDF308FC1CB040C8B /* ZipArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40947154AAF1E7674DD534FF /* ZipArchive.swift */; };
 		74E6D6FF679AB7EF240A91A4 /* BinHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7341B898EE4921F2C3CF13E /* BinHex.swift */; };
+		75C68B588D2565F54C93DBD8 /* DiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6002BAA6187486986175C6EA /* DiskImage.swift */; };
+		DE0DC6CCCFAA3A55E7B1148F /* ISO9660.swift in Sources */ = {isa = PBXBuildFile; fileRef = 212E067259FE5C85B1C909E6 /* ISO9660.swift */; };
 		7D7AFEB7DF73D88A4C75F882 /* ServerSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC75DCF747BDE0557CFF5CA /* ServerSuggestions.swift */; };
 		8D3E4565628F763A7277DA53 /* ChatTranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E219BD27B4005CD09D3AE4 /* ChatTranscriptView.swift */; };
 		A002A460BF1E0E92399AB6BC /* XARArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FC35CCCD4BD119E453E4100 /* XARArchive.swift */; };
@@ -179,6 +181,8 @@
 		7FC35CCCD4BD119E453E4100 /* XARArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XARArchive.swift; sourceTree = "<group>"; };
 		9BB4153B3305C2F62F1868C3 /* ChatTranscriptTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTranscriptTextView.swift; sourceTree = "<group>"; };
 		A7341B898EE4921F2C3CF13E /* BinHex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BinHex.swift; sourceTree = "<group>"; };
+		6002BAA6187486986175C6EA /* DiskImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskImage.swift; sourceTree = "<group>"; };
+		212E067259FE5C85B1C909E6 /* ISO9660.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISO9660.swift; sourceTree = "<group>"; };
 		BBE3ACA3E788C6BE871E20E0 /* ChatCodeHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCodeHighlighter.swift; sourceTree = "<group>"; };
 		DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersView.swift; sourceTree = "<group>"; };
 		DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardView.swift; sourceTree = "<group>"; };
@@ -572,6 +576,8 @@
 				7FC35CCCD4BD119E453E4100 /* XARArchive.swift */,
 				43274A6A673C9471F719D980 /* MacBinary.swift */,
 				A7341B898EE4921F2C3CF13E /* BinHex.swift */,
+				6002BAA6187486986175C6EA /* DiskImage.swift */,
+				212E067259FE5C85B1C909E6 /* ISO9660.swift */,
 				DA5268AA2EB11EA300DCB941 /* ColorArt.swift */,
 				DA55AC782BE6A1AD00034857 /* RegularExpressions.swift */,
 				DA6980822BFFD06C003E434B /* BookmarkDocument.swift */,
@@ -905,6 +911,8 @@
 				A002A460BF1E0E92399AB6BC /* XARArchive.swift in Sources */,
 				36EA38D955AD67524BF4290D /* MacBinary.swift in Sources */,
 				74E6D6FF679AB7EF240A91A4 /* BinHex.swift in Sources */,
+				75C68B588D2565F54C93DBD8 /* DiskImage.swift in Sources */,
+				DE0DC6CCCFAA3A55E7B1148F /* ISO9660.swift in Sources */,
 				DA22F5232F5748AE00E2EA02 /* SpinningLogoView.swift in Sources */,
 				DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */,
 				DAE735052B3218D8000C56F6 /* NewsView.swift in Sources */,
