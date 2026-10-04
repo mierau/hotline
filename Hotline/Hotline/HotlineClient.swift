@@ -1364,14 +1364,34 @@ public actor HotlineClient {
   ///   - name: File name to download
   ///   - path: Directory path containing the file
   ///   - preview: If true, request preview mode (smaller transfer)
+  ///   - dataOffset: Where in the data fork to start, as when resuming a download, so the transfer
+  ///     sends only what's after it
   /// - Returns: Tuple of (referenceNumber, transferSize, fileSize, waitingCount) for the download
-  public func downloadFile(name: String, path: [String], preview: Bool = false) async throws -> (referenceNumber: UInt32, transferSize: Int, fileSize: Int, waitingCount: Int)? {
+  public func downloadFile(name: String, path: [String], preview: Bool = false, dataOffset: Int = 0) async throws -> (referenceNumber: UInt32, transferSize: Int, fileSize: Int, waitingCount: Int)? {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .downloadFile)
     transaction.setFieldString(type: .fileName, val: name)
     transaction.setFieldPath(type: .filePath, val: path)
 
     if preview {
       transaction.setFieldUInt32(type: .fileTransferOptions, val: 2)
+    }
+
+    // How much of each fork there already is, which the server starts after.
+    if dataOffset > 0 {
+      transaction.setFieldData(type: .fileResumeData, val: Data(endian: .big) {
+        "RFLT".fourCharCode()
+        UInt16(1)
+        [UInt8](repeating: 0, count: 34)
+        UInt16(2)
+        "DATA".fourCharCode()
+        UInt32(clamping: dataOffset)
+        UInt32.zero
+        UInt32.zero
+        "MACR".fourCharCode()
+        UInt32.zero
+        UInt32.zero
+        UInt32.zero
+      })
     }
 
     let reply = try await self.sendTransaction(transaction)

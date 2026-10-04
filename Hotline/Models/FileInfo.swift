@@ -52,13 +52,24 @@ import UniformTypeIdentifiers
   /// (as opposed to being a placeholder created by ensureIntermediateFolders).
   var loaded: Bool = false
   
+  /// Its extension, or for a file without one, the one its type code goes with.
+  private var fileExtension: String {
+    let fileExtension = (self.name as NSString).pathExtension.lowercased()
+    if fileExtension.isEmpty && !self.type.isEmpty, let ext = FileManager.HFSTypeToExtension[self.type.lowercased()] {
+      return ext
+    }
+    return fileExtension
+  }
+
+  /// A ZIP archive, which can be previewed by what's in it.
+  var isZipArchive: Bool {
+    self.fileExtension == "zip"
+  }
+
   var isPreviewable: Bool {
-    var fileExtension = (self.name as NSString).pathExtension.lowercased()
-    if fileExtension.isEmpty && !self.type.isEmpty {
-      let type = self.type.lowercased()
-      if let ext = FileManager.HFSTypeToExtension[type] {
-        fileExtension = ext
-      }
+    let fileExtension = self.fileExtension
+    if self.isZipArchive {
+      return true
     }
     
     if let fileType = UTType(filenameExtension: fileExtension) {

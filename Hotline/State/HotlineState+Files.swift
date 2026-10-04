@@ -729,6 +729,35 @@ extension HotlineState {
     }
   }
 
+  /// Part of a file, without downloading all of it: up to `length` bytes of its data fork from
+  /// `offset`, and the size the transfer gives the data fork, which is all of it from the start.
+  /// From anywhere else, servers differ on what they give.
+  @MainActor
+  func readFile(_ fileName: String, path: [String], from offset: Int, length: Int) async throws -> (data: Data, size: Int) {
+    guard let client = self.client, let server = self.server else {
+      throw HotlineClientError.notConnected
+    }
+
+    var fullPath: [String] = []
+    if path.count > 1 {
+      fullPath = Array(path[0..<path.count-1])
+    }
+
+    print("HotlineState: Reading \(length) bytes of \(fileName) from \(offset)")
+    guard let transfer = try await client.downloadFile(name: fileName, path: fullPath, dataOffset: offset) else {
+      throw HotlineClientError.invalidResponse
+    }
+    print("HotlineState: Transfer \(transfer.referenceNumber) for \(fileName), transfer size \(transfer.transferSize), file size \(transfer.fileSize), waiting \(transfer.waitingCount)")
+    let reader = HotlineFilePreviewClient(
+      fileName: fileName,
+      address: server.address,
+      port: UInt16(server.port),
+      reference: transfer.referenceNumber,
+      size: UInt32(clamping: transfer.transferSize)
+    )
+    return try await reader.read(upTo: length)
+  }
+
   // MARK: - File Search
 
   @MainActor

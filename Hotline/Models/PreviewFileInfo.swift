@@ -9,6 +9,12 @@ struct PreviewFileInfo: Identifiable, Codable {
   
   var type: String? = nil
   var creator: String? = nil
+
+  /// An archive, which is shown by what's in it, read from the server a little at a time, rather
+  /// than downloaded: through which connection, and where on the server it is.
+  var isArchive: Bool = false
+  var hotlineID: UUID? = nil
+  var path: [String]? = nil
   
   var previewType: FilePreviewType {
     #if os(macOS)

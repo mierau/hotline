@@ -20,6 +20,23 @@ struct FileActions {
       return
     }
 
+    // Shown by what's in it, read from the end of it, which is where a ZIP's list is.
+    if file.isZipArchive, let server = model.server {
+      openPreviewWindow(PreviewFileInfo(
+        id: UInt32.random(in: 1...UInt32.max),
+        address: server.address,
+        port: server.port,
+        size: Int(file.fileSize),
+        name: file.name,
+        type: file.type,
+        creator: file.creator,
+        isArchive: true,
+        hotlineID: model.id,
+        path: file.path
+      ))
+      return
+    }
+
     model.previewFile(file.name, path: file.path) { info in
       if let info = info {
         var extendedInfo = info

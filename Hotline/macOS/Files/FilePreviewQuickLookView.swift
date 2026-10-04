@@ -21,6 +21,9 @@ struct FilePreviewQuickLookView: View {
   /// The file, once it's known whether it's a picture or video, so it isn't shown as a document
   /// first.
   @State private var checkedFile: URL? = nil
+  /// For an archive, which can't be copied to Downloads, as it isn't here, that it's being
+  /// downloaded, as any file is.
+  @State private var archiveDownloadStarted = false
   /// Whether the title bar shows over a picture or video, which is darker under it while it does.
   @State private var showsTitleBar = true
 
@@ -44,6 +47,7 @@ struct FilePreviewQuickLookView: View {
     case failed
     case media(URL, Media)
     case document(URL)
+    case archive([ArchiveEntry])
     case unpreviewable
   }
 
@@ -59,6 +63,8 @@ struct FilePreviewQuickLookView: View {
       case .document(let fileURL):
         QuickLookPreviewView(fileURL: fileURL)
           .frame(minWidth: 400, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
+      case .archive(let entries):
+        FilePreviewArchiveView(entries: entries)
       case .unpreviewable:
         self.unpreviewableView
       }
@@ -79,18 +85,19 @@ struct FilePreviewQuickLookView: View {
       // bar is the same height before and after.
       ToolbarItem(placement: .primaryAction) {
         Button {
-          if let fileURL = self.preview?.fileURL, let info = self.info {
-            FileManager.default.copyToDownloads(from: fileURL, using: info.name, bounceDock: true)
-          }
+          self.downloadFile()
         } label: {
           Label("Download File...", systemImage: "arrow.down")
         }
         .help("Download File")
-        .disabled(self.preview?.fileURL == nil)
+        .disabled(self.info?.isArchive == true ? self.archiveDownloadStarted : self.preview?.fileURL == nil)
       }
-      ToolbarItem(placement: .primaryAction) {
-        self.shareButton
-          .help("Share File")
+      // An archive isn't here to share, only what's in it.
+      if self.info?.isArchive != true {
+        ToolbarItem(placement: .primaryAction) {
+          self.shareButton
+            .help("Share File")
+        }
       }
     }
     // Only a document can have anything under the title bar that it needs a background over.
@@ -160,6 +167,9 @@ struct FilePreviewQuickLookView: View {
     case .failed:
       return .failed
     case .loaded:
+      if let archive = self.preview?.archive {
+        return .archive(archive)
+      }
       guard let fileURL = self.preview?.fileURL else {
         return .unpreviewable
       }
@@ -181,10 +191,30 @@ struct FilePreviewQuickLookView: View {
   }
 
   private var showsDocument: Bool {
-    if case .document = self.content {
+    switch self.content {
+    case .document, .archive:
       return true
+    default:
+      return false
     }
-    return false
+  }
+
+  /// Into Downloads: a copy of the file that's here, or an archive, which isn't, downloaded as any
+  /// file is, from the server, with the rest of the transfers.
+  private func downloadFile() {
+    guard let info = self.info else {
+      return
+    }
+    if info.isArchive {
+      guard let hotlineID = info.hotlineID, let hotline = AppState.shared.hotline(id: hotlineID), let path = info.path else {
+        return
+      }
+      hotline.downloadFile(info.name, path: path)
+      self.archiveDownloadStarted = true
+    }
+    else if let fileURL = self.preview?.fileURL {
+      FileManager.default.copyToDownloads(from: fileURL, using: info.name, bounceDock: true)
+    }
   }
 
   /// A picture or video, edge to edge, under a title bar that comes and goes with the pointer, in a
@@ -322,6 +352,9 @@ struct FilePreviewQuickLookView: View {
   /// How much has come of how much, and about how long the rest will take, or before any of it has
   /// come, that it's connecting.
   private var progressDescription: String {
+    if self.info?.isArchive == true {
+      return "Previewing archive contents…"
+    }
     guard let preview = self.preview, preview.transferred > 0 else {
       return "Connecting…"
     }

@@ -39,6 +39,8 @@ final class FilePreviewState {
 
   var text: String? = nil
   var styledText: NSAttributedString? = nil
+  /// What's in an archive, which is shown in place of it.
+  var archive: [ArchiveEntry]? = nil
   
   @ObservationIgnored private var previewClient: HotlineFilePreviewClient?
   @ObservationIgnored private var previewTask: Task<Void, Never>?
@@ -62,6 +64,11 @@ final class FilePreviewState {
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
       do {
+        if self.info.isArchive {
+          try await self.readArchive()
+          return
+        }
+
         let client = HotlineFilePreviewClient(
           fileName: self.info.name,
           address: self.info.address,
@@ -122,6 +129,22 @@ final class FilePreviewState {
     self.previewTask = task
   }
 
+  /// What's in an archive, from the end of it on the server, which is where a ZIP's list is.
+  private func readArchive() async throws {
+    guard let hotlineID = self.info.hotlineID, let hotline = AppState.shared.hotline(id: hotlineID), let path = self.info.path else {
+      throw HotlineClientError.notConnected
+    }
+    self.state = .loading
+    let name = self.info.name
+    // How long its data is, which a download from the start says, unlike the list of files, and
+    // unlike a resumed one, on some servers.
+    let size = try await hotline.readFile(name, path: path, from: 0, length: 0).size
+    self.archive = try await ZipArchive.entries(size: size) { offset, length in
+      try await hotline.readFile(name, path: path, from: offset, length: length).data
+    }
+    self.state = .loaded
+  }
+
   func cancel() {
     self.previewTask?.cancel()
     self.previewTask = nil
@@ -135,6 +158,7 @@ final class FilePreviewState {
     self.image = nil
     self.text = nil
     self.styledText = nil
+    self.archive = nil
   }
 
   // MARK: - Utility

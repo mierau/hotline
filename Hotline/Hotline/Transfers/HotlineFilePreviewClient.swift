@@ -60,6 +60,47 @@ public class HotlineFilePreviewClient {
     }
   }
 
+  /// Part of the file, for a look at what's in it without all of it: up to `length` bytes of its
+  /// data fork, from wherever the transfer starts, and the size the transfer gives the data fork.
+  /// That's all of it, for a transfer from the start. For one resumed partway through, servers
+  /// differ: some give what's left, and some all of it again. The transfer's left once there's
+  /// enough.
+  public func read(upTo length: Int) async throws -> (data: Data, size: Int) {
+    print("HotlineFilePreviewClient[\(self.referenceNumber)]: Reading up to \(length) bytes of the data fork")
+    let socket = try await NetSocket.connect(
+      host: self.serverAddress,
+      port: self.serverPort + 1
+    )
+    defer { Task { await socket.close() } }
+
+    try await socket.write(Data(endian: .big) {
+      "HTXF".fourCharCode()
+      self.referenceNumber
+      UInt32.zero
+      UInt32.zero
+    })
+
+    guard let header = HotlineFileHeader(from: try await socket.read(HotlineFileHeader.DataSize)) else {
+      throw HotlineTransferClientError.failedToTransfer
+    }
+    print("HotlineFilePreviewClient[\(self.referenceNumber)]: \(header.forkCount) forks")
+    for _ in 0..<Int(header.forkCount) {
+      guard let forkHeader = HotlineFileForkHeader(from: try await socket.read(HotlineFileForkHeader.DataSize)) else {
+        throw HotlineTransferClientError.failedToTransfer
+      }
+      let forkSize = Int(forkHeader.dataSize)
+      print("HotlineFilePreviewClient[\(self.referenceNumber)]: \(forkHeader.forkType.fourCharCode()) fork, said to be \(forkSize) bytes")
+      if forkHeader.isDataFork {
+        let count = min(length, forkSize)
+        let data = count > 0 ? try await socket.read(count) : Data()
+        print("HotlineFilePreviewClient[\(self.referenceNumber)]: Read \(data.count) bytes")
+        return (data, forkSize)
+      }
+      try await socket.skip(forkSize)
+    }
+    return (Data(), 0)
+  }
+
   /// Cancel the current preview download
   public func cancel() {
     self.previewTask?.cancel()

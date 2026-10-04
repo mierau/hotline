@@ -53,6 +53,11 @@ final class AppState {
     self.serverWindows.append(ServerWindow(hotline: hotline, state: state))
   }
 
+  /// The connection with that ID, while its window's open.
+  func hotline(id: UUID) -> HotlineState? {
+    self.serverWindows.last { $0.hotline.id == id }?.hotline
+  }
+
   /// A server window closed. The toolbar falls back to the server window used before it.
   func serverWindowClosed(state: ServerState) {
     self.serverWindows.removeAll { $0.state === state }

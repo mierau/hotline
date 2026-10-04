@@ -849,6 +849,10 @@ struct HotlineTransaction {
   mutating func setFieldPath(type: HotlineTransactionFieldType, val: [String]) {
     self.fields.append(HotlineTransactionField(type: type, pathComponents: val))
   }
+
+  mutating func setFieldData(type: HotlineTransactionFieldType, val: Data) {
+    self.fields.append(HotlineTransactionField(type: type, dataSize: UInt16(val.count), data: [UInt8](val)))
+  }
   
   // MARK: - Subscript support for typed field access
   // Replaces any existing field with the same type, or removes the field if value is set to nil
@@ -1084,6 +1088,7 @@ enum HotlineTransactionFieldType: UInt16 {
   case fileNameWithInfo = 200 // Data { type: 4, creator: 4, file size: 4, reserved: 4, name script: 2, name size: 2, name data: size }
   case fileName = 201 // String
   case filePath = 202 // Path
+  case fileResumeData = 203 // Data { 'RFLT', version: 2, reserved: 34, fork count: 2, forks: { type: 4, offset: 4, reserved: 4, reserved: 4 } }
   case fileTransferOptions = 204 // Integer
   case fileTypeString = 205 // String
   case fileCreatorString = 206 // String
