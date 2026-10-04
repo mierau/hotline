@@ -53,7 +53,8 @@ final class FilePreviewState {
     self.previewTask?.cancel()
     self.previewClient?.cleanup()
 
-    let task = Task { @MainActor in
+    let task = Task { @MainActor [weak self] in
+      guard let self else { return }
       do {
         let client = HotlineFilePreviewClient(
           fileName: self.info.name,

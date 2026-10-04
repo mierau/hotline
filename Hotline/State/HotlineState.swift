@@ -498,7 +498,7 @@ class HotlineState: Equatable {
       forName: ChatStore.historyClearedNotification,
       object: nil,
       queue: .main
-    ) { _ in
+    ) { [weak self] _ in
       Task { @MainActor [weak self] in
         self?.handleChatHistoryCleared()
       }
@@ -508,7 +508,7 @@ class HotlineState: Equatable {
       forName: ChatStore.serverHistoryClearedNotification,
       object: nil,
       queue: .main
-    ) { notification in
+    ) { [weak self] notification in
       Task { @MainActor [weak self] in
         guard let self,
               let address = notification.userInfo?["address"] as? String,

@@ -303,7 +303,7 @@ struct ChatView: View {
     if self.model.access?.contains(.canGetClientInfo) == true {
       menu.addItem(ChatMenuItem("Get Info", systemImage: "info.circle") {
         Task {
-          if let info = try await self.model.getClientInfoText(id: user.id) {
+          if let info = try? await self.model.getClientInfoText(id: user.id) {
             self.serverState.userInfo = info
           }
         }

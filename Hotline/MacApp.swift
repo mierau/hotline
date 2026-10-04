@@ -35,7 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     
     if FileManager.default.ubiquityIdentityToken != nil {
-      CKContainer.default().accountStatus { status, error in
+      CKContainer.default().accountStatus { [weak self] status, error in
         if let error = error {
           print("iCloud account status error: \(error.localizedDescription)")
           AppState.shared.cloudKitReady = true
@@ -49,7 +49,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         default:
           print("iCloud Available")
 
-          self.cloudKitObserverToken = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification, object: nil, queue: OperationQueue.main) { [weak self] note in
+          self?.cloudKitObserverToken = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification, object: nil, queue: OperationQueue.main) { note in
             print("iCloud Changed!")
             AppState.shared.cloudKitReady = true
 

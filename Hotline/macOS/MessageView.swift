@@ -227,7 +227,7 @@ struct MessageView: View {
 
   private func getUserInfo() {
     Task {
-      if let info = try await self.model.getClientInfoText(id: self.userID) {
+      if let info = try? await self.model.getClientInfoText(id: self.userID) {
         self.userInfo = info
       }
     }
@@ -235,7 +235,7 @@ struct MessageView: View {
 
   private func disconnectUser() {
     Task {
-      try await self.model.disconnectUser(id: self.userID, options: nil)
+      try? await self.model.disconnectUser(id: self.userID, options: nil)
     }
   }
 

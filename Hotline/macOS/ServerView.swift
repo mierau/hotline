@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 import AppKit
 
@@ -402,7 +403,7 @@ struct ServerView: View {
         if self.model.access?.contains(.canGetClientInfo) == true {
           Button("Get Info", systemImage: "info.circle") {
             Task {
-              if let info = try await self.model.getClientInfoText(id: user.id) {
+              if let info = try? await self.model.getClientInfoText(id: user.id) {
                 self.state.userInfo = info
               }
             }
@@ -476,7 +477,7 @@ struct ServerView: View {
       Button("Disconnect", role: .destructive) {
         if let user = self.state.disconnectUserTarget {
           Task {
-            try await self.model.disconnectUser(id: user.id, options: nil)
+            try? await self.model.disconnectUser(id: user.id, options: nil)
           }
         }
       }

@@ -54,9 +54,13 @@ struct BroadcastMessageSheet: View {
             self.sending = true
             defer { self.sending = false }
             
-            try await model.sendBroadcast(message)
-            
-            self.dismiss()
+            do {
+              try await model.sendBroadcast(message)
+              self.dismiss()
+            }
+            catch {
+              // It didn't go out, so the sheet stays open to try again.
+            }
           }
         }
         .disabled(self.message.isEmpty)

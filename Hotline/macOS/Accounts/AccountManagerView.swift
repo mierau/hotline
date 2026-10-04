@@ -174,7 +174,13 @@ struct AccountManagerView: View {
           self.selection = nil
           
           if account.persisted {
-            try await self.model.deleteUser(login: account.login)
+            do {
+              try await self.model.deleteUser(login: account.login)
+            }
+            catch {
+              // The server didn't delete it, so it stays.
+              return
+            }
           }
           
           self.accounts = self.accounts.filter { $0.id != account.id }

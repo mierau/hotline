@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct IdentitySettingsView: View {
   @State private var username: String = ""

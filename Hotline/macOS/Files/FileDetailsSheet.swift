@@ -92,16 +92,18 @@ struct FileDetailsSheet: View {
             defer { self.saving = false }
             
             if editedComment != nil || editedFilename != nil {
-              if try await self.model.setFileInfo(fileName: self.details.name, path: self.details.path, fileNewName: editedFilename, comment: editedComment) {
-                try await self.model.getFileList(path: self.details.path)
+              do {
+                if try await self.model.setFileInfo(fileName: self.details.name, path: self.details.path, fileNewName: editedFilename, comment: editedComment) {
+                  try await self.model.getFileList(path: self.details.path)
+                }
+              }
+              catch {
+                // SwiftUI doesn't show the server's error alert above this sheet, so the sheet
+                // stays open instead, with the new name or comment still in it to try again.
+                return
               }
             }
             
-            // We dismiss even if there is an error for now
-            // This is not ideal as we may lose a user's written comment
-            // or new file name, but SwiftUI doesn't show the current
-            // alert above this sheet so we'll need a different way of
-            // handling errors to make this work. Until then...
             self.dismiss()
           }
         } label: {

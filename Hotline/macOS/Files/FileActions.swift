@@ -79,8 +79,13 @@ struct FileActions {
       }
 
       let path: [String] = parentFolder?.path ?? []
-      if try await model.newFolder(name: name, parentPath: path) {
-        try await model.getFileList(path: path)
+      do {
+        if try await model.newFolder(name: name, parentPath: path) {
+          try await model.getFileList(path: path)
+        }
+      }
+      catch {
+        // The server didn't make it, so there's nothing new to list.
       }
     }
   }

@@ -183,8 +183,8 @@ extension HotlineState {
       do {
         result = try await client.downloadFile(name: fileName, path: fullPath)
       }
-      catch let error as HotlineClientError {
-        self.displayError(error, message: error.userMessage)
+      catch {
+        self.displayError(error, message: (error as? HotlineClientError)?.userMessage)
         return
       }
 
@@ -597,8 +597,8 @@ extension HotlineState {
       do {
         referenceNumber = try await client.uploadFile(name: fileName, path: path)
       }
-      catch let error as HotlineClientError {
-        self.displayError(error, message: error.userMessage)
+      catch {
+        self.displayError(error, message: (error as? HotlineClientError)?.userMessage)
         return
       }
 

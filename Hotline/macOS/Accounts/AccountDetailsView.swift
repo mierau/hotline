@@ -81,7 +81,8 @@ struct AccountDetailsView: View {
               do {
                 try await self.save()
               }
-              catch let error as AccountDetailsError {
+              catch {
+                let error = error as? AccountDetailsError ?? .failedToSave
                 self.alertTitle = error.alertTitle
                 self.alertMessage = error.alertMessage
                 self.alertShown = true
