@@ -183,18 +183,34 @@ struct ServerView: View {
           }
       }
     }
-    // In every state, so the window's toolbar, and its title bar with it, is the same height from
-    // the connect form to the server.
+    // Something in the toolbar in every state, so the window's title bar is the same height from
+    // the connect form to the server: the server's globe once it's connected, and before that, a
+    // place kept on the right with nothing in it.
     .toolbar {
-      if #available(macOS 26.0, *) {
-        ToolbarItem(placement: .navigation) {
-          self.serverIcon
+      if self.model.status == .loggedIn {
+        if #available(macOS 26.0, *) {
+          ToolbarItem(placement: .navigation) {
+            self.serverIcon
+          }
+          .sharedBackgroundVisibility(.hidden)
         }
-        .sharedBackgroundVisibility(.hidden)
+        else {
+          ToolbarItem(placement: .navigation) {
+            self.serverIcon
+          }
+        }
       }
       else {
-        ToolbarItem(placement: .navigation) {
-          self.serverIcon
+        if #available(macOS 26.0, *) {
+          ToolbarItem(placement: .primaryAction) {
+            self.toolbarPlaceholder
+          }
+          .sharedBackgroundVisibility(.hidden)
+        }
+        else {
+          ToolbarItem(placement: .primaryAction) {
+            self.toolbarPlaceholder
+          }
         }
       }
     }
@@ -496,6 +512,13 @@ struct ServerView: View {
       .scaledToFit()
       .frame(width: 28)
       .opacity(self.controlActiveState == .inactive ? 0.4 : 1.0)
+  }
+
+  /// Nothing to see, but enough of something for the window to keep its toolbar.
+  private var toolbarPlaceholder: some View {
+    Color.clear
+      .frame(width: 1, height: 1)
+      .accessibilityHidden(true)
   }
 
   // MARK: -
