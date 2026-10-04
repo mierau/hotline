@@ -61,14 +61,14 @@ import UniformTypeIdentifiers
     return fileExtension
   }
 
-  /// A ZIP archive, which can be previewed by what's in it.
-  var isZipArchive: Bool {
-    self.fileExtension == "zip"
+  /// An archive that can be previewed by what's in it.
+  var archiveKind: ArchiveKind? {
+    ArchiveKind(fileExtension: self.fileExtension)
   }
 
   var isPreviewable: Bool {
     let fileExtension = self.fileExtension
-    if self.isZipArchive {
+    if self.archiveKind != nil {
       return true
     }
     

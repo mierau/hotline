@@ -20,8 +20,8 @@ struct FileActions {
       return
     }
 
-    // Shown by what's in it, read from the end of it, which is where a ZIP's list is.
-    if file.isZipArchive, let server = model.server {
+    // Shown by what's in it, read from the start of it, or the end, where its list is.
+    if let archiveKind = file.archiveKind, let server = model.server {
       openPreviewWindow(PreviewFileInfo(
         id: UInt32.random(in: 1...UInt32.max),
         address: server.address,
@@ -30,7 +30,7 @@ struct FileActions {
         name: file.name,
         type: file.type,
         creator: file.creator,
-        isArchive: true,
+        archiveKind: archiveKind,
         hotlineID: model.id,
         path: file.path
       ))

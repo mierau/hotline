@@ -129,21 +129,36 @@ final class FilePreviewState {
     self.previewTask = task
   }
 
-  /// What's in an archive, from the end of it on the server, which is where a ZIP's list is.
+  /// What's in an archive, from the start of it on the server, or the end, where its list is.
   private func readArchive() async throws {
-    guard let hotlineID = self.info.hotlineID, let hotline = AppState.shared.hotline(id: hotlineID), let path = self.info.path else {
+    guard let archiveKind = self.info.archiveKind, let hotlineID = self.info.hotlineID,
+          let hotline = AppState.shared.hotline(id: hotlineID), let path = self.info.path else {
       throw HotlineClientError.notConnected
     }
     self.state = .loading
     let name = self.info.name
-    // How long its data is, which a download from the start says, unlike the list of files, and
-    // unlike a resumed one, on some servers.
-    let size = try await hotline.readFile(name, path: path, from: 0, length: 0).size
-    self.archive = try await ZipArchive.entries(size: size) { offset, length in
-      try await hotline.readFile(name, path: path, from: offset, length: length).data
+    // The start of it, which is where some archives have their list, with how long its data is,
+    // which a download from the start says, unlike the list of files, and unlike a resumed one,
+    // on some servers.
+    let start = try await hotline.readFile(name, path: path, from: 0, length: Self.archiveStartLength)
+    do {
+      self.archive = try await archiveKind.entries(size: start.size) { offset, length in
+        if offset + length <= start.data.count {
+          return start.data.subdata(in: offset..<(offset + length))
+        }
+        return try await hotline.readFile(name, path: path, from: offset, length: length).data
+      }
+    }
+    catch ArchiveReadError.notAnArchive {
+      // Not the kind of archive its name says, as plenty of files named .bin aren't, so there's
+      // nothing to show of it.
+      self.archive = nil
     }
     self.state = .loaded
   }
+
+  /// How much of the start of an archive is read with how long it is.
+  private static let archiveStartLength = 16 * 1024
 
   func cancel() {
     self.previewTask?.cancel()

@@ -1,21 +1,8 @@
 import Foundation
 
-/// Something in an archive, a file or a folder, by its place in it, as "Folder/File.txt".
-struct ArchiveEntry: Hashable, Sendable {
-  let path: String
-  let isFolder: Bool
-  /// How big it is once it's out of the archive.
-  let size: UInt64
-}
-
 /// The list of what's in a ZIP archive, which comes after everything in it, at the end of the file.
 /// So it can be read from a server with just the end of the file, rather than all of it.
 enum ZipArchive {
-  enum ReadError: Error {
-    /// The end of the file isn't the end of a ZIP archive.
-    case notAnArchive
-  }
-
   /// How much of the end of a file is read first: enough for the record that ends an archive,
   /// with the longest comment it can have, and the list of a few thousand files before it.
   static let endLength = 256 * 1024
@@ -27,13 +14,13 @@ enum ZipArchive {
     let offset = max(0, size - self.endLength)
     let tail = Data(try await read(offset, size - offset))
     guard tail.count == size - offset, let record = EndRecord(in: tail) else {
-      throw ReadError.notAnArchive
+      throw ArchiveReadError.notAnArchive
     }
     // Back from the record, where the list ends, rather than where the record says the list
     // starts, which doesn't count anything before the archive, like a program that unpacks it.
     let listStart = offset + record.listEnd - record.listSize
     guard listStart >= 0 else {
-      throw ReadError.notAnArchive
+      throw ArchiveReadError.notAnArchive
     }
     if listStart >= offset {
       return self.entries(in: tail.subdata(in: (listStart - offset)..<record.listEnd), count: record.entryCount)
@@ -41,7 +28,7 @@ enum ZipArchive {
     // A list too long for the end that was read.
     let list = Data(try await read(listStart, record.listSize))
     guard list.count == record.listSize else {
-      throw ReadError.notAnArchive
+      throw ArchiveReadError.notAnArchive
     }
     return self.entries(in: list, count: record.entryCount)
   }
@@ -170,27 +157,5 @@ enum ZipArchive {
       at = end
     }
     return nil
-  }
-}
-
-private extension Data {
-  /// A little-endian number at an offset from the start, or nil if it runs past the end.
-  func littleEndian<T: FixedWidthInteger>(_ type: T.Type, at offset: Int) -> T? {
-    let size = MemoryLayout<T>.size
-    guard offset >= 0, offset + size <= self.count else {
-      return nil
-    }
-    var value: T = 0
-    for index in 0..<size {
-      value |= T(self[self.startIndex + offset + index]) << (8 * index)
-    }
-    return value
-  }
-
-  func hasSignature(_ signature: [UInt8], at offset: Int) -> Bool {
-    guard offset >= 0, offset + signature.count <= self.count else {
-      return false
-    }
-    return self[(self.startIndex + offset)..<(self.startIndex + offset + signature.count)].elementsEqual(signature)
   }
 }

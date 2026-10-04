@@ -224,6 +224,7 @@ extension FileManager {
     "sitx": "sit",
     "sit!": "sit",
     "sit5": "sit",
+    "pact": "cpt",
     "udif": "dmg",
     "cdrw": "cdr",
     

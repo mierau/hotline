@@ -104,7 +104,7 @@ struct ZipArchiveTests {
     let archive = TestArchive(items: [.init("ReadMe.txt", size: 600_000)])
     let server = TestServer(archive.data)
     server.ignoresOffsets = true
-    await #expect(throws: ZipArchive.ReadError.self) {
+    await #expect(throws: ArchiveReadError.self) {
       try await ZipArchive.entries(size: archive.data.count, read: server.read)
     }
   }
@@ -125,7 +125,7 @@ struct ZipArchiveTests {
 
   @Test func turnsDownWhatIsNotAnArchive() async throws {
     let data = Data((0..<10_000).map { UInt8(truncatingIfNeeded: $0 &* 31) })
-    await #expect(throws: ZipArchive.ReadError.self) {
+    await #expect(throws: ArchiveReadError.self) {
       try await ZipArchive.entries(size: data.count, read: TestServer(data).read)
     }
   }

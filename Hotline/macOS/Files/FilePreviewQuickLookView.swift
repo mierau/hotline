@@ -47,7 +47,7 @@ struct FilePreviewQuickLookView: View {
     case failed
     case media(URL, Media)
     case document(URL)
-    case archive([ArchiveEntry])
+    case archive(ArchiveKind, [ArchiveEntry])
     case unpreviewable
   }
 
@@ -63,8 +63,8 @@ struct FilePreviewQuickLookView: View {
       case .document(let fileURL):
         QuickLookPreviewView(fileURL: fileURL)
           .frame(minWidth: 400, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
-      case .archive(let entries):
-        FilePreviewArchiveView(entries: entries)
+      case .archive(let kind, let entries):
+        FilePreviewArchiveView(kind: kind, entries: entries)
       case .unpreviewable:
         self.unpreviewableView
       }
@@ -167,8 +167,8 @@ struct FilePreviewQuickLookView: View {
     case .failed:
       return .failed
     case .loaded:
-      if let archive = self.preview?.archive {
-        return .archive(archive)
+      if let archive = self.preview?.archive, let kind = self.info?.archiveKind {
+        return .archive(kind, archive)
       }
       guard let fileURL = self.preview?.fileURL else {
         return .unpreviewable

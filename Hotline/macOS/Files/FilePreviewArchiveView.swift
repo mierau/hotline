@@ -4,18 +4,20 @@ import SwiftUI
 /// files and folders to look through, with the keyboard too, under a line saying that's what it
 /// is. As they aren't here, none of them can be opened.
 struct FilePreviewArchiveView: View {
+  let kind: ArchiveKind
   private let items: [ArchiveItem]
   /// Only for moving around, with the arrow keys.
   @State private var selection: ArchiveItem.ID?
   @FocusState private var listFocused: Bool
 
-  init(entries: [ArchiveEntry]) {
+  init(kind: ArchiveKind, entries: [ArchiveEntry]) {
+    self.kind = kind
     self.items = ArchiveItem.tree(entries)
   }
 
   var body: some View {
     VStack(spacing: 0) {
-      Label("Previewing ZIP file contents", systemImage: "eye")
+      Label("Previewing \(self.kind.name) contents", systemImage: "eye")
         .font(.system(size: 12))
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -65,7 +67,7 @@ private struct ArchiveItemRow: View {
             .scaledToFit()
         }
         else {
-          FileIconView(filename: self.item.name, fileType: nil)
+          FileIconView(filename: self.item.name, fileType: self.item.type)
         }
       }
       .frame(width: 16, height: 16)
@@ -95,6 +97,8 @@ struct ArchiveItem: Identifiable {
   let name: String
   let isFolder: Bool
   let size: UInt64
+  /// A Mac file's type code, which says what it is when its name doesn't.
+  let type: String?
   /// Nil for a file, or a folder with nothing in it, which has nothing to show.
   let children: [ArchiveItem]?
 
@@ -110,10 +114,10 @@ struct ArchiveItem: Identifiable {
       let path = folder.isEmpty ? name : "\(folder)/\(name)"
       let inside = group.filter { $0.components.count > 1 }.map { (components: Array($0.components.dropFirst()), entry: $0.entry) }
       if inside.isEmpty, let file = group.first?.entry, !file.isFolder {
-        return ArchiveItem(id: path, name: name, isFolder: false, size: file.size, children: nil)
+        return ArchiveItem(id: path, name: name, isFolder: false, size: file.size, type: file.type, children: nil)
       }
       let children = self.items(inside, in: path)
-      return ArchiveItem(id: path, name: name, isFolder: true, size: 0, children: children.isEmpty ? nil : children)
+      return ArchiveItem(id: path, name: name, isFolder: true, size: 0, type: nil, children: children.isEmpty ? nil : children)
     }
     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
