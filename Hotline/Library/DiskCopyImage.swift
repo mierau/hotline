@@ -2,9 +2,9 @@ import Foundation
 
 /// A disk image in Disk Copy 6's format, as Disk Copy, ShrinkWrap and self-mounting images save
 /// one: the disk in chunks, one after another in the data fork, each kept as it is, left out for
-/// being empty, or compressed, with Apple's compression, or StuffIt's, from ShrinkWrap, and a map
-/// of them, in the resource fork. Any part of the disk is read from the chunks it's in, which are
-/// together, so with one read.
+/// being empty, or compressed, with Apple's compression or KenCode, or StuffIt's, from ShrinkWrap,
+/// and a map of them, in the resource fork. Any part of the disk is read from the chunks it's in,
+/// which are together, so with one read.
 struct DiskCopyImage {
   /// A run of the disk's 512-byte sectors, and how it's kept.
   private struct Chunk {
@@ -17,6 +17,7 @@ struct DiskCopyImage {
 
   private static let empty: UInt8 = 0x00
   private static let asIs: UInt8 = 0x02
+  private static let kenCode: UInt8 = 0x80
   private static let adc: UInt8 = 0x83
   private static let stuffIt: UInt8 = 0xF0
   private static let end: UInt8 = 0xFF
@@ -26,11 +27,13 @@ struct DiskCopyImage {
   let size: Int
 
   /// From the map in a resource fork, for a data fork `dataSize` long: its header, with the
-  /// disk's name, how many sectors it has, and how many chunks, then for each, the sector it
-  /// starts at, how it's kept, and where it is in the data fork, and how long.
+  /// disk's name, how many sectors it has, where in the data fork the chunks are from, and how
+  /// many there are, then for each, the sector it starts at, how it's kept, and where it is, and
+  /// how long.
   init?(resourceFork: Data, dataSize: Int) {
     guard let map = ResourceFork.resource("bcem", in: resourceFork),
           let sectors = map.bigEndian(UInt32.self, at: 68).map(Int.init), sectors > 0,
+          let dataOffset = map.bigEndian(UInt32.self, at: 76).map(Int.init),
           let count = map.bigEndian(UInt32.self, at: 124).map(Int.init), count > 1, 128 + 12 * count <= map.count else {
       return nil
     }
@@ -39,10 +42,10 @@ struct DiskCopyImage {
       let entry = 128 + 12 * index
       guard let start = map.bigEndian(UInt32.self, at: entry).map({ Int($0 >> 8) }),
             let kind = map.byte(at: entry + 3),
-            let offset = map.bigEndian(UInt32.self, at: entry + 4).map(Int.init),
+            let offset = map.bigEndian(UInt32.self, at: entry + 4).map({ Int($0) + dataOffset }),
             let length = map.bigEndian(UInt32.self, at: entry + 8).map(Int.init),
             let next = map.bigEndian(UInt32.self, at: entry + 12).map({ Int($0 >> 8) }), next > start,
-            [Self.empty, Self.asIs, Self.adc, Self.stuffIt].contains(kind), offset + length <= dataSize else {
+            [Self.empty, Self.asIs, Self.kenCode, Self.adc, Self.stuffIt].contains(kind), offset + length <= dataSize else {
         return nil
       }
       chunks.append(Chunk(sector: start, sectors: next - start, kind: kind, offset: offset, length: length))
@@ -83,6 +86,7 @@ struct DiskCopyImage {
       let expanded: Data?
       switch chunk.kind {
       case Self.adc: expanded = Self.expand(data, to: size)
+      case Self.kenCode: expanded = Self.expandKenCode(data, to: size)
       case Self.stuffIt: expanded = Self.expandStuffIt(data, to: size)
       default: expanded = data
       }
@@ -145,6 +149,127 @@ struct DiskCopyImage {
     return output.count >= size ? Data(output.prefix(size)) : nil
   }
 
+  /// KenCode, as Disk Copy 6 compresses a chunk: runs of bytes as they are, and copies of what's
+  /// just before, written high bit first. Each starts with a copy's length, less two, in fewer bits
+  /// for shorter ones, where none means a run instead, with its own length after it. A run can't
+  /// follow a run shorter than the longest, so after one, the length is a copy's less three. A copy
+  /// then says how far back it's from: near, further or furthest, in more bits the further into the
+  /// chunk it is.
+  static func expandKenCode(_ data: Data, to size: Int) -> Data? {
+    var bits = KenCodeBits(data)
+    var output: [UInt8] = []
+    output.reserveCapacity(size)
+    var runCanFollow = true
+    while output.count < size {
+      let length = Self.kenCodeLength(&bits)
+      if length == 0 && runCanFollow {
+        let count = Self.kenCodeRunLength(&bits)
+        guard output.count + count <= size else {
+          return nil
+        }
+        for _ in 0..<count {
+          output.append(UInt8(bits.read(8)))
+        }
+        runCanFollow = count == 63
+      }
+      else {
+        let count = length + (runCanFollow ? 2 : 3)
+        let distance = Self.kenCodeDistance(&bits, at: output.count)
+        guard output.count + count <= size, distance <= output.count else {
+          return nil
+        }
+        for _ in 0..<count {
+          output.append(output[output.count - distance])
+        }
+        runCanFollow = true
+      }
+      guard !bits.isPastEnd else {
+        return nil
+      }
+    }
+    return Data(output)
+  }
+
+  /// Bits, and what's added to them, for a copy's length after three ones, and each more, to ten.
+  private static let kenCodeLengths = [(3, 11), (3, 19), (5, 27), (6, 59), (7, 123), (8, 251), (9, 507), (10, 1019)]
+
+  /// A copy's length, less two: ones, up to ten, before a zero, then bits for the rest.
+  private static func kenCodeLength(_ bits: inout KenCodeBits) -> Int {
+    switch bits.ones(upTo: 10) {
+    case 0:
+      return bits.read(1)
+    case 1:
+      return bits.read(1) == 0 ? 2 : 3 + bits.read(1)
+    case 2:
+      return bits.read(1) == 0 ? 5 + bits.read(1) : 7 + bits.read(2)
+    case let ones:
+      let (width, added) = Self.kenCodeLengths[ones - 3]
+      return added + bits.read(width)
+    }
+  }
+
+  /// A run's length, from one to 63.
+  private static func kenCodeRunLength(_ bits: inout KenCodeBits) -> Int {
+    guard bits.read(1) == 1 else {
+      return 1
+    }
+    switch bits.read(2) {
+    case 0:
+      return 2
+    case 1:
+      return 3
+    case 2:
+      return 4 + bits.read(2)
+    default:
+      let high = bits.read(4)
+      if high < 8 {
+        return 8 + high
+      }
+      if high < 12 {
+        return high * 4 - 16 + bits.read(2)
+      }
+      return high * 8 - 64 + bits.read(3)
+    }
+  }
+
+  /// How far into the chunk a copy has to be for how far back it's from to take a bit more.
+  private static let kenCodeReaches = [0xA, 0x14, 0x28, 0x50, 0xA0, 0x2A0, 0x3E8, 0xA80, 0x1500, 0x2A00]
+
+  /// How far back a copy `position` into the chunk is from: near, in as many bits as for how far
+  /// into the chunk it is, further, in two more, or furthest, in as many as there's room for back
+  /// to the chunk's start, as Disk Copy works that out.
+  private static func kenCodeDistance(_ bits: inout KenCodeBits, at position: Int) -> Int {
+    let width = Self.kenCodeReaches.firstIndex { position <= $0 } ?? Self.kenCodeReaches.count
+    let near = 1 << width
+    if bits.read(1) == 0 {
+      return 1 + bits.read(width)
+    }
+    if bits.read(1) == 0 {
+      return near + 1 + bits.read(width + 2)
+    }
+    // Further ones go back as far as five times near ones do, and the furthest from there.
+    let further = 5 * near
+    if position <= further + 2 {
+      return further + 1 + bits.read(1)
+    }
+    if position <= further + 4 {
+      return further + 1 + bits.read(2)
+    }
+    var level = 3
+    var step = 4
+    var reach = further + 4
+    while level < width + 4 {
+      reach += step
+      // As Disk Copy does, which checks against 0x66C where this reaches 0x680.
+      if position <= (reach == 0x680 ? 0x66C : reach) {
+        break
+      }
+      step <<= 1
+      level += 1
+    }
+    return further + 1 + bits.read(level)
+  }
+
   /// How long a copy is, for each of the codes for one, before the bits after it that add to it.
   private static let copyLengths = [4, 5, 6, 7, 8, 10, 12, 16, 20, 28, 36, 52, 68, 100, 132, 196, 260, 388, 516, 772]
   private static let copyLengthBits = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8]
@@ -186,6 +311,45 @@ struct DiskCopyImage {
       }
     }
     return bits.isPastEnd ? nil : Data(output)
+  }
+}
+
+/// Bits, high bit first, as KenCode writes them.
+private struct KenCodeBits {
+  private let bytes: [UInt8]
+  private var position = 0
+  /// Whether more's been read than there is.
+  private(set) var isPastEnd = false
+
+  init(_ data: Data) {
+    self.bytes = [UInt8](data)
+  }
+
+  /// The next `width` bits, the first of them the highest.
+  mutating func read(_ width: Int) -> Int {
+    var value = 0
+    for _ in 0..<width {
+      value = value << 1 | self.bit()
+    }
+    return value
+  }
+
+  /// How many ones come before a zero, up to `most`, with no zero after that many.
+  mutating func ones(upTo most: Int) -> Int {
+    var count = 0
+    while count < most && self.bit() == 1 {
+      count += 1
+    }
+    return count
+  }
+
+  private mutating func bit() -> Int {
+    guard self.position < self.bytes.count * 8 else {
+      self.isPastEnd = true
+      return 0
+    }
+    defer { self.position += 1 }
+    return Int(self.bytes[self.position / 8] >> (7 - self.position % 8)) & 1
   }
 }
 

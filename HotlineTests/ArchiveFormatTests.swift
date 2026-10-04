@@ -298,6 +298,33 @@ struct ArchiveFormatTests {
     #expect(try await image.read(1000, 24, from: TestServer(chunk).read) == TestDiskCopy.stuffItText.suffix(24))
   }
 
+  @Test func expandsKenCodeAsDiskCopyCompressesAChunk() {
+    #expect(DiskCopyImage.expandKenCode(TestDiskCopy.kenCodeChunk, to: 2048) == TestDiskCopy.kenCodeText)
+    // Cut short.
+    #expect(DiskCopyImage.expandKenCode(TestDiskCopy.kenCodeChunk.dropLast(2), to: 2048) == nil)
+    // A run of two zeros, which is longer than one.
+    #expect(DiskCopyImage.expandKenCode(Data([0x20, 0x00, 0x00]), to: 2) == Data(count: 2))
+    #expect(DiskCopyImage.expandKenCode(Data([0x20, 0x00, 0x00]), to: 1) == nil)
+    // Three bytes copied from one back, before there's anything to copy.
+    #expect(DiskCopyImage.expandKenCode(Data([0x40]), to: 3) == nil)
+  }
+
+  @Test func readsAChunkCompressedWithKenCode() async throws {
+    let chunk = TestDiskCopy.kenCodeChunk
+    let resourceFork = TestDiskCopy.resourceFork([(0, 0x80, 0, chunk.count), (4, 0xFF, chunk.count, 0)])
+    let image = try #require(DiskCopyImage(resourceFork: resourceFork, dataSize: chunk.count))
+    #expect(try await image.read(0, 2048, from: TestServer(chunk).read) == TestDiskCopy.kenCodeText)
+    #expect(try await image.read(1662, 16, from: TestServer(chunk).read) == Data("end of the chunk".utf8))
+  }
+
+  @Test func readsChunksFromWhereTheMapSaysTheyStart() async throws {
+    let data = Data(repeating: 0xEE, count: 100) + TestDiskCopy.stuffItChunk
+    let chunk = TestDiskCopy.stuffItChunk
+    let resourceFork = TestDiskCopy.resourceFork([(0, 0xF0, 0, chunk.count), (2, 0xFF, chunk.count, 0)], dataOffset: 100)
+    let image = try #require(DiskCopyImage(resourceFork: resourceFork, dataSize: data.count))
+    #expect(try await image.read(0, 1024, from: TestServer(data).read) == TestDiskCopy.stuffItText)
+  }
+
   @Test func readsADiskCopyImageInChunks() async throws {
     let image = TestDiskCopy.image(TestDisc.hfs([
       .file("Install ShrinkWrap™ 3.5.1", in: 2, type: "APPL", data: 1_243_290),
@@ -324,7 +351,7 @@ struct ArchiveFormatTests {
   }
 
   @Test func turnsDownChunksCompressedAnotherWay() async throws {
-    let image = TestDiskCopy.image(TestDisc.hfs([.file("Read Me", in: 2, type: "TEXT", data: 100)]), compression: 0x80)
+    let image = TestDiskCopy.image(TestDisc.hfs([.file("Read Me", in: 2, type: "TEXT", data: 100)]), compression: 0x81)
     await #expect(throws: ArchiveReadError.self) {
       try await ArchiveKind.diskImage.entries(size: image.data.count, read: TestServer(image.data).read) {
         image.resourceFork
@@ -750,10 +777,11 @@ private enum TestDiskCopy {
   }
 
   /// The map of a disk's chunks, in a resource fork: where each starts, how it's kept, and where it
-  /// is in the data fork, and how long, the last being the end.
-  static func resourceFork(_ chunks: [(sector: Int, kind: UInt8, offset: Int, length: Int)]) -> Data {
+  /// is in the data fork, after `dataOffset`, and how long, the last being the end.
+  static func resourceFork(_ chunks: [(sector: Int, kind: UInt8, offset: Int, length: Int)], dataOffset: Int = 0) -> Data {
     var map = bytes(UInt16(11), UInt16(0)) + Data([10]) + macRoman("ShrinkWrap") + Data(count: 53)
-    map += bytes(UInt32(chunks.last?.sector ?? 0)) + Data(count: 52) + bytes(UInt32(chunks.count))
+    map += bytes(UInt32(chunks.last?.sector ?? 0), UInt32(0), UInt32(dataOffset)) + Data(count: 44)
+    map += bytes(UInt32(chunks.count))
     for chunk in chunks {
       map += bytes(UInt32(chunk.sector << 8 | Int(chunk.kind)), UInt32(chunk.offset), UInt32(chunk.length))
     }
@@ -779,6 +807,27 @@ private enum TestDiskCopy {
     0xDF, 0xFE, 0xED, 0xDF, 0xFE, 0xED, 0x3F, 0xE3, 0x3E, 0xFE, 0x37, 0x43, 0x05, 0x13, 0xE3, 0xEE,
     0x20, 0x91, 0x75, 0xF6, 0x53, 0xD9, 0x02, 0xB7, 0x27, 0x71, 0xC6, 0x6A, 0x0E, 0x5D, 0xE1, 0x3D,
     0xDF, 0x91, 0xC0, 0xFE,
+  ])
+
+  /// Two kilobytes, as Disk Copy compresses a chunk with KenCode: runs of all sorts of lengths, the
+  /// longest with another after it, copies after short runs, a copy of 1,100, and copies from near,
+  /// further and furthest back, one of them 1,646 bytes in, where Disk Copy takes a bit more for
+  /// how far back than it needs.
+  static let kenCodeText: Data = {
+    var text = Data("Hotline, Hotline, Hotline,!\r".utf8) + Data("Hot".utf8) + Data(0x80...0xBE) + Data(count: 1101)
+    text += Data("ShrinkWrapHotline 3.5".utf8) + Data(count: 430) + Data("Hotline, Hotline".utf8)
+    return text + Data("end of the chunk".utf8) + Data(count: 370)
+  }()
+  static let kenCodeChunk = Data([
+    0x38, 0xA4, 0x37, 0xBA, 0x36, 0x34, 0xB7, 0x32, 0x96, 0x10, 0x73, 0xF2, 0x10, 0x86, 0x9F, 0x3F,
+    0xF8, 0x08, 0x18, 0x28, 0x38, 0x48, 0x58, 0x68, 0x78, 0x88, 0x98, 0xA8, 0xB8, 0xC8, 0xD8, 0xE8,
+    0xF9, 0x09, 0x19, 0x29, 0x39, 0x49, 0x59, 0x69, 0x79, 0x89, 0x99, 0xA9, 0xB9, 0xC9, 0xD9, 0xE9,
+    0xFA, 0x0A, 0x1A, 0x2A, 0x3A, 0x4A, 0x5A, 0x6A, 0x7A, 0x8A, 0x9A, 0xAA, 0xBA, 0xCA, 0xDA, 0xEA,
+    0xFB, 0x0B, 0x1B, 0x2B, 0x3B, 0x4B, 0x5B, 0x6B, 0x7B, 0x8B, 0x9B, 0xAB, 0xBB, 0xCB, 0xDB, 0xE0,
+    0x01, 0xFF, 0x89, 0xC0, 0x39, 0x29, 0xB4, 0x39, 0x34, 0xB7, 0x35, 0xAB, 0xB9, 0x30, 0xB8, 0x5F,
+    0x1A, 0x18, 0x20, 0x33, 0x2E, 0x35, 0xFF, 0x58, 0x6B, 0x3F, 0x3D, 0xF6, 0x9E, 0x06, 0x56, 0xE6,
+    0x42, 0x06, 0xF6, 0x62, 0x07, 0x46, 0x86, 0x52, 0x06, 0x36, 0x87, 0x56, 0xE6, 0xBF, 0xF3, 0xA6,
+    0xD6, 0xC0,
   ])
 
   /// Apple Data Compression: a run of a byte, after one like it, as copies of the byte before, and
