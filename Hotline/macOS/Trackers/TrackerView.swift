@@ -22,7 +22,6 @@ enum TrackerSelection: Hashable {
 struct TrackerView: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.openWindow) private var openWindow
-  @Environment(\.controlActiveState) private var controlActiveState
   @Environment(\.modelContext) private var modelContext
   
   @State private var refreshing = false
@@ -341,18 +340,6 @@ struct TrackerView: View {
     }
     .navigationTitle("Servers")
     .toolbar {
-      if #available(macOS 26.0, *) {
-        ToolbarItem(placement: .navigation) {
-          self.hotlineLogoImage
-        }
-        .sharedBackgroundVisibility(.hidden)
-      }
-      else {
-        ToolbarItem(placement: .navigation) {
-          self.hotlineLogoImage
-        }
-      }
-      
       ToolbarItem(placement: .primaryAction) {
         Button {
           self.refreshing = true
@@ -385,16 +372,6 @@ struct TrackerView: View {
     }
     .searchable(text: $searchText, isPresented: $isSearching, placement: .automatic, prompt: "Search")
     .background(Button("", action: { isSearching = true }).keyboardShortcut("f").hidden())
-  }
-  
-  private var hotlineLogoImage: some View {
-    Image("Hotline")
-      .resizable()
-      .renderingMode(.template)
-      .scaledToFit()
-      .foregroundColor(Color(hex: 0xE10000))
-      .frame(width: 9)
-      .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
   }
   
   @ViewBuilder
