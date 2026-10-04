@@ -105,3 +105,48 @@ struct ChatMessage: Identifiable {
     self.searchText = NSString(string: searchText)
   }
 }
+
+extension ChatMessage {
+  /// A message as it was saved in the chat store, or nil for a kind of message that isn't kept.
+  init?(entry: ChatStore.Entry) {
+    guard let type = ChatMessageType(storageKey: entry.type) else {
+      return nil
+    }
+    if type == .message, let username = entry.username, !username.isEmpty {
+      self.init(text: "\(username): \(entry.body)", type: type, date: entry.date)
+    }
+    else {
+      self.init(text: entry.body, type: type, date: entry.date)
+    }
+    self.metadata = entry.metadata
+    self.iconID = entry.metadata?.iconID
+    self.isAdmin = entry.metadata?.senderIsAdmin ?? false
+  }
+}
+
+extension Array where Element == ChatMessage {
+  /// The messages that `matches` finds, in order, along with the disconnects between them that
+  /// show where sessions end.
+  func searched(where matches: (ChatMessage) -> Bool) -> [ChatMessage] {
+    var results: [ChatMessage] = []
+    var lastWasDisconnect = false
+    for message in self where message.type != .agreement {
+      let isDisconnect = message.type == .signOut
+      // One disconnect at a time, without the messages in between.
+      if isDisconnect ? lastWasDisconnect : !matches(message) {
+        continue
+      }
+      results.append(message)
+      lastWasDisconnect = isDisconnect
+    }
+
+    // Disconnects only between results.
+    if results.first?.type == .signOut {
+      results.removeFirst()
+    }
+    if results.last?.type == .signOut {
+      results.removeLast()
+    }
+    return results
+  }
+}

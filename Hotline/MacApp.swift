@@ -463,6 +463,13 @@ struct Application: App {
     .defaultPosition(.center)
     .restorationBehavior(.disabled)
 
+    // MARK: Chat History Window
+    WindowGroup("Chat History", id: "chat-log", for: ChatStore.SessionKey.self) { $key in
+      ChatLogView(key: key)
+    }
+    .defaultSize(width: 640, height: 720)
+    .restorationBehavior(.disabled)
+
     // MARK: QuickLook Preview Window
     WindowGroup(id: "preview-quicklook", for: PreviewFileInfo.self) { $info in
       FilePreviewQuickLookView(info: $info)

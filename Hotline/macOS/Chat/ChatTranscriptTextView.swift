@@ -504,7 +504,7 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     if let button = self.copyCodeButton, button.isShowing, button.frame.contains(point) {
       return .arrow
     }
-    if self.hoveredLink != nil || self.sender(at: point) != nil {
+    if self.hoveredLink != nil || (self.userMenu != nil && self.sender(at: point) != nil) {
       return .pointingHand
     }
     if let superview = self.superview, var view = self.hitTest(superview.convert(point, from: self)) {
@@ -536,7 +536,8 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     let index = self.character(at: point) ?? NSNotFound
     var linkRange = NSRange()
     let link = NSLocationInRange(index, message)
-      ? storage.attribute(.link, at: index, longestEffectiveRange: &linkRange, in: message) ?? storage.attribute(ChatMessageRenderer.userNameKey, at: index, longestEffectiveRange: &linkRange, in: message)
+      ? storage.attribute(.link, at: index, longestEffectiveRange: &linkRange, in: message)
+        ?? (self.userMenu == nil ? nil : storage.attribute(ChatMessageRenderer.userNameKey, at: index, longestEffectiveRange: &linkRange, in: message))
       : nil
     guard link != nil else {
       self.clearHoveredLink()

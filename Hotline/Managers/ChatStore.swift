@@ -6,7 +6,7 @@ actor ChatStore {
   static let historyClearedNotification = Notification.Name("ChatStoreHistoryCleared")
   static let serverHistoryClearedNotification = Notification.Name("ChatStoreServerHistoryCleared")
 
-  struct SessionKey: Hashable {
+  struct SessionKey: Hashable, Codable {
     let address: String
     let port: Int
 

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ChatSettingsView: View {
+  @Environment(\.openWindow) private var openWindow
   @State private var newWatchWord: String = ""
   @State private var expandedWord: String?
   @State private var servers: [ChatStore.ServerListing] = []
@@ -134,6 +135,15 @@ struct ChatSettingsView: View {
               Text("\(server.entryCount) messages")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+              Button {
+                self.openWindow(id: "chat-log", value: ChatStore.SessionKey(address: server.metadata.address, port: server.metadata.port))
+              } label: {
+                Image(systemName: "eye")
+              }
+              .buttonStyle(.borderless)
+              .help("View Chat History")
+              .accessibilityLabel("View Chat History")
 
               Button(role: .destructive) {
                 self.serverToDelete = server

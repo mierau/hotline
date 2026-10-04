@@ -27,17 +27,6 @@ struct ChatView: View {
     self.debouncedQuery.isEmpty ? self.model.chat : self.searchResults
   }
 
-  private var effectiveWatchWords: [HighlightWord] {
-    var words = Prefs.shared.watchWords
-    if Prefs.shared.highlightMentions {
-      let username = Prefs.shared.username
-      if !username.isEmpty {
-        words.insert(HighlightWord(word: username, color: Prefs.shared.mentionHighlightColor), at: 0)
-      }
-    }
-    return words
-  }
-
   private var bannerView: some View {
     ZStack {
       if self.stableBannerIsAnimated {
@@ -73,7 +62,7 @@ struct ChatView: View {
       ChatTranscriptView(
         messages: self.displayedMessages,
         searchQuery: self.debouncedQuery,
-        watchWords: self.effectiveWatchWords,
+        watchWords: HighlightWord.chatWords,
         isFiltered: !self.debouncedQuery.isEmpty,
         cachedText: self.model.chatRenderedText,
         cachedCount: self.model.chatRenderedCount,
@@ -335,63 +324,22 @@ struct ChatView: View {
   }
 }
 
-/// What a search of the chat finds: messages with some text in them, and for "links" or "files",
-/// every message with a link, or a link to a file or folder on a Hotline server, too.
-private struct ChatSearch {
-  let text: String
-  /// The links that bring a message into the results whatever its text.
-  let kinds: ChatLinkIndex.Kinds
-
-  init(_ query: String) {
-    self.text = query
-    switch query.trimmingCharacters(in: .whitespaces).lowercased() {
-    case "links":
-      self.kinds = .link
-    case "files":
-      self.kinds = .file
-    default:
-      self.kinds = []
-    }
-  }
-
-  func matches(_ message: ChatMessage, links: ChatLinkIndex) -> Bool {
-    if message.searchText.range(of: self.text, options: [.caseInsensitive, .literal]).location != NSNotFound {
-      return true
-    }
-    return !self.kinds.isEmpty && !links.kinds(in: message).isDisjoint(with: self.kinds)
-  }
-}
-
-/// Which messages have links, and links to files, worked out once for each, since finding links
-/// in a long chat takes a moment.
-private final class ChatLinkIndex {
-  struct Kinds: OptionSet {
-    let rawValue: UInt8
-    static let link = Kinds(rawValue: 1 << 0)
-    static let file = Kinds(rawValue: 1 << 1)
-  }
-
-  private var known: [UUID: Kinds] = [:]
-
-  func kinds(in message: ChatMessage) -> Kinds {
-    if let kinds = self.known[message.id] {
-      return kinds
-    }
-    var kinds: Kinds = []
-    for url in ChatMessageRenderer.links(in: message.text) {
-      kinds.insert(.link)
-      if ChatMessageRenderer.fileName(ofHotlineLink: url) != nil {
-        kinds.insert(.file)
-        break
+extension HighlightWord {
+  /// The words chat highlights: the watch words, and your name, when mentions are highlighted.
+  static var chatWords: [HighlightWord] {
+    var words = Prefs.shared.watchWords
+    if Prefs.shared.highlightMentions {
+      let username = Prefs.shared.username
+      if !username.isEmpty {
+        words.insert(HighlightWord(word: username, color: Prefs.shared.mentionHighlightColor), at: 0)
       }
     }
-    self.known[message.id] = kinds
-    return kinds
+    return words
   }
 }
 
 /// A menu item that does what it's given.
-private final class ChatMenuItem: NSMenuItem {
+final class ChatMenuItem: NSMenuItem {
   private let handler: () -> Void
 
   init(_ title: String, systemImage: String? = nil, isEnabled: Bool = true, handler: @escaping () -> Void) {
@@ -411,7 +359,8 @@ private final class ChatMenuItem: NSMenuItem {
   }
 }
 
-private struct SoftTopScrollEdge: ViewModifier {
+/// Text scrolling under the toolbar fades out, as it does in other apps.
+struct SoftTopScrollEdge: ViewModifier {
   func body(content: Content) -> some View {
     if #available(macOS 26.0, *) {
       content.scrollEdgeEffectStyle(.soft, for: .top)

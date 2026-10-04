@@ -263,26 +263,7 @@ extension HotlineState {
   /// them that show where sessions end.
   @MainActor
   func searchChat(where matches: (ChatMessage) -> Bool) -> [ChatMessage] {
-    var results: [ChatMessage] = []
-    var lastWasDisconnect = false
-    for message in self.chat where message.type != .agreement {
-      let isDisconnect = message.type == .signOut
-      // One disconnect at a time, without the messages in between.
-      if isDisconnect ? lastWasDisconnect : !matches(message) {
-        continue
-      }
-      results.append(message)
-      lastWasDisconnect = isDisconnect
-    }
-
-    // Disconnects only between results.
-    if results.first?.type == .signOut {
-      results.removeFirst()
-    }
-    if results.last?.type == .signOut {
-      results.removeLast()
-    }
-    return results
+    self.chat.searched(where: matches)
   }
 
   // MARK: - Chat Persistence
@@ -370,22 +351,7 @@ extension HotlineState {
         guard self.chatSessionKey == key, self.restoredChatSessionKey != key else { return }
 
         let currentMessages = self.chat
-        let historyMessages = result.entries.compactMap { entry -> ChatMessage? in
-          guard let chatType = ChatMessageType(storageKey: entry.type) else { return nil }
-
-          let renderedText: String
-          if chatType == .message, let username = entry.username, !username.isEmpty {
-            renderedText = "\(username): \(entry.body)"
-          } else {
-            renderedText = entry.body
-          }
-
-          var message = ChatMessage(text: renderedText, type: chatType, date: entry.date)
-          message.metadata = entry.metadata
-          message.iconID = entry.metadata?.iconID
-          message.isAdmin = entry.metadata?.senderIsAdmin ?? false
-          return message
-        }
+        let historyMessages = result.entries.compactMap(ChatMessage.init(entry:))
 
         // Skip history that has no real content (only sign-out/divider messages)
         let hasContent = historyMessages.contains { $0.type != .signOut }
