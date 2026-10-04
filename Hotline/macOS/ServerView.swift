@@ -113,7 +113,7 @@ struct ServerView: View {
           Spacer()
         }
         .presentedWindowToolbarStyle(.unified(showsTitle: false))
-        .navigationTitle(self.model.serverTitle.isBlank ? "Hotline" : self.model.serverTitle)
+        .navigationTitle(self.model.serverTitle.isBlank ? "Connect to Server" : self.model.serverTitle)
       }
       else if self.model.status.isLoggingIn {
         HStack {
@@ -133,7 +133,7 @@ struct ServerView: View {
         }
         .frame(maxWidth: 300)
         .padding()
-        .navigationTitle(self.model.serverTitle.isBlank ? "Hotline" : self.model.serverTitle)
+        .navigationTitle(self.model.serverTitle.isBlank ? "Connect to Server" : self.model.serverTitle)
         .sheet(isPresented: Binding(
           get: { self.model.agreementText != nil },
           set: { if !$0 { self.model.agreementText = nil } }
@@ -192,27 +192,21 @@ struct ServerView: View {
               .frame(width: 400, height: 450)
               .presentationSizing(.fitted)
           }
-          .toolbar {
-            if #available(macOS 26.0, *) {
-              ToolbarItem(placement: .navigation) {
-                Image("Server Large")
-                  .resizable()
-                  .scaledToFit()
-                  .frame(width: 28)
-                  .opacity(self.controlActiveState == .inactive ? 0.4 : 1.0)
-              }
-              .sharedBackgroundVisibility(.hidden)
-            }
-            else {
-              ToolbarItem(placement: .navigation) {
-                Image("Server Large")
-                  .resizable()
-                  .scaledToFit()
-                  .frame(width: 28)
-                  .opacity(self.controlActiveState == .inactive ? 0.4 : 1.0)
-              }
-            }
-          }
+      }
+    }
+    // In every state, so the window's toolbar, and its title bar with it, is the same height from
+    // the connect form to the server.
+    .toolbar {
+      if #available(macOS 26.0, *) {
+        ToolbarItem(placement: .navigation) {
+          self.serverIcon
+        }
+        .sharedBackgroundVisibility(.hidden)
+      }
+      else {
+        ToolbarItem(placement: .navigation) {
+          self.serverIcon
+        }
       }
     }
     .onDisappear {
@@ -484,6 +478,14 @@ struct ServerView: View {
     } message: {
       Text("They will be disconnected from the server, but may reconnect.")
     }
+  }
+
+  private var serverIcon: some View {
+    Image("Server Large")
+      .resizable()
+      .scaledToFit()
+      .frame(width: 28)
+      .opacity(self.controlActiveState == .inactive ? 0.4 : 1.0)
   }
 
   // MARK: -
