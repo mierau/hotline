@@ -7,7 +7,24 @@ struct HighlightWord: Codable, Hashable {
 
   static let allColors: [String] = ["primary", "red", "orange", "yellow", "green", "blue", "purple", "pink"]
 
+  /// The color behind the word: the color itself, or in dark mode a tint of it.
   var nsBackgroundColor: NSColor {
+    guard let base = self.baseColor else {
+      return NSColor(name: nil) { $0.isDark ? NSColor.white.withAlphaComponent(0.22) : .textColor }
+    }
+    return .highlightBackground(base)
+  }
+
+  /// The word's color over it: white or black, or in dark mode a light shade of the color.
+  var nsForegroundColor: NSColor {
+    guard let base = self.baseColor else {
+      return NSColor(name: nil) { $0.isDark ? .white : .textBackgroundColor }
+    }
+    return .highlightForeground(base, light: self.color == "yellow" ? .black : .white)
+  }
+
+  /// The color, as it's shown in light mode. None for "primary", which is the text's own color.
+  private var baseColor: NSColor? {
     switch self.color {
     case "red":    return .systemRed
     case "orange": return .systemOrange
@@ -16,15 +33,7 @@ struct HighlightWord: Codable, Hashable {
     case "blue":   return .systemBlue
     case "purple": return .systemPurple
     case "pink":   return NSColor(srgbRed: 1.0, green: 0.34, blue: 0.67, alpha: 1.0)
-    default:       return .textColor
-    }
-  }
-
-  var nsForegroundColor: NSColor {
-    switch self.color {
-    case "yellow": return .black
-    case "primary": return .textBackgroundColor
-    default:       return .white
+    default:       return nil
     }
   }
 
@@ -39,6 +48,37 @@ struct HighlightWord: Codable, Hashable {
     case "pink":   return Color(red: 1.0, green: 0.34, blue: 0.67)
     default:       return Color(white: 0.5)
     }
+  }
+}
+
+extension NSColor {
+  /// A highlight's background: `light`, or the color itself, in light mode, and in dark mode a tint
+  /// of the color over what's behind it, since solid colors glare against a dark background.
+  static func highlightBackground(_ color: NSColor, light: NSColor? = nil) -> NSColor {
+    NSColor(name: nil) { appearance in
+      appearance.isDark ? color.withAlphaComponent(0.4) : (light ?? color)
+    }
+  }
+
+  /// A highlighted word's color: `light` in light mode, and in dark mode a light shade of the
+  /// highlight's color, to go with its tint.
+  static func highlightForeground(_ color: NSColor, light: NSColor) -> NSColor {
+    NSColor(name: nil) { appearance in
+      guard appearance.isDark else {
+        return light
+      }
+      var shade = NSColor.white
+      appearance.performAsCurrentDrawingAppearance {
+        shade = color.usingColorSpace(.sRGB)?.blended(withFraction: 0.6, of: .white) ?? .white
+      }
+      return shade
+    }
+  }
+}
+
+extension NSAppearance {
+  var isDark: Bool {
+    self.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
   }
 }
 
@@ -70,6 +110,8 @@ enum PrefsKeys: String {
   case mentionHighlightColor = "mention highlight color"
   case showBannerToolbar = "show banner toolbar"
   case showJoinLeaveMessages = "show join leave messages"
+  case showChatIcons = "show chat icons"
+  case previewChatImages = "preview chat images"
   case downloadFolderBookmark = "download folder bookmark"
   case filesViewMode = "files view mode"
   case watchWords = "watch words"
@@ -105,6 +147,8 @@ class Prefs {
       PrefsKeys.mentionHighlightColor.rawValue: "primary",
       PrefsKeys.showBannerToolbar.rawValue: true,
       PrefsKeys.showJoinLeaveMessages.rawValue: true,
+      PrefsKeys.showChatIcons.rawValue: true,
+      PrefsKeys.previewChatImages.rawValue: true,
       PrefsKeys.filesViewMode.rawValue: "grid",
       PrefsKeys.hasCompletedOnboarding.rawValue: false,
     ])
@@ -132,6 +176,8 @@ class Prefs {
     self.mentionHighlightColor = UserDefaults.standard.string(forKey: PrefsKeys.mentionHighlightColor.rawValue)!
     self.showBannerToolbar = UserDefaults.standard.bool(forKey: PrefsKeys.showBannerToolbar.rawValue)
     self.showJoinLeaveMessages = UserDefaults.standard.bool(forKey: PrefsKeys.showJoinLeaveMessages.rawValue)
+    self.showChatIcons = UserDefaults.standard.bool(forKey: PrefsKeys.showChatIcons.rawValue)
+    self.previewChatImages = UserDefaults.standard.bool(forKey: PrefsKeys.previewChatImages.rawValue)
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
 
@@ -240,6 +286,14 @@ class Prefs {
   
   var showJoinLeaveMessages: Bool {
     didSet { UserDefaults.standard.set(self.showJoinLeaveMessages, forKey: PrefsKeys.showJoinLeaveMessages.rawValue) }
+  }
+
+  var showChatIcons: Bool {
+    didSet { UserDefaults.standard.set(self.showChatIcons, forKey: PrefsKeys.showChatIcons.rawValue) }
+  }
+
+  var previewChatImages: Bool {
+    didSet { UserDefaults.standard.set(self.previewChatImages, forKey: PrefsKeys.previewChatImages.rawValue) }
   }
 
   var filesViewMode: String {

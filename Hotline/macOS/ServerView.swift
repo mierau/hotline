@@ -86,9 +86,6 @@ struct ServerView: View {
   @State private var connectLogin: String = ""
   @State private var connectPassword: String = ""
   @State private var connectionDisplayed: Bool = false
-  @State private var composeMessageUser: User? = nil
-  @State private var contextMenuUserInfo: HotlineUserClientInfo? = nil
-  @State private var disconnectUserTarget: User? = nil
   @State private var connectTask: Task<Void, Never>? = nil
 //  @State private var accountsShown: Bool = false
   
@@ -406,14 +403,14 @@ struct ServerView: View {
           Button("Get Info", systemImage: "info.circle") {
             Task {
               if let info = try await self.model.getClientInfoText(id: user.id) {
-                self.contextMenuUserInfo = info
+                self.state.userInfo = info
               }
             }
           }
         }
 
         Button("Send Message...", systemImage: "square.and.pencil") {
-          self.composeMessageUser = user
+          self.state.composeMessageUser = user
         }
         .disabled(self.model.access?.contains(.canSendMessages) != true || user.refusesPrivateMessages)
 
@@ -421,7 +418,7 @@ struct ServerView: View {
           Divider()
 
           Button("Disconnect User", systemImage: "nosign", role: .destructive) {
-            self.disconnectUserTarget = user
+            self.state.disconnectUserTarget = user
           }
         }
       }
@@ -462,22 +459,22 @@ struct ServerView: View {
         }
     }
     .navigationTitle(self.model.serverTitle)
-    .sheet(item: self.$composeMessageUser) { user in
+    .sheet(item: self.$state.composeMessageUser) { user in
       ComposeMessageView(userID: user.id, username: user.name)
         .environment(self.model)
     }
-    .sheet(item: self.$contextMenuUserInfo) { info in
+    .sheet(item: self.$state.userInfo) { info in
       UserClientInfoSheet(info: info)
     }
     .alert(
-      "Are you sure you want to disconnect \(self.disconnectUserTarget?.name ?? "this user")?",
+      "Are you sure you want to disconnect \(self.state.disconnectUserTarget?.name ?? "this user")?",
       isPresented: Binding(
-        get: { self.disconnectUserTarget != nil },
-        set: { if !$0 { self.disconnectUserTarget = nil } }
+        get: { self.state.disconnectUserTarget != nil },
+        set: { if !$0 { self.state.disconnectUserTarget = nil } }
       )
     ) {
       Button("Disconnect", role: .destructive) {
-        if let user = self.disconnectUserTarget {
+        if let user = self.state.disconnectUserTarget {
           Task {
             try await self.model.disconnectUser(id: user.id, options: nil)
           }

@@ -66,12 +66,12 @@ struct ChatTextView: NSViewRepresentable {
       textView.openURLAction = self.openURL
     }
     
-    if coordinator.needsFullRebuild(for: self.messages) {
-      coordinator.rebuildAll(messages: self.messages, cachedText: self.isFiltered ? nil : self.cachedText, cachedCount: self.isFiltered ? 0 : self.cachedCount)
-    } else if self.messages.count > coordinator.renderedCount {
-      coordinator.appendMessages(messages: self.messages)
-    }
-    
+    coordinator.update(
+      messages: self.messages,
+      cachedText: self.isFiltered ? nil : self.cachedText,
+      cachedCount: self.isFiltered ? 0 : self.cachedCount
+    )
+
     if coordinator.currentWatchWords != self.watchWords {
       coordinator.applyWatchWordHighlights(words: self.watchWords)
     }
@@ -89,10 +89,11 @@ struct ChatTextView: NSViewRepresentable {
       didSet { self.observeScroll() }
     }
     var onCacheUpdate: ((NSAttributedString, Int) -> Void)?
-    var renderedCount = 0
     var currentSearchQuery = ""
     var currentWatchWords: [HighlightWord] = []
-    private var lastMessageIDs: [UUID] = []
+    /// The messages in the text view, in order.
+    private var renderedIDs: [UUID] = []
+    private var renderedCount: Int { self.renderedIDs.count }
     private var scrollObserver: NSObjectProtocol?
     private var highlightedCharRange: NSRange = NSRange(location: NSNotFound, length: 0)
     private var lastHighlightedVisibleOriginY: CGFloat = -.greatestFiniteMagnitude
@@ -127,16 +128,38 @@ struct ChatTextView: NSViewRepresentable {
       }
     }
     
-    func needsFullRebuild(for messages: [ChatMessage]) -> Bool {
-      if messages.count < self.renderedCount { return true }
-      if self.renderedCount == 0 && messages.isEmpty { return false }
-      if self.renderedCount == 0 { return true }
-      for i in 0..<min(self.renderedCount, messages.count, self.lastMessageIDs.count) {
-        if messages[i].id != self.lastMessageIDs[i] { return true }
+    /// Brings the text up to date with `messages`. New messages are appended, and ones that fell
+    /// off the front (the chat keeps only the latest couple thousand) are deleted from the top, so
+    /// a full chat doesn't redraw every message for each new line. Any other change, like restored
+    /// history or search results, rebuilds the text.
+    func update(messages: [ChatMessage], cachedText: NSAttributedString?, cachedCount: Int) {
+      if let dropped = self.droppedFromFront(of: messages) {
+        if dropped > 0 || messages.count > self.renderedCount - dropped {
+          self.trimAndAppend(messages: messages, dropped: dropped)
+        }
       }
-      return false
+      else if !messages.isEmpty || !self.renderedIDs.isEmpty {
+        self.rebuildAll(messages: messages, cachedText: cachedText, cachedCount: cachedCount)
+      }
     }
-    
+
+    /// How many of the rendered messages are gone from the front of `messages`, if the rest are
+    /// still there in the same order. Nil for any other kind of change.
+    private func droppedFromFront(of messages: [ChatMessage]) -> Int? {
+      guard let firstID = messages.first?.id, let lastRenderedID = self.renderedIDs.last else {
+        return nil
+      }
+      // Usually nothing was dropped, so check the front before searching.
+      guard let dropped = self.renderedIDs.first == firstID ? 0 : self.renderedIDs.firstIndex(of: firstID) else {
+        return nil
+      }
+      let keptCount = self.renderedCount - dropped
+      guard messages.count >= keptCount, messages[keptCount - 1].id == lastRenderedID else {
+        return nil
+      }
+      return dropped
+    }
+
     func rebuildAll(messages: [ChatMessage], cachedText: NSAttributedString?, cachedCount: Int) {
       guard let textView = self.textView else { return }
       guard let storage = textView.textStorage else { return }
@@ -148,26 +171,24 @@ struct ChatTextView: NSViewRepresentable {
         storage.beginEditing()
         storage.setAttributedString(cached)
         storage.endEditing()
-        
-        self.renderedCount = cachedCount
-        self.lastMessageIDs = messages.map(\.id)
+
+        self.renderedIDs = messages.map(\.id)
         textView.needsDisplay = true
         self.scrollToBottom()
         return
       }
-      
+
       storage.beginEditing()
       storage.setAttributedString(NSAttributedString())
       for (index, msg) in messages.enumerated() {
         if index > 0 {
           storage.append(NSAttributedString(string: "\n"))
         }
-        storage.append(self.renderMessage(msg))
+        self.appendMessage(msg, to: storage)
       }
       storage.endEditing()
-      
-      self.renderedCount = messages.count
-      self.lastMessageIDs = messages.map(\.id)
+
+      self.renderedIDs = messages.map(\.id)
       textView.needsDisplay = true
       
       // Save to cache
@@ -182,25 +203,50 @@ struct ChatTextView: NSViewRepresentable {
       self.scrollToBottom()
     }
     
-    func appendMessages(messages: [ChatMessage]) {
+    /// Deletes the first `dropped` rendered messages from the top of the text and appends the
+    /// messages after the ones that stay.
+    private func trimAndAppend(messages: [ChatMessage], dropped: Int) {
       guard let textView = self.textView else { return }
       guard let storage = textView.textStorage else { return }
-      
-      let wasAtBottom = self.isScrolledToBottom()
-      let startIndex = self.renderedCount
-      
-      storage.beginEditing()
-      for i in startIndex..<messages.count {
-        if storage.length > 0 {
-          storage.append(NSAttributedString(string: "\n"))
+
+      // Everything before the first message that stays: the dropped messages and their newlines.
+      var removedLength = 0
+      if dropped > 0 {
+        guard let start = self.start(ofMessage: messages[0].id, in: storage) else {
+          self.rebuildAll(messages: messages, cachedText: nil, cachedCount: 0)
+          return
         }
-        storage.append(self.renderMessage(messages[i]))
+        removedLength = start
+      }
+
+      let wasAtBottom = self.isScrolledToBottom()
+      // Scrolled back through the chat, the text removed from the top would otherwise pull what
+      // you're reading up the screen.
+      let readingPosition = (wasAtBottom || removedLength == 0) ? nil : self.readingPosition()
+
+      if removedLength > 0 {
+        // Highlights and the hovered link are tied to character ranges that are about to move.
+        textView.clearHoveredLink()
+        if let layoutManager = textView.layoutManager, self.highlightedCharRange.location != NSNotFound {
+          layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: self.highlightedCharRange)
+          layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: self.highlightedCharRange)
+        }
+      }
+
+      let newMessages = messages[(self.renderedCount - dropped)...]
+      storage.beginEditing()
+      if removedLength > 0 {
+        storage.deleteCharacters(in: NSRange(location: 0, length: removedLength))
+      }
+      for message in newMessages {
+        storage.append(NSAttributedString(string: "\n"))
+        self.appendMessage(message, to: storage)
       }
       storage.endEditing()
-      
-      self.renderedCount = messages.count
-      self.lastMessageIDs = messages.map(\.id)
-      
+
+      self.renderedIDs.removeFirst(dropped)
+      self.renderedIDs.append(contentsOf: newMessages.map(\.id))
+
       // Update cache
       self.onCacheUpdate?(NSAttributedString(attributedString: storage), self.renderedCount)
 
@@ -210,9 +256,65 @@ struct ChatTextView: NSViewRepresentable {
         self.highlightVisibleRange()
       }
 
-      if wasAtBottom || startIndex == 0 {
+      if wasAtBottom {
         self.scrollToBottom()
       }
+      else if let readingPosition {
+        self.restore(readingPosition, movedBack: removedLength)
+      }
+    }
+
+    /// Renders a message onto the end of the text, marked with its ID so it can be found again.
+    private func appendMessage(_ message: ChatMessage, to storage: NSTextStorage) {
+      let start = storage.length
+      storage.append(self.renderMessage(message))
+      storage.addAttribute(BottomAnchoredTextView.messageIDKey, value: message.id, range: NSRange(location: start, length: storage.length - start))
+    }
+
+    /// Where a rendered message starts in the text.
+    private func start(ofMessage id: UUID, in storage: NSTextStorage) -> Int? {
+      var start: Int?
+      storage.enumerateAttribute(BottomAnchoredTextView.messageIDKey, in: NSRange(location: 0, length: storage.length)) { value, range, stop in
+        if (value as? UUID) == id {
+          start = range.location
+          stop.pointee = true
+        }
+      }
+      return start
+    }
+
+    // MARK: - Reading Position
+
+    /// The character at the top of the visible text, and how far its line sits from the top.
+    private func readingPosition() -> (characterIndex: Int, offset: CGFloat)? {
+      guard let textView = self.textView,
+            let layoutManager = textView.layoutManager,
+            let textContainer = textView.textContainer,
+            let scrollView = self.scrollView else { return nil }
+      let visibleTop = scrollView.contentView.bounds.minY
+      let origin = textView.textContainerOrigin
+      let glyphIndex = layoutManager.glyphIndex(for: NSPoint(x: 0, y: visibleTop - origin.y), in: textContainer)
+      let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+      return (layoutManager.characterIndexForGlyph(at: glyphIndex), lineRect.minY + origin.y - visibleTop)
+    }
+
+    /// Scrolls the character at a reading position, now `movedBack` characters earlier in the
+    /// text, back to the same place on screen. If it was itself removed, the oldest message left
+    /// goes at the top.
+    private func restore(_ position: (characterIndex: Int, offset: CGFloat), movedBack: Int) {
+      guard let textView = self.textView,
+            let layoutManager = textView.layoutManager,
+            let storage = textView.textStorage,
+            let scrollView = self.scrollView else { return }
+      let characterIndex = position.characterIndex - movedBack
+      var top: CGFloat = 0
+      if characterIndex >= 0, characterIndex < storage.length {
+        let glyphIndex = layoutManager.glyphIndexForCharacter(at: characterIndex)
+        let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+        top = max(0, lineRect.minY + textView.textContainerOrigin.y - position.offset)
+      }
+      scrollView.contentView.scroll(to: NSPoint(x: scrollView.contentView.bounds.minX, y: top))
+      scrollView.reflectScrolledClipView(scrollView.contentView)
     }
     
     func scrollToBottom() {
@@ -593,6 +695,8 @@ class BottomAnchoredTextView: NSTextView, NSTextViewDelegate {
   static let serverMessageKey = NSAttributedString.Key("serverMessageBackground")
   static let chatDividerKey = NSAttributedString.Key("chatDividerLine")
   static let skipHighlightKey = NSAttributedString.Key("skipHighlight")
+  /// The ID of the message a range of text belongs to.
+  static let messageIDKey = NSAttributedString.Key("chatMessageID")
   private var hoveredLinkRange: NSRange?
 
   var openURLAction: ((URL) -> Void)?
@@ -875,7 +979,7 @@ class BottomAnchoredTextView: NSTextView, NSTextViewDelegate {
     super.mouseExited(with: event)
   }
   
-  private func clearHoveredLink() {
+  func clearHoveredLink() {
     if let range = self.hoveredLinkRange {
       self.layoutManager?.removeTemporaryAttribute(.underlineStyle, forCharacterRange: range)
       self.hoveredLinkRange = nil
@@ -973,10 +1077,12 @@ class BottomPinningScrollView: NSScrollView {
   }
 
   override func reflectScrolledClipView(_ cView: NSClipView) {
-    super.reflectScrolledClipView(cView)
+    // Before super, which can tile, and tiling pins to the bottom if this still says to, undoing
+    // a scroll away from it.
     if !self.isAdjusting {
       self.shouldPinToBottom = self.isAtBottom()
     }
+    super.reflectScrolledClipView(cView)
   }
 }
 

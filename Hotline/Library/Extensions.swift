@@ -201,28 +201,77 @@ extension String {
   
   func convertToAttributedStringWithLinks() -> AttributedString {
     let attributedString: NSMutableAttributedString = NSMutableAttributedString(string: self)
-
-    // Apply email links first
-    let emailRanges = self.ranges(of: RegularExpressions.emailAddress)
-    for range in emailRanges {
-      let email = String(self[range])
-      attributedString.addAttribute(.link, value: "mailto:\(email)", range: NSRange(range, in: self))
-    }
-
-    // Apply URL links, skipping any that overlap with email matches
-    let urlRanges = self.ranges(of: RegularExpressions.relaxedLink)
-    for urlRange in urlRanges {
-      let overlapsEmail = emailRanges.contains { $0.overlaps(urlRange) }
-      if overlapsEmail { continue }
-
-      let matchString = String(self[urlRange])
-      let hasScheme = (try? RegularExpressions.supportedLinkScheme.prefixMatch(in: matchString)) != nil
-      let url = hasScheme ? matchString : "https://\(matchString)"
-      attributedString.addAttribute(.link, value: url, range: NSRange(urlRange, in: self))
+    for link in self.detectedLinks() {
+      attributedString.addAttribute(.link, value: link.url.absoluteString, range: NSRange(link.range, in: self))
     }
     return AttributedString(attributedString)
   }
-  
+
+  /// The links in the text, found the way the rest of macOS finds them, as in Messages: web
+  /// addresses with or without http, email addresses, and hotline:// links. Links of other kinds,
+  /// like file://, aren't included, since they'd act on this Mac rather than open a page.
+  ///
+  /// A server's address and port written without a scheme, like hotline.example.org:5500 or
+  /// 192.168.1.5:5500, links to the Hotline server, which in Hotline chat it nearly always is.
+  func detectedLinks() -> [(range: Range<String.Index>, url: URL)] {
+    guard let detector = String.linkDetector else {
+      return []
+    }
+    let text = self as NSString
+    var links: [(range: Range<String.Index>, url: URL)] = []
+    for match in detector.matches(in: self, range: NSRange(location: 0, length: text.length)) {
+      guard var url = match.url, let scheme = url.scheme?.lowercased(), String.linkSchemes.contains(scheme) else {
+        continue
+      }
+      var range = match.range
+      // A link at the end of something in parentheses can take the closing one with it.
+      let found = text.substring(with: range)
+      if found.hasSuffix(")"), found.filter({ $0 == ")" }).count > found.filter({ $0 == "(" }).count {
+        range.length -= 1
+        let address = url.absoluteString
+        if address.hasSuffix(")"), let trimmed = URL(string: String(address.dropLast())) {
+          url = trimmed
+        }
+      }
+      if !found.contains("://"), scheme != "mailto", let host = url.host(), let port = url.port,
+         url.path.isEmpty || url.path == "/", let server = URL(string: "hotline://\(host):\(port)") {
+        url = server
+      }
+      if let stringRange = Range(range, in: self) {
+        links.append((stringRange, url))
+      }
+    }
+
+    // IP addresses and ports, which data detectors don't find.
+    for match in self.matches(of: RegularExpressions.serverAddress) {
+      let address = self[match.range]
+      let octets = address.split(separator: ":")[0].split(separator: ".").compactMap { Int($0) }
+      guard octets.count == 4, octets.allSatisfy({ $0 <= 255 }),
+            !links.contains(where: { $0.range.overlaps(match.range) }),
+            let url = URL(string: "hotline://\(address)") else {
+        continue
+      }
+      links.append((match.range, url))
+    }
+    return links.sorted { $0.range.lowerBound < $1.range.lowerBound }
+  }
+
+  /// Text with Markdown's special characters escaped, so a link's text shows as it was written,
+  /// rather than *these* becoming italics.
+  private static func escapingMarkdown(_ text: Substring) -> String {
+    var escaped = ""
+    for character in text {
+      if "\\`*_{}[]<>()#+!|~".contains(character) {
+        escaped.append("\\")
+      }
+      escaped.append(character)
+    }
+    return escaped
+  }
+
+  private static let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+  private static let linkSchemes: Set<String> = ["http", "https", "hotline", "mailto"]
+
   func isEmailAddress() -> Bool {
     self.wholeMatch(of: RegularExpressions.emailAddress) != nil
   }
@@ -256,85 +305,29 @@ extension String {
   /// links, but no Markdown interpretation.  Useful for ASCII art or other
   /// content where `_` and `*` should be rendered literally.
   func attributedStringHighlightingLinks() -> AttributedString {
-    let emailRanges = self.ranges(of: RegularExpressions.emailAddress)
-    let urlRanges = self.ranges(of: RegularExpressions.relaxedLink)
-
-    struct LinkMatch {
-      let range: Range<String.Index>
-      let isEmail: Bool
-    }
-
-    var matches: [LinkMatch] = emailRanges.map { LinkMatch(range: $0, isEmail: true) }
-    for urlRange in urlRanges {
-      let overlapsEmail = emailRanges.contains { $0.overlaps(urlRange) }
-      if !overlapsEmail {
-        matches.append(LinkMatch(range: urlRange, isEmail: false))
-      }
-    }
-
-    matches.sort { $0.range.lowerBound < $1.range.lowerBound }
-
     var result = AttributedString(self)
-
-    for match in matches.reversed() {
-      let text = String(self[match.range])
-      guard let attrRange = Range(match.range, in: result) else { continue }
-
-      if match.isEmail {
-        if let url = URL(string: "mailto:\(text)") {
-          result[attrRange].link = url
-        }
-      } else {
-        let hasScheme = (try? RegularExpressions.supportedLinkScheme.prefixMatch(in: text)) != nil
-        let urlString = hasScheme ? text : "https://\(text)"
-        if let url = URL(string: urlString) {
-          result[attrRange].link = url
-        }
+    for link in self.detectedLinks().reversed() {
+      if let range = Range(link.range, in: result) {
+        result[range].link = link.url
       }
     }
-
     return result
   }
 
   func convertingLinksToMarkdown() -> String {
-    // Collect email and URL ranges from the original string
-    let emailRanges = self.ranges(of: RegularExpressions.emailAddress)
-    let urlRanges = self.ranges(of: RegularExpressions.relaxedLink)
-
-    struct LinkMatch {
-      let range: Range<String.Index>
-      let isEmail: Bool
-    }
-
-    var matches: [LinkMatch] = emailRanges.map { LinkMatch(range: $0, isEmail: true) }
-    for urlRange in urlRanges {
-      let overlapsEmail = emailRanges.contains { $0.overlaps(urlRange) }
-      if !overlapsEmail {
-        matches.append(LinkMatch(range: urlRange, isEmail: false))
-      }
-    }
-
-    matches.sort { $0.range.lowerBound < $1.range.lowerBound }
+    // Except in links already written in Markdown, whose text and address would otherwise become
+    // links of their own inside it.
+    let markdownLinks = self.ranges(of: RegularExpressions.markdownLink)
+    let links = self.detectedLinks().filter { link in !markdownLinks.contains { $0.overlaps(link.range) } }
 
     // Build result by interleaving original text with markdown links
     var result = ""
     var currentIndex = self.startIndex
-
-    for match in matches {
-      result += self[currentIndex..<match.range.lowerBound]
-      let text = String(self[match.range])
-
-      if match.isEmail {
-        result += "[\(text)](mailto:\(text))"
-      } else {
-        let hasScheme = (try? RegularExpressions.supportedLinkScheme.prefixMatch(in: text)) != nil
-        let url = hasScheme ? text : "https://\(text)"
-        result += "[\(text)](\(url))"
-      }
-
-      currentIndex = match.range.upperBound
+    for link in links {
+      result += self[currentIndex..<link.range.lowerBound]
+      result += "[\(String.escapingMarkdown(self[link.range]))](\(link.url.absoluteString))"
+      currentIndex = link.range.upperBound
     }
-
     result += self[currentIndex..<self.endIndex]
     return result
   }

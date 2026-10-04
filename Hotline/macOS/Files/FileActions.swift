@@ -94,9 +94,11 @@ struct FileActions {
     components.port = server.port == HotlinePorts.DefaultServerPort ? nil : server.port
     var pathComponentAllowed = CharacterSet.urlPathAllowed
     pathComponentAllowed.remove(charactersIn: "/")
-    components.percentEncodedPath = "/files/" + file.path.map {
+    let path = file.path.map {
       $0.addingPercentEncoding(withAllowedCharacters: pathComponentAllowed) ?? $0
     }.joined(separator: "/")
+    // A link to a folder ends in a slash, which is how chat knows to show it as one.
+    components.percentEncodedPath = "/files/" + path + (file.isFolder ? "/" : "")
 
     guard let urlString = components.string else { return }
     NSPasteboard.general.clearContents()

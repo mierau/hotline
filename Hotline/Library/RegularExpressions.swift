@@ -237,6 +237,28 @@ struct RegularExpressions {
   .anchorsMatchLineEndings()
   .ignoresCase()
 
+  // MARK: - Server Address
+
+  /// An IP address and port, like 192.168.1.5:5500, the way Hotline servers are often written.
+  static let serverAddress = Regex {
+    Anchor.wordBoundary
+    ipv4Address
+    ":"
+    Repeat(2...5) { .digit }
+    Anchor.wordBoundary
+  }
+
+  // MARK: - Markdown Link
+
+  /// A link already written in Markdown, [text](address).
+  static let markdownLink = Regex {
+    "["
+    ZeroOrMore { CharacterClass.anyOf("]").inverted }
+    "]("
+    ZeroOrMore { CharacterClass(.anyOf(")"), .whitespace).inverted }
+    ")"
+  }
+
   // MARK: - Email Address
 
   static let emailAddress = Regex {

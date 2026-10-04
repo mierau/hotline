@@ -5,6 +5,11 @@ import SwiftUI
 extension HotlineState {
 
   static let maxChatMessages = 2000
+  /// How many of the oldest messages go at once when the chat passes its limit. Removing text
+  /// from the top of the chat view makes it lay out everything below again, about as slow for
+  /// one message as for a few hundred, so a batch at a time keeps that to every couple hundred
+  /// messages rather than every one.
+  static let chatTrimBatch = 200
 
   @MainActor
   func sendBroadcast(_ message: String) async throws {
@@ -244,67 +249,40 @@ extension HotlineState {
     }
   }
 
+  /// The messages in the chat with `query` in their text or sender's name, in order, along with
+  /// the disconnects between them that show where sessions end.
   @MainActor
   func searchChat(query: String) -> [ChatMessage] {
     guard !query.isEmpty else {
       return []
     }
+    return self.searchChat { $0.searchText.range(of: query, options: [.caseInsensitive, .literal]).location != NSNotFound }
+  }
 
-    // Create a map of all messages by ID to deduplicate
-    var messageMap: [UUID: ChatMessage] = [:]
-
-    // Add current in-memory messages
-    for message in self.chat {
-      messageMap[message.id] = message
-    }
-
-    // Filter messages based on query
-    let filteredMessages = messageMap.values.filter { message in
-      // Never include agreement messages
-      if message.type == .agreement {
-        return false
-      }
-
-      // Always include disconnect messages to show session boundaries
-      let isDisconnect = message.type == .signOut
-
-      // Search in text and username (literal + caseInsensitive skips locale normalization)
-      let matchesText = message.text.range(of: query, options: [.caseInsensitive, .literal]) != nil
-      let matchesUsername = message.username?.range(of: query, options: [.caseInsensitive, .literal]) != nil
-      let matchesQuery = matchesText || matchesUsername
-
-      return isDisconnect || matchesQuery
-    }
-
-    // Sort by date to maintain chronological order
-    let sortedMessages = filteredMessages.sorted { $0.date < $1.date }
-
-    // Remove consecutive disconnect messages to avoid visual clutter
-    var deduplicated: [ChatMessage] = []
+  /// The messages in the chat that `matches` finds, in order, along with the disconnects between
+  /// them that show where sessions end.
+  @MainActor
+  func searchChat(where matches: (ChatMessage) -> Bool) -> [ChatMessage] {
+    var results: [ChatMessage] = []
     var lastWasDisconnect = false
-
-    for message in sortedMessages {
+    for message in self.chat where message.type != .agreement {
       let isDisconnect = message.type == .signOut
-
-      if isDisconnect && lastWasDisconnect {
+      // One disconnect at a time, without the messages in between.
+      if isDisconnect ? lastWasDisconnect : !matches(message) {
         continue
       }
-
-      deduplicated.append(message)
+      results.append(message)
       lastWasDisconnect = isDisconnect
     }
 
-    // Remove leading disconnect message
-    if deduplicated.first?.type == .signOut {
-      deduplicated.removeFirst()
+    // Disconnects only between results.
+    if results.first?.type == .signOut {
+      results.removeFirst()
     }
-
-    // Remove trailing disconnect message
-    if deduplicated.last?.type == .signOut {
-      deduplicated.removeLast()
+    if results.last?.type == .signOut {
+      results.removeLast()
     }
-
-    return deduplicated
+    return results
   }
 
   // MARK: - Chat Persistence
@@ -325,7 +303,7 @@ extension HotlineState {
     if display && !skipDisplay {
       self.chat.append(message)
       if self.chat.count > Self.maxChatMessages {
-        self.chat.removeFirst(self.chat.count - Self.maxChatMessages)
+        self.chat.removeFirst(self.chat.count - (Self.maxChatMessages - Self.chatTrimBatch))
         self.chatRenderedText = nil
         self.chatRenderedCount = 0
       }

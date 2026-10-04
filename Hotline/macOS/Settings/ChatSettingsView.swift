@@ -11,7 +11,9 @@ struct ChatSettingsView: View {
     @Bindable var preferences = Prefs.shared
 
     Form {
-      Toggle("Show Connections in Chat", isOn: $preferences.showJoinLeaveMessages)
+      Toggle("Show connections in chat", isOn: $preferences.showJoinLeaveMessages)
+      Toggle("Show user icons in chat", isOn: $preferences.showChatIcons)
+      Toggle("Preview image links in chat", isOn: $preferences.previewChatImages)
 
       Section("Highlighted Words") {
         HStack(spacing: 8) {

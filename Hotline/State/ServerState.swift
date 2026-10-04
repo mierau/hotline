@@ -10,6 +10,12 @@ class ServerState: Equatable {
   var broadcastShown: Bool = false
   var fileNavigationPath: [String]? = nil
   var fileFolderPath: [String] = []
+  /// Someone to send a message to, from the user list or the chat.
+  var composeMessageUser: User? = nil
+  /// Someone's info to show, from the user list or the chat.
+  var userInfo: HotlineUserClientInfo? = nil
+  /// Someone to disconnect from the server, once that's confirmed.
+  var disconnectUserTarget: User? = nil
 
   /// The window showing this server, so the banner toolbar can bring it forward.
   @ObservationIgnored weak var window: NSWindow? = nil

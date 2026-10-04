@@ -300,4 +300,42 @@ struct URLHighlightingTests {
     let urls = matchedURLs(in: text)
     #expect(urls == ["tracked.mainecyber.com"])
   }
+
+  // MARK: - Detected Links
+
+  @Test func serverAndPortLinksToHotline() {
+    let result = "server is hotline.example.org:5500".convertingLinksToMarkdown()
+    #expect(result == "server is [hotline.example.org:5500](hotline://hotline.example.org:5500)")
+  }
+
+  @Test func ipAddressAndPortLinksToHotline() {
+    let result = "connect to 192.168.1.5:5500 now".convertingLinksToMarkdown()
+    #expect(result == "connect to [192.168.1.5:5500](hotline://192.168.1.5:5500) now")
+  }
+
+  @Test func bareIPAddressIsNotALink() {
+    #expect("version 10.0.0.2 is out".convertingLinksToMarkdown() == "version 10.0.0.2 is out")
+  }
+
+  @Test func fileNamesAreNotLinks() {
+    #expect("the file is notes.txt and readme.md".convertingLinksToMarkdown() == "the file is notes.txt and readme.md")
+  }
+
+  @Test func otherSchemesAreNotLinks() {
+    #expect("open file:///etc/hosts".convertingLinksToMarkdown() == "open file:///etc/hosts")
+  }
+
+  @Test func markdownLinksAreLeftAlone() {
+    #expect("read [the plan](https://example.com/plan) first".convertingLinksToMarkdown() == "read [the plan](https://example.com/plan) first")
+  }
+
+  @Test func linkTextIsEscaped() {
+    // So *b* in a link isn't read as italics.
+    #expect("see example.com/a*b* now".convertingLinksToMarkdown() == "see [example.com/a\\*b\\*](https://example.com/a*b*) now")
+  }
+
+  @Test func linkInParenthesesKeepsItsOwn() {
+    let links = "(https://en.wikipedia.org/wiki/Hotline_(software)) is it".detectedLinks()
+    #expect(links.map(\.url.absoluteString) == ["https://en.wikipedia.org/wiki/Hotline_(software)"])
+  }
 }

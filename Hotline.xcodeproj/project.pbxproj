@@ -7,10 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0080D3056237065F81E4BDF8 /* ChatImagePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DF11A389B4DE29AEAF66B70 /* ChatImagePreview.swift */; };
 		11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726072BE0672A000C1DA7 /* FileDetails.swift */; };
 		11A7260A2BE0675A000C1DA7 /* FileDetailsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726092BE06759000C1DA7 /* FileDetailsSheet.swift */; platformFilters = (macos, ); };
 		11F8288B2BF9428100216BA0 /* AccountManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11F8288A2BF9428100216BA0 /* AccountManagerView.swift */; };
+		3EA91235C2B1662A012BD27C /* ChatTranscriptTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BB4153B3305C2F62F1868C3 /* ChatTranscriptTextView.swift */; };
 		443438BC804C8366ED678933 /* BannerCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0396E4EF8544986A8B51D08E /* BannerCache.swift */; };
+		8D3E4565628F763A7277DA53 /* ChatTranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E219BD27B4005CD09D3AE4 /* ChatTranscriptView.swift */; };
+		B80C9D251E65A1F31D0CE0C9 /* ChatMessageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDF6C825424D089CCFD85EA /* ChatMessageRenderer.swift */; };
+		03B76AD263F0CFCEE5D9F844 /* ChatCodeHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE3ACA3E788C6BE871E20E0 /* ChatCodeHighlighter.swift */; };
 		DA0D698D2B1E7CF700C71DF5 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */; platformFilter = ios; };
 		DA0D698F2B1E841600C71DF5 /* MessageBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */; platformFilter = ios; };
 		DA0D69912B1E894800C71DF5 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0D69902B1E894800C71DF5 /* FilesView.swift */; platformFilter = ios; };
@@ -153,6 +158,10 @@
 		11A726072BE0672A000C1DA7 /* FileDetails.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileDetails.swift; sourceTree = "<group>"; };
 		11A726092BE06759000C1DA7 /* FileDetailsSheet.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileDetailsSheet.swift; sourceTree = "<group>"; };
 		11F8288A2BF9428100216BA0 /* AccountManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManagerView.swift; sourceTree = "<group>"; };
+		6DF11A389B4DE29AEAF66B70 /* ChatImagePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatImagePreview.swift; sourceTree = "<group>"; };
+		6FDF6C825424D089CCFD85EA /* ChatMessageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageRenderer.swift; sourceTree = "<group>"; };
+		BBE3ACA3E788C6BE871E20E0 /* ChatCodeHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCodeHighlighter.swift; sourceTree = "<group>"; };
+		9BB4153B3305C2F62F1868C3 /* ChatTranscriptTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTranscriptTextView.swift; sourceTree = "<group>"; };
 		DA0D698C2B1E7CF700C71DF5 /* UsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersView.swift; sourceTree = "<group>"; };
 		DA0D698E2B1E841600C71DF5 /* MessageBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBoardView.swift; sourceTree = "<group>"; };
 		DA0D69902B1E894800C71DF5 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
@@ -278,6 +287,7 @@
 		DAE735042B3218D8000C56F6 /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
 		DAE735062B3251B3000C56F6 /* SoundEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundEffects.swift; sourceTree = "<group>"; };
 		DAF5BC6B2EC2727100551E4D /* ConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectView.swift; sourceTree = "<group>"; };
+		F5E219BD27B4005CD09D3AE4 /* ChatTranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTranscriptView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -456,6 +466,11 @@
 			children = (
 				DAE734FE2B2E6750000C56F6 /* ChatView.swift */,
 				DA5A6F112F454D4600060F18 /* ChatTextView.swift */,
+				F5E219BD27B4005CD09D3AE4 /* ChatTranscriptView.swift */,
+				9BB4153B3305C2F62F1868C3 /* ChatTranscriptTextView.swift */,
+				BBE3ACA3E788C6BE871E20E0 /* ChatCodeHighlighter.swift */,
+				6FDF6C825424D089CCFD85EA /* ChatMessageRenderer.swift */,
+				6DF11A389B4DE29AEAF66B70 /* ChatImagePreview.swift */,
 				DA5A6F132F456DC900060F18 /* ChatInputField.swift */,
 				DA6549992BEC280E00EDB697 /* ServerMessageView.swift */,
 				DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */,
@@ -878,6 +893,11 @@
 				DA501BE72EBE9542001714F8 /* TrackerBookmarkSheet.swift in Sources */,
 				DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */,
 				DA5A6F122F454D4600060F18 /* ChatTextView.swift in Sources */,
+				8D3E4565628F763A7277DA53 /* ChatTranscriptView.swift in Sources */,
+				3EA91235C2B1662A012BD27C /* ChatTranscriptTextView.swift in Sources */,
+				B80C9D251E65A1F31D0CE0C9 /* ChatMessageRenderer.swift in Sources */,
+				03B76AD263F0CFCEE5D9F844 /* ChatCodeHighlighter.swift in Sources */,
+				0080D3056237065F81E4BDF8 /* ChatImagePreview.swift in Sources */,
 				DA22F51F2F56477400E2EA02 /* OnboardingView.swift in Sources */,
 				DA3429B72EBAB1750010784E /* QuickLookPreviewView.swift in Sources */,
 				DABAFBEC2EC599700015E889 /* BroadcastMessageSheet.swift in Sources */,

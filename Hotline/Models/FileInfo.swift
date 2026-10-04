@@ -111,6 +111,21 @@ import UniformTypeIdentifiers
     }
   }
 
+  /// A file or folder known only from a link to it, as in chat, without its type, creator, or size.
+  init(linkedName name: String, path: [String], isFolder: Bool) {
+    self.id = UUID()
+    self.path = path
+    self.name = name
+    self.type = ""
+    self.creator = ""
+    self.fileSize = 0
+    self.isFolder = isFolder
+    self.isUnavailable = false
+    if isFolder {
+      self.children = []
+    }
+  }
+
   /// Creates a placeholder folder node for building intermediate tree paths.
   init(folderName: String, path: [String]) {
     self.id = UUID()
