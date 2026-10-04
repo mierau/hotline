@@ -5,7 +5,8 @@ struct ServerBookmarkSheet: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
 
-  @State private var bookmark: Bookmark
+  /// The bookmark being edited, or nil for a new one.
+  @State private var bookmark: Bookmark?
   @State private var serverName: String = ""
   @State private var serverAddress: String = ""
   @State private var serverLogin: String = ""
@@ -17,6 +18,15 @@ struct ServerBookmarkSheet: View {
     _serverAddress = .init(initialValue: editingBookmark.displayAddress)
     _serverLogin = .init(initialValue: editingBookmark.login ?? "")
     _serverPassword = .init(initialValue: editingBookmark.password ?? "")
+  }
+
+  /// A new bookmark, filled in with whatever's known of it already.
+  init(name: String = "", address: String = "", login: String = "", password: String = "") {
+    _bookmark = .init(initialValue: nil)
+    _serverName = .init(initialValue: name)
+    _serverAddress = .init(initialValue: address)
+    _serverLogin = .init(initialValue: login)
+    _serverPassword = .init(initialValue: password)
   }
 
   var body: some View {
@@ -44,22 +54,29 @@ struct ServerBookmarkSheet: View {
     .fixedSize(horizontal: true, vertical: true)
     .toolbar {
       ToolbarItem(placement: .confirmationAction) {
-        Button("Save") {
+        Button(self.bookmark == nil ? "Create" : "Save") {
           let displayName = self.serverName.trimmingCharacters(in: .whitespacesAndNewlines)
           let (host, port) = Server.parseServerAddressAndPort(self.serverAddress)
           let login = self.serverLogin.trimmingCharacters(in: .whitespacesAndNewlines)
           let password = self.serverPassword
 
           if !displayName.isEmpty && !host.isEmpty {
-            self.bookmark.name = displayName
-            self.bookmark.address = host
-            self.bookmark.port = port
-            self.bookmark.login = login.isEmpty ? nil : login
-            self.bookmark.password = password.isEmpty ? nil : password
+            if let bookmark = self.bookmark {
+              bookmark.name = displayName
+              bookmark.address = host
+              bookmark.port = port
+              bookmark.login = login.isEmpty ? nil : login
+              bookmark.password = password.isEmpty ? nil : password
+            }
+            else {
+              let bookmark = Bookmark(type: .server, name: displayName, address: host, port: port, login: login.isEmpty ? nil : login, password: password.isEmpty ? nil : password)
+              Bookmark.add(bookmark, context: self.modelContext)
+            }
 
             self.dismiss()
           }
         }
+        .disabled(self.serverName.isBlank || Server.parseServerAddress(self.serverAddress).host.isEmpty)
       }
       ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") {

@@ -68,7 +68,10 @@ extension HotlineState {
       let client = try await HotlineClient.connect(
         host: server.address,
         port: UInt16(server.port),
-        login: loginInfo
+        login: loginInfo,
+        willLogIn: { @MainActor [weak self] in
+          self?.status = .loggingIn
+        }
       )
       print("HotlineState.login(): HotlineClient.connect() returned")
 

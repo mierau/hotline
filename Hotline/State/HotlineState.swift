@@ -6,12 +6,15 @@ import UserNotifications
 enum HotlineConnectionStatus: Equatable {
   case disconnected
   case connecting
+  /// Connected, and sending the login.
+  case loggingIn
+  /// Logged in, with the agreement and the user list still to come.
   case connected
   case loggedIn
   case failed(String)
 
   var isLoggingIn: Bool {
-    self == .connecting || self == .connected
+    self == .connecting || self == .loggingIn || self == .connected
   }
 
   var isConnected: Bool {

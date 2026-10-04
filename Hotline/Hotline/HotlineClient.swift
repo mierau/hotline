@@ -176,12 +176,14 @@ public actor HotlineClient {
   ///   - port: Server port (default: 5500)
   ///   - login: Login credentials and user info
   ///   - tls: TLS policy (default: disabled for Hotline)
+  ///   - willLogIn: Called once it's connected, as it sends the login
   /// - Returns: Connected and logged-in client
   /// - Throws: `HotlineClientError` if connection or login fails
   public static func connect(
     host: String,
     port: UInt16 = 5500,
-    login: HotlineLogin
+    login: HotlineLogin,
+    willLogIn: (@Sendable () async -> Void)? = nil
   ) async throws -> HotlineClient {
     print("HotlineClient.connect(): Starting connection to \(host):\(port) as '\(login.username)'")
 
@@ -248,6 +250,7 @@ public actor HotlineClient {
 
     // Perform login
     print("HotlineClient.connect(): Performing login")
+    await willLogIn?()
     let serverInfo: HotlineServerInfo
     do {
       serverInfo = try await client.performLogin(login)

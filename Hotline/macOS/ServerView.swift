@@ -106,34 +106,23 @@ struct ServerView: View {
   
   var body: some View {
     Group {
-      if self.model.status == .disconnected {
+      if self.model.status == .disconnected || self.model.status.isLoggingIn {
         VStack(alignment: .center) {
           Spacer()
           self.connectForm
           Spacer()
         }
-        .presentedWindowToolbarStyle(.unified(showsTitle: false))
-        .navigationTitle(self.model.serverTitle.isBlank ? "Connect to Server" : self.model.serverTitle)
-      }
-      else if self.model.status.isLoggingIn {
-        HStack {
-          Image("Hotline")
-            .resizable()
-            .renderingMode(.template)
-            .scaledToFit()
-            .foregroundColor(Color(hex: 0xE10000))
-            .frame(width: 18)
-            .opacity(self.controlActiveState == .inactive ? 0.5 : 1.0)
-            .padding(.trailing, 4)
-
-          ProgressView(value: connectionStatusToProgress(status: self.model.status)) {
-            Text(connectionStatusToLabel(status: self.model.status))
-          }
-          .accentColor(self.colorScheme == .dark ? .white : .black)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Grayer than the window, so the glass of the fields and buttons stands out from it.
+        .background {
+          Color(nsColor: .underPageBackgroundColor)
+            .ignoresSafeArea()
         }
-        .frame(maxWidth: 300)
-        .padding()
-        .navigationTitle(self.model.serverTitle.isBlank ? "Connect to Server" : self.model.serverTitle)
+        .presentedWindowToolbarStyle(.unified(showsTitle: false))
+        // The gray all the way up, with nothing in the toolbar to set apart.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        // The form, whether or not it was connected before, and while connecting, the server.
+        .navigationTitle(self.model.status == .disconnected || self.model.serverTitle.isBlank ? "Connect" : self.model.serverTitle)
         .sheet(isPresented: Binding(
           get: { self.model.agreementText != nil },
           set: { if !$0 { self.model.agreementText = nil } }
@@ -283,20 +272,25 @@ struct ServerView: View {
   }
   
   private var connectForm: some View {
-    ConnectView(address: self.$connectAddress, login: self.$connectLogin, password: self.$connectPassword) {
+    ConnectView(
+      address: self.$connectAddress,
+      login: self.$connectLogin,
+      password: self.$connectPassword,
+      isConnecting: self.model.status.isLoggingIn,
+      status: self.connectionStatusToLabel(status: self.model.status),
+      cancel: { self.cancelConnecting() }
+    ) {
       self.connectToServer()
     }
     .focusSection()
     .onChange(of: self.connectAddress) {
-      let (a, p) = Server.parseServerAddressAndPort(self.connectAddress)
-      self.server.address = a
-      self.server.port = p
+      self.updateServerFromForm()
     }
     .onChange(of: self.connectLogin) {
-      self.server.login = self.connectLogin.trimmingCharacters(in: .whitespacesAndNewlines)
+      self.updateServerFromForm()
     }
     .onChange(of: self.connectPassword) {
-      self.server.password = self.connectPassword
+      self.updateServerFromForm()
     }
   }
   
@@ -480,6 +474,22 @@ struct ServerView: View {
     }
   }
 
+  /// The server to connect to, from the form: its address, and a login and password typed with
+  /// it, as in user:password@host, or else the ones in their own fields.
+  private func updateServerFromForm() {
+    let typed = Server.parseServerAddress(self.connectAddress)
+    self.server.address = typed.host
+    self.server.port = typed.port
+    if let login = typed.login {
+      self.server.login = login
+      self.server.password = typed.password ?? ""
+    }
+    else {
+      self.server.login = self.connectLogin.trimmingCharacters(in: .whitespacesAndNewlines)
+      self.server.password = self.connectPassword
+    }
+  }
+
   private var serverIcon: some View {
     Image("Server Large")
       .resizable()
@@ -532,18 +542,12 @@ struct ServerView: View {
     }
   }
   
-  private func connectionStatusToProgress(status: HotlineConnectionStatus) -> Double {
-    switch status {
-    case .disconnected:
-      return 0.0
-    case .connecting:
-      return 0.4
-    case .connected:
-      return 0.9
-    case .loggedIn:
-      return 1.0
-    case .failed:
-      return 0.0
+  private func cancelConnecting() {
+    self.connectTask?.cancel()
+    self.connectTask = nil
+    // Once connected, the server's agreement can still be waiting, so close the connection too.
+    Task {
+      await self.model.disconnect()
     }
   }
 
@@ -553,9 +557,11 @@ struct ServerView: View {
     case .disconnected:
       return "Disconnected"
     case .connecting:
-      return "Connecting to \(n)..."
+      return "Connecting to \(n)…"
+    case .loggingIn:
+      return "Logging in to \(n)…"
     case .connected:
-      return "Logging in to \(n)..."
+      return "Joining \(n)…"
     case .loggedIn:
       return "Logged in to \(n)"
     case .failed(let error):

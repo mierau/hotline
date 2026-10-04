@@ -101,7 +101,38 @@ struct Server: Codable {
     }
   }
   
+  /// An address as it's typed, which can start with a login and password, as in
+  /// user:password@hotline.example.com, or be a hotline:// link: its host and port, and the login
+  /// and password, if it has them.
+  static func parseServerAddress(_ address: String) -> (host: String, port: Int, login: String?, password: String?) {
+    var rest = address.trimmingCharacters(in: .whitespacesAndNewlines)
+    if rest.lowercased().hasPrefix("hotline://") {
+      rest = String(rest.dropFirst("hotline://".count))
+    }
+    var login: String?
+    var password: String?
+    // At the last @, since a password can have one in it, and an address can't.
+    if let at = rest.lastIndex(of: "@") {
+      let credentials = rest[..<at]
+      rest = String(rest[rest.index(after: at)...])
+      if let colon = credentials.firstIndex(of: ":") {
+        login = String(credentials[..<colon])
+        password = String(credentials[credentials.index(after: colon)...])
+      }
+      else {
+        login = String(credentials)
+      }
+    }
+    let (host, port) = self.parseHostAndPort(rest)
+    return (host, port, login?.isEmpty == false ? login : nil, password)
+  }
+
   static func parseServerAddressAndPort(_ address: String) -> (String, Int) {
+    let parsed = self.parseServerAddress(address)
+    return (parsed.host, parsed.port)
+  }
+
+  private static func parseHostAndPort(_ address: String) -> (String, Int) {
     let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
 
     // Check if this looks like an IPv6 address (contains colons but no port delimiter)

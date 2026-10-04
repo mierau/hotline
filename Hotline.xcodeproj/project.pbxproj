@@ -143,6 +143,7 @@
 		DAE735052B3218D8000C56F6 /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAE735042B3218D8000C56F6 /* NewsView.swift */; platformFilters = (macos, ); };
 		DAE735072B3251B3000C56F6 /* SoundEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAE735062B3251B3000C56F6 /* SoundEffects.swift */; };
 		DAF5BC6C2EC2727700551E4D /* ConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF5BC6B2EC2727100551E4D /* ConnectView.swift */; };
+		7D7AFEB7DF73D88A4C75F882 /* ServerSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC75DCF747BDE0557CFF5CA /* ServerSuggestions.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -291,6 +292,7 @@
 		DAE735042B3218D8000C56F6 /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
 		DAE735062B3251B3000C56F6 /* SoundEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundEffects.swift; sourceTree = "<group>"; };
 		DAF5BC6B2EC2727100551E4D /* ConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectView.swift; sourceTree = "<group>"; };
+		4FC75DCF747BDE0557CFF5CA /* ServerSuggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerSuggestions.swift; sourceTree = "<group>"; };
 		F5E219BD27B4005CD09D3AE4 /* ChatTranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTranscriptView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -642,6 +644,7 @@
 				DACCE5E22EABE86A008CDD92 /* AppUpdateView.swift */,
 				DAE136B92B9D1147007D8307 /* HotlinePanelView.swift */,
 				DAF5BC6B2EC2727100551E4D /* ConnectView.swift */,
+				4FC75DCF747BDE0557CFF5CA /* ServerSuggestions.swift */,
 				DAE735022B30C0BB000C56F6 /* MessageView.swift */,
 				DAC0E4222EC78E1100E999DB /* UserClientInfoSheet.swift */,
 				DA5268B42EB6840A00DCB941 /* TransfersView.swift */,
@@ -838,6 +841,7 @@
 				DAE735032B30C0BB000C56F6 /* MessageView.swift in Sources */,
 				DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */,
 				DAF5BC6C2EC2727700551E4D /* ConnectView.swift in Sources */,
+				7D7AFEB7DF73D88A4C75F882 /* ServerSuggestions.swift in Sources */,
 				DA20BBE12BF5237600B94E7C /* Bookmark.swift in Sources */,
 				DA3429B32EBA7ADF0010784E /* HotlineFilePreviewClient.swift in Sources */,
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,
