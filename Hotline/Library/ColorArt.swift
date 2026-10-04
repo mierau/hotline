@@ -308,6 +308,25 @@ struct ColorArt: Equatable {
   }
 }
 
+extension ColorArt {
+  /// The most colorful of the banner's colors for text, which are picked to stand out against its
+  /// background, or nil if they're all close to gray, as the white and black they fall back to are.
+  var accentColor: NSColor? {
+    let saturation = { (color: NSColor) in color.usingColorSpace(.genericRGB)?.saturationComponent ?? 0 }
+    return [self.primaryColor, self.secondaryColor, self.detailColor]
+      .filter { saturation($0) >= 0.2 }
+      .max { saturation($0) < saturation($1) }
+  }
+
+  /// Whether the banner's background is white, or nearly, or a light gray: no color to speak of.
+  var hasPlainLightBackground: Bool {
+    guard let color = self.backgroundColor.usingColorSpace(.genericRGB) else {
+      return false
+    }
+    return color.saturationComponent < 0.12 && color.brightnessComponent > 0.7
+  }
+}
+
 // MARK: - Helper Classes
 
 fileprivate struct CountedColor {

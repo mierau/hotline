@@ -15,6 +15,13 @@ struct GeneralSettingsView: View {
           .frame(maxWidth: .infinity)
       }
 
+      Section {
+        Toggle(isOn: $preferences.useServerThemedColors) {
+          Text("Use server themed colors")
+          Text("Server windows take their colors from the server's banner.")
+        }
+      }
+
       Section("Downloads") {
         HStack(spacing: 4) {
           VStack(alignment: .leading, spacing: 4) {

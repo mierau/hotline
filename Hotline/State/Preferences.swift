@@ -109,6 +109,7 @@ enum PrefsKeys: String {
   case highlightMentions = "highlight mentions"
   case mentionHighlightColor = "mention highlight color"
   case showBannerToolbar = "show banner toolbar"
+  case useServerThemedColors = "use server themed colors"
   case showJoinLeaveMessages = "show join leave messages"
   case showChatIcons = "show chat icons"
   case previewChatImages = "preview chat images"
@@ -146,6 +147,7 @@ class Prefs {
       PrefsKeys.highlightMentions.rawValue: true,
       PrefsKeys.mentionHighlightColor.rawValue: "primary",
       PrefsKeys.showBannerToolbar.rawValue: true,
+      PrefsKeys.useServerThemedColors.rawValue: true,
       PrefsKeys.showJoinLeaveMessages.rawValue: true,
       PrefsKeys.showChatIcons.rawValue: true,
       PrefsKeys.previewChatImages.rawValue: true,
@@ -175,6 +177,7 @@ class Prefs {
     self.highlightMentions = UserDefaults.standard.bool(forKey: PrefsKeys.highlightMentions.rawValue)
     self.mentionHighlightColor = UserDefaults.standard.string(forKey: PrefsKeys.mentionHighlightColor.rawValue)!
     self.showBannerToolbar = UserDefaults.standard.bool(forKey: PrefsKeys.showBannerToolbar.rawValue)
+    self.useServerThemedColors = UserDefaults.standard.bool(forKey: PrefsKeys.useServerThemedColors.rawValue)
     self.showJoinLeaveMessages = UserDefaults.standard.bool(forKey: PrefsKeys.showJoinLeaveMessages.rawValue)
     self.showChatIcons = UserDefaults.standard.bool(forKey: PrefsKeys.showChatIcons.rawValue)
     self.previewChatImages = UserDefaults.standard.bool(forKey: PrefsKeys.previewChatImages.rawValue)
@@ -282,6 +285,11 @@ class Prefs {
 
   var showBannerToolbar: Bool {
     didSet { UserDefaults.standard.set(self.showBannerToolbar, forKey: PrefsKeys.showBannerToolbar.rawValue) }
+  }
+
+  /// Server windows in the colors of each server's banner.
+  var useServerThemedColors: Bool {
+    didSet { UserDefaults.standard.set(self.useServerThemedColors, forKey: PrefsKeys.useServerThemedColors.rawValue) }
   }
   
   var showJoinLeaveMessages: Bool {

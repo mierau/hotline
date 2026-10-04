@@ -316,6 +316,7 @@ struct ServerView: View {
       ForEach(model.serverVersion < 151 ? ServerView.classicMenuItems : ServerView.menuItems) { menuItem in
         if menuItem.type == .chat {
           ListItemView(icon: menuItem.image, title: menuItem.name, unread: model.unreadPublicChat).tag(menuItem.type)
+            .serverThemedRow(isSelected: self.state.selection == menuItem.type)
         }
 //        else if menuItem.type == .board {
 //          if self.model.access?.contains(.canReadMessageBoard) == true {
@@ -336,9 +337,11 @@ struct ServerView: View {
                   .padding(.trailing, 4)
               }
             }
+            .serverThemedRow(isSelected: self.state.selection == menuItem.type)
         }
         else {
           ListItemView(icon: menuItem.image, title: menuItem.name, unread: false).tag(menuItem.type)
+            .serverThemedRow(isSelected: self.state.selection == menuItem.type)
         }
       }
       
@@ -403,6 +406,7 @@ struct ServerView: View {
       .opacity(user.isIdle ? 0.5 : 1.0)
       .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
       .tag(ServerNavigationType.user(userID: user.id))
+      .serverThemedRow(isSelected: self.state.selection == .user(userID: user.id))
       .contextMenu {
         if self.model.access?.contains(.canGetClientInfo) == true {
           Button("Get Info", systemImage: "info.circle") {
@@ -433,6 +437,7 @@ struct ServerView: View {
   var serverView: some View {
     NavigationSplitView(columnVisibility: self.$state.columnVisibility) {
       self.navigationList
+        .serverThemedSidebar(self.sidebarColors)
         .navigationSplitViewColumnWidth(200)
 //        .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
         .toolbar(removing: .sidebarToggle)
@@ -504,6 +509,16 @@ struct ServerView: View {
       self.server.login = self.connectLogin.trimmingCharacters(in: .whitespacesAndNewlines)
       self.server.password = self.connectPassword
     }
+  }
+
+  /// The server banner's colors, for the sidebar, when server themed colors are on, and the banner's
+  /// colors could be read, and its background has a color, not white or a light gray, which wouldn't
+  /// look like anything but a plain sidebar.
+  private var sidebarColors: ColorArt? {
+    guard Prefs.shared.useServerThemedColors, let colors = self.model.bannerColors, !colors.hasPlainLightBackground else {
+      return nil
+    }
+    return colors
   }
 
   private var serverIcon: some View {
@@ -821,6 +836,214 @@ struct ServerTransferRow: View {
               .scaledToFit()
               .frame(width: 16, height: 16)
           }
+        }
+      }
+    }
+  }
+}
+
+private extension View {
+  /// A sidebar painted in a server banner's colors in place of its own background, with light text
+  /// on a dark color and dark text on a light one, or as it is, without them.
+  func serverThemedSidebar(_ colors: ColorArt?) -> some View {
+    self.modifier(ServerThemedSidebar(colors: colors))
+  }
+
+  /// A row of a server-themed sidebar, which shows itself selected in the banner's accent color in
+  /// place of the system's, when the banner has one.
+  func serverThemedRow(isSelected: Bool) -> some View {
+    self.modifier(ServerThemedRow(isSelected: isSelected))
+  }
+}
+
+extension EnvironmentValues {
+  /// The color a server-themed sidebar's rows show their selection in, in place of the system's.
+  @Entry var sidebarSelectionColor: NSColor? = nil
+}
+
+private struct ServerThemedSidebar: ViewModifier {
+  @Environment(\.colorScheme) private var colorScheme
+  let colors: ColorArt?
+
+  func body(content: Content) -> some View {
+    let palette = self.colors.map { SidebarPalette($0, dark: self.colorScheme == .dark) }
+    content
+      .scrollContentBackground(palette == nil ? .automatic : .hidden)
+      .background {
+        if let palette {
+          ServerThemedBackground(color: palette.background, accent: palette.accent)
+            .ignoresSafeArea()
+            .transition(.opacity)
+        }
+      }
+      .environment(\.colorScheme, palette.map { $0.background.isDarkColor ? .dark : .light } ?? self.colorScheme)
+      .environment(\.sidebarSelectionColor, palette?.accent)
+      .animation(.default, value: palette)
+  }
+}
+
+/// A banner's colors as a sidebar shows them: as they are in light mode, and in dark mode, its
+/// background as dark as dark mode's colors, in its own hue, and its accent bright enough to show
+/// against that.
+private struct SidebarPalette: Equatable {
+  let background: NSColor
+  let accent: NSColor?
+
+  init(_ colors: ColorArt, dark: Bool) {
+    self.background = dark ? colors.backgroundColor.withBrightness(atMost: 0.3) : colors.backgroundColor
+    self.accent = dark ? colors.accentColor?.withBrightness(atLeast: 0.8) : colors.accentColor
+  }
+}
+
+private extension NSColor {
+  /// The same hue and saturation, no brighter than `limit`.
+  func withBrightness(atMost limit: CGFloat) -> NSColor {
+    guard let color = self.usingColorSpace(.genericRGB), color.brightnessComponent > limit else {
+      return self
+    }
+    return NSColor(colorSpace: .genericRGB, hue: color.hueComponent, saturation: color.saturationComponent, brightness: limit, alpha: color.alphaComponent)
+  }
+
+  /// The same hue and saturation, at least as bright as `limit`.
+  func withBrightness(atLeast limit: CGFloat) -> NSColor {
+    guard let color = self.usingColorSpace(.genericRGB), color.brightnessComponent < limit else {
+      return self
+    }
+    return NSColor(colorSpace: .genericRGB, hue: color.hueComponent, saturation: color.saturationComponent, brightness: limit, alpha: color.alphaComponent)
+  }
+}
+
+/// A banner's background color, with its accent color coming in toward the bottom-trailing corner,
+/// under the panel's light from the top-leading one: white, blended with soft light, which lightens
+/// the color without washing it out.
+private struct ServerThemedBackground: View {
+  let color: NSColor
+  let accent: NSColor?
+
+  var body: some View {
+    Group {
+      if self.accent != nil {
+        MeshGradient(width: 3, height: 3, points: [
+          [0, 0], [0.5, 0], [1, 0],
+          [0, 0.5], [0.5, 0.5], [1, 0.5],
+          [0, 1], [0.5, 1], [1, 1],
+        ], colors: [
+          self.mixed(0), self.mixed(0), self.mixed(0),
+          self.mixed(0), self.mixed(0), self.mixed(0.12),
+          self.mixed(0.1), self.mixed(0.22), self.mixed(0.38),
+        ])
+      }
+      else {
+        Color(nsColor: self.color)
+      }
+    }
+    .overlay {
+      LinearGradient(colors: [.white.opacity(0.5), .white.opacity(0)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        .blendMode(.softLight)
+    }
+    .compositingGroup()
+  }
+
+  /// The background color, with as much of the accent mixed in.
+  private func mixed(_ fraction: CGFloat) -> Color {
+    guard fraction > 0, let accent = self.accent, let mixed = self.color.blended(withFraction: fraction, of: accent) else {
+      return Color(nsColor: self.color)
+    }
+    return Color(nsColor: mixed)
+  }
+}
+
+/// A row of a server-themed sidebar, selected: a capsule in the banner's accent color, in the window
+/// in front with text in white or black, whichever shows on it, or in other windows fainter, with
+/// the text as it is, as the system's selection does.
+private struct ServerThemedRow: ViewModifier {
+  @Environment(\.sidebarSelectionColor) private var selectionColor
+  @Environment(\.controlActiveState) private var controlActiveState
+  @Environment(\.colorScheme) private var colorScheme
+  let isSelected: Bool
+
+  func body(content: Content) -> some View {
+    // The same views themed or not, so the table's highlight is switched by the same view each time.
+    let color = self.isSelected ? self.selectionColor : nil
+    let emphasized = self.controlActiveState == .key
+    content
+      .environment(\.colorScheme, (emphasized ? color.map { $0.isDarkColor ? .dark : .light } : nil) ?? self.colorScheme)
+      .listRowBackground(color.map { SelectionCapsule(color: $0, emphasized: emphasized) })
+      .background { TableHighlight(isShown: self.selectionColor == nil) }
+  }
+}
+
+/// A selected row's background, where the system's would be.
+private struct SelectionCapsule: View {
+  let color: NSColor
+  let emphasized: Bool
+
+  var body: some View {
+    RoundedRectangle(cornerRadius: 8, style: .continuous)
+      .fill(Color(nsColor: self.color).opacity(self.emphasized ? 1 : 0.35))
+      .padding(.horizontal, 10)
+  }
+}
+
+/// The sidebar's own selection highlight, shown or not. SwiftUI's sidebar is an AppKit outline view,
+/// which draws it in the system's accent color, so it's turned off for the rows to draw their own.
+/// It's found from a row, up through the views the row's in.
+private struct TableHighlight: NSViewRepresentable {
+  let isShown: Bool
+
+  func makeNSView(context: Context) -> Finder {
+    Finder()
+  }
+
+  func updateNSView(_ view: Finder, context: Context) {
+    view.isShown = self.isShown
+  }
+
+  final class Finder: NSView {
+    /// What each table's highlight was before it was turned off, to turn it back on as it was.
+    private static var originalStyles: [ObjectIdentifier: NSTableView.SelectionHighlightStyle] = [:]
+
+    var isShown = true {
+      didSet {
+        if self.isShown != oldValue {
+          self.apply()
+        }
+      }
+    }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      self.apply()
+    }
+
+    // Clicks go to the row.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+      nil
+    }
+
+    /// On the next turn of the run loop, and only if it's different. Changing it adds the table's
+    /// rows again, this view among them, which mustn't happen while they're being added or laid out.
+    /// Turned back on, it's as it was.
+    private func apply() {
+      DispatchQueue.main.async { [weak self] in
+        guard let self, self.window != nil else {
+          return
+        }
+        var view = self.superview
+        while let current = view {
+          if let table = current as? NSTableView {
+            if self.isShown {
+              if let original = Self.originalStyles.removeValue(forKey: ObjectIdentifier(table)) {
+                table.selectionHighlightStyle = original
+              }
+            }
+            else if table.selectionHighlightStyle != .none {
+              Self.originalStyles[ObjectIdentifier(table)] = table.selectionHighlightStyle
+              table.selectionHighlightStyle = .none
+            }
+            return
+          }
+          view = current.superview
         }
       }
     }
