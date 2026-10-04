@@ -5,6 +5,7 @@ import AppKit
 /// - **Enter**: Send message
 /// - **Option+Enter**: Send as announcement
 /// - **Shift+Enter**: Insert newline
+/// - **Tab**: Complete the name being typed, then the next name that fits; **Shift+Tab** goes back
 ///
 /// Auto-resizes vertically up to `maxLines` lines, then scrolls.
 /// Fills its entire frame; text is inset internally so the scroll bar
@@ -13,6 +14,8 @@ struct ChatInputField: NSViewRepresentable {
   @Binding var text: String
   @Binding var height: CGFloat
   var maxLines: Int = 5
+  /// The names Tab completes, best first.
+  var namesToComplete: () -> [String] = { [] }
   var onSubmit: (_ announce: Bool) -> Void
 
   /// Single-line height matching what `recalculateHeight` computes for an empty field.
@@ -65,6 +68,9 @@ struct ChatInputField: NSViewRepresentable {
     textView.delegate = context.coordinator
     textView.submitHandler = { announce in
       context.coordinator.parent.onSubmit(announce)
+    }
+    textView.namesToComplete = { [weak coordinator = context.coordinator] in
+      coordinator?.parent.namesToComplete() ?? []
     }
     let coordinator = context.coordinator
     textView.frameResizeHandler = { [weak coordinator] in
@@ -163,6 +169,11 @@ struct ChatInputField: NSViewRepresentable {
 class ChatInputTextView: NSTextView {
   var submitHandler: ((_ announce: Bool) -> Void)?
   var frameResizeHandler: (() -> Void)?
+  /// The names Tab completes, best first.
+  var namesToComplete: (() -> [String])?
+  /// The name Tab last put in, and the others that fit what was typed, so another Tab can swap it
+  /// for the next one.
+  private var completion: (names: [String], index: Int, range: NSRange, inserted: String)?
 
   static let verticalInset: CGFloat = 24
 
@@ -218,6 +229,73 @@ class ChatInputTextView: NSTextView {
   override func didChangeText() {
     super.didChangeText()
     self.updateChevronPosition()
+  }
+
+  // MARK: Completing Names
+
+  override func insertTab(_ sender: Any?) {
+    if !self.completeName(forward: true) {
+      super.insertTab(sender)
+    }
+  }
+
+  override func insertBacktab(_ sender: Any?) {
+    if !self.completeName(forward: false) {
+      super.insertBacktab(sender)
+    }
+  }
+
+  /// Completes the name being typed before the insertion point, or right after a completion, puts
+  /// in the next name that fits instead. Returns whether Tab was for a name, which it isn't with
+  /// nothing typed before it.
+  private func completeName(forward: Bool) -> Bool {
+    let selection = self.selectedRange()
+    guard !self.hasMarkedText(), selection.length == 0, let names = self.namesToComplete?(), !names.isEmpty else {
+      return false
+    }
+    let text = self.string as NSString
+
+    if let completion = self.completion, NSMaxRange(completion.range) == selection.location, NSMaxRange(completion.range) <= text.length,
+       text.substring(with: completion.range) == completion.inserted {
+      let count = completion.names.count
+      let index = (completion.index + (forward ? 1 : count - 1)) % count
+      self.insert(completion.names, at: index, replacing: completion.range)
+      return true
+    }
+
+    // What's typed: the most of the line before the insertion point, from the start of a word,
+    // that a name starts with, for names with spaces in them.
+    let line = text.lineRange(for: NSRange(location: selection.location, length: 0))
+    guard selection.location > line.location, let typedBefore = Unicode.Scalar(text.character(at: selection.location - 1)),
+          !CharacterSet.whitespacesAndNewlines.contains(typedBefore) else {
+      return false
+    }
+    var start = line.location
+    while start < selection.location {
+      let typed = text.substring(with: NSRange(location: start, length: selection.location - start))
+      let fits = names.filter { $0.range(of: typed, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil }
+      if !fits.isEmpty {
+        self.insert(fits, at: 0, replacing: NSRange(location: start, length: selection.location - start))
+        return true
+      }
+      let space = text.rangeOfCharacter(from: .whitespaces, options: [], range: NSRange(location: start, length: selection.location - start))
+      guard space.location != NSNotFound else {
+        break
+      }
+      start = NSMaxRange(space)
+    }
+    NSSound.beep()
+    return true
+  }
+
+  /// Puts a name in place of what was typed: at the start of a line followed by a colon, the way
+  /// someone's spoken to, and elsewhere by a space.
+  private func insert(_ names: [String], at index: Int, replacing range: NSRange) {
+    let text = self.string as NSString
+    let startsLine = range.location == 0 || [0x0A, 0x0D, 0x2028].contains(text.character(at: range.location - 1))
+    let inserted = names[index] + (startsLine ? ": " : " ")
+    self.insertText(inserted, replacementRange: range)
+    self.completion = (names, index, NSRange(location: range.location, length: (inserted as NSString).length), inserted)
   }
 
   func updateChevronPosition() {

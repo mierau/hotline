@@ -187,6 +187,7 @@ struct ChatView: View {
     return ChatInputField(
       text: $bindModel.chatInput,
       height: self.$inputHeight,
+      namesToComplete: { self.namesToComplete() },
       onSubmit: { announce in
         let message = self.model.chatInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if !message.isEmpty {
@@ -201,6 +202,21 @@ struct ChatView: View {
     .frame(height: self.inputHeight)
   }
   
+  /// The names Tab completes in the input: the people here, the ones who spoke last first, then
+  /// the rest by name, and not you.
+  private func namesToComplete() -> [String] {
+    var here = Set(self.model.users.map(\.name))
+    here.remove(Prefs.shared.username)
+    var names: [String] = []
+    for message in self.model.chat.reversed() where names.count < here.count {
+      if let name = message.username, here.contains(name), !names.contains(name) {
+        names.append(name)
+      }
+    }
+    let rest = here.subtracting(names).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    return names + rest
+  }
+
   /// Opens a link from the chat: hotline:// links go to that part of this server, or connect to
   /// another one, and anything else opens in its app.
   private func open(_ url: URL) {
