@@ -7,7 +7,8 @@ import Foundation
 /// in a partition further on, as on a CD for PCs too, whose part comes first. For HFS and HFS
 /// Plus, and a catalog in at most four pieces the header says where all of are, as a disc's
 /// usually is, in one, so it's read with a look at the start, maybe one at the header, and a read
-/// of each piece of the catalog. A disc without one is read as a PC's is.
+/// of each piece of the catalog. A disc without one is read as a PC's is, and an image in Disk
+/// Copy 6's chunks, from them, with their map, from the resource fork.
 enum DiskImage {
   /// How much of the start is read, for the volume header, with room for a partition map before
   /// it, and how much from the start of a partition further on.
@@ -18,13 +19,33 @@ enum DiskImage {
   static let catalogPieceLimit = 4
 
   /// What's on the disc in an image `size` long, read through `read`, which gives the `length`
-  /// bytes of it from `offset`.
-  static func entries(size: Int, read: (_ offset: Int, _ length: Int) async throws -> Data) async throws -> [ArchiveEntry] {
+  /// bytes of it from `offset`, and `resourceFork`, which gives its resource fork, for an image
+  /// in Disk Copy 6's chunks.
+  static func entries(size: Int, read: (_ offset: Int, _ length: Int) async throws -> Data, resourceFork: (() async throws -> Data)? = nil) async throws -> [ArchiveEntry] {
     let start = Data(try await read(0, min(size, self.startLength)))
+    do {
+      return try await self.storedEntries(size: size, start: start, read: read)
+    }
+    catch ArchiveReadError.notAnArchive {
+      // In chunks, mapped in its resource fork, if it has one.
+      guard let resourceFork, let image = DiskCopyImage(resourceFork: try await resourceFork(), dataSize: size) else {
+        throw ArchiveReadError.notAnArchive
+      }
+      func disk(_ offset: Int, _ length: Int) async throws -> Data {
+        try await image.read(offset, length, from: read)
+      }
+      // Only as much of its start as a volume at the disk's start needs, which is in the first
+      // chunk, usually kept as it is, and already read. More's read for a volume further on.
+      return try await self.diskEntries(size: image.size, start: try await disk(0, min(image.size, 1536)), read: disk)
+    }
+  }
+
+  /// What's on the disc in an image of it as it is, or as it's written.
+  private static func storedEntries(size: Int, start: Data, read: (_ offset: Int, _ length: Int) async throws -> Data) async throws -> [ArchiveEntry] {
     // A disc saved as it's written, in 2352-byte sectors, each with its 2048 bytes of data between
     // a sync, a header, and in Mode 2, a subheader, and its error correction.
     guard start.hasSignature([0x00] + Array(repeating: 0xFF, count: 10) + [0x00], at: 0), size % 2352 == 0 else {
-      return try await self.entries(size: size, start: start, read: read)
+      return try await self.diskEntries(size: size, start: start, read: read)
     }
     func data(_ offset: Int, _ length: Int) async throws -> Data {
       guard length > 0 else {
@@ -43,12 +64,12 @@ enum DiskImage {
     }
     // What's been read of the start, as data, which is fewer sectors than bytes.
     let dataStart = try await data(0, start.count / 2352 * 2048)
-    return try await self.entries(size: size / 2352 * 2048, start: dataStart, read: data)
+    return try await self.diskEntries(size: size / 2352 * 2048, start: dataStart, read: data)
   }
 
   /// What's on a disc `size` long, with `start`, what's been read of its start: its Mac volume, or
   /// if it hasn't one, or one that can be read, its PC one.
-  private static func entries(size: Int, start: Data, read: (_ offset: Int, _ length: Int) async throws -> Data) async throws -> [ArchiveEntry] {
+  private static func diskEntries(size: Int, start: Data, read: (_ offset: Int, _ length: Int) async throws -> Data) async throws -> [ArchiveEntry] {
     var volume: Volume?
     for volumeStart in self.volumeStarts(in: start) where volumeStart < size {
       // Its header, in what's been read of the start, or read for it, if it's further on.
@@ -60,7 +81,9 @@ enum DiskImage {
         break
       }
     }
-    guard let volume, let pieces = volume.catalog, pieces.reduce(0, { $0 + $1.length }) <= self.catalogLimit,
+    // Not one that's bigger than the image, which can't be in it as it is.
+    guard let volume, volume.end <= size + self.startLength,
+          let pieces = volume.catalog, pieces.reduce(0, { $0 + $1.length }) <= self.catalogLimit,
           pieces.allSatisfy({ $0.offset + $0.length <= size }) else {
       return try await ISO9660.entries(size: size, start: start, read: read)
     }
@@ -77,6 +100,8 @@ enum DiskImage {
 
   private struct Volume {
     let isPlus: Bool
+    /// Where it ends in the image, from how big its header says it is.
+    let end: Int
     /// Where its catalog's pieces are in the image, in order, if its header says where all of them
     /// are, and there aren't too many.
     let catalog: [(offset: Int, length: Int)]?
@@ -147,7 +172,8 @@ enum DiskImage {
         }
         return (Int(start), Int(count))
       }
-      return Volume(isPlus: false, catalog: self.catalogPieces(extents, blockSize: blockSize, from: volumeStart + blocks, size: catalogSize))
+      let blockCount = Int(window.bigEndian(UInt16.self, at: header + 0x12) ?? 0)
+      return Volume(isPlus: false, end: volumeStart + blocks + blockCount * blockSize, catalog: self.catalogPieces(extents, blockSize: blockSize, from: volumeStart + blocks, size: catalogSize))
     case 0x482B, 0x4858:
       // HFS Plus: its blocks' size, and the catalog's size and first eight extents.
       guard let blockSize = window.bigEndian(UInt32.self, at: header + 40).map(Int.init), blockSize > 0,
@@ -161,7 +187,8 @@ enum DiskImage {
         }
         return (Int(start), Int(count))
       }
-      return Volume(isPlus: true, catalog: self.catalogPieces(extents, blockSize: blockSize, from: volumeStart, size: catalogSize))
+      let blockCount = Int(window.bigEndian(UInt32.self, at: header + 44) ?? 0)
+      return Volume(isPlus: true, end: volumeStart + blockCount * blockSize, catalog: self.catalogPieces(extents, blockSize: blockSize, from: volumeStart, size: catalogSize))
     default:
       return nil
     }

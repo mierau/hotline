@@ -129,6 +129,9 @@ final class FilePreviewState {
     self.previewTask = task
   }
 
+  /// The most of a resource fork read, for the map of a disk image's chunks.
+  private static let resourceForkLimit = 4 * 1024 * 1024
+
   /// What's in an archive, from the start of it on the server, or the end, where its list is.
   private func readArchive() async throws {
     guard let archiveKind = self.info.archiveKind, let hotlineID = self.info.hotlineID,
@@ -147,6 +150,8 @@ final class FilePreviewState {
           return start.data.subdata(in: offset..<(offset + length))
         }
         return try await hotline.readFile(name, path: path, from: offset, length: length).data
+      } resourceFork: {
+        try await hotline.readResourceFork(name, path: path, dataForkSize: start.size, limit: Self.resourceForkLimit)
       }
     }
     catch ArchiveReadError.notAnArchive {

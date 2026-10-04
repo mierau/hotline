@@ -758,6 +758,34 @@ extension HotlineState {
     return try await reader.read(upTo: length)
   }
 
+  /// A file's resource fork, up to `limit` bytes of it, without its data fork, which is
+  /// `dataForkSize` long.
+  @MainActor
+  func readResourceFork(_ fileName: String, path: [String], dataForkSize: Int, limit: Int) async throws -> Data {
+    guard let client = self.client, let server = self.server else {
+      throw HotlineClientError.notConnected
+    }
+
+    var fullPath: [String] = []
+    if path.count > 1 {
+      fullPath = Array(path[0..<path.count-1])
+    }
+
+    print("HotlineState: Reading the resource fork of \(fileName), after its \(dataForkSize)-byte data fork")
+    guard let transfer = try await client.downloadFile(name: fileName, path: fullPath, dataOffset: dataForkSize) else {
+      throw HotlineClientError.invalidResponse
+    }
+    print("HotlineState: Transfer \(transfer.referenceNumber) for \(fileName), transfer size \(transfer.transferSize), file size \(transfer.fileSize), waiting \(transfer.waitingCount)")
+    let reader = HotlineFilePreviewClient(
+      fileName: fileName,
+      address: server.address,
+      port: UInt16(server.port),
+      reference: transfer.referenceNumber,
+      size: UInt32(clamping: transfer.transferSize)
+    )
+    return try await reader.readResourceFork(upTo: limit)
+  }
+
   // MARK: - File Search
 
   @MainActor

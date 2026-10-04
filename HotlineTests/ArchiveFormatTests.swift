@@ -265,6 +265,50 @@ struct ArchiveFormatTests {
     #expect(entries.map(\.path) == ["Read Me.txt"])
   }
 
+  // MARK: - Disk Copy 6
+
+  @Test func expandsApplesDataCompression() {
+    // "ABC" as it is, three bytes from three back, then five of the byte just before.
+    let compressed = Data([0x82, 0x41, 0x42, 0x43, 0x00, 0x02, 0x41, 0x00, 0x00])
+    #expect(DiskCopyImage.expand(compressed, to: 11) == Data("ABCABCCCCCC".utf8))
+    // From further back than there is.
+    #expect(DiskCopyImage.expand(Data([0x80, 0x41, 0x00, 0x05]), to: 4) == nil)
+  }
+
+  @Test func readsADiskCopyImageInChunks() async throws {
+    let image = TestDiskCopy.image(TestDisc.hfs([
+      .file("Install ShrinkWrap™ 3.5.1", in: 2, type: "APPL", data: 1_243_290),
+      .folder("Extras", id: 16, in: 2),
+      .file("serial", in: 16, type: "TEXT", data: 388),
+    ]))
+    let entries = try await ArchiveKind.diskImage.entries(size: image.data.count, read: TestServer(image.data).read) {
+      image.resourceFork
+    }
+    #expect(Set(entries) == [
+      ArchiveEntry(path: "Install ShrinkWrap™ 3.5.1", isFolder: false, size: 1_243_290, type: "APPL"),
+      ArchiveEntry(path: "Extras", isFolder: true, size: 0),
+      ArchiveEntry(path: "Extras/serial", isFolder: false, size: 388, type: "TEXT"),
+    ])
+  }
+
+  @Test func turnsDownAChunkedImageWithoutItsMap() async throws {
+    let image = TestDiskCopy.image(TestDisc.hfs([.file("Read Me", in: 2, type: "TEXT", data: 100)]))
+    await #expect(throws: ArchiveReadError.self) {
+      try await ArchiveKind.diskImage.entries(size: image.data.count, read: TestServer(image.data).read) {
+        Data()
+      }
+    }
+  }
+
+  @Test func turnsDownChunksCompressedAnotherWay() async throws {
+    let image = TestDiskCopy.image(TestDisc.hfs([.file("Read Me", in: 2, type: "TEXT", data: 100)]), compression: 0x80)
+    await #expect(throws: ArchiveReadError.self) {
+      try await ArchiveKind.diskImage.entries(size: image.data.count, read: TestServer(image.data).read) {
+        image.resourceFork
+      }
+    }
+  }
+
   @Test func turnsDownADiscWithoutAMacVolume() async throws {
     let disc = Data(count: 200_000)
     await #expect(throws: ArchiveReadError.self) {
@@ -661,5 +705,68 @@ private enum TestISO {
 
   private static func le<Number: FixedWidthInteger>(_ number: Number) -> Data {
     withUnsafeBytes(of: number.littleEndian) { Data($0) }
+  }
+}
+
+/// A disk in Disk Copy 6's chunks: its first five sectors kept as they are, the rest compressed,
+/// and an empty stretch after it left out, with their map in a resource fork.
+private enum TestDiskCopy {
+  static func image(_ disk: Data, compression: UInt8 = 0x83) -> (data: Data, resourceFork: Data) {
+    var disk = disk
+    disk += Data(count: (512 - disk.count % 512) % 512)
+    let sectors = disk.count / 512
+    let compressed = self.compress(disk.subdata(in: 2560..<disk.count))
+    let data = disk.prefix(2560) + compressed
+
+    // The chunks: where each starts, how it's kept, where it is, and how long, then the end.
+    var chunks = bytes(UInt32(0 << 8 | 0x02), UInt32(0), UInt32(2560))
+    chunks += bytes(UInt32(5 << 8 | UInt32(compression)), UInt32(2560), UInt32(compressed.count))
+    chunks += bytes(UInt32(sectors << 8 | 0x00), UInt32(0), UInt32(0))
+    chunks += bytes(UInt32((sectors + 1000) << 8 | 0xFF), UInt32(data.count), UInt32(0))
+    var map = bytes(UInt16(11), UInt16(0)) + Data([10]) + macRoman("ShrinkWrap") + Data(count: 53)
+    map += bytes(UInt32(sectors + 1000)) + Data(count: 52) + bytes(UInt32(4)) + chunks
+
+    // The resource fork: its header, room after it, the map's data, then its map, with one type,
+    // 'bcem', and one of it, 128.
+    let resourceData = bytes(UInt32(map.count)) + map
+    let header = bytes(UInt32(256), UInt32(256 + resourceData.count), UInt32(resourceData.count), UInt32(50))
+    var resourceMap = header + Data(count: 8) + bytes(UInt16(28), UInt16(50))
+    resourceMap += bytes(UInt16(0)) + macRoman("bcem") + bytes(UInt16(0), UInt16(10))
+    resourceMap += bytes(UInt16(128), UInt16(0xFFFF), UInt32(0), UInt32(0))
+    let resourceFork = header + Data(count: 240) + resourceData + resourceMap
+    return (data, resourceFork)
+  }
+
+  /// Apple Data Compression: a run of a byte, after one like it, as copies of the byte before, and
+  /// anything else as it is.
+  private static func compress(_ data: Data) -> Data {
+    let bytes = [UInt8](data)
+    var output = Data()
+    var literal: [UInt8] = []
+    func flush() {
+      for start in stride(from: 0, to: literal.count, by: 128) {
+        let run = literal[start..<min(literal.count, start + 128)]
+        output += Data([0x80 | UInt8(run.count - 1)]) + Data(run)
+      }
+      literal = []
+    }
+    var index = 0
+    while index < bytes.count {
+      var run = 1
+      while index + run < bytes.count && bytes[index + run] == bytes[index] && run < 67 {
+        run += 1
+      }
+      if run >= 4 && (index > 0 && bytes[index - 1] == bytes[index]) {
+        flush()
+        output += Data([0x40 | UInt8(run - 4), 0, 0])
+        index += run
+      }
+      else {
+        literal.append(bytes[index])
+        index += 1
+      }
+    }
+    flush()
+    return output
   }
 }

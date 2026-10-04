@@ -101,6 +101,67 @@ public class HotlineFilePreviewClient {
     return (Data(), 0)
   }
 
+  /// The file's resource fork, up to `limit` bytes of it, without its data fork, from a transfer
+  /// resumed at the data fork's end. A server sends the resource fork after it with a header that
+  /// says how big it is, or as Mobius does for a resumed transfer, without one, so it's what's
+  /// left of the transfer's size, or if that's not given, whatever comes before the server hangs
+  /// up, which Mobius waits a few seconds to do.
+  public func readResourceFork(upTo limit: Int) async throws -> Data {
+    print("HotlineFilePreviewClient[\(self.referenceNumber)]: Reading up to \(limit) bytes of the resource fork")
+    let socket = try await NetSocket.connect(
+      host: self.serverAddress,
+      port: self.serverPort + 1
+    )
+    defer { Task { await socket.close() } }
+
+    try await socket.write(Data(endian: .big) {
+      "HTXF".fourCharCode()
+      self.referenceNumber
+      UInt32.zero
+      UInt32.zero
+    })
+
+    // The information fork, then the data fork's header, which none of the data fork follows,
+    // whatever size it gives.
+    guard let header = HotlineFileHeader(from: try await socket.read(HotlineFileHeader.DataSize)),
+          let info = HotlineFileForkHeader(from: try await socket.read(HotlineFileForkHeader.DataSize)), info.isInfoFork else {
+      throw HotlineTransferClientError.failedToTransfer
+    }
+    try await socket.skip(Int(info.dataSize))
+    guard let data = HotlineFileForkHeader(from: try await socket.read(HotlineFileForkHeader.DataSize)), data.isDataFork else {
+      throw HotlineTransferClientError.failedToTransfer
+    }
+    print("HotlineFilePreviewClient[\(self.referenceNumber)]: \(header.forkCount) forks, INFO fork \(info.dataSize) bytes, DATA fork said to be \(data.dataSize) bytes")
+
+    let headers = HotlineFileHeader.DataSize + 2 * HotlineFileForkHeader.DataSize + Int(info.dataSize)
+    let left = Int(self.transferSize) - headers
+    let most = limit + HotlineFileForkHeader.DataSize
+    var rest = try await self.read(left > 0 ? min(left, most) : most, from: socket)
+    print("HotlineFilePreviewClient[\(self.referenceNumber)]: Read \(rest.count) bytes after the data fork")
+    if let fork = HotlineFileForkHeader(from: rest.prefix(HotlineFileForkHeader.DataSize)), fork.isResourceFork {
+      // All of it, should the transfer's size not have counted its header.
+      let end = HotlineFileForkHeader.DataSize + min(Int(fork.dataSize), limit)
+      if rest.count < end {
+        rest += try await self.read(end - rest.count, from: socket)
+      }
+      return rest.subdata(in: HotlineFileForkHeader.DataSize..<min(rest.count, end))
+    }
+    return rest.prefix(limit)
+  }
+
+  /// `count` bytes, or as many as come before the server hangs up.
+  private func read(_ count: Int, from socket: NetSocket) async throws -> Data {
+    do {
+      return try await socket.read(count)
+    }
+    catch NetSocketError.insufficientData(_, let got) {
+      return try await socket.read(got)
+    }
+    catch NetSocketError.closed {
+      return Data()
+    }
+  }
+
   /// Cancel the current preview download
   public func cancel() {
     self.previewTask?.cancel()

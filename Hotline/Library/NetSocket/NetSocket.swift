@@ -820,7 +820,12 @@ public actor NetSocket {
         throw NetSocketError.insufficientData(expected: count, got: self.availableBytes)
       }
       try await self.ensureReady()
-      try await self.waitForData()
+      do {
+        try await self.waitForData()
+      } catch NetSocketError.closed {
+        // Closed while waiting: go around again so what arrived before the close is reported.
+        continue
+      }
     }
   }
   

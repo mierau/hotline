@@ -69,8 +69,8 @@ enum ArchiveKind: String, Codable, Sendable {
   }
 
   /// What's in one `size` long, read through `read`, which gives the `length` bytes of it from
-  /// `offset`.
-  func entries(size: Int, read: (_ offset: Int, _ length: Int) async throws -> Data) async throws -> [ArchiveEntry] {
+  /// `offset`, and for a disk image, `resourceFork`, which gives its resource fork.
+  func entries(size: Int, read: (_ offset: Int, _ length: Int) async throws -> Data, resourceFork: (() async throws -> Data)? = nil) async throws -> [ArchiveEntry] {
     switch self {
     case .zip:
       return try await ZipArchive.entries(size: size, read: read)
@@ -83,7 +83,7 @@ enum ArchiveKind: String, Codable, Sendable {
     case .binHex:
       return try await BinHex.entries(size: size, read: read)
     case .diskImage:
-      return try await DiskImage.entries(size: size, read: read)
+      return try await DiskImage.entries(size: size, read: read, resourceFork: resourceFork)
     }
   }
 }
