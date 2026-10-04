@@ -275,6 +275,29 @@ struct ArchiveFormatTests {
     #expect(DiskCopyImage.expand(Data([0x80, 0x41, 0x00, 0x05]), to: 4) == nil)
   }
 
+  @Test func expandsStuffItAsShrinkWrapCompressesAChunk() {
+    #expect(DiskCopyImage.expandStuffIt(TestDiskCopy.stuffItChunk, to: 1024) == TestDiskCopy.stuffItText)
+    // Cut short, or not as long as it's meant to be.
+    #expect(DiskCopyImage.expandStuffIt(TestDiskCopy.stuffItChunk.dropLast(8), to: 1024) == nil)
+    #expect(DiskCopyImage.expandStuffIt(TestDiskCopy.stuffItChunk, to: 512) == nil)
+    // Four bytes copied from one back, before there's anything to copy.
+    let copyFirst = Data([
+      0x36, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+      0x05, 0xFE, 0xED, 0xDF, 0xFE, 0xED, 0xAF, 0xE0, 0xDF, 0xFE, 0xED, 0xDF, 0xFE, 0xED, 0xDF, 0xFE,
+      0xED, 0xDF, 0xFE, 0xED, 0xDF, 0xFE, 0xED, 0xDF, 0xEE, 0x0E, 0xFE, 0xED, 0x0E, 0x43, 0x05, 0xE2,
+      0xE2, 0x1E, 0x11, 0x33, 0xEC, 0x01,
+    ])
+    #expect(DiskCopyImage.expandStuffIt(copyFirst, to: 5) == nil)
+  }
+
+  @Test func readsAChunkCompressedWithStuffIt() async throws {
+    let chunk = TestDiskCopy.stuffItChunk
+    let resourceFork = TestDiskCopy.resourceFork([(0, 0xF0, 0, chunk.count), (2, 0xFF, chunk.count, 0)])
+    let image = try #require(DiskCopyImage(resourceFork: resourceFork, dataSize: chunk.count))
+    #expect(try await image.read(0, 1024, from: TestServer(chunk).read) == TestDiskCopy.stuffItText)
+    #expect(try await image.read(1000, 24, from: TestServer(chunk).read) == TestDiskCopy.stuffItText.suffix(24))
+  }
+
   @Test func readsADiskCopyImageInChunks() async throws {
     let image = TestDiskCopy.image(TestDisc.hfs([
       .file("Install ShrinkWrap™ 3.5.1", in: 2, type: "APPL", data: 1_243_290),
@@ -718,13 +741,22 @@ private enum TestDiskCopy {
     let compressed = self.compress(disk.subdata(in: 2560..<disk.count))
     let data = disk.prefix(2560) + compressed
 
-    // The chunks: where each starts, how it's kept, where it is, and how long, then the end.
-    var chunks = bytes(UInt32(0 << 8 | 0x02), UInt32(0), UInt32(2560))
-    chunks += bytes(UInt32(5 << 8 | UInt32(compression)), UInt32(2560), UInt32(compressed.count))
-    chunks += bytes(UInt32(sectors << 8 | 0x00), UInt32(0), UInt32(0))
-    chunks += bytes(UInt32((sectors + 1000) << 8 | 0xFF), UInt32(data.count), UInt32(0))
+    return (data, self.resourceFork([
+      (0, 0x02, 0, 2560),
+      (5, compression, 2560, compressed.count),
+      (sectors, 0x00, 0, 0),
+      (sectors + 1000, 0xFF, data.count, 0),
+    ]))
+  }
+
+  /// The map of a disk's chunks, in a resource fork: where each starts, how it's kept, and where it
+  /// is in the data fork, and how long, the last being the end.
+  static func resourceFork(_ chunks: [(sector: Int, kind: UInt8, offset: Int, length: Int)]) -> Data {
     var map = bytes(UInt16(11), UInt16(0)) + Data([10]) + macRoman("ShrinkWrap") + Data(count: 53)
-    map += bytes(UInt32(sectors + 1000)) + Data(count: 52) + bytes(UInt32(4)) + chunks
+    map += bytes(UInt32(chunks.last?.sector ?? 0)) + Data(count: 52) + bytes(UInt32(chunks.count))
+    for chunk in chunks {
+      map += bytes(UInt32(chunk.sector << 8 | Int(chunk.kind)), UInt32(chunk.offset), UInt32(chunk.length))
+    }
 
     // The resource fork: its header, room after it, the map's data, then its map, with one type,
     // 'bcem', and one of it, 128.
@@ -733,9 +765,21 @@ private enum TestDiskCopy {
     var resourceMap = header + Data(count: 8) + bytes(UInt16(28), UInt16(50))
     resourceMap += bytes(UInt16(0)) + macRoman("bcem") + bytes(UInt16(0), UInt16(10))
     resourceMap += bytes(UInt16(128), UInt16(0xFFFF), UInt32(0), UInt32(0))
-    let resourceFork = header + Data(count: 240) + resourceData + resourceMap
-    return (data, resourceFork)
+    return header + Data(count: 240) + resourceData + resourceMap
   }
+
+  /// A kilobyte, as ShrinkWrap compresses a chunk with StuffIt: the codes for bytes and copies with
+  /// their lengths as they are, the codes for how far back with codes of their own for theirs, and
+  /// copies of 16 bytes from 9 back, 980 from 1 back, and 8 from 990 back.
+  static let stuffItText = Data("Hotline, Hotline, Hotline!\r".utf8) + Data(count: 981) + Data("Hotline! ShrinkW".utf8)
+  static let stuffItChunk = Data([
+    0x54, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x05, 0xE4, 0x8F, 0xE4, 0xDF, 0x3E, 0xE4, 0x6F, 0xE4, 0xDF, 0xFE, 0x46, 0xFE, 0x46, 0xEE, 0x4E,
+    0xFE, 0x49, 0xEE, 0x34, 0x4E, 0xE3, 0x32, 0xEE, 0xE3, 0xE3, 0xDF, 0xFE, 0xED, 0xDF, 0xFE, 0xED,
+    0xDF, 0xFE, 0xED, 0xDF, 0xFE, 0xED, 0x3F, 0xE3, 0x3E, 0xFE, 0x37, 0x43, 0x05, 0x13, 0xE3, 0xEE,
+    0x20, 0x91, 0x75, 0xF6, 0x53, 0xD9, 0x02, 0xB7, 0x27, 0x71, 0xC6, 0x6A, 0x0E, 0x5D, 0xE1, 0x3D,
+    0xDF, 0x91, 0xC0, 0xFE,
+  ])
 
   /// Apple Data Compression: a run of a byte, after one like it, as copies of the byte before, and
   /// anything else as it is.
