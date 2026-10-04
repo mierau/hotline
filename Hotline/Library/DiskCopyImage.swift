@@ -2,9 +2,9 @@ import Foundation
 
 /// A disk image in Disk Copy 6's format, as Disk Copy, ShrinkWrap and self-mounting images save
 /// one: the disk in chunks, one after another in the data fork, each kept as it is, left out for
-/// being empty, or compressed, with Apple's compression or KenCode, or StuffIt's, from ShrinkWrap,
-/// and a map of them, in the resource fork. Any part of the disk is read from the chunks it's in,
-/// which are together, so with one read.
+/// being empty, or compressed, with Apple's compression, KenCode, or DART's run lengths or LZH, or
+/// StuffIt's, from ShrinkWrap, and a map of them, in the resource fork. Any part of the disk is
+/// read from the chunks it's in, which are together, so with one read.
 struct DiskCopyImage {
   /// A run of the disk's 512-byte sectors, and how it's kept.
   private struct Chunk {
@@ -18,6 +18,8 @@ struct DiskCopyImage {
   private static let empty: UInt8 = 0x00
   private static let asIs: UInt8 = 0x02
   private static let kenCode: UInt8 = 0x80
+  private static let runLengths: UInt8 = 0x81
+  private static let lzh: UInt8 = 0x82
   private static let adc: UInt8 = 0x83
   private static let stuffIt: UInt8 = 0xF0
   private static let end: UInt8 = 0xFF
@@ -45,7 +47,7 @@ struct DiskCopyImage {
             let offset = map.bigEndian(UInt32.self, at: entry + 4).map({ Int($0) + dataOffset }),
             let length = map.bigEndian(UInt32.self, at: entry + 8).map(Int.init),
             let next = map.bigEndian(UInt32.self, at: entry + 12).map({ Int($0 >> 8) }), next > start,
-            [Self.empty, Self.asIs, Self.kenCode, Self.adc, Self.stuffIt].contains(kind), offset + length <= dataSize else {
+            [Self.empty, Self.asIs, Self.kenCode, Self.runLengths, Self.lzh, Self.adc, Self.stuffIt].contains(kind), offset + length <= dataSize else {
         return nil
       }
       chunks.append(Chunk(sector: start, sectors: next - start, kind: kind, offset: offset, length: length))
@@ -87,6 +89,8 @@ struct DiskCopyImage {
       switch chunk.kind {
       case Self.adc: expanded = Self.expand(data, to: size)
       case Self.kenCode: expanded = Self.expandKenCode(data, to: size)
+      case Self.runLengths: expanded = Self.expandRunLengths(data, to: size)
+      case Self.lzh: expanded = Self.expandLZH(data, to: size)
       case Self.stuffIt: expanded = Self.expandStuffIt(data, to: size)
       default: expanded = data
       }
@@ -156,7 +160,7 @@ struct DiskCopyImage {
   /// then says how far back it's from: near, further or furthest, in more bits the further into the
   /// chunk it is.
   static func expandKenCode(_ data: Data, to size: Int) -> Data? {
-    var bits = KenCodeBits(data)
+    var bits = HighBitFirstBits(data)
     var output: [UInt8] = []
     output.reserveCapacity(size)
     var runCanFollow = true
@@ -194,7 +198,7 @@ struct DiskCopyImage {
   private static let kenCodeLengths = [(3, 11), (3, 19), (5, 27), (6, 59), (7, 123), (8, 251), (9, 507), (10, 1019)]
 
   /// A copy's length, less two: ones, up to ten, before a zero, then bits for the rest.
-  private static func kenCodeLength(_ bits: inout KenCodeBits) -> Int {
+  private static func kenCodeLength(_ bits: inout HighBitFirstBits) -> Int {
     switch bits.ones(upTo: 10) {
     case 0:
       return bits.read(1)
@@ -209,7 +213,7 @@ struct DiskCopyImage {
   }
 
   /// A run's length, from one to 63.
-  private static func kenCodeRunLength(_ bits: inout KenCodeBits) -> Int {
+  private static func kenCodeRunLength(_ bits: inout HighBitFirstBits) -> Int {
     guard bits.read(1) == 1 else {
       return 1
     }
@@ -238,7 +242,7 @@ struct DiskCopyImage {
   /// How far back a copy `position` into the chunk is from: near, in as many bits as for how far
   /// into the chunk it is, further, in two more, or furthest, in as many as there's room for back
   /// to the chunk's start, as Disk Copy works that out.
-  private static func kenCodeDistance(_ bits: inout KenCodeBits, at position: Int) -> Int {
+  private static func kenCodeDistance(_ bits: inout HighBitFirstBits, at position: Int) -> Int {
     let width = Self.kenCodeReaches.firstIndex { position <= $0 } ?? Self.kenCodeReaches.count
     let near = 1 << width
     if bits.read(1) == 0 {
@@ -270,6 +274,113 @@ struct DiskCopyImage {
     return further + 1 + bits.read(level)
   }
 
+  /// Apple's run lengths, as DART compresses a chunk: two-byte words, in runs, each after how many
+  /// there are, big-endian, as they are, or for a negative count, one word repeated as many times.
+  /// A count of none, or as many words as a whole DART chunk has bytes, is skipped.
+  static func expandRunLengths(_ data: Data, to size: Int) -> Data? {
+    let bytes = [UInt8](data)
+    var output: [UInt8] = []
+    output.reserveCapacity(size)
+    var index = 0
+    while output.count < size {
+      guard index + 2 <= bytes.count else {
+        return nil
+      }
+      let count = Int(Int16(bitPattern: UInt16(bytes[index]) << 8 | UInt16(bytes[index + 1])))
+      index += 2
+      guard count != 0, abs(count) < 20960 else {
+        continue
+      }
+      guard output.count + 2 * abs(count) <= size else {
+        return nil
+      }
+      if count < 0 {
+        guard index + 2 <= bytes.count else {
+          return nil
+        }
+        for _ in 0..<(-count) {
+          output += bytes[index..<(index + 2)]
+        }
+        index += 2
+      }
+      else {
+        guard index + 2 * count <= bytes.count else {
+          return nil
+        }
+        output += bytes[index..<(index + 2 * count)]
+        index += 2 * count
+      }
+    }
+    return Data(output)
+  }
+
+  /// Apple's LZH, as DART compresses a chunk: LHarc's, written high bit first, with codes for
+  /// bytes, and for copies of three to 60 of them, that get shorter the more they're used, and for
+  /// a copy, how far back it's from, up to 4K, its top six bits in three to eight, fewer for
+  /// nearer, then the rest. Before the chunk's start, copies see what LHarc starts with, but with
+  /// zeros where LHarc has spaces.
+  static func expandLZH(_ data: Data, to size: Int) -> Data? {
+    var bits = HighBitFirstBits(data)
+    var codes = LZHCodes()
+    var output: [UInt8] = []
+    output.reserveCapacity(size)
+    while output.count < size {
+      let code = codes.next(from: &bits)
+      if code < 256 {
+        output.append(UInt8(code))
+      }
+      else {
+        guard let high = Self.lzhDistance(&bits) else {
+          return nil
+        }
+        let distance = high << 6 + bits.read(6) + 1
+        for _ in 0..<min(code - 256 + 3, size - output.count) {
+          let from = output.count - distance
+          output.append(from >= 0 ? output[from] : Self.lzhWindow[from + 4096])
+        }
+      }
+      guard !bits.isPastEnd else {
+        return nil
+      }
+    }
+    return Data(output)
+  }
+
+  /// What LZH's copies see before a chunk's start: 13 of each byte in turn, after 18 zeros, then
+  /// every byte up, then down, then zeros.
+  private static let lzhWindow: [UInt8] = {
+    var window = [UInt8](repeating: 0, count: 4096)
+    for byte in 0..<256 {
+      for index in 0..<13 {
+        window[18 + byte * 13 + index] = UInt8(byte)
+      }
+      window[3346 + byte] = UInt8(byte)
+      window[3602 + byte] = UInt8(255 - byte)
+    }
+    return window
+  }()
+
+  /// How many codes for the top six bits of a copy's distance there are of each length.
+  private static let lzhDistanceCounts = [0, 0, 0, 1, 3, 8, 12, 24, 16]
+
+  /// The top six bits of how far back a copy's from, numbered from the shortest code to the
+  /// longest.
+  private static func lzhDistance(_ bits: inout HighBitFirstBits) -> Int? {
+    var code = 0
+    var first = 0
+    var index = 0
+    for count in Self.lzhDistanceCounts.dropFirst() {
+      code |= bits.read(1)
+      if code - first < count {
+        return index + code - first
+      }
+      index += count
+      first = (first + count) << 1
+      code <<= 1
+    }
+    return nil
+  }
+
   /// How long a copy is, for each of the codes for one, before the bits after it that add to it.
   private static let copyLengths = [4, 5, 6, 7, 8, 10, 12, 16, 20, 28, 36, 52, 68, 100, 132, 196, 260, 388, 516, 772]
   private static let copyLengthBits = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8]
@@ -283,7 +394,7 @@ struct DiskCopyImage {
     guard data.littleEndian(UInt32.self, at: 4).map(Int.init) == size else {
       return nil
     }
-    var bits = StuffItBits(data.dropFirst(16))
+    var bits = LowBitFirstBits(data.dropFirst(16))
     guard let codes = StuffItCode(from: &bits, count: 256 + Self.copyLengths.count),
           let distances = StuffItCode(from: &bits, count: 16) else {
       return nil
@@ -314,8 +425,8 @@ struct DiskCopyImage {
   }
 }
 
-/// Bits, high bit first, as KenCode writes them.
-private struct KenCodeBits {
+/// Bits, high bit first, as KenCode and LZH write them.
+private struct HighBitFirstBits {
   private let bytes: [UInt8]
   private var position = 0
   /// Whether more's been read than there is.
@@ -353,9 +464,125 @@ private struct KenCodeBits {
   }
 }
 
+/// LZH's codes for bytes, and copies of three to 60 of them, in a tree that changes as it's used,
+/// as LHarc's LZHUF has it: every code counts its uses, and each of its nodes moves up past any
+/// with fewer, so the more a code's used, the shorter it gets. Once the top's counted 32K uses, the
+/// tree's made again from its leaves, with their counts halved.
+private struct LZHCodes {
+  private static let symbols = 314
+  private static let nodes = 2 * Self.symbols - 1
+  private static let top = Self.nodes - 1
+
+  /// How many uses each node's had, the nodes in order of it, and one past the last, that's more.
+  private var counts = [Int](repeating: 0, count: Self.nodes + 1)
+  /// Each node's parent, and after the nodes, each code's leaf.
+  private var parents = [Int](repeating: 0, count: Self.nodes + Self.symbols)
+  /// The first of each node's two children, or for a leaf, its code, after the nodes.
+  private var children = [Int](repeating: 0, count: Self.nodes)
+
+  /// Every code with one use, and the codes in pairs, then those pairs in pairs, to the top.
+  init() {
+    for symbol in 0..<Self.symbols {
+      self.counts[symbol] = 1
+      self.children[symbol] = Self.nodes + symbol
+      self.parents[Self.nodes + symbol] = symbol
+    }
+    var child = 0
+    for node in Self.symbols..<Self.nodes {
+      self.counts[node] = self.counts[child] + self.counts[child + 1]
+      self.children[node] = child
+      self.parents[child] = node
+      self.parents[child + 1] = node
+      child += 2
+    }
+    self.counts[Self.nodes] = .max
+    self.parents[Self.top] = 0
+  }
+
+  /// The next code, from the top down, a bit for which of each node's children it's under.
+  mutating func next(from bits: inout HighBitFirstBits) -> Int {
+    var node = self.children[Self.top]
+    while node < Self.nodes {
+      node = self.children[node + bits.read(1)]
+    }
+    let symbol = node - Self.nodes
+    self.count(symbol)
+    return symbol
+  }
+
+  /// One more use of a code, and of each node above it, each moving up past those with fewer.
+  private mutating func count(_ symbol: Int) {
+    if self.counts[Self.top] == 0x8000 {
+      self.rebuild()
+    }
+    var node = self.parents[Self.nodes + symbol]
+    repeat {
+      self.counts[node] += 1
+      let count = self.counts[node]
+      var other = node + 1
+      if count > self.counts[other] {
+        while count > self.counts[other + 1] {
+          other += 1
+        }
+        // Swapped, with their children.
+        self.counts[node] = self.counts[other]
+        self.counts[other] = count
+        let child = self.children[node]
+        self.parents[child] = other
+        if child < Self.nodes {
+          self.parents[child + 1] = other
+        }
+        let otherChild = self.children[other]
+        self.children[other] = child
+        self.parents[otherChild] = node
+        if otherChild < Self.nodes {
+          self.parents[otherChild + 1] = node
+        }
+        self.children[node] = otherChild
+        node = other
+      }
+      node = self.parents[node]
+    } while node != 0
+  }
+
+  /// The tree made again: its leaves, in order, with their counts halved, then joined in pairs,
+  /// each pair placed after the nodes with as many uses or fewer.
+  private mutating func rebuild() {
+    var leaf = 0
+    for node in 0..<Self.nodes where self.children[node] >= Self.nodes {
+      self.counts[leaf] = (self.counts[node] + 1) / 2
+      self.children[leaf] = self.children[node]
+      leaf += 1
+    }
+    var child = 0
+    for node in Self.symbols..<Self.nodes {
+      let count = self.counts[child] + self.counts[child + 1]
+      var place = node - 1
+      while count < self.counts[place] {
+        place -= 1
+      }
+      place += 1
+      for index in stride(from: node, to: place, by: -1) {
+        self.counts[index] = self.counts[index - 1]
+        self.children[index] = self.children[index - 1]
+      }
+      self.counts[place] = count
+      self.children[place] = child
+      child += 2
+    }
+    for node in 0..<Self.nodes {
+      let child = self.children[node]
+      self.parents[child] = node
+      if child < Self.nodes {
+        self.parents[child + 1] = node
+      }
+    }
+  }
+}
+
 /// Bits, low bit first, from the low bit of each byte, as StuffIt writes them, and nothing but
 /// zeros after the last.
-private struct StuffItBits {
+private struct LowBitFirstBits {
   private let bytes: [UInt8]
   private var index = 0
   private var buffer: UInt64 = 0
@@ -403,7 +630,7 @@ private struct StuffItCode {
   /// how many bits each is, what's added to each, and whether they're written with codes of their
   /// own, in a table before them. The last value repeats the length before it, three times and as
   /// many more as the next says.
-  init?(from bits: inout StuffItBits, count: Int, depth: Int = 0) {
+  init?(from bits: inout LowBitFirstBits, count: Int, depth: Int = 0) {
     let hasNone = bits.read(1) == 1
     let width = bits.read(2) + 2
     let added = bits.read(3) + 1
@@ -466,7 +693,7 @@ private struct StuffItCode {
   }
 
   /// What the next code stands for, or nil for one that isn't in the table.
-  func next(from bits: inout StuffItBits) -> Int? {
+  func next(from bits: inout LowBitFirstBits) -> Int? {
     var code = 0
     var first = 0
     var index = 0

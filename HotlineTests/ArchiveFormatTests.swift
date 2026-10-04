@@ -317,6 +317,52 @@ struct ArchiveFormatTests {
     #expect(try await image.read(1662, 16, from: TestServer(chunk).read) == Data("end of the chunk".utf8))
   }
 
+  @Test func expandsDARTsRunLengths() {
+    // Three words of zeros, a count of none, skipped, four words as they are, a count too big for a
+    // DART chunk, skipped, then two words of a line's end.
+    let compressed = Data([0xFF, 0xFD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04]) + Data("Hotline!".utf8) + Data([0x51, 0xE0, 0xFF, 0xFE, 0x0D, 0x0A])
+    #expect(DiskCopyImage.expandRunLengths(compressed, to: 18) == Data(count: 6) + Data("Hotline!\r\n\r\n".utf8))
+    // Cut short, or longer than the chunk.
+    #expect(DiskCopyImage.expandRunLengths(compressed.dropLast(1), to: 18) == nil)
+    #expect(DiskCopyImage.expandRunLengths(compressed, to: 16) == nil)
+  }
+
+  @Test func expandsDARTsLZH() {
+    #expect(DiskCopyImage.expandLZH(TestDiskCopy.lzhChunk, to: 1024) == TestDiskCopy.lzhText)
+    // Cut short.
+    #expect(DiskCopyImage.expandLZH(TestDiskCopy.lzhChunk.dropLast(2), to: 1024) == nil)
+  }
+
+  @Test func rebuildsLZHsCodesAsTheyreUsed() throws {
+    // Bits from xorshift, which come out as 57,819 codes and 450K, the codes made again twice
+    // along the way. The hash is what a separate version of the decoder, checked against LHarc's,
+    // makes of them.
+    var x: UInt32 = 0x2545_F491
+    let bits = Data((0..<80_000).map { _ in
+      x ^= x << 13
+      x ^= x >> 17
+      x ^= x << 5
+      return UInt8(truncatingIfNeeded: x)
+    })
+    let expanded = try #require(DiskCopyImage.expandLZH(bits, to: 450_000))
+    #expect(expanded.reduce(UInt64(0)) { $0 &* 31 &+ UInt64($1) } == 0x96CE_8CC6_17E2_FDC4)
+  }
+
+  @Test func readsChunksCompressedWithDARTsRunLengthsAndLZH() async throws {
+    // A sector of run lengths, "Hotline!" then 252 words of zeros, then two of LZH.
+    let runLengths = Data([0x00, 0x04]) + Data("Hotline!".utf8) + Data([0xFF, 0x04, 0x00, 0x00])
+    let data = runLengths + TestDiskCopy.lzhChunk
+    let resourceFork = TestDiskCopy.resourceFork([
+      (0, 0x81, 0, runLengths.count),
+      (1, 0x82, runLengths.count, TestDiskCopy.lzhChunk.count),
+      (3, 0xFF, data.count, 0),
+    ])
+    let image = try #require(DiskCopyImage(resourceFork: resourceFork, dataSize: data.count))
+    let disk = Data("Hotline!".utf8) + Data(count: 504) + TestDiskCopy.lzhText
+    #expect(try await image.read(0, 1536, from: TestServer(data).read) == disk)
+    #expect(try await image.read(500, 40, from: TestServer(data).read) == disk.subdata(in: 500..<540))
+  }
+
   @Test func readsChunksFromWhereTheMapSaysTheyStart() async throws {
     let data = Data(repeating: 0xEE, count: 100) + TestDiskCopy.stuffItChunk
     let chunk = TestDiskCopy.stuffItChunk
@@ -351,7 +397,7 @@ struct ArchiveFormatTests {
   }
 
   @Test func turnsDownChunksCompressedAnotherWay() async throws {
-    let image = TestDiskCopy.image(TestDisc.hfs([.file("Read Me", in: 2, type: "TEXT", data: 100)]), compression: 0x81)
+    let image = TestDiskCopy.image(TestDisc.hfs([.file("Read Me", in: 2, type: "TEXT", data: 100)]), compression: 0x84)
     await #expect(throws: ArchiveReadError.self) {
       try await ArchiveKind.diskImage.entries(size: image.data.count, read: TestServer(image.data).read) {
         image.resourceFork
@@ -828,6 +874,20 @@ private enum TestDiskCopy {
     0x1A, 0x18, 0x20, 0x33, 0x2E, 0x35, 0xFF, 0x58, 0x6B, 0x3F, 0x3D, 0xF6, 0x9E, 0x06, 0x56, 0xE6,
     0x42, 0x06, 0xF6, 0x62, 0x07, 0x46, 0x86, 0x52, 0x06, 0x36, 0x87, 0x56, 0xE6, 0xBF, 0xF3, 0xA6,
     0xD6, 0xC0,
+  ])
+
+  /// A kilobyte, as DART compresses a chunk with LZH: zeros copied from before the chunk, where
+  /// Apple's window has zeros and LHarc's spaces, first 40 of them, and later 60, and 13 A's and 32
+  /// bytes counting up copied from the rest of the window.
+  static let lzhText = Data(count: 40) + Data("Hotline, Hotline, Hotline!\r".utf8) + Data(repeating: 0x41, count: 13) + Data(0x10...0x2F)
+    + Data(count: 880) + Data("Apple LZH, as DART compresses it".utf8)
+  static let lzhChunk = Data([
+    0xB1, 0x00, 0x75, 0x3F, 0x60, 0x1F, 0x8F, 0xAF, 0xEB, 0xE3, 0xB8, 0xD6, 0x4C, 0x82, 0x35, 0xB9,
+    0x99, 0x6F, 0x38, 0xEA, 0x64, 0xB6, 0xC4, 0xC3, 0xB6, 0x00, 0x5A, 0x00, 0x5A, 0x00, 0x58, 0x00,
+    0xB0, 0x01, 0x60, 0x02, 0xC0, 0x05, 0x40, 0x15, 0x00, 0x54, 0x01, 0x50, 0x05, 0x40, 0x15, 0x00,
+    0x62, 0x80, 0x39, 0xBF, 0xCA, 0x6C, 0x1B, 0xEB, 0xCE, 0xC7, 0x9B, 0x12, 0xF6, 0x77, 0xB7, 0xFF,
+    0x57, 0xA1, 0x5F, 0xDE, 0xF0, 0x47, 0xEF, 0xC3, 0xFC, 0xC5, 0xFF, 0x49, 0xA8, 0x85, 0x2E, 0x54,
+    0x78, 0x18, 0x40,
   ])
 
   /// Apple Data Compression: a run of a byte, after one like it, as copies of the byte before, and
