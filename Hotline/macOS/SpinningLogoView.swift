@@ -246,23 +246,42 @@ struct InteractiveSpinningLogo: View {
 
 /// The red Hotline H for the default banner, as a slowly spinning 3D model on a transparent background.
 struct SpinningBannerLogo: NSViewRepresentable {
+  var interaction: BannerLogoView.Interaction = .clickToSpin
+  /// How much closer in to frame the H. 1 is the banner's own framing.
+  var zoom: CGFloat = 1
+
   func makeNSView(context: Context) -> BannerLogoView {
-    BannerLogoView()
+    BannerLogoView(interaction: self.interaction, zoom: self.zoom)
   }
 
   func updateNSView(_ nsView: BannerLogoView, context: Context) {}
 }
 
 final class BannerLogoView: SCNView, SCNSceneRendererDelegate {
+  /// What pressing on the logo does.
+  enum Interaction {
+    /// A click spins the logo. Pressing and moving drags the window, like the rest of the banner.
+    case clickToSpin
+    /// Dragging turns the logo by hand, and once let go it coasts back into its regular spin. A
+    /// click spins it, the same as in the banner.
+    case dragToSpin
+  }
+
   /// One full turn, in seconds.
   private static let spinDuration: TimeInterval = 12
   /// Turned slightly to show its left side, the way the old banner artwork drew the H.
   private static let restingAngle: CGFloat = -20 * .pi / 180
+  /// How far dragging turns the logo, in radians for each point the pointer moves.
+  private static let dragRadiansPerPoint: Double = 0.01
+  /// The fastest it can be flung, in radians a second. Nearly two and a half turns a second.
+  private static let fastestFling: Double = 15
   private static let spinKey = "spin"
 
+  private let interaction: Interaction
   private var spinNode: SCNNode?
 
-  init() {
+  init(interaction: Interaction = .clickToSpin, zoom: CGFloat = 1) {
+    self.interaction = interaction
     super.init(frame: .zero, options: nil)
     self.backgroundColor = .clear
     self.antialiasingMode = .multisampling4X
@@ -276,6 +295,11 @@ final class BannerLogoView: SCNView, SCNSceneRendererDelegate {
     self.scene = scene
     self.pointOfView = camera
     self.spinNode = spinNode
+    // A narrower view from the same spot crops in on the H without changing its perspective.
+    if zoom != 1, let lens = camera.camera {
+      let halfAngle = lens.fieldOfView / 2 * .pi / 180
+      lens.fieldOfView = 2 * atan(tan(halfAngle) / zoom) * 180 / .pi
+    }
     spinNode.eulerAngles.y = Self.restingAngle
 
     if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
@@ -318,25 +342,32 @@ final class BannerLogoView: SCNView, SCNSceneRendererDelegate {
 
   /// A few quick turns that ease back into the regular spin.
   private func spinQuickly() {
+    self.spin(from: 2.5 * 2 * .pi)
+  }
+
+  /// Turns at a speed, in radians a second, that eases back into the regular spin. Backwards too.
+  private func spin(from speed: Double) {
     guard let spinNode = self.spinNode, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+      self.preferredFramesPerSecond = 30
       return
     }
 
-    // Start at 2.5 turns a second and let the extra speed fall away exponentially, so it settles
-    // into the regular spin without a jolt. After 5 seconds less than 1% of the extra is left.
+    // Let the difference from the regular speed fall away exponentially, so it settles into the
+    // regular spin without a jolt. After 5 seconds less than 1% of it is left.
     let steadySpeed = 2 * Double.pi / Self.spinDuration
-    let fastSpeed = 2.5 * 2 * Double.pi
     let falloff = 1.0
     let duration = 5 * falloff
     func angle(at time: Double) -> Double {
-      steadySpeed * time + (fastSpeed - steadySpeed) * falloff * (1 - exp(-time / falloff))
+      steadySpeed * time + (speed - steadySpeed) * falloff * (1 - exp(-time / falloff))
     }
-    let totalAngle = angle(at: duration)
 
-    // One relative rotation with a custom timing curve, so the steady spin can pick up right where it ends.
-    let boost = SCNAction.rotateBy(x: 0, y: CGFloat(totalAngle), z: 0, duration: duration)
-    boost.timingFunction = { progress in
-      Float(angle(at: Double(progress) * duration) / totalAngle)
+    // Turned a step at a time from wherever it is, so taking over from another spin doesn't jump,
+    // and the steady spin can pick up right where this ends.
+    var turned = 0.0
+    let boost = SCNAction.customAction(duration: duration) { node, elapsed in
+      let total = angle(at: Double(elapsed))
+      node.eulerAngles.y += CGFloat(total - turned)
+      turned = total
     }
 
     let backToSlowerFrameRate = SCNAction.run { [weak self] _ in
@@ -358,23 +389,80 @@ final class BannerLogoView: SCNView, SCNSceneRendererDelegate {
     true
   }
 
-  // A click spins the logo. Pressing and moving drags the panel, like the rest of the banner.
+  override var mouseDownCanMoveWindow: Bool {
+    self.interaction == .dragToSpin ? false : super.mouseDownCanMoveWindow
+  }
+
   override func mouseDown(with event: NSEvent) {
     guard let window = self.window else {
       return
     }
+    switch self.interaction {
+    case .clickToSpin:
+      // A click spins the logo. Pressing and moving drags the panel, like the rest of the banner.
+      let start = event.locationInWindow
+      while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+        if next.type == .leftMouseUp {
+          self.spinQuickly()
+          return
+        }
+        let location = next.locationInWindow
+        if hypot(location.x - start.x, location.y - start.y) > 3 {
+          window.performDrag(with: event)
+          return
+        }
+      }
+    case .dragToSpin:
+      self.turnByHand(from: event, in: window)
+    }
+  }
+
+  /// Turns the logo along with the pointer until the mouse comes up, then lets it coast at the speed
+  /// it was let go. A click without a drag spins it quickly instead.
+  private func turnByHand(from event: NSEvent, in window: NSWindow) {
+    guard let spinNode = self.spinNode else {
+      return
+    }
     let start = event.locationInWindow
+    var last = start
+    var lastTime = event.timestamp
+    var speed: Double = 0
+    var turning = false
     while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
       if next.type == .leftMouseUp {
-        self.spinQuickly()
-        return
+        // Held still before letting go, so it was let go at rest.
+        if next.timestamp - lastTime > 0.1 {
+          speed = 0
+        }
+        break
       }
       let location = next.locationInWindow
-      if hypot(location.x - start.x, location.y - start.y) > 3 {
-        window.performDrag(with: event)
-        return
+      if !turning {
+        guard hypot(location.x - start.x, location.y - start.y) > 3 else {
+          continue
+        }
+        turning = true
+        spinNode.removeAction(forKey: Self.spinKey)
+        self.preferredFramesPerSecond = 60
+        NSCursor.closedHand.push()
       }
+      let angle = Double(location.x - last.x) * Self.dragRadiansPerPoint
+      spinNode.eulerAngles.y += CGFloat(angle)
+      let elapsed = next.timestamp - lastTime
+      if elapsed > 0 {
+        // Smoothed a little, since the pointer doesn't move evenly from one event to the next.
+        speed = 0.5 * speed + 0.5 * angle / elapsed
+      }
+      last = location
+      lastTime = next.timestamp
     }
+
+    guard turning else {
+      self.spinQuickly()
+      return
+    }
+    NSCursor.pop()
+    self.spin(from: min(max(speed, -Self.fastestFling), Self.fastestFling))
   }
 
   // MARK: Visibility
