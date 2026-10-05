@@ -3,7 +3,8 @@ import SwiftData
 
 /// What a server window shows before it's connected, like a browser's address bar: the server's
 /// address, with servers from your bookmarks and your trackers suggested as you type, and Connect
-/// beside it. A login and password, for servers where you have an account, are a click away.
+/// beside it. A login and password, for servers where you have an account, are a click away, and
+/// where they'd be, servers you've been to lately, and bookmarked ones, to connect to in a click.
 struct ConnectView: View {
   @Environment(\.appearsActive) private var appearsActive
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
@@ -30,6 +31,10 @@ struct ConnectView: View {
   @State private var selectedSuggestion: ServerSuggestion.ID?
   /// Set as a suggestion goes into the address, so that doesn't bring the suggestions back.
   @State private var choosingSuggestion: Bool = false
+  /// Whether the servers to connect to in a click have come in, a moment after the form shows.
+  @State private var quickServersShown: Bool = false
+  /// How wide the room for them is, for how many columns they're in.
+  @State private var quickServersWidth: CGFloat = 0
 
   private enum FocusFields {
     case address
@@ -64,9 +69,24 @@ struct ConnectView: View {
           else {
             self.accountToggle
           }
-          if self.showsAccount {
-            self.accountFields
-              .transition(.opacity.combined(with: .move(edge: .top)))
+          // The login and password, or while they don't show, servers to connect to in a click, in
+          // the login and password's room, kept either way, so the address doesn't move when they
+          // show: two rows as tall as the address, with room above and below each, and the line
+          // between them.
+          ZStack(alignment: .top) {
+            if self.showsAccount {
+              self.accountFields
+                .transition(.opacity)
+            }
+            else {
+              self.quickServersGrid
+                .transition(.opacity)
+            }
+          }
+          .frame(maxWidth: .infinity)
+          .frame(height: 2 * (Self.addressHeight + 8) + 1, alignment: .top)
+          .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            self.quickServersWidth = width
           }
         }
         self.connectButton
@@ -80,6 +100,11 @@ struct ConnectView: View {
     }
     .task {
       await self.suggestions.load(bookmarks: self.bookmarks)
+    }
+    .task {
+      // Just after the form, so they come in after it.
+      try? await Task.sleep(for: .milliseconds(120))
+      self.quickServersShown = true
     }
     .onChange(of: self.address) {
       // A bookmark's saved login comes with it.
@@ -275,14 +300,93 @@ struct ConnectView: View {
 
   /// Connects to a bookmarked server, with its login, the way a browser goes to a bookmark.
   private func open(_ bookmark: Bookmark) {
-    self.setAddress(bookmark.port == HotlinePorts.DefaultServerPort ? bookmark.address : "\(bookmark.address):\(bookmark.port)")
-    self.login = bookmark.login ?? ""
-    self.password = bookmark.password ?? ""
-    self.showsAccount = !self.login.isBlank
+    self.connect(to: Self.addressText(bookmark.address, port: bookmark.port), login: bookmark.login, password: bookmark.password)
+  }
+
+  /// Connects to a server, with a login if there's one for it, which shows.
+  private func connect(to address: String, login: String?, password: String?) {
+    self.setAddress(address)
+    self.login = login ?? ""
+    self.password = password ?? ""
+    withAnimation(.snappy) {
+      self.showsAccount = !self.login.isBlank
+    }
     // Once the window has the new address.
     DispatchQueue.main.async {
       self.action?()
     }
+  }
+
+  /// A server's address as it's typed, with its port only if it isn't Hotline's usual one.
+  private static func addressText(_ address: String, port: Int) -> String {
+    port == HotlinePorts.DefaultServerPort ? address : "\(address):\(port)"
+  }
+
+  /// A server to connect to in a click: one logged in to lately, or a bookmarked one.
+  private struct QuickServer: Identifiable {
+    let id: String
+    let name: String
+    /// As it goes in the address field.
+    let address: String
+    let login: String?
+    let password: String?
+    let isRecent: Bool
+    /// When you were last on it, for a recent one.
+    let lastConnected: Date?
+  }
+
+  /// The narrowest a column of servers can be, with room for a short name and how long ago.
+  private static let quickServerWidth: CGFloat = 150
+
+  /// As many columns of servers as fit, up to three.
+  private var quickServerColumns: Int {
+    max(1, min(3, Int((self.quickServersWidth + 6) / (Self.quickServerWidth + 6))))
+  }
+
+  /// The servers logged in to lately, the latest first, then bookmarked ones, to fill three rows of
+  /// as many columns as fit. A recent server that's bookmarked too comes with the bookmark's login.
+  private var quickServers: [QuickServer] {
+    let bookmarks = self.bookmarks.filter { $0.type == .server }
+    var servers: [QuickServer] = []
+    for recent in Prefs.shared.recentServers {
+      let bookmark = bookmarks.first { $0.address.caseInsensitiveCompare(recent.address) == .orderedSame && $0.port == recent.port }
+      servers.append(QuickServer(id: recent.id, name: recent.name, address: Self.addressText(recent.address, port: recent.port), login: bookmark?.login, password: bookmark?.password, isRecent: true, lastConnected: recent.lastConnected))
+    }
+    for bookmark in bookmarks {
+      let id = "\(bookmark.address.lowercased()):\(bookmark.port)"
+      guard !servers.contains(where: { $0.id == id }) else {
+        continue
+      }
+      servers.append(QuickServer(id: id, name: bookmark.name.isBlank ? bookmark.address : bookmark.name, address: Self.addressText(bookmark.address, port: bookmark.port), login: bookmark.login, password: bookmark.password, isRecent: false, lastConnected: nil))
+    }
+    return Array(servers.prefix(3 * self.quickServerColumns))
+  }
+
+  /// The servers to connect to in a click, in as many columns as fit, coming in one after another
+  /// as the form shows, and dimmed while it's connecting.
+  private var quickServersGrid: some View {
+    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: self.quickServerColumns), alignment: .leading, spacing: 4) {
+      ForEach(Array(self.quickServers.enumerated()), id: \.element.id) { index, server in
+        QuickServerButton(name: server.name, address: server.address, lastConnected: server.lastConnected) {
+          self.connect(to: server.address, login: server.login, password: server.password)
+        }
+        .contextMenu {
+          if server.isRecent {
+            Button("Remove from Recent Servers") {
+              withAnimation(.snappy) {
+                Prefs.shared.recentServers.removeAll { $0.id == server.id }
+              }
+            }
+          }
+        }
+        .opacity(self.quickServersShown ? 1 : 0)
+        .offset(y: self.quickServersShown ? 0 : 6)
+        .animation(.spring(duration: 0.5, bounce: 0.2).delay(0.04 * Double(index)), value: self.quickServersShown)
+      }
+    }
+    .padding(.top, 2)
+    .opacity(self.isConnecting ? 0.4 : 1)
+    .disabled(self.isConnecting)
   }
 
   /// Connect, a blue circle beside the address, which turns into a plain X that stops it while it's
@@ -379,6 +483,94 @@ struct ConnectView: View {
     .frame(height: Self.addressHeight)
     // Room between the row and the edge of the card, or the divider.
     .padding(.vertical, 4)
+  }
+}
+
+/// A server in the connect form to connect to in a click: its globe and name, and for a recent one,
+/// how long ago you were on it, in a capsule while the pointer's over it, with an arrow for going
+/// there in place of the time, and its whole name and address as its help.
+private struct QuickServerButton: View {
+  let name: String
+  let address: String
+  let lastConnected: Date?
+  let action: () -> Void
+  @State private var hovered = false
+
+  var body: some View {
+    Button(action: self.action) {
+      HStack(spacing: 6) {
+        // The globe the address field has, and where it has it.
+        Image("Server")
+          .resizable()
+          .scaledToFit()
+          .frame(width: 16, height: 16)
+          .accessibilityHidden(true)
+        // The name, with all the room there is, close up to the time.
+        HStack(spacing: 4) {
+          Text(self.name)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+          // A bookmark without a time only makes room for the arrow while it shows.
+          if self.lastConnected != nil || self.hovered {
+            ZStack(alignment: .trailing) {
+              if let lastConnected = self.lastConnected {
+                // Kept up to date while the form's open, from the time it's redrawn, as the minute
+                // it's for can be most of a minute before.
+                TimelineView(.everyMinute) { _ in
+                  Text(Self.age(of: lastConnected, now: .now))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                }
+                .opacity(self.hovered ? 0 : 1)
+              }
+              Image(systemName: "arrow.right")
+                .font(.system(size: 10, weight: .semibold))
+                .opacity(self.hovered ? 1 : 0)
+                .accessibilityHidden(true)
+            }
+          }
+        }
+      }
+      .font(.callout)
+      .foregroundStyle(self.hovered ? .primary : .secondary)
+      .padding(.leading, 12)
+      .padding(.trailing, 8)
+      .frame(height: 26)
+      .background(.quaternary.opacity(self.hovered ? 1 : 0), in: Capsule())
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover { hovering in
+      withAnimation(.easeOut(duration: 0.15)) {
+        self.hovered = hovering
+      }
+    }
+    // The whole name, as it can be cut short, its address, and when you were last on it.
+    .help([self.name, self.address, self.lastConnected.map { "Last connected \($0.formatted(date: .abbreviated, time: .shortened))" }].compactMap { $0 }.joined(separator: "\n"))
+    .accessibilityLabel("Connect to \(self.name)")
+  }
+
+  /// How long ago, as short as it can be: now, 5m, 5h, 6d, 8mo, 2y.
+  static func age(of date: Date, now: Date) -> String {
+    let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date, to: now)
+    if let years = parts.year, years > 0 {
+      return "\(years)y"
+    }
+    if let months = parts.month, months > 0 {
+      return "\(months)mo"
+    }
+    if let days = parts.day, days > 0 {
+      return "\(days)d"
+    }
+    if let hours = parts.hour, hours > 0 {
+      return "\(hours)h"
+    }
+    if let minutes = parts.minute, minutes > 0 {
+      return "\(minutes)m"
+    }
+    return "now"
   }
 }
 

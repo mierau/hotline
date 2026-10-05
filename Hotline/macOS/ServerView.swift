@@ -224,8 +224,16 @@ struct ServerView: View {
         await self.model.disconnect()
       }
     }
+    .onChange(of: self.model.status) { old, new in
+      self.rememberServer()
+      // Leaving it is the last time you were on it.
+      if old == .loggedIn && new != .loggedIn {
+        Prefs.shared.rememberServer(address: self.server.address, port: self.server.port)
+      }
+    }
     .onChange(of: self.model.serverTitle) {
       self.state.serverName = self.model.serverTitle
+      self.rememberServer()
     }
     .onChange(of: AppState.shared.pendingLink) { _, _ in
       self.consumePendingLink()
@@ -551,6 +559,15 @@ struct ServerView: View {
     if section == .files, let filePath = pending.initialFilePath {
       self.state.fileNavigationPath = filePath
     }
+  }
+
+  /// Puts the server first among the recent ones once it's logged in to, under the name it goes by,
+  /// which can come a moment after.
+  private func rememberServer() {
+    guard self.model.status == .loggedIn else {
+      return
+    }
+    Prefs.shared.rememberServer(address: self.server.address, port: self.server.port, name: self.model.serverTitle)
   }
 
   private func syncFieldsFromServer() {

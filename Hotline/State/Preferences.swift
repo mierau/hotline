@@ -1,6 +1,21 @@
 import SwiftUI
 import AppKit
 
+/// A server logged in to before, to connect to again in a click.
+struct RecentServer: Codable, Hashable, Identifiable {
+  var address: String
+  var port: Int
+  /// The server's own name, or what it was known by, which is its address if nothing else.
+  var name: String
+  /// When you were last on it: when you logged in to it, or left it. Not known for one remembered
+  /// before this was.
+  var lastConnected: Date?
+
+  var id: String {
+    "\(self.address.lowercased()):\(self.port)"
+  }
+}
+
 struct HighlightWord: Codable, Hashable {
   var word: String
   var color: String  // "primary", "red", "orange", "yellow", "green", "blue", "purple", "pink"
@@ -116,6 +131,7 @@ enum PrefsKeys: String {
   case downloadFolderBookmark = "download folder bookmark"
   case filesViewMode = "files view mode"
   case watchWords = "watch words"
+  case recentServers = "recent servers"
   case hasCompletedOnboarding = "has completed onboarding"
 }
 
@@ -185,6 +201,13 @@ class Prefs {
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
 
     self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: PrefsKeys.hasCompletedOnboarding.rawValue)
+
+    if let recentServersData = UserDefaults.standard.data(forKey: PrefsKeys.recentServers.rawValue),
+       let decoded = try? JSONDecoder().decode([RecentServer].self, from: recentServersData) {
+      self.recentServers = decoded
+    } else {
+      self.recentServers = []
+    }
 
     if let watchWordsData = UserDefaults.standard.data(forKey: PrefsKeys.watchWords.rawValue) {
       if let decoded = try? JSONDecoder().decode([HighlightWord].self, from: watchWordsData) {
@@ -314,6 +337,31 @@ class Prefs {
         UserDefaults.standard.set(encoded, forKey: PrefsKeys.watchWords.rawValue)
       }
     }
+  }
+
+  /// Servers logged in to, the latest first.
+  var recentServers: [RecentServer] {
+    didSet {
+      if let encoded = try? JSONEncoder().encode(self.recentServers) {
+        UserDefaults.standard.set(encoded, forKey: PrefsKeys.recentServers.rawValue)
+      }
+    }
+  }
+
+  /// Puts a server first among the recent ones, once, as just connected to, with the name it goes
+  /// by now, or if that isn't given, the name it had, keeping the last dozen.
+  func rememberServer(address: String, port: Int, name: String? = nil) {
+    var server = RecentServer(address: address, port: port, name: address, lastConnected: .now)
+    let known = self.recentServers.first { $0.id == server.id }
+    if let name, !name.isBlank {
+      server.name = name
+    }
+    else if let known {
+      server.name = known.name
+    }
+    var servers = self.recentServers.filter { $0.id != server.id }
+    servers.insert(server, at: 0)
+    self.recentServers = Array(servers.prefix(12))
   }
 
   var hasCompletedOnboarding: Bool {
