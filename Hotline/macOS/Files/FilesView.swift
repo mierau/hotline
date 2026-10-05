@@ -5,6 +5,9 @@ import AppKit
 struct FilesView: View {
   @Environment(HotlineState.self) private var model: HotlineState
   @Environment(\.openWindow) private var openWindow
+  @Environment(\.controlActiveState) private var controlActiveState
+  @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.serverTheme) private var theme
 
   @Bindable var serverState: ServerState
 
@@ -312,18 +315,23 @@ struct FilesView: View {
     }
     .safeAreaInset(edge: .top) {
       if isShowingSearchResults, let message = searchStatusMessage {
+        // In the window in front, white on the bar's color, and in other windows, dimmer, on a
+        // fainter bar, as selections are.
+        let emphasized = self.controlActiveState == .key
+        let onBar: Color = emphasized ? .white : .secondary
         HStack(alignment: .center, spacing: 6) {
           if case .searching(_, _) = model.fileSearchStatus {
+            // The spinner only takes its color from light and dark, so it's dark's, light, on the
+            // bar's color, to go with the white there.
             ProgressView()
               .controlSize(.small)
-              .accentColor(.white)
-              .tint(.white)
+              .environment(\.colorScheme, emphasized ? .dark : self.colorScheme)
           }
           else if case .completed = model.fileSearchStatus {
             Image(systemName: "checkmark.circle.fill")
               .resizable()
               .symbolRenderingMode(.monochrome)
-              .foregroundStyle(.white)
+              .foregroundStyle(onBar)
               .aspectRatio(contentMode: .fit)
               .frame(width: 16, height: 16)
           }
@@ -331,7 +339,7 @@ struct FilesView: View {
             Image(systemName: "exclamationmark.triangle.fill")
               .resizable()
               .symbolRenderingMode(.monochrome)
-              .foregroundStyle(.white)
+              .foregroundStyle(onBar)
               .aspectRatio(contentMode: .fit)
               .frame(width: 16, height: 16)
           }
@@ -339,7 +347,7 @@ struct FilesView: View {
           Text(message)
             .lineLimit(1)
             .font(.body)
-            .foregroundStyle(.white)
+            .foregroundStyle(onBar)
 
           Spacer()
 
@@ -348,7 +356,7 @@ struct FilesView: View {
               .lineLimit(1)
               .truncationMode(.tail)
               .font(.footnote)
-              .foregroundStyle(.white)
+              .foregroundStyle(onBar)
               .opacity(0.5)
               .padding(.top, 2)
           }
@@ -362,9 +370,11 @@ struct FilesView: View {
               Color.fileComplete
             }
             else {
-              Color(nsColor: .controlAccentColor)
+              // The selection's color in the server's theme, which is dark enough for white on it.
+              Color(nsColor: self.theme?.selection ?? .controlAccentColor)
             }
           }
+          .opacity(emphasized ? 1 : 0.35)
           .clipShape(.capsule(style: .continuous))
         }
         .padding(.horizontal, 8)

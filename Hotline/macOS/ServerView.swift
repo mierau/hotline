@@ -60,7 +60,7 @@ struct ListItemView: View {
       if unread {
         Circle()
           .frame(width: 6, height: 6)
-          .serverUnreadDot(opacity: 0.75)
+          .serverUnreadDot(opacity: 0.9)
           .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 6))
       }
     }
@@ -386,35 +386,39 @@ struct ServerView: View {
   var usersSection: some View {
     ForEach(model.users) { user in
       HStack(spacing: 5) {
-        if let iconImage = HotlineState.getClassicIcon(Int(user.iconID)) {
-          Image(nsImage: iconImage)
-            .frame(width: 16, height: 16)
-            .padding(.leading, 2)
-            .padding(.trailing, 2)
+        // Fainter while they're idle, but not the dot, since unread messages from them matter
+        // whether they're there or not.
+        HStack(spacing: 5) {
+          if let iconImage = HotlineState.getClassicIcon(Int(user.iconID)) {
+            Image(nsImage: iconImage)
+              .frame(width: 16, height: 16)
+              .padding(.leading, 2)
+              .padding(.trailing, 2)
+          }
+          else {
+            Image("User")
+              .frame(width: 16, height: 16)
+              .padding(.leading, 2)
+              .padding(.trailing, 2)
+          }
+          
+          Text(user.name)
+            // Bolder with messages from them you haven't read, as the dot beside it shows.
+            .fontWeight(model.hasUnreadPrivateMessages(userID: user.id) ? .semibold : nil)
+            .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary))
         }
-        else {
-          Image("User")
-            .frame(width: 16, height: 16)
-            .padding(.leading, 2)
-            .padding(.trailing, 2)
-        }
-        
-        Text(user.name)
-          // Bolder with messages from them you haven't read, as the dot beside it shows.
-          .fontWeight(model.hasUnreadPrivateMessages(userID: user.id) ? .semibold : nil)
-          .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary))
+        .opacity(user.isIdle ? 0.5 : 1.0)
 
         Spacer()
         
         if model.hasUnreadPrivateMessages(userID: user.id) {
           Circle()
             .frame(width: 6, height: 6)
-            .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary.opacity(0.5)))
+            .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary.opacity(0.7)))
             .serverUnreadDot()
             .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2))
         }
       }
-      .opacity(user.isIdle ? 0.5 : 1.0)
       .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
       .tag(ServerNavigationType.user(userID: user.id))
       .serverThemedRow(for: ServerNavigationType.user(userID: user.id))
@@ -634,6 +638,7 @@ struct ServerTransferRow: View {
   let transfer: TransferInfo
     
   @Environment(\.controlActiveState) private var controlActiveState
+  @Environment(\.serverTheme) private var theme
   @Environment(HotlineState.self) private var model: HotlineState
   @State private var hovered: Bool = false
   @State private var buttonHovered: Bool = false
@@ -669,6 +674,8 @@ struct ServerTransferRow: View {
         ProgressView(value: min(max(self.transfer.progress, 0.0), 1.0), total: 1.0)
           .progressViewStyle(.linear)
           .controlSize(.extraLarge)
+          // In the server's theme, in its accent, as it stands out on the sidebar.
+          .tint(self.theme?.sidebarAccent.map { Color(nsColor: $0) })
           .frame(maxWidth: 40)
       }
       

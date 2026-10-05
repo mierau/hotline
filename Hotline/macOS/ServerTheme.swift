@@ -16,9 +16,9 @@ struct ServerTheme: Equatable {
   /// Admins' names in the sidebar: the accent, as the unread dots are, or without one, Hotline's red,
   /// as light or dark as it has to be to read on it.
   let sidebarAdmin: NSColor
-  /// The dot on sidebar rows with something unread: the accent, as light or dark as it has to be to
-  /// stand out on the sidebar.
-  let sidebarUnread: NSColor?
+  /// The accent, as light or dark as it has to be to stand out on the sidebar, for what's marked
+  /// there, like unread dots and transfers' progress.
+  let sidebarAccent: NSColor?
   /// Behind chat, news and files.
   let content: NSColor
   /// Behind the board's posts and messages, and news's topics, a step deeper than the content.
@@ -97,7 +97,7 @@ struct ServerTheme: Equatable {
     self.admin = Self.admin(hue, on: self.content)
     // As much contrast as marks need, a little less than text.
     let sidebar = self.sidebar
-    self.sidebarUnread = hue.map { Self.standingOut($0, on: sidebar, enough: 3) }
+    self.sidebarAccent = hue.map { Self.standingOut($0, on: sidebar, enough: 3) }
   }
 
   /// Admins' names: `color`, or without one, Hotline's red, made to read on `background` as well as
@@ -158,12 +158,19 @@ extension ShapeStyle where Self == ServerAdminStyle {
   }
 }
 
-/// What matters less in a server-themed list's rows, like dates and counts: the theme's color for
-/// it, or on a selected row, the text's color part way to the selection's. It's the list's secondary
-/// style, so it's taken where each row shows it.
-private struct ServerSecondaryStyle: ShapeStyle {
+/// What matters less, like dates and counts: the server's theme's color for it, as chat has it, or
+/// the system's secondary without one. In a server-themed list, it's the list's secondary style,
+/// taken where each row shows it, so a selected row has the text's color part way to the
+/// selection's instead.
+struct ServerSecondaryStyle: ShapeStyle {
   func resolve(in environment: EnvironmentValues) -> Color {
-    environment.serverSecondaryColor ?? .secondary
+    environment.serverSecondaryColor ?? environment.serverTheme.map { Color(nsColor: $0.secondaryText) } ?? .secondary
+  }
+}
+
+extension ShapeStyle where Self == ServerSecondaryStyle {
+  static var serverSecondary: ServerSecondaryStyle {
+    ServerSecondaryStyle()
   }
 }
 
@@ -350,7 +357,7 @@ private struct ServerThemedSidebar: ViewModifier {
     content
       .environment(\.serverListSelection, ServerListSelection(selected: self.selection, color: self.theme?.selection, cornerRadius: 8))
       .environment(\.serverAdminColor, self.theme.map { Color(nsColor: $0.sidebarAdmin) })
-      .environment(\.serverUnreadColor, self.theme?.sidebarUnread.map { Color(nsColor: $0) })
+      .environment(\.serverUnreadColor, self.theme?.sidebarAccent.map { Color(nsColor: $0) })
       .scrollContentBackground(self.theme == nil ? .automatic : .hidden)
       .background {
         if let theme = self.theme {

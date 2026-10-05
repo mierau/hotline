@@ -361,7 +361,7 @@ struct NewsView: View {
                 .padding(.bottom, 16)
               Spacer()
               Text("\(NewsItemView.dateFormatter.string(from: postDate))")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.serverSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .textSelection(.enabled)
@@ -370,6 +370,7 @@ struct NewsView: View {
           }
           
           Divider()
+            .serverThemedDivider()
           
           Text(selection.name).font(.title)
             .textSelection(.enabled)
