@@ -21,6 +21,7 @@
 		74E6D6FF679AB7EF240A91A4 /* BinHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7341B898EE4921F2C3CF13E /* BinHex.swift */; };
 		75C68B588D2565F54C93DBD8 /* DiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6002BAA6187486986175C6EA /* DiskImage.swift */; };
 		7D7AFEB7DF73D88A4C75F882 /* ServerSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC75DCF747BDE0557CFF5CA /* ServerSuggestions.swift */; };
+		9618C46F9D5DFA8A622BE24D /* ServerTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA59B43BA1935EFCD162F4B /* ServerTheme.swift */; };
 		8D3E4565628F763A7277DA53 /* ChatTranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E219BD27B4005CD09D3AE4 /* ChatTranscriptView.swift */; };
 		A002A460BF1E0E92399AB6BC /* XARArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FC35CCCD4BD119E453E4100 /* XARArchive.swift */; };
 		B80C9D251E65A1F31D0CE0C9 /* ChatMessageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDF6C825424D089CCFD85EA /* ChatMessageRenderer.swift */; };
@@ -177,6 +178,7 @@
 		43274A6A673C9471F719D980 /* MacBinary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacBinary.swift; sourceTree = "<group>"; };
 		43B2284214709C056E442BE1 /* ChatLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLogView.swift; sourceTree = "<group>"; };
 		4FC75DCF747BDE0557CFF5CA /* ServerSuggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerSuggestions.swift; sourceTree = "<group>"; };
+		5EA59B43BA1935EFCD162F4B /* ServerTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerTheme.swift; sourceTree = "<group>"; };
 		6002BAA6187486986175C6EA /* DiskImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskImage.swift; sourceTree = "<group>"; };
 		63C7BB6A3389106DAB6006D5 /* FilePreviewArchiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewArchiveView.swift; sourceTree = "<group>"; };
 		6DF11A389B4DE29AEAF66B70 /* ChatImagePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatImagePreview.swift; sourceTree = "<group>"; };
@@ -664,6 +666,7 @@
 			isa = PBXGroup;
 			children = (
 				DAE734F82B2E4185000C56F6 /* ServerView.swift */,
+				5EA59B43BA1935EFCD162F4B /* ServerTheme.swift */,
 				DA55AC762BE589F700034857 /* AboutView.swift */,
 				DACCE5E22EABE86A008CDD92 /* AppUpdateView.swift */,
 				DAE136B92B9D1147007D8307 /* HotlinePanelView.swift */,
@@ -866,6 +869,7 @@
 				DA32CD4B2B29318E0053B98B /* FileInfo.swift in Sources */,
 				DAF5BC6C2EC2727700551E4D /* ConnectView.swift in Sources */,
 				7D7AFEB7DF73D88A4C75F882 /* ServerSuggestions.swift in Sources */,
+				9618C46F9D5DFA8A622BE24D /* ServerTheme.swift in Sources */,
 				DA20BBE12BF5237600B94E7C /* Bookmark.swift in Sources */,
 				DA3429B32EBA7ADF0010784E /* HotlineFilePreviewClient.swift in Sources */,
 				DA9CAFCB2B126E3300CDA197 /* HotlineTrackerClient.swift in Sources */,

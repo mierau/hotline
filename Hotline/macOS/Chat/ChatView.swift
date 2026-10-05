@@ -117,6 +117,7 @@ struct ChatView: View {
       .safeAreaInset(edge: .bottom, spacing: 0) {
         VStack(spacing: 0) {
           Divider()
+            .serverThemedDivider()
           self.inputBar
         }
       }
@@ -160,15 +161,7 @@ struct ChatView: View {
       self.stableBannerFileURL = newValue
       self.stableBannerIsAnimated = self.model.bannerImageFormat == .gif
     }
-    .background {
-      if #available(macOS 26.0, *) {
-        Color(.windowBackgroundColor)
-          .ignoresSafeArea()
-      } else {
-        Color(nsColor: .textBackgroundColor)
-          .ignoresSafeArea()
-      }
-    }
+    .serverBackground(.content)
   }
   
   private var inputBar: some View {

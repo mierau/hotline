@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FolderItemView: View {
   @Environment(HotlineState.self) private var model: HotlineState
+  @Environment(\.serverTheme) private var theme
   
   @State var loading = false
   @State var dragOver = false
@@ -38,8 +39,7 @@ struct FolderItemView: View {
         Text(Image(systemName: file.expanded ? "chevron.down" : "chevron.right"))
           .fontWeight(.semibold)
           .font(.system(size: 10))
-          .foregroundStyle(dragOver ? Color.white : Color.primary)
-          .opacity(0.5)
+          .foregroundStyle(dragOver ? AnyShapeStyle(Color.white.opacity(0.5)) : AnyShapeStyle(.serverDisclosure))
       }
       .buttonStyle(.plain)
       .frame(width: 10)
@@ -86,7 +86,7 @@ struct FolderItemView: View {
       Spacer()
       if !file.isUnavailable {
         Text(file.fileSize == 0 ? "Empty" : "^[\(file.fileSize) \("file")](inflect: true)")
-          .foregroundStyle(dragOver ? Color.white.opacity(0.75) : Color.secondary)
+          .foregroundStyle(dragOver ? AnyShapeStyle(Color.white.opacity(0.75)) : AnyShapeStyle(.secondary))
           .lineLimit(1)
           .padding(.trailing, 6)
       }
@@ -94,7 +94,7 @@ struct FolderItemView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(
       RoundedRectangle(cornerRadius: 4.0)
-        .fill(dragOver ? Color(nsColor: NSColor.selectedContentBackgroundColor) : Color.clear)
+        .fill(dragOver ? Color(nsColor: self.theme?.selection ?? NSColor.selectedContentBackgroundColor) : Color.clear)
         .padding(.horizontal, -6)
         .padding(.vertical, -4)
     )
@@ -125,6 +125,7 @@ struct FolderItemView: View {
       
       return true
     }
+    .serverThemedRow(for: self.file)
     
     if file.expanded {
       ForEach(file.children!, id: \.self) { childFile in

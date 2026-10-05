@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MessageBoardView: View {
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.serverTheme) private var theme
   @Environment(HotlineState.self) private var model: HotlineState
   
   @State private var composerDisplayed: Bool = false
@@ -21,7 +22,7 @@ struct MessageBoardView: View {
     }
 //    .background(self.colorScheme == .light ? Color(nsColor: .tertiarySystemFill).ignoresSafeArea() : Color(nsColor: .controlBackgroundColor).ignoresSafeArea())
 //    .containerBackground(.hotlineRed, for: .window)
-    .background(Color(nsColor: .underPageBackgroundColor).opacity(self.colorScheme == .light ? 0.25 : 1.0).ignoresSafeArea())
+    .serverBackground(.page)
     .sheet(isPresented: $composerDisplayed) {
       MessageBoardEditorView()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -87,7 +88,7 @@ struct MessageBoardView: View {
                   .padding(.bottom, 8)
                 Spacer()
               }
-              .background(.quinary.opacity(self.colorScheme == .light ? 0.7 : 0.3))
+              .serverBackground(.postHeader)
               
               Divider().opacity(self.colorScheme == .light ? 0.7 : 0.3)
             }
@@ -117,7 +118,7 @@ struct MessageBoardView: View {
               .textSelection(.enabled)
               .padding(.vertical, 16)
               .padding(.horizontal, 24)
-              .background(.quinary.opacity(self.colorScheme == .light ? 0.7 : 0.3))
+              .serverBackground(.postHeader)
 //              Divider()
             }
             
@@ -144,12 +145,14 @@ struct MessageBoardView: View {
             .padding(.vertical, 24)
           }
 //          .padding(.bottom, 16)
-          .background(Color(nsColor: .textBackgroundColor))
+          .serverBackground(.post)
           
 //          .background(self.colorScheme == .light ? AnyShapeStyle(Color.clear) : AnyShapeStyle(.thickMaterial))
 //          .background(self.colorScheme == .light ? Color(nsColor: .controlBackgroundColor) : Color.clear)
           .clipShape(.rect(cornerRadius: 16))
-          .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
+          // In the server's theme, the page's color sets the posts apart. Without one, the page is
+          // nearly as white as they are.
+          .shadow(color: .black.opacity(self.theme == nil ? 0.08 : 0), radius: 2, x: 0, y: 1)
           .padding(.horizontal, 24)
           
 //          Divider()

@@ -44,6 +44,7 @@ struct FileItemView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .serverThemedRow(for: self.file)
 
     if file.expanded {
       ForEach(file.children!, id: \.self) { childFile in

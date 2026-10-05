@@ -6,6 +6,7 @@ private let gridColumnMin: CGFloat = 100
 private let gridColumnMax: CGFloat = 120
 
 struct FileGridItemView: View {
+  @Environment(\.serverTheme) private var theme
   let file: FileInfo
   let isSelected: Bool
   let isDragTarget: Bool
@@ -47,12 +48,12 @@ struct FileGridItemView: View {
       )
       .overlay(
         RoundedRectangle(cornerRadius: 6)
-          .fill(Color.accentColor.opacity(0.15))
+          .fill(.tint.opacity(0.15))
           .opacity(self.isDragTarget ? 1 : 0)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 6)
-          .strokeBorder(Color.accentColor, lineWidth: 2)
+          .strokeBorder(.tint, lineWidth: 2)
           .opacity(self.isDragTarget ? 1 : 0)
       )
 
@@ -66,7 +67,7 @@ struct FileGridItemView: View {
         .padding(.vertical, 1)
         .background(
           RoundedRectangle(cornerRadius: 4)
-            .fill(self.isSelected ? Color(nsColor: .selectedContentBackgroundColor) : Color.clear)
+            .fill(self.isSelected ? Color(nsColor: self.theme?.selection ?? .selectedContentBackgroundColor) : Color.clear)
         )
         .frame(width: 90, alignment: .center)
         .help(self.file.name.count > 10 ? self.file.name : "")

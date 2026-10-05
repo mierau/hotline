@@ -35,6 +35,17 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
   }
 
   private let fragments = ChatLayoutFragmentProvider()
+
+  /// The lines between days, and code blocks' languages, in place of the system's tertiary color, as
+  /// a server's theme has it.
+  var tertiaryColor: NSColor? {
+    didSet {
+      if self.tertiaryColor != oldValue {
+        self.fragments.tertiaryColor = self.tertiaryColor ?? .tertiaryLabelColor
+        self.redrawVisibleText()
+      }
+    }
+  }
   private var hoveredLink: NSRange?
   /// The characters whose highlights are up to date.
   private var highlightedCharacters = IndexSet()
@@ -1427,6 +1438,8 @@ extension ChatTranscriptTextView {
 final class ChatLayoutFragmentProvider: NSObject, NSTextLayoutManagerDelegate {
   /// The link or name under the pointer, in characters, which the fragment holding it underlines.
   var hoveredLink: NSRange?
+  /// The color of the lines between days, and code blocks' languages.
+  var tertiaryColor: NSColor = .tertiaryLabelColor
 
   func textLayoutManager(_ textLayoutManager: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation, in textElement: NSTextElement) -> NSTextLayoutFragment {
     guard let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else {
@@ -1458,7 +1471,7 @@ final class ChatLayoutFragmentProvider: NSObject, NSTextLayoutManagerDelegate {
 
 /// A message's layout fragment, with what it draws behind its text: the sender's icon before
 /// their name (wide icons run under the name, as in the user list), the rounded background of a
-/// server message or a code block, or the line above a date divider. It also underlines a link
+/// server message or a code block, or the line through a date divider. It also underlines a link
 /// under the pointer.
 final class ChatLayoutFragment: NSTextLayoutFragment {
   enum Decoration {
@@ -1550,12 +1563,13 @@ final class ChatLayoutFragment: NSTextLayoutFragment {
       return CGRect(x: -self.layoutFragmentFrame.minX, y: text.minY - 10, width: width, height: text.height + 20)
 
     case .divider:
-      // A line just above the date, from where text starts across to the same margin on the right.
-      let text = self.textBounds
+      // A line through the middle of the date, from where text starts across to the same margin on
+      // the right, which leaves room around the date as it's drawn.
+      let line = self.textLineFragments.first?.typographicBounds ?? self.textBounds
       let width = self.textLayoutManager?.textContainer?.size.width ?? self.layoutFragmentFrame.width
       let left = self.lineFragmentPadding - self.layoutFragmentFrame.minX
       let right = width - self.lineFragmentPadding - self.layoutFragmentFrame.minX
-      return CGRect(x: left, y: text.minY - 6, width: right - left, height: 1)
+      return CGRect(x: left, y: line.midY, width: right - left, height: 1)
 
     case .codeBlock:
       // Around the code, from where a message's wrapped lines start across to the right margin,
@@ -1572,6 +1586,25 @@ final class ChatLayoutFragment: NSTextLayoutFragment {
 
   override var renderingSurfaceBounds: CGRect {
     super.renderingSurfaceBounds.union(self.decorationBounds)
+  }
+
+  /// The room a divider's line leaves either side of the date.
+  private static let dividerGap: CGFloat = 8
+
+  /// Where a divider's date starts and ends across, in the fragment's coordinates.
+  private var dividerDate: ClosedRange<CGFloat>? {
+    guard let line = self.textLineFragments.first else {
+      return nil
+    }
+    let string = line.attributedString.string as NSString
+    let start = line.characterRange.location
+    var end = NSMaxRange(line.characterRange)
+    // Not the line break after it.
+    while end > start, CharacterSet.newlines.contains(UnicodeScalar(string.character(at: end - 1)) ?? " ") {
+      end -= 1
+    }
+    let origin = line.typographicBounds.minX
+    return (origin + line.locationForCharacter(at: start).x)...(origin + line.locationForCharacter(at: end).x)
   }
 
   /// Where a code block's background starts: where its lines do, less its padding.
@@ -1621,12 +1654,22 @@ final class ChatLayoutFragment: NSTextLayoutFragment {
 
     case .divider:
       // One pixel tall, whatever the screen's scale, and darker than a separator, to stand out from
-      // the messages.
+      // the messages. It stops short of the date and goes on after it.
       let rect = self.decorationBounds.offsetBy(dx: point.x, dy: point.y)
       let pixel = abs(context.convertToUserSpace(CGSize(width: 1, height: 1)).height)
+      let y = (rect.minY / pixel).rounded(.down) * pixel
+      var segments = [rect.minX...rect.maxX]
+      if let date = self.dividerDate {
+        let before = rect.minX...max(rect.minX, date.lowerBound + point.x - Self.dividerGap)
+        let after = min(rect.maxX, date.upperBound + point.x + Self.dividerGap)...rect.maxX
+        segments = [before, after]
+      }
       context.saveGState()
-      context.setFillColor(NSColor.tertiaryLabelColor.cgColor)
-      context.fill(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: pixel))
+      context.setFillColor((self.provider?.tertiaryColor ?? .tertiaryLabelColor).cgColor)
+      // A stub too short to read as a line isn't drawn.
+      for segment in segments where segment.upperBound - segment.lowerBound >= 4 {
+        context.fill(CGRect(x: segment.lowerBound, y: y, width: segment.upperBound - segment.lowerBound, height: pixel))
+      }
       context.restoreGState()
 
     case .codeBlock:
@@ -1640,7 +1683,7 @@ final class ChatLayoutFragment: NSTextLayoutFragment {
         // Small and faint, in line with the code.
         let label = NSAttributedString(string: language, attributes: [
           .font: Self.codeLanguageFont,
-          .foregroundColor: NSColor.tertiaryLabelColor,
+          .foregroundColor: self.provider?.tertiaryColor ?? .tertiaryLabelColor,
         ])
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)

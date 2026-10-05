@@ -50,9 +50,12 @@ struct ChatTranscriptView: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     let coordinator = context.coordinator
     coordinator.onCacheUpdate = self.isFiltered ? nil : self.onCacheUpdate
-    coordinator.options = ChatMessageRenderer.Options(showsIcons: self.showsIcons, previewsImages: self.previewsImages)
+    let theme = context.environment.serverTheme
+    coordinator.options = ChatMessageRenderer.Options(showsIcons: self.showsIcons, previewsImages: self.previewsImages, adminColor: theme?.admin, secondaryColor: theme?.secondaryText, tertiaryColor: theme?.tertiaryText)
 
     if let textView = coordinator.textView {
+      textView.applyServerTheme(theme)
+      textView.tertiaryColor = theme?.tertiaryText
       textView.openURLAction = self.openURL
       textView.describeHotlineLink = self.describeHotlineLink
       textView.fileLinkMenu = self.fileLinkMenu
@@ -78,10 +81,11 @@ struct ChatTranscriptView: NSViewRepresentable {
       didSet { self.observeScrolling() }
     }
     var onCacheUpdate: ((NSAttributedString, Int) -> Void)?
-    /// How messages are shown. When the settings change, every message is rendered again.
+    /// How messages are shown. When the settings change, or the server's theme, every message is
+    /// rendered again.
     var options = ChatMessageRenderer.Options() {
       didSet {
-        if self.options.showsIcons != oldValue.showsIcons || self.options.previewsImages != oldValue.previewsImages {
+        if self.options != oldValue {
           self.renderedMessages = [:]
           self.renderedContinuations = [:]
           self.savedText = nil
@@ -167,7 +171,7 @@ struct ChatTranscriptView: NSViewRepresentable {
     private static let renderingKey = NSAttributedString.Key("chatRendering")
 
     private var rendering: String {
-      "icons \(self.options.showsIcons), previews \(self.options.previewsImages)"
+      "icons \(self.options.showsIcons), previews \(self.options.previewsImages), admins \(self.options.adminColor?.description ?? "red"), secondary \(self.options.secondaryColor?.description ?? "system"), tertiary \(self.options.tertiaryColor?.description ?? "system")"
     }
 
     private func saveText(_ storage: NSTextStorage) {

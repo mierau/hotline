@@ -371,15 +371,7 @@ struct FilesView: View {
         .padding(.top, 8)
       }
     }
-    .background {
-      if #available(macOS 26.0, *) {
-        Color(.windowBackgroundColor)
-          .ignoresSafeArea()
-      } else {
-        Color(nsColor: .textBackgroundColor)
-          .ignoresSafeArea()
-      }
-    }
+    .serverBackground(.content)
   }
 
   // MARK: - List View
@@ -458,7 +450,7 @@ struct FilesView: View {
       }
       .environment(\.defaultMinListRowHeight, 28)
       .listStyle(.inset)
-      .alternatingRowBackgrounds(.enabled)
+      .serverThemedList(selection: self.selection)
       .onChange(of: self.selection) { _, newValue in
         if let file = newValue {
           withAnimation {

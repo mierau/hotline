@@ -31,7 +31,7 @@ struct NewsItemView: View {
           Text(Image(systemName: news.expanded ? "chevron.down" : "chevron.right"))
             .fontWeight(.semibold)
             .font(.system(size: 10))
-            .opacity(0.5)
+            .foregroundStyle(.serverDisclosure)
             .frame(alignment: .center)
         }
         .buttonStyle(.plain)
@@ -137,6 +137,7 @@ struct NewsItemView: View {
         try? await model.getNewsList(at: news.path)
       }
     }
+    .serverThemedRow(for: self.news)
     
     if news.expanded {
       ForEach(news.children.reversed(), id: \.self) { childNews in

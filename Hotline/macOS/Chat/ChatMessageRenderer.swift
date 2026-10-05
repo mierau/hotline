@@ -41,11 +41,20 @@ enum ChatMessageRenderer {
   static let fileLinkKey = NSAttributedString.Key("chatFileLink")
 
   /// How messages are shown: what the settings ask for, and which server the chat is on.
-  struct Options {
+  struct Options: Equatable {
     /// Whether messages have their sender's icon before them. Without, there's no icon column.
     var showsIcons = true
     /// Whether links to images have a preview under them.
     var previewsImages = true
+    /// Admins' names, and when they come and go, in place of Hotline's red, as a server's theme has
+    /// them.
+    var adminColor: NSColor? = nil
+    /// What matters less, like emotes, and people coming and going, in place of the system's
+    /// secondary color, as a server's theme has it.
+    var secondaryColor: NSColor? = nil
+    /// What matters least, like the days between messages, in place of the system's tertiary color,
+    /// as a server's theme has it.
+    var tertiaryColor: NSColor? = nil
   }
 
   // MARK: Layout
@@ -93,7 +102,7 @@ enum ChatMessageRenderer {
     case .left:
       text = self.presence(message, arrow: "\u{2190}", options: options)
     case .signOut:
-      text = self.divider(message)
+      text = self.divider(message, options: options)
     case .server:
       text = self.serverMessage(message)
     case .agreement:
@@ -126,7 +135,7 @@ enum ChatMessageRenderer {
     if let username = message.username, !continuing {
       let nameAttributes: [NSAttributedString.Key: Any] = [
         .font: self.semiboldFont,
-        .foregroundColor: message.isAdmin ? self.adminColor : NSColor.textColor,
+        .foregroundColor: message.isAdmin ? options.adminColor ?? self.adminColor : NSColor.textColor,
         .paragraphStyle: paragraph,
         self.skipHighlightKey: true,
       ]
@@ -179,7 +188,7 @@ enum ChatMessageRenderer {
       string: self.lineSeparated(displayText),
       attributes: [
         .font: italic,
-        .foregroundColor: NSColor.secondaryLabelColor,
+        .foregroundColor: options.secondaryColor ?? NSColor.secondaryLabelColor,
         .paragraphStyle: paragraph,
       ]
     )
@@ -205,24 +214,29 @@ enum ChatMessageRenderer {
       string: "\(arrow)\t\(message.text)",
       attributes: [
         .font: self.baseFont,
-        .foregroundColor: message.isAdmin ? self.adminColor : NSColor.secondaryLabelColor,
+        .foregroundColor: message.isAdmin ? options.adminColor ?? self.adminColor : options.secondaryColor ?? NSColor.secondaryLabelColor,
         .paragraphStyle: paragraph,
         self.skipHighlightKey: true,
       ]
     )
   }
 
-  private static func divider(_ message: ChatMessage) -> NSMutableAttributedString {
+  /// The day and time a session starts, in a line across the chat, where people coming and going
+  /// have what they did.
+  private static func divider(_ message: ChatMessage, options: Options) -> NSMutableAttributedString {
     let paragraph = NSMutableParagraphStyle()
-    // 34 above the date and 18 below it, with what's around it.
-    paragraph.paragraphSpacingBefore = 34 - self.groupedSpacing
+    let textStart = options.showsIcons ? self.textIndent : self.hangingIndent
+    paragraph.firstLineHeadIndent = textStart
+    paragraph.headIndent = textStart
+    // 28 above the date and 18 below it, with what's around it.
+    paragraph.paragraphSpacingBefore = 28 - self.groupedSpacing
     paragraph.paragraphSpacing = 18 - (self.messageSpacing - self.groupedSpacing)
 
     let text = NSMutableAttributedString(
       string: self.dividerDate(message.date),
       attributes: [
         .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-        .foregroundColor: NSColor.secondaryLabelColor,
+        .foregroundColor: options.tertiaryColor ?? NSColor.tertiaryLabelColor,
         .paragraphStyle: paragraph,
       ]
     )

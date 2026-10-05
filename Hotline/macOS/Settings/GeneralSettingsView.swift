@@ -15,10 +15,13 @@ struct GeneralSettingsView: View {
           .frame(maxWidth: .infinity)
       }
 
-      Section {
-        Toggle(isOn: $preferences.useServerThemedColors) {
-          Text("Use server themed colors")
-          Text("Server windows take their colors from the server's banner.")
+      // Themes are only on macOS 27 and later.
+      if #available(macOS 27, *) {
+        Section {
+          Toggle(isOn: $preferences.useServerThemedColors) {
+            Text("Use server themed colors")
+            Text("Server windows take their colors from the server's banner.")
+          }
         }
       }
 

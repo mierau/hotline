@@ -66,7 +66,7 @@ struct MessageView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color(nsColor: .underPageBackgroundColor).opacity(self.colorScheme == .light ? 0.25 : 1.0).ignoresSafeArea())
+    .serverBackground(.page)
     .onKeyPress(.downArrow, phases: [.down, .repeat]) { _ in
       self.moveFocus(direction: 1)
       return .handled
@@ -334,7 +334,7 @@ struct MessageView: View {
 
         Text(msg.senderName)
           .fontWeight(msg.isRead ? .regular : .semibold)
-          .foregroundStyle(msg.senderIsAdmin ? Color.hotlineRed : .primary)
+          .foregroundStyle(msg.senderIsAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary))
           .lineLimit(1)
           .truncationMode(.tail)
           .textSelection(.disabled)
@@ -417,12 +417,11 @@ struct MessageView: View {
       }
     }
     .padding(24)
-    .background(self.colorScheme == .light ? AnyShapeStyle(Color.clear) : AnyShapeStyle(.thickMaterial))
-    .background(self.colorScheme == .light ? Color(nsColor: .controlBackgroundColor) : Color.clear)
+    .serverBackground(.message)
     .clipShape(.rect(cornerRadius: 16))
     .overlay(
       RoundedRectangle(cornerRadius: 16)
-        .strokeBorder(Color.accentColor, lineWidth: 2)
+        .strokeBorder(.tint, lineWidth: 2)
         .opacity(self.focusedMessageID == msg.id ? 1 : 0)
     )
     .opacity(collapsed ? 0.75 : 1.0)

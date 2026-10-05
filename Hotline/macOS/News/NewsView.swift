@@ -6,6 +6,7 @@ struct NewsView: View {
   @Environment(HotlineState.self) private var model: HotlineState
   @Environment(\.openWindow) private var openWindow
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.serverTheme) private var theme
   
   @State private var selection: NewsInfo?
   @State private var articleText: String?
@@ -48,10 +49,14 @@ struct NewsView: View {
         )
         .fraction(splitFraction)
         .constraints(minPFraction: 0.1, minSFraction: 0.3)
-        .styling(color: colorScheme == .dark ? .black : Splitter.defaultColor, inset: 0, visibleThickness: 0.5, invisibleThickness: 5, hideSplitter: true)
+        // In the server's theme, no line, only the topics' deeper color meeting the article's. Its
+        // thickness changes with the theme, where its color is only taken when it first shows.
+        .styling(color: colorScheme == .dark ? .black : Splitter.defaultColor, inset: 0, visibleThickness: self.theme == nil ? 0.5 : 0, invisibleThickness: 5, hideSplitter: true)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
     }
+    // The topics' color, under them, and the toolbar over them, and what shows while news loads.
+    .serverBackground(.browser)
     .task {
       if !model.newsLoaded {
         loading = true
@@ -225,7 +230,7 @@ struct NewsView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .environment(\.defaultMinListRowHeight, 28)
     .listStyle(.inset)
-    .alternatingRowBackgrounds(.enabled)
+    .serverThemedList(selection: self.selection)
     .contextMenu(forSelectionType: NewsInfo.self) { items in
       let selectedItem = items.first
       let isBackground = items.isEmpty
@@ -392,15 +397,7 @@ struct NewsView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .transition(.move(edge: .bottom))
-    .background {
-      if #available(macOS 26.0, *) {
-        Color(.windowBackgroundColor)
-          .ignoresSafeArea()
-      } else {
-        Color(nsColor: .textBackgroundColor)
-          .ignoresSafeArea()
-      }
-    }
+    .serverBackground(.content)
   }
   
   // MARK: - Helpers

@@ -90,6 +90,8 @@ struct ChatInputField: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     context.coordinator.parent = self
     guard let textView = context.coordinator.textView else { return }
+    textView.applyServerTheme(context.environment.serverTheme)
+    textView.chevronColor = context.environment.serverTheme?.secondaryText
     // Never overwrite the text view's string while the IME is composing
     // (has marked text). Doing so clears the uncommitted composition,
     // causing input to vanish — especially when text wraps to a new line.
@@ -179,6 +181,13 @@ class ChatInputTextView: NSTextView {
 
   let leftInset: CGFloat = 30
   let rightInset: CGFloat = 12
+
+  /// The chevron's color, the system's tertiary label color, unless a server's theme has one.
+  var chevronColor: NSColor? {
+    didSet {
+      self.chevronView.contentTintColor = self.chevronColor ?? .tertiaryLabelColor
+    }
+  }
 
   private lazy var chevronView: NSImageView = {
     let config = NSImage.SymbolConfiguration(pointSize: NSFont.systemFontSize, weight: .semibold)
