@@ -722,6 +722,7 @@
 				DA9CAFB32B126D5700CDA197 /* Sources */,
 				DA9CAFB42B126D5700CDA197 /* Frameworks */,
 				DA9CAFB52B126D5700CDA197 /* Resources */,
+				DA090E433A02DD750F7F3A27 /* Remove Unused Math Fonts */,
 			);
 			buildRules = (
 			);
@@ -813,6 +814,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		DA090E433A02DD750F7F3A27 /* Remove Unused Math Fonts */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/swiftui-math_SwiftUIMath.bundle",
+			);
+			name = "Remove Unused Math Fonts";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/swiftui-math_SwiftUIMath.bundle/Contents/Resources/mathFonts.bundle",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Textual typesets math with swiftui-math, which brings a dozen math fonts. Hotline only ever uses\n# Textual's default, Latin Modern, for math code blocks, so keep that one and remove the rest, about\n# 6 MB. The license files stay.\nfonts=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/swiftui-math_SwiftUIMath.bundle/Contents/Resources/mathFonts.bundle\"\nif [ ! -f \"${fonts}/latinmodern-math.otf\" ]; then\n  echo \"warning: Couldn't find swiftui-math's Latin Modern font, so left its fonts alone. Check the Remove Unused Math Fonts build phase.\"\n  exit 0\nfi\nfind \"${fonts}\" -type f \\( -name '*.otf' -o -name '*.plist' \\) ! -name 'latinmodern-math.*' -delete\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		DA5A6EEE2F44F26500060F18 /* Sources */ = {
