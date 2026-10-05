@@ -311,15 +311,18 @@ struct FilePreviewQuickLookView: View {
   /// The file's icon, with its name beside it over whatever's to say about it, in the middle of the
   /// window.
   private func fileRow(failed: Bool = false, @ViewBuilder details: () -> some View) -> some View {
-    HStack(alignment: .center, spacing: 14) {
+    // A document icon's page only fills the middle 31 pt of its 48 pt square, so this leaves about
+    // 12 pt between the page and the text.
+    HStack(alignment: .center, spacing: 4) {
       FileIconView(filename: self.info?.name ?? "", fileType: self.info?.type)
         .frame(width: 48, height: 48)
         .overlay(alignment: .bottomTrailing) {
           if failed {
+            // On the page's bottom corner, hanging just past it to the right about as much as below.
             Image(systemName: "exclamationmark.triangle.fill")
               .symbolRenderingMode(.multicolor)
               .font(.system(size: 16))
-              .offset(x: 4, y: 2)
+              .offset(x: -4)
           }
         }
       VStack(alignment: .leading, spacing: 3) {
