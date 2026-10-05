@@ -132,6 +132,7 @@ enum PrefsKeys: String {
   case filesViewMode = "files view mode"
   case watchWords = "watch words"
   case recentServers = "recent servers"
+  case showRecentServers = "show recent servers"
   case hasCompletedOnboarding = "has completed onboarding"
 }
 
@@ -168,6 +169,7 @@ class Prefs {
       PrefsKeys.showChatIcons.rawValue: true,
       PrefsKeys.previewChatImages.rawValue: true,
       PrefsKeys.filesViewMode.rawValue: "grid",
+      PrefsKeys.showRecentServers.rawValue: true,
       PrefsKeys.hasCompletedOnboarding.rawValue: false,
     ])
     
@@ -199,6 +201,7 @@ class Prefs {
     self.previewChatImages = UserDefaults.standard.bool(forKey: PrefsKeys.previewChatImages.rawValue)
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
+    self.showRecentServers = UserDefaults.standard.bool(forKey: PrefsKeys.showRecentServers.rawValue)
 
     self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: PrefsKeys.hasCompletedOnboarding.rawValue)
 
@@ -313,6 +316,11 @@ class Prefs {
   /// Server windows in the colors of each server's banner.
   var useServerThemedColors: Bool {
     didSet { UserDefaults.standard.set(self.useServerThemedColors, forKey: PrefsKeys.useServerThemedColors.rawValue) }
+  }
+
+  /// Servers you've been on lately, under the address in a new server window.
+  var showRecentServers: Bool {
+    didSet { UserDefaults.standard.set(self.showRecentServers, forKey: PrefsKeys.showRecentServers.rawValue) }
   }
   
   var showJoinLeaveMessages: Bool {

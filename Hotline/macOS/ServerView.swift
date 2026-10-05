@@ -252,6 +252,9 @@ struct ServerView: View {
       if !NSEvent.modifierFlags.contains(.option) {
         self.connectToServer()
       }
+      else {
+        self.model.previewBanner(for: self.server)
+      }
     }
     .onChange(of: self.server) {
       // During window restoration, the binding may update after the view
@@ -260,6 +263,8 @@ struct ServerView: View {
         self.syncFieldsFromServer()
         self.connectionDisplayed = true
       }
+      // The banner follows the server as it's typed or chosen.
+      self.model.previewBanner(for: self.server)
     }
     .alert("Something Went Wrong", isPresented: self.$model.errorDisplayed) {
       Button("OK") {}

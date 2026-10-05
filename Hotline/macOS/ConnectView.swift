@@ -4,7 +4,7 @@ import SwiftData
 /// What a server window shows before it's connected, like a browser's address bar: the server's
 /// address, with servers from your bookmarks and your trackers suggested as you type, and Connect
 /// beside it. A login and password, for servers where you have an account, are a click away, and
-/// where they'd be, servers you've been to lately, and bookmarked ones, to connect to in a click.
+/// where they'd be, servers you've been to lately, to connect to in a click.
 struct ConnectView: View {
   @Environment(\.appearsActive) private var appearsActive
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
@@ -78,11 +78,13 @@ struct ConnectView: View {
               self.accountFields
                 .transition(.opacity)
             }
-            else {
+            // Only the server it's connecting to while it connects.
+            else if Prefs.shared.showRecentServers && !self.isConnecting {
               self.quickServersGrid
                 .transition(.opacity)
             }
           }
+          .animation(.easeInOut(duration: 0.2), value: self.isConnecting)
           .frame(maxWidth: .infinity)
           .frame(height: 2 * (Self.addressHeight + 8) + 1, alignment: .top)
           .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
@@ -159,15 +161,25 @@ struct ConnectView: View {
         .scaledToFit()
         .frame(width: 16, height: 16)
         .accessibilityHidden(true)
-      TextField("Server name or address", text: self.$address)
-        .textFieldStyle(.plain)
-        // A step up from the 13 pt of the rest of the app, for the one thing the window is for.
-        .font(.system(size: 15))
-        .focused(self.$focusedField, equals: .address)
-        .disabled(self.isConnecting)
-        .onKeyPress(keys: [.upArrow, .downArrow, .return, .escape, .tab]) { press in
-          self.handleKey(press)
-        }
+      // While it's connecting, the address as plain text, right where it's typed, so it can't be
+      // changed but isn't dimmed the way a disabled field would be.
+      if self.isConnecting {
+        Text(self.address)
+          .font(.system(size: 15))
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      else {
+        TextField("Server name or address", text: self.$address)
+          .textFieldStyle(.plain)
+          // A step up from the 13 pt of the rest of the app, for the one thing the window is for.
+          .font(.system(size: 15))
+          .focused(self.$focusedField, equals: .address)
+          .onKeyPress(keys: [.upArrow, .downArrow, .return, .escape, .tab]) { press in
+            self.handleKey(press)
+          }
+      }
       if !self.isConnecting {
         self.bookmarksMenu
       }
@@ -322,7 +334,7 @@ struct ConnectView: View {
     port == HotlinePorts.DefaultServerPort ? address : "\(address):\(port)"
   }
 
-  /// A server to connect to in a click: one logged in to lately, or a bookmarked one.
+  /// A server to connect to in a click: one logged in to lately.
   private struct QuickServer: Identifiable {
     let id: String
     let name: String
@@ -330,8 +342,7 @@ struct ConnectView: View {
     let address: String
     let login: String?
     let password: String?
-    let isRecent: Bool
-    /// When you were last on it, for a recent one.
+    /// When you were last on it, if that was known when it was remembered.
     let lastConnected: Date?
   }
 
@@ -343,27 +354,19 @@ struct ConnectView: View {
     max(1, min(3, Int((self.quickServersWidth + 6) / (Self.quickServerWidth + 6))))
   }
 
-  /// The servers logged in to lately, the latest first, then bookmarked ones, to fill three rows of
-  /// as many columns as fit. A recent server that's bookmarked too comes with the bookmark's login.
+  /// The servers logged in to lately, the latest first, as many as fill three rows of as many
+  /// columns as fit. One that's bookmarked too comes with the bookmark's login.
   private var quickServers: [QuickServer] {
     let bookmarks = self.bookmarks.filter { $0.type == .server }
-    var servers: [QuickServer] = []
-    for recent in Prefs.shared.recentServers {
+    let servers = Prefs.shared.recentServers.map { recent in
       let bookmark = bookmarks.first { $0.address.caseInsensitiveCompare(recent.address) == .orderedSame && $0.port == recent.port }
-      servers.append(QuickServer(id: recent.id, name: recent.name, address: Self.addressText(recent.address, port: recent.port), login: bookmark?.login, password: bookmark?.password, isRecent: true, lastConnected: recent.lastConnected))
-    }
-    for bookmark in bookmarks {
-      let id = "\(bookmark.address.lowercased()):\(bookmark.port)"
-      guard !servers.contains(where: { $0.id == id }) else {
-        continue
-      }
-      servers.append(QuickServer(id: id, name: bookmark.name.isBlank ? bookmark.address : bookmark.name, address: Self.addressText(bookmark.address, port: bookmark.port), login: bookmark.login, password: bookmark.password, isRecent: false, lastConnected: nil))
+      return QuickServer(id: recent.id, name: recent.name, address: Self.addressText(recent.address, port: recent.port), login: bookmark?.login, password: bookmark?.password, lastConnected: recent.lastConnected)
     }
     return Array(servers.prefix(3 * self.quickServerColumns))
   }
 
   /// The servers to connect to in a click, in as many columns as fit, coming in one after another
-  /// as the form shows, and dimmed while it's connecting.
+  /// as the form shows.
   private var quickServersGrid: some View {
     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: self.quickServerColumns), alignment: .leading, spacing: 4) {
       ForEach(Array(self.quickServers.enumerated()), id: \.element.id) { index, server in
@@ -371,11 +374,9 @@ struct ConnectView: View {
           self.connect(to: server.address, login: server.login, password: server.password)
         }
         .contextMenu {
-          if server.isRecent {
-            Button("Remove from Recent Servers") {
-              withAnimation(.snappy) {
-                Prefs.shared.recentServers.removeAll { $0.id == server.id }
-              }
+          Button("Remove from Recent Servers") {
+            withAnimation(.snappy) {
+              Prefs.shared.recentServers.removeAll { $0.id == server.id }
             }
           }
         }
@@ -385,8 +386,6 @@ struct ConnectView: View {
       }
     }
     .padding(.top, 2)
-    .opacity(self.isConnecting ? 0.4 : 1)
-    .disabled(self.isConnecting)
   }
 
   /// Connect, a blue circle beside the address, which turns into a plain X that stops it while it's
@@ -425,9 +424,12 @@ struct ConnectView: View {
     } label: {
       HStack(spacing: 4) {
         Text("Log in with an account")
-        Image(systemName: "chevron.down")
+        // Right while they're put away, turning down once they show, like a disclosure triangle. In a
+        // square, so it has the same room either way.
+        Image(systemName: "chevron.right")
           .font(.system(size: 10, weight: .semibold))
-          .rotationEffect(.degrees(self.showsAccount ? 180 : 0))
+          .frame(width: 10, height: 10)
+          .rotationEffect(.degrees(self.showsAccount ? 90 : 0))
       }
       .font(.callout)
       .foregroundStyle(.secondary)
@@ -486,9 +488,9 @@ struct ConnectView: View {
   }
 }
 
-/// A server in the connect form to connect to in a click: its globe and name, and for a recent one,
-/// how long ago you were on it, in a capsule while the pointer's over it, with an arrow for going
-/// there in place of the time, and its whole name and address as its help.
+/// A server in the connect form to connect to in a click: its globe and name, and how long ago you
+/// were on it, in a capsule while the pointer's over it, with an arrow for going there in place of
+/// the time, and its whole name and address as its help.
 private struct QuickServerButton: View {
   let name: String
   let address: String
@@ -511,7 +513,7 @@ private struct QuickServerButton: View {
             .lineLimit(1)
             .truncationMode(.tail)
             .frame(maxWidth: .infinity, alignment: .leading)
-          // A bookmark without a time only makes room for the arrow while it shows.
+          // One remembered before times were kept only makes room for the arrow while it shows.
           if self.lastConnected != nil || self.hovered {
             ZStack(alignment: .trailing) {
               if let lastConnected = self.lastConnected {

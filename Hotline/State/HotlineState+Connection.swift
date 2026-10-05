@@ -117,7 +117,7 @@ extension HotlineState {
         await client.disconnect()
         self.client = nil
       }
-      self.clearBanner()
+      self.stopDownloadingBanner()
       self.status = .disconnected
       throw error
     }
@@ -136,7 +136,7 @@ extension HotlineState {
         await client.disconnect()
         self.client = nil
       }
-      self.clearBanner()
+      self.stopDownloadingBanner()
       self.status = .disconnected
       throw clientError
     }
@@ -146,7 +146,7 @@ extension HotlineState {
         await client.disconnect()
         self.client = nil
       }
-      self.clearBanner()
+      self.stopDownloadingBanner()
       self.status = .disconnected
       self.displayError(error)
       throw error
@@ -310,8 +310,12 @@ extension HotlineState {
     self.pendingNavigation = nil
     self.accounts = []
     self.accountsLoaded = false
-    // Back to the default banner. The server's banner stays cached for next time.
-    self.clearBanner()
+    // The server stays in the connect form, and so does its banner: the one cached for it, or the
+    // default if it couldn't be kept.
+    self.stopDownloadingBanner()
+    if let server = self.server {
+      self.previewBanner(for: server)
+    }
 
     print("HotlineState: Resetting file search...")
     self.resetFileSearchState()
@@ -447,6 +451,8 @@ extension HotlineState {
     self.bannerCacheTask?.cancel()
     self.bannerCacheTask = Task { @MainActor [weak self] in
       guard let fileURL = await BannerCache.shared.banner(forAddress: server.address, port: server.port),
+            // Already showing, from typing the server in.
+            fileURL != self?.bannerFileURL,
             let banner = await Self.loadBanner(at: fileURL),
             let self,
             !Task.isCancelled,
@@ -458,15 +464,49 @@ extension HotlineState {
     }
   }
 
-  /// Stops loading the banner and goes back to the default one, for when the connection ends.
+  /// Before connecting, the banner cached from an earlier visit to the server in the connect form,
+  /// or the default banner if there isn't one, so the banner follows what's typed or chosen.
   @MainActor
-  func clearBanner() {
+  func previewBanner(for server: Server) {
+    guard self.status == .disconnected else {
+      return
+    }
     self.bannerCacheTask?.cancel()
-    self.bannerCacheTask = nil
+    self.bannerCacheTask = Task { @MainActor [weak self] in
+      // A moment after typing stops, rather than on the way through each keystroke.
+      try? await Task.sleep(for: .milliseconds(120))
+      guard !Task.isCancelled else {
+        return
+      }
+      let fileURL = server.address.isEmpty ? nil : await BannerCache.shared.banner(forAddress: server.address, port: server.port)
+      guard let self, !Task.isCancelled, self.status == .disconnected else {
+        return
+      }
+      guard let fileURL else {
+        self.hideBanner()
+        return
+      }
+      guard fileURL != self.bannerFileURL,
+            let banner = await Self.loadBanner(at: fileURL),
+            !Task.isCancelled,
+            self.status == .disconnected else {
+        return
+      }
+      self.showBanner(banner)
+    }
+  }
+
+  /// For a connection that doesn't go through: stops downloading the banner, but keeps the one
+  /// cached for the server, which is still in the connect form. One that came with the connection
+  /// and couldn't be cached goes with it.
+  @MainActor
+  private func stopDownloadingBanner() {
     self.bannerDownloadTask?.cancel()
     self.bannerDownloadTask = nil
     self.bannerDownloaded = false
-    self.hideBanner()
+    if self.bannerTemporaryFileURL != nil {
+      self.hideBanner()
+    }
   }
 
   /// For a server that no longer has a banner, or has one that can't be shown: forgets the cached
