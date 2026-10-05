@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import dnssd
 
 @Observable
 class BonjourState {
@@ -9,13 +10,6 @@ class BonjourState {
   
   private var browser: NWBrowser?
   private var resolutionTasks: [UUID: Task<Void, Never>] = [:]
-  
-  private actor ConnectionResolverState {
-    var completed = false
-    func markComplete() {
-      self.completed = true
-    }
-  }
   
   struct BonjourServer: Identifiable, Hashable {
     let id = UUID()
@@ -36,11 +30,6 @@ class BonjourState {
         return nil
       }
       return Server(name: self.displayName, description: nil, address: address, port: Int(port))
-    }
-    
-    var isLoopback: Bool {
-      guard let address = self.address else { return false }
-      return address.hasPrefix("127.") || address.hasPrefix("::1")
     }
     
     static func == (lhs: BonjourServer, rhs: BonjourServer) -> Bool {
@@ -114,126 +103,43 @@ class BonjourState {
     self.browser?.start(queue: .main)
   }
   
-  private func cleanAddress(_ addressString: String) -> String {
-    // For link-local IPv6 addresses (fe80::), we MUST keep the zone identifier
-    // because it tells the system which network interface to use for routing
-    // For all other addresses (global IPv6, IPv4), strip the zone identifier
-    if addressString.hasPrefix("fe80:") {
-      return addressString
-    }
-
-    return addressString.components(separatedBy: "%").first ?? addressString
-  }
-  
+  /// Finds out where a service is, its host name and port, and adds it to the list or updates it.
+  ///
+  /// This asks Bonjour rather than connecting to the server to see where it ends up, because a
+  /// server can count that connection against how often one address may connect, and turn away the
+  /// real one that follows.
+  @MainActor
   private func resolveService(_ result: NWBrowser.Result) async {
-    guard case .service(let name, _, _, _) = result.endpoint else {
+    guard case .service(let name, let type, let domain, let interface) = result.endpoint else {
       return
     }
 
-    // Create a connection to resolve the service
-    let connection = NWConnection(to: result.endpoint, using: .tcp)
-    let resolver = ConnectionResolverState()
-    
-    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-      connection.stateUpdateHandler = { [weak self] state in
-        Task { @MainActor in
-          if Task.isCancelled {
-            await resolver.markComplete()
-            return
-          }
-          
-          if await resolver.completed {
-            return
-          }
-          
-          switch state {
-          case .ready:
-            await resolver.markComplete()
+    guard let (host, port) = await BonjourResolution.resolve(name: name, type: type, domain: domain, interface: interface) else {
+      print("BonjourState: Failed to resolve \(name)")
+      return
+    }
 
-            // Extract address and port
-            var address: String?
-            var port: UInt16?
-
-            guard let path = connection.currentPath, let endpoint = path.remoteEndpoint else {
-              return
-            }
-
-            var isLoopback: Bool = false
-            if path.usesInterfaceType(.loopback) {
-              isLoopback = true
-            }
-
-            if case .hostPort(let host, let nwPort) = endpoint {
-              switch host {
-              case .ipv4(let ipv4):
-                address = self?.cleanAddress(ipv4.debugDescription)
-              case .ipv6(let ipv6):
-                let ipv6String = ipv6.debugDescription
-                address = self?.cleanAddress(ipv6String)
-              case .name(let hostname, _):
-                address = hostname
-              @unknown default:
-                break
-              }
-
-              if isLoopback {
-                address = "127.0.0.1"
-              }
-              port = nwPort.rawValue
-            }
-            
-            // Parse TXT records
-            var txtRecords: [String: String] = [:]
-            if case .bonjour(let txtRecord) = result.metadata {
-              for (key, value) in txtRecord.dictionary {
-                txtRecords[key] = value
-              }
-            }
-            
-            let server = BonjourServer(
-              serviceName: name,
-              name: name,
-              address: address,
-              port: port,
-              txtRecords: txtRecords
-            )
-            
-            // Update or add server
-            if let index = self?.discoveredServers.firstIndex(where: { $0.serviceName ==
-              name }) {
-              self?.discoveredServers[index] = server
-            } else {
-              self?.discoveredServers.append(server)
-            }
-                        
-            connection.cancel()
-            continuation.resume()
-            
-          case .failed(let error):
-            await resolver.markComplete()
-            
-            print("BonjourState: Failed to resolve \(name): \(error)")
-            connection.cancel()
-            continuation.resume()
-            
-          default:
-            break
-          }
-        }
+    // Parse TXT records
+    var txtRecords: [String: String] = [:]
+    if case .bonjour(let txtRecord) = result.metadata {
+      for (key, value) in txtRecord.dictionary {
+        txtRecords[key] = value
       }
-      
-      connection.start(queue: .main)
-      
-      // Timeout after 5 seconds
-      Task {
-        try? await Task.sleep(nanoseconds: 5_000_000_000)
-        
-        if await resolver.completed == false {
-          await resolver.markComplete()
-          connection.cancel()
-          continuation.resume()
-        }
-      }
+    }
+
+    let server = BonjourServer(
+      serviceName: name,
+      name: name,
+      address: host,
+      port: port,
+      txtRecords: txtRecords
+    )
+
+    // Update or add server
+    if let index = self.discoveredServers.firstIndex(where: { $0.serviceName == name }) {
+      self.discoveredServers[index] = server
+    } else {
+      self.discoveredServers.append(server)
     }
   }
   
@@ -254,5 +160,69 @@ class BonjourState {
     self.browser = nil
     self.isBrowsing = false
     self.discoveredServers.removeAll()
+  }
+}
+
+/// One question to Bonjour about where a service is: its host name, like micro.local, and port.
+/// Everything happens on the main queue.
+private final class BonjourResolution {
+  typealias Answer = (host: String, port: UInt16)
+
+  private var reference: DNSServiceRef?
+  private var continuation: CheckedContinuation<Answer?, Never>?
+
+  /// The service's host name and port, or nil if Bonjour can't say within a few seconds.
+  @MainActor
+  static func resolve(name: String, type: String, domain: String, interface: NWInterface?) async -> Answer? {
+    await withCheckedContinuation { continuation in
+      BonjourResolution().start(name: name, type: type, domain: domain, interfaceIndex: UInt32(interface?.index ?? 0), continuation: continuation)
+    }
+  }
+
+  private func start(name: String, type: String, domain: String, interfaceIndex: UInt32, continuation: CheckedContinuation<Answer?, Never>) {
+    self.continuation = continuation
+
+    // Kept alive until it finishes, and handed to the reply, which can't capture anything.
+    let context = Unmanaged.passRetained(self).toOpaque()
+    let error = DNSServiceResolve(&self.reference, 0, interfaceIndex, name, type, domain, { _, _, _, error, _, hostTarget, port, _, _, context in
+      guard let context else {
+        return
+      }
+      let resolution = Unmanaged<BonjourResolution>.fromOpaque(context).takeUnretainedValue()
+      guard error == DNSServiceErrorType(kDNSServiceErr_NoError), let hostTarget else {
+        resolution.finish(nil)
+        return
+      }
+      // A fully qualified name, with a dot on the end, and the port in network byte order.
+      var host = String(cString: hostTarget)
+      if host.hasSuffix(".") {
+        host.removeLast()
+      }
+      resolution.finish((host, UInt16(bigEndian: port)))
+    }, context)
+
+    guard error == DNSServiceErrorType(kDNSServiceErr_NoError), let reference = self.reference else {
+      self.finish(nil)
+      return
+    }
+    DNSServiceSetDispatchQueue(reference, .main)
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+      self.finish(nil)
+    }
+  }
+
+  /// Answers once, with the first reply or nothing, and stops asking.
+  private func finish(_ answer: Answer?) {
+    guard let continuation = self.continuation else {
+      return
+    }
+    self.continuation = nil
+    if let reference = self.reference {
+      DNSServiceRefDeallocate(reference)
+      self.reference = nil
+    }
+    continuation.resume(returning: answer)
+    Unmanaged.passUnretained(self).release()
   }
 }
