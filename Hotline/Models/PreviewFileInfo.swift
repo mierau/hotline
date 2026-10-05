@@ -38,6 +38,16 @@ struct PreviewFileInfo: Identifiable, Codable {
     }
     return .unknown
   }
+
+  /// A picture, a PICT among them, or a video, going by its name, or its type for a PICT.
+  var isPictureOrVideo: Bool {
+    switch self.previewType {
+    case .image, .pict:
+      return true
+    case .text, .unknown:
+      return UTType(filenameExtension: (self.name as NSString).pathExtension)?.conforms(to: .movie) == true
+    }
+  }
 }
 
 extension PreviewFileInfo: Equatable {

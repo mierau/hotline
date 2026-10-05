@@ -133,7 +133,18 @@ struct FilePreviewQuickLookView: View {
       self.preview?.cleanup()
       self.dismiss()
     }
-    .preferredColorScheme(.dark)
+    // Pictures and videos in dark, as photo and video apps show them, and anything else as other
+    // windows are.
+    .preferredColorScheme(self.isPictureOrVideo ? .dark : nil)
+  }
+
+  /// Whether the window's for a picture or a video: one its name says it is, from the start, or one
+  /// it turned out to be.
+  private var isPictureOrVideo: Bool {
+    if case .media = self.content {
+      return true
+    }
+    return self.info?.isPictureOrVideo == true
   }
 
   /// The bottom of a video, where its controls are, which are for using, not moving the window.
@@ -230,9 +241,11 @@ struct FilePreviewQuickLookView: View {
     }
     .frame(minWidth: MediaWindow.minimumSize.width, maxWidth: .infinity, minHeight: MediaWindow.minimumSize.height, maxHeight: .infinity)
     .ignoresSafeArea()
-    // Darker behind the title bar, so it can be read over a bright picture.
+    // A shade behind the title bar, so it can be read over any picture: dark under Dark Mode's light
+    // text, and light under light mode's dark text.
     .overlay(alignment: .top) {
-      LinearGradient(colors: [.black.opacity(0.55), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+      let shade: Color = self.colorScheme == .dark ? .black : .white
+      LinearGradient(colors: [shade.opacity(0.55), shade.opacity(0)], startPoint: .top, endPoint: .bottom)
         .frame(height: 90)
         .opacity(self.showsTitleBar ? 1 : 0)
         .allowsHitTesting(false)

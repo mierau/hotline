@@ -884,14 +884,15 @@ private struct ServerThemedSidebar: ViewModifier {
 
 /// A banner's colors as a sidebar shows them: as they are in light mode, and in dark mode, its
 /// background as dark as dark mode's colors, in its own hue, and its accent bright enough to show
-/// against that.
+/// against that. A banner without a colorful color for text takes its accent from its background's.
 private struct SidebarPalette: Equatable {
   let background: NSColor
   let accent: NSColor?
 
   init(_ colors: ColorArt, dark: Bool) {
+    let accent = colors.accentColor ?? colors.backgroundColor.contrastingShade
     self.background = dark ? colors.backgroundColor.withBrightness(atMost: 0.3) : colors.backgroundColor
-    self.accent = dark ? colors.accentColor?.withBrightness(atLeast: 0.8) : colors.accentColor
+    self.accent = dark ? accent?.withBrightness(atLeast: 0.8) : accent
   }
 }
 
@@ -904,6 +905,22 @@ private extension NSColor {
     return NSColor(colorSpace: .genericRGB, hue: color.hueComponent, saturation: color.saturationComponent, brightness: limit, alpha: color.alphaComponent)
   }
 
+  /// The same hue, brighter on a dark color, where there's room to be, and deeper and richer on any
+  /// other, to stand out against it, or nil for a color close to gray or black, which has no hue to
+  /// take.
+  /// Going by brightness, not how dark it looks, a bright, saturated blue, which looks dark, is made
+  /// deeper, not brighter, which it already nearly is.
+  var contrastingShade: NSColor? {
+    guard let color = self.usingColorSpace(.genericRGB), color.saturationComponent >= 0.15, color.brightnessComponent >= 0.2 else {
+      return nil
+    }
+    let brightness = color.brightnessComponent
+    if brightness < 0.55 {
+      return NSColor(colorSpace: .genericRGB, hue: color.hueComponent, saturation: color.saturationComponent, brightness: min(max(brightness + 0.4, 0.7), 1), alpha: 1)
+    }
+    return NSColor(colorSpace: .genericRGB, hue: color.hueComponent, saturation: min(color.saturationComponent + 0.25, 1), brightness: max(brightness - 0.35, 0.2), alpha: 1)
+  }
+
   /// The same hue and saturation, at least as bright as `limit`.
   func withBrightness(atLeast limit: CGFloat) -> NSColor {
     guard let color = self.usingColorSpace(.genericRGB), color.brightnessComponent < limit else {
@@ -914,8 +931,8 @@ private extension NSColor {
 }
 
 /// A banner's background color, with its accent color coming in toward the bottom-trailing corner,
-/// under the panel's light from the top-leading one: white, blended with soft light, which lightens
-/// the color without washing it out.
+/// under a touch of the panel's light from the top-leading one: white, blended with soft light,
+/// which lightens the color without washing it out.
 private struct ServerThemedBackground: View {
   let color: NSColor
   let accent: NSColor?
@@ -938,7 +955,7 @@ private struct ServerThemedBackground: View {
       }
     }
     .overlay {
-      LinearGradient(colors: [.white.opacity(0.5), .white.opacity(0)], startPoint: .topLeading, endPoint: .bottomTrailing)
+      LinearGradient(colors: [.white.opacity(0.2), .white.opacity(0)], startPoint: .topLeading, endPoint: .bottomTrailing)
         .blendMode(.softLight)
     }
     .compositingGroup()

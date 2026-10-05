@@ -34,8 +34,6 @@
 import AppKit
 import SwiftUI
 
-fileprivate let kColorThresholdMinimumPercentage: CGFloat = 0.001
-
 // ColorArt.analyze(image: img) -> ColorArt?
 
 struct ColorArt: Equatable {
@@ -43,13 +41,19 @@ struct ColorArt: Equatable {
   let primaryColor: NSColor
   let secondaryColor: NSColor
   let detailColor: NSColor
+  /// The banner's color for theming things alongside its background, like a selection: the biggest
+  /// part of it that's colorful and of another hue, or on a gray or black background, the biggest
+  /// colorful part, like a logo. It's made to stand out against the background. Nil when the
+  /// banner has nothing of another color.
+  let accentColor: NSColor?
 //  let scaledImage: NSImage
 
   static func == (lhs: ColorArt, rhs: ColorArt) -> Bool {
     return lhs.backgroundColor == rhs.backgroundColor &&
            lhs.primaryColor == rhs.primaryColor &&
            lhs.secondaryColor == rhs.secondaryColor &&
-           lhs.detailColor == rhs.detailColor
+           lhs.detailColor == rhs.detailColor &&
+           lhs.accentColor == rhs.accentColor
   }
   
   static func analyze(image: NSImage) -> ColorArt? {
@@ -73,7 +77,8 @@ struct ColorArt: Equatable {
     return ColorArt(backgroundColor: colors.background,
                     primaryColor: colors.primary,
                     secondaryColor: colors.secondary,
-                    detailColor: colors.detail)
+                    detailColor: colors.detail,
+                    accentColor: colors.accent)
   }
   
   // MARK: - Image Scaling
@@ -130,11 +135,14 @@ struct ColorArt: Equatable {
   
   // MARK: - Image Analysis
   
-  private static func analyzeImage(_ image: NSImage) -> (background: NSColor, primary: NSColor, secondary: NSColor, detail: NSColor)? {
-    var imageColors: NSCountedSet?
-    guard let backgroundColor = self.findEdgeColor(image, imageColors: &imageColors),
-          let colors = imageColors
-    else {
+  private static func analyzeImage(_ image: NSImage) -> (background: NSColor, primary: NSColor, secondary: NSColor, detail: NSColor, accent: NSColor?)? {
+    guard let colors = self.imageColors(image) else {
+      return nil
+    }
+    // The background is the color covering the most of the banner, all of it, not just an edge,
+    // which a logo or border can fill.
+    let groups = self.colorGroups(colors)
+    guard let backgroundColor = groups.first?.color else {
       return nil
     }
     
@@ -158,6 +166,8 @@ struct ColorArt: Equatable {
       detailColor = darkBackground ? .white : .black
     }
 
+    let accentColor = self.accentColor(in: groups, background: backgroundColor)
+
     // Convert all colors to calibrated RGB color space for consistency
     // This ensures all colors are in the same color space and prevents
     // any color space conversion issues when used in SwiftUI
@@ -166,13 +176,15 @@ struct ColorArt: Equatable {
     let finalPrimary = primaryColor!.usingColorSpace(rgbColorSpace) ?? primaryColor!
     let finalSecondary = secondaryColor!.usingColorSpace(rgbColorSpace) ?? secondaryColor!
     let finalDetail = detailColor!.usingColorSpace(rgbColorSpace) ?? detailColor!
+    let finalAccent = accentColor.map { $0.usingColorSpace(rgbColorSpace) ?? $0 }
 
-    return (finalBackground, finalPrimary, finalSecondary, finalDetail)
+    return (finalBackground, finalPrimary, finalSecondary, finalDetail, finalAccent)
   }
   
-  // MARK: - Edge Color Detection
+  // MARK: - Colors
   
-  private static func findEdgeColor(_ image: NSImage, imageColors: inout NSCountedSet?) -> NSColor? {
+  /// Every color in the image that isn't see-through, with how many of its pixels are that color.
+  private static func imageColors(_ image: NSImage) -> NSCountedSet? {
     var bitmapRep: NSBitmapImageRep?
 
     // Try to get existing bitmap representation
@@ -191,77 +203,99 @@ struct ColorArt: Equatable {
       return nil
     }
     
-    let pixelsWide = bitmapRep.pixelsWide
-    let pixelsHigh = bitmapRep.pixelsHigh
-    
-    let colors = NSCountedSet(capacity: pixelsWide * pixelsHigh)
-    let leftEdgeColors = NSCountedSet(capacity: pixelsHigh)
-    var searchColumnX = 0
-    
-    for x in 0..<pixelsWide {
-      for y in 0..<pixelsHigh {
-        guard let color = bitmapRep.colorAt(x: x, y: y) else { continue }
-        
-        if x == searchColumnX {
-          // Make sure it's a meaningful color
-          if color.alphaComponent > 0.5 {
-            leftEdgeColors.add(color)
-          }
-        }
-        
-        if color.alphaComponent > CGFloat.ulpOfOne {
+    let colors = NSCountedSet(capacity: bitmapRep.pixelsWide * bitmapRep.pixelsHigh)
+    for x in 0..<bitmapRep.pixelsWide {
+      for y in 0..<bitmapRep.pixelsHigh {
+        if let color = bitmapRep.colorAt(x: x, y: y), color.alphaComponent > CGFloat.ulpOfOne {
           colors.add(color)
         }
       }
-      
-      // Background is clear, keep looking in next column for background color
-      if leftEdgeColors.count == 0 {
-        searchColumnX += 1
-      }
     }
-    
-    imageColors = colors
-    
-    var sortedColors: [CountedColor] = []
-    
-    for color in leftEdgeColors {
-      guard let nsColor = color as? NSColor else { continue }
-      let colorCount = leftEdgeColors.count(for: nsColor)
-      
-      let randomColorsThreshold = Int(CGFloat(pixelsHigh) * kColorThresholdMinimumPercentage)
-      
-      if colorCount <= randomColorsThreshold {
+    return colors.count > 0 ? colors : nil
+  }
+  
+  /// Colors close enough to look the same, together, with how many pixels they cover.
+  private struct ColorGroup {
+    var count = 0
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+
+    /// Their average.
+    var color: NSColor {
+      NSColor(colorSpace: .genericRGB, components: [self.red / CGFloat(self.count), self.green / CGFloat(self.count), self.blue / CGFloat(self.count), 1], count: 4)
+    }
+
+    mutating func add(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, count: Int) {
+      self.count += count
+      self.red += red * CGFloat(count)
+      self.green += green * CGFloat(count)
+      self.blue += blue * CGFloat(count)
+    }
+
+    mutating func add(_ other: ColorGroup) {
+      self.count += other.count
+      self.red += other.red
+      self.green += other.green
+      self.blue += other.blue
+    }
+
+    func isClose(to other: ColorGroup) -> Bool {
+      let count = CGFloat(self.count), otherCount = CGFloat(other.count)
+      return abs(self.red / count - other.red / otherCount) + abs(self.green / count - other.green / otherCount) + abs(self.blue / count - other.blue / otherCount) < 0.12
+    }
+  }
+
+  /// The image's colors in groups of about the same color, the biggest first, so a color that noise
+  /// or dithering has split into many close shades counts as the one it looks like. Colors are put
+  /// in eight steps of red, green and blue, then steps whose colors are close, joined.
+  private static func colorGroups(_ colors: NSCountedSet) -> [ColorGroup] {
+    var steps: [Int: ColorGroup] = [:]
+    for case let color as NSColor in colors {
+      guard color.alphaComponent > 0.5, let rgb = color.usingColorSpace(.genericRGB) else {
         continue
       }
-      
-      sortedColors.append(CountedColor(color: nsColor, count: colorCount))
+      let step = Int(rgb.redComponent * 7.999) << 6 | Int(rgb.greenComponent * 7.999) << 3 | Int(rgb.blueComponent * 7.999)
+      steps[step, default: ColorGroup()].add(rgb.redComponent, rgb.greenComponent, rgb.blueComponent, count: colors.count(for: color))
     }
-    
-    sortedColors.sort { $0.count > $1.count }
-    
-    guard var proposedEdgeColor = sortedColors.first else {
-      return nil
-    }
-    
-    // Want to choose color over black/white so we keep looking
-    if proposedEdgeColor.color.isBlackOrWhite {
-      for i in 1..<sortedColors.count {
-        let nextProposedColor = sortedColors[i]
-        
-        // Make sure the second choice color is 30% as common as the first choice
-        if Double(nextProposedColor.count) / Double(proposedEdgeColor.count) > 0.3 {
-          if !nextProposedColor.color.isBlackOrWhite {
-            proposedEdgeColor = nextProposedColor
-            break
-          }
-        } else {
-          // Reached color threshold less than 30% of the original proposed edge color
-          break
-        }
+    var groups: [ColorGroup] = []
+    for step in steps.values.sorted(by: { $0.count > $1.count }) {
+      if let index = groups.firstIndex(where: { $0.isClose(to: step) }) {
+        groups[index].add(step)
+      }
+      else {
+        groups.append(step)
       }
     }
-    
-    return proposedEdgeColor.color
+    return groups.sorted { $0.count > $1.count }
+  }
+
+  /// The biggest group that's colorful, at least half a percent of the image, so not a speck, and
+  /// of another hue than the background, or on a gray or nearly black background, any colorful
+  /// one. Made to stand out against the background: if it's too near its brightness, it's made
+  /// deeper on a bright background and brighter on a dark one, and a little more colorful.
+  private static func accentColor(in groups: [ColorGroup], background: NSColor) -> NSColor? {
+    guard let background = background.usingColorSpace(.genericRGB) else {
+      return nil
+    }
+    let total = groups.reduce(0) { $0 + $1.count }
+    // Nearly black has no hue to speak of, whatever its saturation works out to.
+    let grayBackground = background.saturationComponent < 0.15 || background.brightnessComponent < 0.2
+    for group in groups.dropFirst() where CGFloat(group.count) >= CGFloat(total) * 0.005 {
+      guard let color = group.color.usingColorSpace(.genericRGB), color.saturationComponent >= 0.2 else {
+        continue
+      }
+      let hueDistance = abs(color.hueComponent - background.hueComponent)
+      guard grayBackground || min(hueDistance, 1 - hueDistance) >= 25 / 360 else {
+        continue
+      }
+      let brightness = background.brightnessComponent
+      guard abs(color.brightnessComponent - brightness) < 0.3 else {
+        return color
+      }
+      return NSColor(colorSpace: .genericRGB, hue: color.hueComponent, saturation: min(color.saturationComponent + 0.15, 1), brightness: brightness >= 0.55 ? brightness - 0.3 : min(brightness + 0.3, 1), alpha: 1)
+    }
+    return nil
   }
   
   // MARK: - Text Color Detection
@@ -309,15 +343,6 @@ struct ColorArt: Equatable {
 }
 
 extension ColorArt {
-  /// The most colorful of the banner's colors for text, which are picked to stand out against its
-  /// background, or nil if they're all close to gray, as the white and black they fall back to are.
-  var accentColor: NSColor? {
-    let saturation = { (color: NSColor) in color.usingColorSpace(.genericRGB)?.saturationComponent ?? 0 }
-    return [self.primaryColor, self.secondaryColor, self.detailColor]
-      .filter { saturation($0) >= 0.2 }
-      .max { saturation($0) < saturation($1) }
-  }
-
   /// Whether the banner's background is white, or nearly, or a light gray: no color to speak of.
   var hasPlainLightBackground: Bool {
     guard let color = self.backgroundColor.usingColorSpace(.genericRGB) else {
@@ -392,27 +417,6 @@ extension NSColor {
     }
     
     return self
-  }
-  
-  var isBlackOrWhite: Bool {
-    guard let tempColor = usingColorSpace(.genericRGB) else {
-      return false
-    }
-    
-    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-    tempColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-    
-    // White
-    if r > 0.91 && g > 0.91 && b > 0.91 {
-      return true
-    }
-    
-    // Black
-    if r < 0.09 && g < 0.09 && b < 0.09 {
-      return true
-    }
-    
-    return false
   }
   
   func isContrasting(to color: NSColor) -> Bool {
