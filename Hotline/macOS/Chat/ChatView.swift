@@ -169,6 +169,8 @@ struct ChatView: View {
     return ChatInputField(
       text: $bindModel.chatInput,
       height: self.$inputHeight,
+      // Yours as the user list shows it, when the chat shows icons.
+      iconID: Prefs.shared.showChatIcons ? self.model.ownIconID : nil,
       namesToComplete: { self.namesToComplete() },
       onSubmit: { announce in
         let message = self.model.chatInput.trimmingCharacters(in: .whitespacesAndNewlines)

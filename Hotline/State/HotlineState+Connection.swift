@@ -293,6 +293,7 @@ extension HotlineState {
     self.agreed = false
     self.agreementText = nil
     self.users = []
+    self.ownUserID = nil
     self.chat = []
     self.chatRenderedText = nil
     self.chatRenderedCount = 0

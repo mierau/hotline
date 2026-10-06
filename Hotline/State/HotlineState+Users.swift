@@ -11,6 +11,20 @@ extension HotlineState {
 
     let hotlineUsers = try await client.getUserList()
     self.users = hotlineUsers.map { User(hotlineUser: $0) }
+    self.findOwnUser()
+  }
+
+  /// Finds which entry in the user list is you, if that isn't known: the one with your name, or of
+  /// more than one, the one with your icon too, since a server can give you another, and of those,
+  /// the last to connect, as user IDs count up. Once found, it's followed by its ID, through
+  /// changes to your name and icon.
+  func findOwnUser() {
+    if let id = self.ownUserID, self.users.contains(where: { $0.id == id }) {
+      return
+    }
+    let named = self.users.filter { $0.name == self.username }
+    let alsoIcon = named.filter { Int($0.iconID) == self.iconID }
+    self.ownUserID = (alsoIcon.isEmpty ? named : alsoIcon).max { $0.id < $1.id }?.id
   }
 
   func getClientInfoText(id userID: UInt16) async throws -> HotlineUserClientInfo? {
@@ -107,6 +121,7 @@ extension HotlineState {
 
       print("HotlineState: added user: \(user.name)")
       self.users.append(User(hotlineUser: user))
+      self.findOwnUser()
 
       if Prefs.shared.showJoinLeaveMessages {
         var chatMessage = ChatMessage(text: "\(user.name) connected", type: .joined, date: Date())

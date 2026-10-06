@@ -7,6 +7,13 @@ import AppKit
 /// Don't use `layoutManager` here, even to read it. Asking for it switches the view to TextKit 1
 /// for good. Use `textLayoutManager` and `textContentStorage` instead.
 final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTipOwner {
+  /// The room either side of the chat.
+  static let horizontalMargin: CGFloat = 24
+  /// How far in the senders' icons are, which the input under the chat lines your icon up with: the
+  /// margin, the padding text has inside its container, which here is the usual, and the icon's
+  /// inset.
+  static let iconColumnStart = horizontalMargin + NSTextContainer().lineFragmentPadding + ChatMessageRenderer.iconInset
+
   /// What to highlight in the chat.
   struct Highlights: Equatable {
     var query: String = ""
@@ -95,7 +102,7 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     self.drawsBackground = false
     self.usesFindBar = false
     self.isAutomaticLinkDetectionEnabled = false
-    self.textContainerInset = NSSize(width: 24, height: 24)
+    self.textContainerInset = NSSize(width: Self.horizontalMargin, height: 24)
     self.isVerticallyResizable = true
     self.isHorizontallyResizable = false
     self.minSize = .zero

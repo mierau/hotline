@@ -398,6 +398,18 @@ class HotlineState: Equatable {
 
   // Users
   var users: [User] = []
+  /// Which entry in the user list is you, once that's known. Servers don't say, so it's found by
+  /// your name. See `findOwnUser()`.
+  var ownUserID: UInt16? = nil
+
+  /// Your icon as the user list shows it, which a server can choose for you, or until your entry
+  /// is there, the one you chose.
+  var ownIconID: Int {
+    if let id = self.ownUserID, let user = self.users.first(where: { $0.id == id }) {
+      return Int(user.iconID)
+    }
+    return self.iconID
+  }
 
   // Chat
   var broadcastMessage: String = ""

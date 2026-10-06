@@ -14,6 +14,8 @@ struct ChatInputField: NSViewRepresentable {
   @Binding var text: String
   @Binding var height: CGFloat
   var maxLines: Int = 5
+  /// Your icon, before the chevron, or nil for none.
+  var iconID: Int? = nil
   /// The names Tab completes, best first.
   var namesToComplete: () -> [String] = { [] }
   var onSubmit: (_ announce: Bool) -> Void
@@ -62,7 +64,7 @@ struct ChatInputField: NSViewRepresentable {
     textView.font = .systemFont(ofSize: NSFont.systemFontSize)
     textView.textColor = .textColor
     textView.drawsBackground = false
-    textView.textContainerInset = NSSize(width: textView.leftInset, height: ChatInputTextView.verticalInset)
+    textView.updateInsets()
     textView.textContainer?.lineFragmentPadding = 0
 
     textView.delegate = context.coordinator
@@ -92,6 +94,8 @@ struct ChatInputField: NSViewRepresentable {
     guard let textView = context.coordinator.textView else { return }
     textView.applyServerTheme(context.environment.serverTheme)
     textView.chevronColor = context.environment.serverTheme?.secondaryText
+    // A generic one for an icon this copy of Hotline doesn't have.
+    textView.icon = self.iconID.flatMap { HotlineState.getClassicIcon($0) ?? NSImage(named: "User") }
     // Never overwrite the text view's string while the IME is composing
     // (has marked text). Doing so clears the uncommitted composition,
     // causing input to vanish — especially when text wraps to a new line.
@@ -167,7 +171,8 @@ struct ChatInputField: NSViewRepresentable {
 
 /// NSTextView subclass that intercepts Enter key variants and provides
 /// asymmetric internal padding so the text area is inset from the edges.
-/// Shows a chevron indicator next to the line containing the insertion point.
+/// Shows a chevron indicator next to the line containing the insertion point, with your icon
+/// before it.
 class ChatInputTextView: NSTextView {
   var submitHandler: ((_ announce: Bool) -> Void)?
   var frameResizeHandler: (() -> Void)?
@@ -179,13 +184,61 @@ class ChatInputTextView: NSTextView {
 
   static let verticalInset: CGFloat = 24
 
-  let leftInset: CGFloat = 30
-  let rightInset: CGFloat = 12
+  /// Your icon, before the chevron, in line with the icons of the messages above. Nil for none.
+  var icon: NSImage? {
+    didSet {
+      guard self.icon !== oldValue else {
+        return
+      }
+      self.iconView.image = self.icon
+      self.iconView.isHidden = self.icon == nil
+      self.updateInsets()
+    }
+  }
 
-  /// The chevron's color, the system's tertiary label color, unless a server's theme has one.
+  /// Where the chat's icon column ends.
+  private static let iconColumnEnd = ChatTranscriptTextView.iconColumnStart + ChatMessageRenderer.iconColumnWidth
+  /// The space between your icon and the chevron.
+  private static let iconGap: CGFloat = 5
+
+  /// Where the text starts: after the chevron, and before it, your icon if there is one.
+  var leftInset: CGFloat {
+    guard self.icon != nil else {
+      return 30
+    }
+    return Self.iconColumnEnd + Self.iconGap + self.chevronView.frame.width + 4
+  }
+  let rightInset: CGFloat = 30
+
+  /// Insets the text from the left past the chevron and icon, and from the right by `rightInset`.
+  /// The text view's own inset is the same on both sides, so it's what they come to together, and
+  /// `textContainerOrigin` moves the text over.
+  func updateInsets() {
+    let inset = NSSize(width: (self.leftInset + self.rightInset) / 2, height: Self.verticalInset)
+    guard self.textContainerInset != inset else {
+      return
+    }
+    self.textContainerInset = inset
+    self.updateChevronPosition()
+    self.frameResizeHandler?()
+  }
+
+  override var textContainerOrigin: NSPoint {
+    NSPoint(x: self.leftInset, y: super.textContainerOrigin.y)
+  }
+
+  private lazy var iconView: NSImageView = {
+    let view = NSImageView()
+    view.imageScaling = .scaleNone
+    view.isHidden = true
+    view.setAccessibilityElement(false)
+    return view
+  }()
+
+  /// The chevron's color, the chat's secondary color: the theme's, or without one, the system's.
   var chevronColor: NSColor? {
     didSet {
-      self.chevronView.contentTintColor = self.chevronColor ?? .tertiaryLabelColor
+      self.chevronView.contentTintColor = self.chevronColor ?? .secondaryLabelColor
     }
   }
 
@@ -195,7 +248,7 @@ class ChatInputTextView: NSTextView {
       .withSymbolConfiguration(config)
     let iv = NSImageView()
     iv.image = image
-    iv.contentTintColor = .tertiaryLabelColor
+    iv.contentTintColor = .secondaryLabelColor
     iv.imageScaling = .scaleNone
     iv.setContentHuggingPriority(.required, for: .horizontal)
     iv.setContentHuggingPriority(.required, for: .vertical)
@@ -215,6 +268,7 @@ class ChatInputTextView: NSTextView {
   override func viewDidMoveToSuperview() {
     super.viewDidMoveToSuperview()
     if self.chevronView.superview == nil, let clipView = self.superview {
+      clipView.addSubview(self.iconView)
       clipView.addSubview(self.chevronView)
       self.updateChevronPosition()
     }
@@ -369,6 +423,15 @@ class ChatInputTextView: NSTextView {
     let x = (self.leftInset - chevronSize.width - 4)
     let y = self.textContainerInset.height + lineRect.origin.y + (lineRect.height - chevronSize.height) / 2.0
     self.chevronView.frame.origin = NSPoint(x: x, y: y)
+
+    // Your icon goes along with it, centered in the chat's icon column, or for a wide one, ending
+    // where the column does and reaching back into the margin, clear of the chevron.
+    if let size = self.icon?.size {
+      let column = ChatMessageRenderer.iconColumnWidth
+      let iconX = size.width <= column ? Self.iconColumnEnd - column + (column - size.width) / 2 : Self.iconColumnEnd - size.width
+      let iconY = self.textContainerInset.height + lineRect.origin.y + (lineRect.height - size.height) / 2.0
+      self.iconView.frame = NSRect(x: iconX.rounded(), y: iconY.rounded(), width: size.width, height: size.height)
+    }
   }
 
   override func keyDown(with event: NSEvent) {
