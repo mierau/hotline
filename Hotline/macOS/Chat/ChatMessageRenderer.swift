@@ -103,6 +103,8 @@ enum ChatMessageRenderer {
       text = self.presence(message, arrow: "\u{2192}", options: options)
     case .left:
       text = self.presence(message, arrow: "\u{2190}", options: options)
+    case .renamed:
+      text = self.presence(message, arrow: "\u{2197}", options: options)
     case .signOut:
       text = self.divider(message, options: options)
     case .server:
@@ -196,8 +198,8 @@ enum ChatMessageRenderer {
     )
   }
 
-  /// Someone connecting or disconnecting, with the arrow in the icon column. Without icons, the
-  /// arrow goes first, and the text where messages' wrapped lines start.
+  /// Someone connecting, disconnecting, or changing their name, with the arrow in the icon column.
+  /// Without icons, the arrow goes first, and the text where messages' wrapped lines start.
   private static func presence(_ message: ChatMessage, arrow: String, options: Options) -> NSMutableAttributedString {
     let paragraph = NSMutableParagraphStyle()
     let textStart = options.showsIcons ? self.textIndent : self.hangingIndent

@@ -8,11 +8,10 @@ import AppKit
 /// for good. Use `textLayoutManager` and `textContentStorage` instead.
 final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTipOwner {
   /// The room either side of the chat.
-  static let horizontalMargin: CGFloat = 24
-  /// How far in the senders' icons are, which the input under the chat lines your icon up with: the
-  /// margin, the padding text has inside its container, which here is the usual, and the icon's
-  /// inset.
-  static let iconColumnStart = horizontalMargin + NSTextContainer().lineFragmentPadding + ChatMessageRenderer.iconInset
+  static let horizontalMargin: CGFloat = 16
+  /// Where the chat's lines start, which the input under the chat lines your icon and what you type
+  /// up with: the margin, and the padding text has inside its container, which here is the usual.
+  static let lineStart = horizontalMargin + NSTextContainer().lineFragmentPadding
 
   /// What to highlight in the chat.
   struct Highlights: Equatable {

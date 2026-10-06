@@ -9,7 +9,7 @@ struct GeneralSettingsView: View {
       Toggle("Refuse private chat invites", isOn: $preferences.refusePrivateChat)
       Toggle("Automatic Response", isOn: $preferences.enableAutomaticMessage)
       if preferences.enableAutomaticMessage {
-        TextField("", text: $preferences.automaticMessage, prompt: Text("Write a response message"))
+        DeferredTextField(title: "", text: $preferences.automaticMessage, prompt: Text("Write a response message"))
           .lineLimit(2)
           .multilineTextAlignment(.leading)
           .frame(maxWidth: .infinity)

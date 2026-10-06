@@ -14,7 +14,7 @@ struct ChatInputField: NSViewRepresentable {
   @Binding var text: String
   @Binding var height: CGFloat
   var maxLines: Int = 5
-  /// Your icon, before the chevron, or nil for none.
+  /// Your icon, where the chat has the senders', or nil for none.
   var iconID: Int? = nil
   /// The names Tab completes, best first.
   var namesToComplete: () -> [String] = { [] }
@@ -93,7 +93,6 @@ struct ChatInputField: NSViewRepresentable {
     context.coordinator.parent = self
     guard let textView = context.coordinator.textView else { return }
     textView.applyServerTheme(context.environment.serverTheme)
-    textView.chevronColor = context.environment.serverTheme?.secondaryText
     // A generic one for an icon this copy of Hotline doesn't have.
     textView.icon = self.iconID.flatMap { HotlineState.getClassicIcon($0) ?? NSImage(named: "User") }
     // Never overwrite the text view's string while the IME is composing
@@ -171,8 +170,8 @@ struct ChatInputField: NSViewRepresentable {
 
 /// NSTextView subclass that intercepts Enter key variants and provides
 /// asymmetric internal padding so the text area is inset from the edges.
-/// Shows a chevron indicator next to the line containing the insertion point, with your icon
-/// before it.
+/// Laid out like the messages above: your icon where they have their senders', and the text where
+/// theirs starts.
 class ChatInputTextView: NSTextView {
   var submitHandler: ((_ announce: Bool) -> Void)?
   var frameResizeHandler: (() -> Void)?
@@ -184,7 +183,8 @@ class ChatInputTextView: NSTextView {
 
   static let verticalInset: CGFloat = 24
 
-  /// Your icon, before the chevron, in line with the icons of the messages above. Nil for none.
+  /// Your icon, where the messages above have their senders'. Nil for none, as when the chat
+  /// doesn't show icons.
   var icon: NSImage? {
     didSet {
       guard self.icon !== oldValue else {
@@ -193,25 +193,21 @@ class ChatInputTextView: NSTextView {
       self.iconView.image = self.icon
       self.iconView.isHidden = self.icon == nil
       self.updateInsets()
+      // Another icon can be another width.
+      self.updateIconPosition()
     }
   }
 
-  /// Where the chat's icon column ends.
-  private static let iconColumnEnd = ChatTranscriptTextView.iconColumnStart + ChatMessageRenderer.iconColumnWidth
-  /// The space between your icon and the chevron.
-  private static let iconGap: CGFloat = 5
-
-  /// Where the text starts: after the chevron, and before it, your icon if there is one.
+  /// Where the text starts, where the messages above have theirs: after the icons, when there's
+  /// yours, or without, at the start of the line.
   var leftInset: CGFloat {
-    guard self.icon != nil else {
-      return 30
-    }
-    return Self.iconColumnEnd + Self.iconGap + self.chevronView.frame.width + 4
+    ChatTranscriptTextView.lineStart + (self.icon == nil ? 0 : ChatMessageRenderer.textIndent)
   }
-  let rightInset: CGFloat = 30
+  /// Where the text ends, where the chat's lines do.
+  let rightInset = ChatTranscriptTextView.lineStart
 
-  /// Insets the text from the left past the chevron and icon, and from the right by `rightInset`.
-  /// The text view's own inset is the same on both sides, so it's what they come to together, and
+  /// Insets the text from the left past your icon, and from the right by `rightInset`. The text
+  /// view's own inset is the same on both sides, so it's what they come to together, and
   /// `textContainerOrigin` moves the text over.
   func updateInsets() {
     let inset = NSSize(width: (self.leftInset + self.rightInset) / 2, height: Self.verticalInset)
@@ -219,7 +215,6 @@ class ChatInputTextView: NSTextView {
       return
     }
     self.textContainerInset = inset
-    self.updateChevronPosition()
     self.frameResizeHandler?()
   }
 
@@ -235,27 +230,6 @@ class ChatInputTextView: NSTextView {
     return view
   }()
 
-  /// The chevron's color, the chat's secondary color: the theme's, or without one, the system's.
-  var chevronColor: NSColor? {
-    didSet {
-      self.chevronView.contentTintColor = self.chevronColor ?? .secondaryLabelColor
-    }
-  }
-
-  private lazy var chevronView: NSImageView = {
-    let config = NSImage.SymbolConfiguration(pointSize: NSFont.systemFontSize, weight: .semibold)
-    let image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)?
-      .withSymbolConfiguration(config)
-    let iv = NSImageView()
-    iv.image = image
-    iv.contentTintColor = .secondaryLabelColor
-    iv.imageScaling = .scaleNone
-    iv.setContentHuggingPriority(.required, for: .horizontal)
-    iv.setContentHuggingPriority(.required, for: .vertical)
-    iv.frame.size = image?.size ?? NSSize(width: 10, height: 12)
-    return iv
-  }()
-
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     if self.window != nil {
@@ -267,16 +241,15 @@ class ChatInputTextView: NSTextView {
 
   override func viewDidMoveToSuperview() {
     super.viewDidMoveToSuperview()
-    if self.chevronView.superview == nil, let clipView = self.superview {
+    if self.iconView.superview == nil, let clipView = self.superview {
       clipView.addSubview(self.iconView)
-      clipView.addSubview(self.chevronView)
-      self.updateChevronPosition()
+      self.updateIconPosition()
     }
   }
 
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)
-    self.updateChevronPosition()
+    self.updateIconPosition()
     self.frameResizeHandler?()
   }
 
@@ -286,12 +259,12 @@ class ChatInputTextView: NSTextView {
 
   override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
     super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
-    self.updateChevronPosition()
+    self.updateIconPosition()
   }
 
   override func didChangeText() {
     super.didChangeText()
-    self.updateChevronPosition()
+    self.updateIconPosition()
   }
 
   // MARK: Completing Names
@@ -361,77 +334,34 @@ class ChatInputTextView: NSTextView {
     self.completion = (names, index, NSRange(location: range.location, length: (inserted as NSString).length), inserted)
   }
 
-  func updateChevronPosition() {
-    let font = self.font ?? .systemFont(ofSize: NSFont.systemFontSize)
-    let length = self.textStorage?.length ?? 0
-
-    let lineRect: NSRect
-
-    if let layoutManager = self.layoutManager {
-      // TextKit 1 path
-      if length == 0 {
-        let lineHeight = layoutManager.defaultLineHeight(for: font)
-        lineRect = NSRect(x: 0, y: 0, width: 0, height: lineHeight)
-      } else {
-        let insertionIndex = self.selectedRange().location
-        let extraRect = layoutManager.extraLineFragmentRect
-        if insertionIndex >= length && extraRect.height > 0 {
-          lineRect = extraRect
-        } else {
-          let charIndex = min(insertionIndex, length - 1)
-          let glyphIndex = layoutManager.glyphIndexForCharacter(at: charIndex)
-          lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-        }
-      }
-    } else if let textLayoutManager = self.textLayoutManager {
-      // TextKit 2 path
-      let defaultLineHeight = ceil(font.ascender + abs(font.descender) + font.leading)
-
-      if length == 0 {
-        lineRect = NSRect(x: 0, y: 0, width: 0, height: defaultLineHeight)
-      } else {
-        let insertionIndex = self.selectedRange().location
-        let docRange = textLayoutManager.documentRange
-
-        let location: NSTextLocation
-        if insertionIndex >= length {
-          location = docRange.endLocation
-        } else {
-          location = textLayoutManager.location(docRange.location, offsetBy: insertionIndex) ?? docRange.location
-        }
-
-        if let fragment = textLayoutManager.textLayoutFragment(for: location) {
-          lineRect = fragment.layoutFragmentFrame
-        } else {
-          // Fallback: find the last layout fragment
-          var lastRect = NSRect(x: 0, y: 0, width: 0, height: defaultLineHeight)
-          textLayoutManager.enumerateTextLayoutFragments(
-            from: docRange.endLocation,
-            options: [.reverse, .ensuresLayout]
-          ) { fragment in
-            lastRect = fragment.layoutFragmentFrame
-            return false
-          }
-          lineRect = lastRect
-        }
-      }
-    } else {
+  /// Puts your icon by the first line, as the chat has a message's sender: centered in the icon
+  /// column, which a wide one spills out of, and on the line.
+  func updateIconPosition() {
+    guard let size = self.icon?.size else {
       return
     }
+    let font = self.font ?? .systemFont(ofSize: NSFont.systemFontSize)
 
-    let chevronSize = self.chevronView.frame.size
-    let x = (self.leftInset - chevronSize.width - 4)
-    let y = self.textContainerInset.height + lineRect.origin.y + (lineRect.height - chevronSize.height) / 2.0
-    self.chevronView.frame.origin = NSPoint(x: x, y: y)
-
-    // Your icon goes along with it, centered in the chat's icon column, or for a wide one, ending
-    // where the column does and reaching back into the margin, clear of the chevron.
-    if let size = self.icon?.size {
-      let column = ChatMessageRenderer.iconColumnWidth
-      let iconX = size.width <= column ? Self.iconColumnEnd - column + (column - size.width) / 2 : Self.iconColumnEnd - size.width
-      let iconY = self.textContainerInset.height + lineRect.origin.y + (lineRect.height - size.height) / 2.0
-      self.iconView.frame = NSRect(x: iconX.rounded(), y: iconY.rounded(), width: size.width, height: size.height)
+    // The first line, or with no text, where it would be.
+    var lineRect = NSRect(x: 0, y: 0, width: 0, height: ceil(font.ascender + abs(font.descender) + font.leading))
+    if let layoutManager = self.layoutManager {
+      // TextKit 1 path
+      if layoutManager.numberOfGlyphs > 0 {
+        lineRect = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+      } else {
+        lineRect.size.height = layoutManager.defaultLineHeight(for: font)
+      }
+    } else if let textLayoutManager = self.textLayoutManager,
+              let fragment = textLayoutManager.textLayoutFragment(for: textLayoutManager.documentRange.location),
+              let line = fragment.textLineFragments.first {
+      // TextKit 2 path
+      lineRect = line.typographicBounds.offsetBy(dx: fragment.layoutFragmentFrame.minX, dy: fragment.layoutFragmentFrame.minY)
     }
+
+    let midX = ChatTranscriptTextView.lineStart + ChatMessageRenderer.iconInset + ChatMessageRenderer.iconColumnWidth / 2
+    let midY = self.textContainerInset.height + lineRect.midY
+    // On whole points, as pixel art blurs between them.
+    self.iconView.frame = NSRect(x: (midX - size.width / 2).rounded(), y: (midY - size.height / 2).rounded(), width: size.width, height: size.height)
   }
 
   override func keyDown(with event: NSEvent) {

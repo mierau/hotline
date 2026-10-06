@@ -475,6 +475,8 @@ struct ChatTextView: NSViewRepresentable {
         return self.renderJoinedMessage(msg)
       case .left:
         return self.renderLeftMessage(msg)
+      case .renamed:
+        return self.renderRenamedMessage(msg)
       case .signOut:
         return self.renderSignOutMessage(msg)
       case .server:
@@ -623,6 +625,28 @@ struct ChatTextView: NSViewRepresentable {
       )
     }
     
+    private func renderRenamedMessage(_ msg: ChatMessage) -> NSAttributedString {
+      let paraStyle = NSMutableParagraphStyle()
+      paraStyle.lineSpacing = 2
+      paraStyle.paragraphSpacing = 8
+
+      let color: NSColor = msg.isAdmin
+        ? (NSColor(named: "Hotline Red") ?? .systemRed)
+        : .secondaryLabelColor
+
+      let arrow = "\u{2197} " // up-right arrow
+      let text = arrow + msg.text
+      return NSAttributedString(
+        string: text,
+        attributes: [
+          .font: self.baseFont,
+          .foregroundColor: color,
+          .paragraphStyle: paraStyle,
+          BottomAnchoredTextView.skipHighlightKey: true,
+        ]
+      )
+    }
+
     private func renderSignOutMessage(_ msg: ChatMessage) -> NSAttributedString {
       let paraStyle = NSMutableParagraphStyle()
       paraStyle.paragraphSpacingBefore = 26 // + 8 from preceding message's paragraphSpacing = 34

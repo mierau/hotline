@@ -1,18 +1,17 @@
 import SwiftUI
-import Combine
 
 struct IdentitySettingsView: View {
-  @State private var username: String = ""
-  @State private var usernameChanged: Bool = false
   @State private var hoveredUserIconID: Int = -1
-
-  let saveTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
   var body: some View {
     @Bindable var preferences = Prefs.shared
 
     Form {
-      TextField("Nickname", text: self.$username, prompt: Text("unnamed"))
+      // Without spaces around it, and with none, "unnamed", as the field says when it's empty.
+      DeferredTextField(title: "Nickname", text: $preferences.username, prompt: Text("unnamed"), cleanUp: { name in
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "unnamed" : name
+      })
 
       Section("Icon") {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 40), spacing: 0)], spacing: 0) {
@@ -49,23 +48,5 @@ struct IdentitySettingsView: View {
     }
     .formStyle(.grouped)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .onAppear {
-      self.username = preferences.username
-      self.usernameChanged = false
-    }
-    .onDisappear {
-      preferences.username = self.username
-      self.usernameChanged = false
-    }
-    .onChange(of: self.username) { oldValue, newValue in
-      self.usernameChanged = true
-      preferences.username = newValue
-    }
-    .onReceive(self.saveTimer) { _ in
-      if self.usernameChanged {
-        self.usernameChanged = false
-        preferences.username = self.username
-      }
-    }
   }
 }
