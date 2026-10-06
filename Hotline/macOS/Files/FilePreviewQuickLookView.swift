@@ -277,7 +277,7 @@ struct FilePreviewQuickLookView: View {
   private var downloadingView: some View {
     self.fileRow {
       Group {
-        if let preview = self.preview, preview.transferred > 0 {
+        if let preview = self.preview, preview.transferred > 0, preview.total > 0 {
           ProgressView(value: max(0.0, min(1.0, preview.progress)))
         }
         else {
@@ -373,6 +373,10 @@ struct FilePreviewQuickLookView: View {
     }
     guard let preview = self.preview, preview.transferred > 0 else {
       return "Connecting…"
+    }
+    // A picture from the web can come without saying how big it is.
+    guard preview.total > 0 else {
+      return Self.byteCount(preview.transferred)
     }
     let sizes = "\(Self.byteCount(preview.transferred)) of \(Self.byteCount(preview.total))"
     guard let remaining = preview.timeRemaining, remaining.isFinite, remaining >= 1 else {

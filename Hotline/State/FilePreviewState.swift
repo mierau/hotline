@@ -44,6 +44,8 @@ final class FilePreviewState {
   
   @ObservationIgnored private var previewClient: HotlineFilePreviewClient?
   @ObservationIgnored private var previewTask: Task<Void, Never>?
+  /// Where a picture from the web is kept while its window's open.
+  @ObservationIgnored private var webDownloadFolder: URL?
 
   var previewType: FilePreviewType {
     self.info.previewType
@@ -66,6 +68,18 @@ final class FilePreviewState {
       do {
         if self.info.isArchive {
           try await self.readArchive()
+          return
+        }
+
+        if let webURL = self.info.webURL {
+          self.state = .loading
+          self.progress = 0.0
+          self.transferred = 0
+          self.timeRemaining = nil
+          let url = try await self.downloadFromWeb(webURL)
+          self.state = .loaded
+          self.progress = 1.0
+          self.fileURL = url
           return
         }
 
@@ -129,6 +143,83 @@ final class FilePreviewState {
     self.previewTask = task
   }
 
+  /// Downloads a picture linked in chat into a folder of its own, under the name it's saved and
+  /// shared with, showing its progress as it comes.
+  private func downloadFromWeb(_ url: URL) async throws -> URL {
+    let folder = FileManager.default.temporaryDirectory
+      .appending(path: "Web Previews", directoryHint: .isDirectory)
+      .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    // Before it starts, so a download that's stopped partway is cleaned up too.
+    self.webDownloadFolder = folder
+    let fileURL = folder.appending(path: self.info.name, directoryHint: .notDirectory)
+
+    // Only the newest progress, shown here on the main actor, so the download doesn't hold on to
+    // the window's state.
+    let (updates, continuation) = AsyncStream.makeStream(of: (written: Int, expected: Int64).self, bufferingPolicy: .bufferingNewest(1))
+    let download = Task.detached(priority: .userInitiated) {
+      defer {
+        continuation.finish()
+      }
+      try await Self.download(url, to: fileURL) { written, expected in
+        continuation.yield((written, expected))
+      }
+    }
+    let started = Date()
+    for await update in updates {
+      self.transferred = update.written
+      // Unknown when the server doesn't say how big it is.
+      guard update.expected > 0 else {
+        continue
+      }
+      self.total = Int(update.expected)
+      self.progress = Double(update.written) / Double(update.expected)
+      let elapsed = Date().timeIntervalSince(started)
+      if elapsed > 0.5, update.written > 0 {
+        self.timeRemaining = Double(Int(update.expected) - update.written) / (Double(update.written) / elapsed)
+      }
+    }
+    try await withTaskCancellationHandler {
+      try await download.value
+    } onCancel: {
+      download.cancel()
+    }
+    return fileURL
+  }
+
+  /// How much of a picture from the web is written at a time, and so how often its progress shows.
+  nonisolated private static let webChunkSize = 64 * 1024
+
+  /// Streams a download into a file, a chunk at a time, saying how much has come of how much as it
+  /// goes. Turns away an error page before any of it comes.
+  nonisolated private static func download(_ url: URL, to fileURL: URL, progress: @escaping @Sendable (_ written: Int, _ expected: Int64) -> Void) async throws {
+    let (bytes, response) = try await URLSession.shared.bytes(for: URLRequest(url: url))
+    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+      throw URLError(.badServerResponse)
+    }
+    let expected = response.expectedContentLength
+    FileManager.default.createFile(atPath: fileURL.path(percentEncoded: false), contents: nil)
+    let handle = try FileHandle(forWritingTo: fileURL)
+    defer {
+      try? handle.close()
+    }
+    var chunk = Data()
+    chunk.reserveCapacity(self.webChunkSize)
+    var written = 0
+    for try await byte in bytes {
+      chunk.append(byte)
+      if chunk.count == self.webChunkSize {
+        try handle.write(contentsOf: chunk)
+        written += chunk.count
+        chunk.removeAll(keepingCapacity: true)
+        progress(written, expected)
+      }
+    }
+    try handle.write(contentsOf: chunk)
+    written += chunk.count
+    progress(written, expected)
+  }
+
   /// The most of a resource fork read, for the map of a disk image's chunks.
   private static let resourceForkLimit = 4 * 1024 * 1024
 
@@ -172,6 +263,10 @@ final class FilePreviewState {
   func cleanup() {
     self.previewClient?.cleanup()
     self.previewClient = nil
+    if let folder = self.webDownloadFolder {
+      try? FileManager.default.removeItem(at: folder)
+      self.webDownloadFolder = nil
+    }
     self.fileURL = nil
     self.image = nil
     self.text = nil

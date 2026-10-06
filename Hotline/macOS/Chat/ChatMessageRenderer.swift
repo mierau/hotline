@@ -39,6 +39,8 @@ enum ChatMessageRenderer {
   /// A link to a file on a Hotline server, shown as the file's icon and name. The link itself, so
   /// copying gives the link rather than the name.
   static let fileLinkKey = NSAttributedString.Key("chatFileLink")
+  /// A long link shown shorter, as it was written, so copying gives all of it.
+  static let fullLinkKey = NSAttributedString.Key("chatFullLink")
 
   /// How messages are shown: what the settings ask for, and which server the chat is on.
   struct Options: Equatable {
@@ -481,7 +483,57 @@ enum ChatMessageRenderer {
     if string.unicodeScalars.contains(where: { self.markCharacters.contains($0) }) {
       self.applyFormatting(to: text, outside: linkRanges)
     }
+    if !linkRanges.isEmpty {
+      self.shortenLongLinks(in: text)
+    }
     return text
+  }
+
+  /// How long a link can be before most of what's after its ? is hidden.
+  private static let longLinkLength = 80
+  /// The longest a long link's first parameter can be and still show, like YouTube's v=…, which
+  /// says which video.
+  private static let shownParameterLength = 24
+
+  /// Web links longer than `longLinkLength` with parameters, shown without them.
+  private static func shortenLongLinks(in text: NSMutableAttributedString) {
+    var long: [(range: NSRange, shown: String, written: String)] = []
+    text.enumerateAttribute(.link, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+      let url = (value as? URL) ?? (value as? String).flatMap { URL(string: $0) }
+      guard range.length > self.longLinkLength, let scheme = url?.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+        return
+      }
+      let written = (text.string as NSString).substring(with: range)
+      if let shown = self.shortLink(written) {
+        long.append((range, shown, written))
+      }
+    }
+    // From the end, so earlier ranges stay put.
+    for link in long.reversed() {
+      var attributes = text.attributes(at: link.range.location, effectiveRange: nil)
+      attributes[self.fullLinkKey] = link.written
+      text.replaceCharacters(in: link.range, with: NSAttributedString(string: link.shown, attributes: attributes))
+    }
+  }
+
+  /// A link shown up to its ? or #, with its first parameter if that's short, then …. Nil if
+  /// there's nothing after that to hide.
+  static func shortLink(_ link: String) -> String? {
+    guard let cut = link.firstIndex(where: { $0 == "?" || $0 == "#" }) else {
+      return nil
+    }
+    var shown = String(link[..<cut])
+    if link[cut] == "?" {
+      let parameters = link[link.index(after: cut)...]
+      let first = parameters.prefix { $0 != "&" && $0 != "#" }
+      if !first.isEmpty, first.count <= self.shownParameterLength {
+        guard first.endIndex < parameters.endIndex else {
+          return nil
+        }
+        shown += "?" + first
+      }
+    }
+    return shown + "\u{2026}"
   }
 
   /// Whether there's anything a link could be: an @, a scheme's ://, or a dot with something right
@@ -775,7 +827,9 @@ enum ChatMessageRenderer {
         text.append(NSAttributedString(string: "\u{2028}", attributes: [.font: self.baseFont, .paragraphStyle: paragraph]))
       }
       let preview = NSMutableAttributedString(attachment: ChatImageAttachment(url: url))
-      preview.addAttributes([.paragraphStyle: paragraph, self.skipHighlightKey: true], range: NSRange(location: 0, length: preview.length))
+      // In a tiny font, so its line is only as tall as the preview, which is nothing until its
+      // image starts to come in.
+      preview.addAttributes([.paragraphStyle: paragraph, self.skipHighlightKey: true, .font: NSFont.systemFont(ofSize: 1)], range: NSRange(location: 0, length: preview.length))
       text.append(preview)
     }
   }

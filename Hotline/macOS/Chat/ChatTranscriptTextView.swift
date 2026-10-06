@@ -16,6 +16,8 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
   }
 
   var openURLAction: ((URL) -> Void)?
+  /// What clicking an image's preview does: open the image in a preview window.
+  var openImageAction: ((URL) -> Void)?
   /// What clicking a hotline:// link does, in a few words, for its tooltip, since that depends on
   /// which server this is. Nil if it does nothing.
   var describeHotlineLink: ((URL) -> String?)?
@@ -414,7 +416,58 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     if let link = self.fileLink(at: point), let menu = self.fileLinkMenu?(link.url) {
       return menu
     }
-    return super.menu(for: event)
+    let menu = super.menu(for: event)
+    // Over any other link, macOS's own menu has Open Link and Copy Link. For a link to an image,
+    // Open Image comes first.
+    if let menu, menu.items.contains(where: { $0.action == NSSelectorFromString("copyLink:") }),
+       let url = self.link(near: point), ChatImagePreview.canPreview(url), let openImage = self.openImageAction {
+      menu.insertItem(ChatMenuItem("Open Image", systemImage: "photo") {
+        openImage(url)
+      }, at: 0)
+      menu.insertItem(.separator(), at: 1)
+    }
+    return menu
+  }
+
+  /// What can be done with a link to an image, for its preview's menu: open the image in a preview
+  /// window, or the link the way a click on it does, or copy it, as macOS's menu for a link has.
+  func linkMenuItems(for url: URL) -> [NSMenuItem] {
+    var items: [NSMenuItem] = []
+    if let openImage = self.openImageAction {
+      items.append(ChatMenuItem("Open Image", systemImage: "photo") {
+        openImage(url)
+      })
+    }
+    let open = self.openURLAction
+    items.append(ChatMenuItem("Open Link", systemImage: "arrow.up.forward.app") {
+      if let open {
+        open(url)
+      }
+      else {
+        NSWorkspace.shared.open(url)
+      }
+    })
+    items.append(ChatMenuItem("Copy Link", systemImage: "link") {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    })
+    return items
+  }
+
+  /// The link at a point, found the way macOS's menu for a link finds it: from where an insertion
+  /// point there would go, the character after it, or before it, at the end of a link.
+  private func link(near point: NSPoint) -> URL? {
+    guard let storage = self.textStorage else {
+      return nil
+    }
+    let index = self.characterIndexForInsertion(at: point)
+    for candidate in [index, index - 1] where candidate >= 0 && candidate < storage.length {
+      let value = storage.attribute(.link, at: candidate, effectiveRange: nil)
+      if let url = (value as? URL) ?? (value as? String).flatMap({ URL(string: $0) }) {
+        return url
+      }
+    }
+    return nil
   }
 
   /// A click on someone's name or icon, or on a link to a file, opens its menu under it, like a
@@ -837,8 +890,8 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
 
   // MARK: Copying
 
-  // Plain text gets real line breaks, the links to files shown by their names, and none of the
-  // stand-in characters for icons and previews.
+  // Plain text gets real line breaks, the links to files shown by their names and long links shown
+  // shorter as they were written, and none of the stand-in characters for icons and previews.
   override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
     let wrote = super.writeSelection(to: pboard, types: types)
     if wrote, pboard.string(forType: .string) != nil, let storage = self.textStorage {
@@ -856,9 +909,10 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     text.enumerateAttribute(ChatMessageRenderer.fileLinkKey, in: NSRange(location: 0, length: text.length)) { value, range, _ in
       if let url = value as? URL {
         plain += url.absoluteString
+        return
       }
-      else {
-        plain += (text.string as NSString).substring(with: range)
+      text.enumerateAttribute(ChatMessageRenderer.fullLinkKey, in: range) { written, part, _ in
+        plain += (written as? String) ?? (text.string as NSString).substring(with: part)
       }
     }
     return plain

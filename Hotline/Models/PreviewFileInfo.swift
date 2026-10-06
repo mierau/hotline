@@ -16,6 +16,9 @@ struct PreviewFileInfo: Identifiable, Codable {
   var hotlineID: UUID? = nil
   var path: [String]? = nil
 
+  /// A picture linked in chat, which comes from the web rather than from a Hotline server.
+  var webURL: URL? = nil
+
   var isArchive: Bool {
     self.archiveKind != nil
   }
@@ -47,6 +50,16 @@ struct PreviewFileInfo: Identifiable, Codable {
     case .text, .unknown:
       return UTType(filenameExtension: (self.name as NSString).pathExtension)?.conforms(to: .movie) == true
     }
+  }
+}
+
+extension PreviewFileInfo {
+  /// A picture linked in chat, named for the end of its address, which is all there is to go on,
+  /// and known by its address, so opening it again brings its window back.
+  init(webImage url: URL) {
+    let name = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+    self.init(id: UInt32(truncatingIfNeeded: url.absoluteString.hashValue), address: url.host() ?? "", port: url.port ?? 443, size: 0, name: name.isEmpty || name == "/" ? "Image" : name)
+    self.webURL = url
   }
 }
 

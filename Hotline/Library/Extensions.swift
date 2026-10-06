@@ -219,11 +219,22 @@ extension String {
     }
     let text = self as NSString
     var links: [(range: Range<String.Index>, url: URL)] = []
-    for match in detector.matches(in: self, range: NSRange(location: 0, length: text.length)) {
+    let matches = detector.matches(in: self, range: NSRange(location: 0, length: text.length))
+    for (index, match) in matches.enumerated() {
       guard var url = match.url, let scheme = url.scheme?.lowercased(), String.linkSchemes.contains(scheme) else {
         continue
       }
       var range = match.range
+      // Data detectors give up partway through a link with a long unbroken stretch in it, like the
+      // token on a signed address, and stop at the last place they were sure of. Carry on to where
+      // it really ends, short of the next link.
+      let limit = index + 1 < matches.count ? matches[index + 1].range.location : text.length
+      if let whole = String.wholeLink(cutShort: range, in: text, limit: limit),
+         let wholeURL = URL(string: text.substring(with: whole)),
+         wholeURL.scheme?.lowercased() == scheme {
+        range = whole
+        url = wholeURL
+      }
       // A link at the end of something in parentheses can take the closing one with it.
       let found = text.substring(with: range)
       if found.hasSuffix(")"), found.filter({ $0 == ")" }).count > found.filter({ $0 == "(" }).count {
@@ -270,6 +281,28 @@ extension String {
   }
 
   private static let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+
+  /// The characters an address can have in it.
+  private static let addressCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/?#[]@!$&'()*+,;=%")
+  /// What can end a sentence or a bit of formatting rather than an address.
+  private static let trailingPunctuation = CharacterSet(charactersIn: ".,;:!?'\"*_~`")
+
+  /// A link written with its scheme that a data detector stopped short of the end of, as far as
+  /// its address goes, up to a space or anything else that can't be in one, but not past `limit`,
+  /// and leaving off punctuation at the end. Nil if it didn't stop short.
+  private static func wholeLink(cutShort range: NSRange, in text: NSString, limit: Int) -> NSRange? {
+    guard text.substring(with: range).contains("://") else {
+      return nil
+    }
+    var end = NSMaxRange(range)
+    while end < limit, let character = Unicode.Scalar(text.character(at: end)), self.addressCharacters.contains(character) {
+      end += 1
+    }
+    while end > NSMaxRange(range), let character = Unicode.Scalar(text.character(at: end - 1)), self.trailingPunctuation.contains(character) {
+      end -= 1
+    }
+    return end > NSMaxRange(range) ? NSRange(location: range.location, length: end - range.location) : nil
+  }
   private static let linkSchemes: Set<String> = ["http", "https", "hotline", "mailto"]
 
   func isEmailAddress() -> Bool {
