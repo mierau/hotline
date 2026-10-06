@@ -97,6 +97,9 @@ extension HotlineState {
       self.status = .connected
       print("HotlineState.login(): Status set to connected")
 
+      // What people do waits for the user list, and you, to be in. See `getUserList()`.
+      self.heldUserEvents = []
+
       // Start event loop so showAgreement and other events can flow through.
       self.startEventLoop()
 
@@ -162,6 +165,11 @@ extension HotlineState {
   /// Requests user list, sets status to loggedIn, and starts post-login tasks.
   @MainActor
   func completeLogin() async throws {
+    // What people did while you logged in goes through once you're in, after the line saying so.
+    defer {
+      self.releaseHeldUserEvents()
+    }
+
     print("HotlineState.completeLogin(): Requesting user list...")
     try await self.getUserList()
 
@@ -294,6 +302,7 @@ extension HotlineState {
     self.agreementText = nil
     self.users = []
     self.ownUserID = nil
+    self.heldUserEvents = nil
     self.chat = []
     self.chatRenderedText = nil
     self.chatRenderedCount = 0

@@ -4,14 +4,48 @@ import SwiftUI
 
 extension HotlineState {
 
+  /// Loads the user list. What people do until it's in is held, and goes through after it, in
+  /// order: a busy server can send word of what they did before the list, though they did it after
+  /// the list was made, and the list would undo it, keeping someone who left for good, or leaving
+  /// out someone who came.
   func getUserList() async throws {
     guard let client = self.client else {
       throw HotlineClientError.notConnected
     }
 
+    // Unless it's held already, as while logging in, for that to go through.
+    let holding = self.heldUserEvents == nil
+    if holding {
+      self.heldUserEvents = []
+    }
+    defer {
+      if holding {
+        self.releaseHeldUserEvents()
+      }
+    }
+
     let hotlineUsers = try await client.getUserList()
     self.users = hotlineUsers.map { User(hotlineUser: $0) }
     self.findOwnUser()
+  }
+
+  /// Goes through what people did while it was held, in the order they did it. Without sounds, as
+  /// it all comes at once, as you arrive.
+  func releaseHeldUserEvents() {
+    guard let events = self.heldUserEvents else {
+      return
+    }
+    self.heldUserEvents = nil
+    for event in events {
+      switch event {
+      case .userChanged(let user):
+        self.addOrUpdateHotlineUser(user, playsSound: false)
+      case .userDisconnected(let userID):
+        self.handleUserDisconnected(userID, playsSound: false)
+      default:
+        break
+      }
+    }
   }
 
   /// Finds which entry in the user list is you, if that isn't known: the one with your name, or of
@@ -106,7 +140,7 @@ extension HotlineState {
 
   // MARK: - User Management
 
-  func addOrUpdateHotlineUser(_ user: HotlineUser) {
+  func addOrUpdateHotlineUser(_ user: HotlineUser, playsSound: Bool = true) {
     print("HotlineState: users: \n\(self.users)")
 
     if let i = self.users.firstIndex(where: { $0.id == user.id }) {
@@ -121,7 +155,7 @@ extension HotlineState {
         self.recordChatMessage(chatMessage)
       }
     } else {
-      if !self.users.isEmpty {
+      if playsSound && !self.users.isEmpty {
         if Prefs.shared.playSounds && Prefs.shared.playJoinSound {
           SoundEffects.play(.userLogin)
         }

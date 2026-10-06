@@ -498,6 +498,9 @@ class HotlineState: Equatable {
 
   @ObservationIgnored var client: HotlineClient?
   @ObservationIgnored var eventTask: Task<Void, Never>?
+  /// What people do before the user list is in: coming, going, and changing, held to go through
+  /// after it. Nil once it's in. See `getUserList()`.
+  @ObservationIgnored var heldUserEvents: [HotlineEvent]?
   @ObservationIgnored var chatSessionKey: ChatStore.SessionKey?
   @ObservationIgnored var restoredChatSessionKey: ChatStore.SessionKey?
   @ObservationIgnored private var chatHistoryObserver: NSObjectProtocol?

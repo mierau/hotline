@@ -68,10 +68,20 @@ extension HotlineState {
   }
 
   func handleUserChanged(_ user: HotlineUser) {
+    // Until the user list is in. See `getUserList()`.
+    if self.heldUserEvents != nil {
+      self.heldUserEvents?.append(.userChanged(user))
+      return
+    }
     self.addOrUpdateHotlineUser(user)
   }
 
-  func handleUserDisconnected(_ userID: UInt16) {
+  func handleUserDisconnected(_ userID: UInt16, playsSound: Bool = true) {
+    // Until the user list is in. See `getUserList()`.
+    if self.heldUserEvents != nil {
+      self.heldUserEvents?.append(.userDisconnected(userID))
+      return
+    }
     if let existingUserIndex = self.users.firstIndex(where: { $0.id == UInt(userID) }) {
       let user = self.users.remove(at: existingUserIndex)
 
@@ -81,7 +91,7 @@ extension HotlineState {
         self.recordChatMessage(chatMessage)
       }
 
-      if Prefs.shared.playSounds && Prefs.shared.playLeaveSound {
+      if playsSound && Prefs.shared.playSounds && Prefs.shared.playLeaveSound {
         SoundEffects.play(.userLogout)
       }
     }
