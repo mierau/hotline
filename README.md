@@ -5,7 +5,7 @@ A modern remake of Hotline for macOS.
 
 [Download the Latest](https://github.com/mierau/hotline/releases/latest)
 
-**Required:** Sequoia 15.7 and up.  
+**Required:** macOS 26 (Tahoe) and up.  
 iOS, iPadOS, and visionOS are still in the works.
 
 To keep this software fresh and running on Apple's latest platforms, the intention is to support the last two major OS releases from Apple. This gives people time to move to the latest major OS release while also allowing this project to make use of the latest APIs.
