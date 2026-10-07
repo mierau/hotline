@@ -38,7 +38,7 @@ struct MessageBoardView: View {
         Button {
           self.composerDisplayed.toggle()
         } label: {
-          Image(systemName: "square.and.pencil")
+          Image(systemName: "pin")
         }
         .disabled((self.model.access?.contains(.canPostMessageBoard) != true) || (self.model.access?.contains(.canReadMessageBoard) != true))
         .help("Post to Message Board")
