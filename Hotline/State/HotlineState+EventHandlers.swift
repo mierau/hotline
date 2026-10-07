@@ -169,7 +169,9 @@ extension HotlineState {
       .trimmingCharacters(in: .whitespacesAndNewlines)
 
     if !cleaned.isEmpty {
-      self.messageBoard.insert(MessageBoardPost.parse(cleaned), at: 0)
+      let post = MessageBoardPost.parse(cleaned)
+      self.messageBoard.insert(post, at: 0)
+      self.announceBoardPost(post)
     }
 
     SoundEffects.play(.newNews)

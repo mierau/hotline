@@ -43,6 +43,8 @@ actor ChatStore {
     var receiverName: String?
     var receiverIconID: UInt?
     var senderIsAdmin: Bool?
+    /// Where a line about something elsewhere goes, like one saying someone posted to the board.
+    var link: String?
 
     struct ImageMetadata: Codable {
       let url: String

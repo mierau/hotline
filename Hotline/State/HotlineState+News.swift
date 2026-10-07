@@ -1,10 +1,125 @@
 import SwiftUI
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 // MARK: - Message Board & News
 
 extension HotlineState {
 
   // MARK: - Message Board
+
+  /// Says in chat that someone posted to the board, and what about when Apple Intelligence can
+  /// say, linking to the post. In the order they're posted, as saying what one's about takes a
+  /// moment.
+  func announceBoardPost(_ post: MessageBoardPost) {
+    let previous = self.boardPostAnnouncement
+    let link = self.boardLink(to: post)
+    self.boardPostAnnouncement = Task { @MainActor [weak self] in
+      // Long enough for the first one, while the model loads.
+      let topic = await Self.boardPostTopic(post.body, within: .seconds(8))
+      await previous?.value
+      guard let self, !Task.isCancelled else {
+        return
+      }
+
+      let name = post.username
+      let about = topic.map { " about \($0)" } ?? ""
+      var line = ChatMessage(text: "\(name ?? "Someone") posted to the board\(about)", type: .boardPost, date: Date())
+      line.isAdmin = name.flatMap { name in self.users.first(where: { $0.name == name })?.isAdmin } ?? false
+      if let link {
+        line.metadata = ChatStore.EntryMetadata(link: link.absoluteString)
+      }
+      self.recordChatMessage(line)
+    }
+  }
+
+  /// A hotline:// link to a post on this server's board.
+  private func boardLink(to post: MessageBoardPost) -> URL? {
+    guard let server = self.server else {
+      return nil
+    }
+    var components = URLComponents()
+    components.scheme = "hotline"
+    components.host = server.address
+    components.port = server.port == HotlinePorts.DefaultServerPort ? nil : server.port
+    components.path = "/board"
+    components.fragment = post.reference
+    return components.url
+  }
+
+  /// What `boardPostTopic(_:)` comes up with in time, or nil.
+  private static func boardPostTopic(_ body: String, within limit: Duration) async -> String? {
+    final class Answer {
+      var given = false
+    }
+    let answer = Answer()
+    return await withCheckedContinuation { continuation in
+      Task { @MainActor in
+        let topic = await Self.boardPostTopic(body)
+        if !answer.given {
+          answer.given = true
+          continuation.resume(returning: topic)
+        }
+      }
+      Task { @MainActor in
+        try? await Task.sleep(for: limit)
+        if !answer.given {
+          answer.given = true
+          continuation.resume(returning: nil)
+        }
+      }
+    }
+  }
+
+  /// A few words on what a post is about, from Apple Intelligence, or nil without it: on an older
+  /// system, a Mac without it, or a post it won't or can't say anything about, like one too short
+  /// to be about anything.
+  private static func boardPostTopic(_ body: String) async -> String? {
+    #if canImport(FoundationModels)
+    guard #available(macOS 26.0, iOS 26.0, *) else {
+      return nil
+    }
+    guard case .available = SystemLanguageModel.default.availability,
+          body.split(whereSeparator: \.isWhitespace).count >= 4 else {
+      return nil
+    }
+    // Finishing a sentence, it writes the words as the line needs them, names capitalized. Asked
+    // for lowercase, it lowercases names too.
+    let session = LanguageModelSession(instructions: """
+      Finish the sentence about the message board post with two to five words. Answer with only \
+      the words that finish it, without quotes or a period.
+      """)
+    do {
+      // Posts can be long, and the start says what they're about.
+      let prompt = "\(body.prefix(1500))\n\nThe post is about"
+      let response = try await session.respond(to: prompt, options: GenerationOptions(temperature: 0.2, maximumResponseTokens: 24))
+      return Self.topic(from: response.content)
+    }
+    catch {
+      return nil
+    }
+    #else
+    return nil
+    #endif
+  }
+
+  /// The topic as the line has it: its first line, without quotes, an ending, or words from the
+  /// question it sometimes says again, and with "A server outage" as "a server outage", or nil for
+  /// nothing, or too much to be a topic.
+  private static func topic(from answer: String) -> String? {
+    var topic = answer.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+    topic = topic.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "\"'“”‘’.!?:;")))
+    topic = topic.replacing(/^(topic:\s*|((the|this) )?post (is |was )?about\s+|.*posted to the board about\s+|about\s+)/.ignoresCase(), with: "")
+    if let first = topic.split(separator: " ").first, ["A", "An", "The"].contains(first) {
+      topic = first.lowercased() + topic.dropFirst(first.count)
+    }
+    let words = topic.split(separator: " ")
+    guard !words.isEmpty, words.count <= 8, topic.count <= 60 else {
+      return nil
+    }
+    return words.joined(separator: " ")
+  }
 
   @MainActor
   @discardableResult

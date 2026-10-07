@@ -100,11 +100,18 @@ enum ChatMessageRenderer {
     case .message:
       text = message.isEmote ? self.emote(message, options: options) : self.chat(message, continuing: continuing, options: options)
     case .joined:
-      text = self.presence(message, arrow: "\u{2192}", options: options)
+      text = self.presence(message, marker: .arrow("\u{2192}"), options: options)
     case .left:
-      text = self.presence(message, arrow: "\u{2190}", options: options)
+      text = self.presence(message, marker: .arrow("\u{2190}"), options: options)
     case .renamed:
-      text = self.presence(message, arrow: "\u{2197}", options: options)
+      text = self.presence(message, marker: .arrow("\u{2197}"), options: options)
+    case .boardPost:
+      text = self.presence(message, marker: .symbol("pin.fill"), options: options)
+      // To the post, from the words, not the pin or the space after it.
+      if let link = message.metadata?.link.flatMap({ URL(string: $0) }) {
+        let start = text.length - (message.text as NSString).length
+        text.addAttribute(.link, value: link, range: NSRange(location: start, length: text.length - start))
+      }
     case .signOut:
       text = self.divider(message, options: options)
     case .server:
@@ -198,31 +205,89 @@ enum ChatMessageRenderer {
     )
   }
 
-  /// Someone connecting, disconnecting, or changing their name, with the arrow in the icon column.
-  /// Without icons, the arrow goes first, and the text where messages' wrapped lines start.
-  private static func presence(_ message: ChatMessage, arrow: String, options: Options) -> NSMutableAttributedString {
+  /// What marks a line about someone in the icon column: an arrow, or an SF Symbol.
+  private enum Marker {
+    case arrow(String)
+    case symbol(String)
+  }
+
+  /// Someone connecting, disconnecting, changing their name, or posting to the board, with what
+  /// marks it in the icon column. Without icons, that goes first, and the text where messages'
+  /// wrapped lines start.
+  private static func presence(_ message: ChatMessage, marker: Marker, options: Options) -> NSMutableAttributedString {
+    let color = message.isAdmin ? options.adminColor ?? self.adminColor : options.secondaryColor ?? NSColor.secondaryLabelColor
+    let mark: NSAttributedString
+    let markWidth: CGFloat
+    switch marker {
+    case .arrow(let arrow):
+      mark = NSAttributedString(string: arrow)
+      markWidth = (arrow as NSString).size(withAttributes: [.font: self.baseFont]).width
+    case .symbol(let name):
+      let attachment = self.symbolAttachment(name, color: color)
+      mark = NSAttributedString(attachment: attachment)
+      markWidth = attachment.bounds.width
+    }
+
     let paragraph = NSMutableParagraphStyle()
     let textStart = options.showsIcons ? self.textIndent : self.hangingIndent
     paragraph.tabStops = [NSTextTab(textAlignment: .left, location: textStart)]
     paragraph.headIndent = textStart
     if options.showsIcons {
-      // The arrow in the middle of the icon column, where messages have the sender's icon.
-      let arrowWidth = (arrow as NSString).size(withAttributes: [.font: self.baseFont]).width
-      paragraph.firstLineHeadIndent = max(0, self.iconInset + self.iconColumnWidth / 2 - arrowWidth / 2)
+      // In the middle of the icon column, where messages have the sender's icon.
+      paragraph.firstLineHeadIndent = max(0, self.iconInset + self.iconColumnWidth / 2 - markWidth / 2)
     }
     paragraph.lineSpacing = 2
     paragraph.paragraphSpacingBefore = self.messageSpacing - self.groupedSpacing
     paragraph.paragraphSpacing = self.groupedSpacing
 
-    return NSMutableAttributedString(
-      string: "\(arrow)\t\(message.text)",
-      attributes: [
-        .font: self.baseFont,
-        .foregroundColor: message.isAdmin ? options.adminColor ?? self.adminColor : options.secondaryColor ?? NSColor.secondaryLabelColor,
-        .paragraphStyle: paragraph,
-        self.skipHighlightKey: true,
-      ]
-    )
+    let text = NSMutableAttributedString(attributedString: mark)
+    text.append(NSAttributedString(string: "\t\(message.text)"))
+    text.addAttributes([
+      .font: self.baseFont,
+      .foregroundColor: color,
+      .paragraphStyle: paragraph,
+      self.skipHighlightKey: true,
+    ], range: NSRange(location: 0, length: text.length))
+    return text
+  }
+
+  /// How big an SF Symbol marking a line is, to look as big as the arrows marking the others. A
+  /// narrow one, like the pin, is taller than they are.
+  private static let markerSymbolSize: CGFloat = 10
+
+  /// An SF Symbol marking a line, in the line's color, its middle level with the arrows' on the
+  /// lines around it.
+  private static func symbolAttachment(_ name: String, color: NSColor) -> NSTextAttachment {
+    let attachment = NSTextAttachment()
+    let configuration = NSImage.SymbolConfiguration(pointSize: self.markerSymbolSize, weight: .regular)
+    guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else {
+      // Rather than the 32 points square an attachment without bounds takes.
+      attachment.bounds = CGRect(x: 0, y: 0, width: 1, height: 1)
+      return attachment
+    }
+    // The color where the symbol is, as the text has it. A symbol's own colors make one you can see
+    // through lighter, as the secondary color is.
+    let image = NSImage(size: symbol.size, flipped: false) { rect in
+      color.set()
+      rect.fill()
+      symbol.draw(in: rect, from: .zero, operation: .destinationIn, fraction: 1)
+      return true
+    }
+    // Drawn each time, for a color that's different in dark mode.
+    image.cacheMode = .never
+    attachment.image = image
+    let y = self.arrowMidY - symbol.alignmentRect.midY
+    attachment.bounds = CGRect(x: 0, y: y.rounded(), width: symbol.size.width, height: symbol.size.height)
+    return attachment
+  }
+
+  /// How far above the baseline the middle of the arrows marking lines is.
+  private static var arrowMidY: CGFloat {
+    let font = self.baseFont as CTFont
+    var character = UniChar(0x2192)
+    var glyph = CGGlyph()
+    CTFontGetGlyphsForCharacters(font, &character, &glyph, 1)
+    return CTFontGetBoundingRectsForGlyphs(font, .default, &glyph, nil, 1).midY
   }
 
   /// The day and time a session starts, in a line across the chat, where people coming and going

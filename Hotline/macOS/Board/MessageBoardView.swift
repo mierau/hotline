@@ -10,7 +10,12 @@ struct MessageBoardView: View {
   
   var body: some View {
     NavigationStack {
-      self.messageBoardView
+      ScrollViewReader { proxy in
+        self.messageBoardView
+          .onChange(of: self.model.boardPostToReveal, initial: true) { _, reference in
+            self.reveal(reference, with: proxy)
+          }
+      }
     }
     .overlay {
       if self.model.messageBoard.isEmpty && (self.model.access?.contains(.canReadMessageBoard) != true) {
@@ -46,6 +51,20 @@ struct MessageBoardView: View {
     }
   }
   
+  /// Scrolls to a post a link in chat asked for, by its reference, once the board has laid out.
+  private func reveal(_ reference: String?, with proxy: ScrollViewProxy) {
+    guard let reference else {
+      return
+    }
+    self.model.boardPostToReveal = nil
+    guard let post = self.model.messageBoard.first(where: { $0.reference == reference }) else {
+      return
+    }
+    Task { @MainActor in
+      proxy.scrollTo(post.id, anchor: .top)
+    }
+  }
+
   private var disabledBoardView: some View {
     ContentUnavailableView {
       Label("No Message Board", systemImage: "quote.bubble")

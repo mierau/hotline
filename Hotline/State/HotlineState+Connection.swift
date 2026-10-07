@@ -303,6 +303,9 @@ extension HotlineState {
     self.users = []
     self.ownUserID = nil
     self.heldUserEvents = nil
+    self.boardPostAnnouncement?.cancel()
+    self.boardPostAnnouncement = nil
+    self.boardPostToReveal = nil
     self.chat = []
     self.chatRenderedText = nil
     self.chatRenderedCount = 0

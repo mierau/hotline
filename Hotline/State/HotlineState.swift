@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import CryptoKit
 
 // MARK: - Connection Status
 
@@ -70,6 +71,13 @@ struct MessageBoardPost: Identifiable, Hashable {
   let yearInferred: Bool
 
   private static let drawingCharacters = CharacterSet(charactersIn: #"|/\_-=+*#@[]()<>{}^~`"#)
+
+  /// What tells this post from the others, the same each time the board loads, unlike its ID: who
+  /// posted it, when, and what they wrote, hashed. Links to the post use it.
+  var reference: String {
+    let text = "\(self.username ?? "")\n\(self.rawDateString ?? "")\n\(self.body)"
+    return SHA256.hash(data: Data(text.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+  }
 
   /// Heuristic: true when the post body contains ASCII art.
   /// Looks for a contiguous run of 3+ lines where each line has a high
@@ -427,6 +435,8 @@ class HotlineState: Equatable {
   var messageBoard: [MessageBoardPost] = []
   var messageBoardLoaded: Bool = false
   var messageBoardSignature: String?
+  /// A post for the board to show, by its `reference`, from a link to it in chat.
+  var boardPostToReveal: String? = nil
 
   // News
   var news: [NewsInfo] = []
@@ -501,6 +511,9 @@ class HotlineState: Equatable {
   /// What people do before the user list is in: coming, going, and changing, held to go through
   /// after it. Nil once it's in. See `getUserList()`.
   @ObservationIgnored var heldUserEvents: [HotlineEvent]?
+  /// The last line in chat saying someone posted to the board, still on its way. See
+  /// `announceBoardPost(_:)`.
+  @ObservationIgnored var boardPostAnnouncement: Task<Void, Never>?
   @ObservationIgnored var chatSessionKey: ChatStore.SessionKey?
   @ObservationIgnored var restoredChatSessionKey: ChatStore.SessionKey?
   @ObservationIgnored private var chatHistoryObserver: NSObjectProtocol?

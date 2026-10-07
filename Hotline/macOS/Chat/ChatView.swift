@@ -88,7 +88,7 @@ struct ChatView: View {
           case .news:
             return "Show News"
           case .board:
-            return "Show Message Board"
+            return url.fragment?.isEmpty == false ? "Show Post on Message Board" : "Show Message Board"
           default:
             return nil
           }
@@ -213,6 +213,10 @@ struct ChatView: View {
         self.serverState.selection = section
         if section == .files, let filePath = linkServer.initialFilePath {
           self.serverState.fileNavigationPath = filePath
+        }
+        // A link to a post, like the one on the line saying it was posted.
+        if section == .board, let post = url.fragment, !post.isEmpty {
+          self.model.boardPostToReveal = post
         }
       }
     }
