@@ -303,6 +303,8 @@ extension HotlineState {
     self.users = []
     self.ownUserID = nil
     self.heldUserEvents = nil
+    self.privateChats = []
+    self.privateChatDrafts = [:]
     self.boardPostAnnouncement?.cancel()
     self.boardPostAnnouncement = nil
     self.boardPostToReveal = nil
@@ -678,6 +680,21 @@ extension HotlineState {
     case .disconnectMessage(let message):
       print("HotlineState: Server sent disconnect message: \(message)")
       self.disconnectMessage = message
+
+    case .chatInvitation(let chatID, let userID, let name, let subject):
+      self.handleChatInvitation(chatID: chatID, userID: userID, name: name, subject: subject)
+
+    case .privateChatMessage(let chatID, let text):
+      self.handlePrivateChatMessage(chatID: chatID, text: text)
+
+    case .privateChatUserChanged(let chatID, let user):
+      self.handlePrivateChatUserChanged(chatID: chatID, user: user)
+
+    case .privateChatUserLeft(let chatID, let userID):
+      self.handlePrivateChatUserLeft(chatID: chatID, userID: userID)
+
+    case .privateChatSubject(let chatID, let subject):
+      self.handlePrivateChatSubject(chatID: chatID, subject: subject)
     }
   }
 }

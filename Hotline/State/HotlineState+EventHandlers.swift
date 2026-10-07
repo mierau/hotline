@@ -95,6 +95,7 @@ extension HotlineState {
         SoundEffects.play(.userLogout)
       }
     }
+    self.removeFromPrivateChats(userID: userID)
   }
 
   func handleServerMessage(_ message: String) {

@@ -67,6 +67,52 @@ struct ListItemView: View {
   }
 }
 
+/// A button on a sidebar row, like the Chat row's for a private chat: its symbol, flat, and with the
+/// pointer over it, a circle of glass, which goes flat again once it's gone. Before macOS 26, with
+/// no glass, a circle in the row's text color, which darkens when it's pressed.
+struct SidebarRowButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    SidebarRowButton(configuration: configuration)
+  }
+
+  private struct SidebarRowButton: View {
+    let configuration: Configuration
+
+    @State private var hovered: Bool = false
+
+    /// The circle, roomy around the symbol, and how much of it reaches past the space the button
+    /// takes up in its row, so the row's no taller for it.
+    private static let size: CGFloat = 28
+    private static let overhang: CGFloat = 4
+
+    var body: some View {
+      let label = self.configuration.label
+        .frame(width: Self.size, height: Self.size)
+        .contentShape(Circle())
+        .onHover { hovered in
+          self.hovered = hovered
+        }
+
+      Group {
+        if #available(macOS 26.0, *) {
+          label
+            .glassEffect(self.hovered ? .regular.interactive() : .identity, in: .circle)
+            .animation(.easeOut(duration: 0.15), value: self.hovered)
+        }
+        else {
+          label
+            .background {
+              Circle()
+                .fill(.primary.opacity(self.configuration.isPressed ? 0.2 : self.hovered ? 0.1 : 0))
+            }
+            .animation(.easeOut(duration: 0.12), value: self.hovered)
+        }
+      }
+      .padding(-Self.overhang)
+    }
+  }
+}
+
 extension FocusedValues {
   @Entry var activeHotlineModel: HotlineState?
   @Entry var activeServerState: ServerState?
@@ -88,6 +134,15 @@ struct ServerView: View {
   @State private var connectPassword: String = ""
   @State private var connectionDisplayed: Bool = false
   @State private var connectTask: Task<Void, Never>? = nil
+  /// Whether the pointer's over the Chat row, which shows a button for a private chat.
+  @State private var chatRowHovered: Bool = false
+  /// The private chats with who's in them folded away, and the one the pointer's over, which shows
+  /// a button to leave it.
+  @State private var foldedPrivateChats: Set<UInt32> = []
+  @State private var hoveredPrivateChat: UInt32? = nil
+  /// A private chat's new subject, as it's written, and the chat.
+  @State private var privateChatSubject: String = ""
+  @State private var privateChatSubjectID: UInt32? = nil
 //  @State private var accountsShown: Bool = false
   
   static var menuItems: [ServerMenuItem] = [
@@ -328,8 +383,40 @@ struct ServerView: View {
       // Don't show news on older servers.
       ForEach(model.serverVersion < 151 ? ServerView.classicMenuItems : ServerView.menuItems) { menuItem in
         if menuItem.type == .chat {
-          ListItemView(icon: menuItem.image, title: menuItem.name, unread: model.unreadPublicChat).tag(menuItem.type)
+          // A button to start a private chat, for those who can, over the row's end, in place of
+          // its dot.
+          let startsChats = self.model.access?.contains(.canCreateChat) == true
+          ListItemView(icon: menuItem.image, title: menuItem.name, unread: model.unreadPublicChat && !(startsChats && self.chatRowHovered)).tag(menuItem.type)
+            .overlay(alignment: .trailing) {
+              if startsChats && self.chatRowHovered {
+                Button {
+                  self.state.privateChatInvite = PrivateChatInvite(chatID: nil)
+                } label: {
+                  // As big as the row's name, and its color, white on the selection, which a
+                  // borderless button's accent color nearly is.
+                  Image(systemName: "plus")
+                    .imageScale(.large)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                }
+                .buttonStyle(SidebarRowButtonStyle())
+                .help("New Private Chat")
+                .padding(.trailing, 6)
+                .transition(.scale(scale: 0.5).combined(with: .opacity))
+              }
+            }
+            // The button grows in with the pointer, and the dot it takes the place of fades.
+            .onHover { hovering in
+              withAnimation(.easeOut(duration: 0.15)) {
+                self.chatRowHovered = hovering
+              }
+            }
             .serverThemedRow(for: menuItem.type)
+
+          // The private chats you're in, under the public one.
+          ForEach(self.model.joinedPrivateChats) { chat in
+            self.privateChatRow(chat)
+          }
         }
 //        else if menuItem.type == .board {
 //          if self.model.access?.contains(.canReadMessageBoard) == true {
@@ -357,7 +444,7 @@ struct ServerView: View {
             .serverThemedRow(for: menuItem.type)
         }
       }
-      
+
       if model.transfers.count > 0 {
         Divider()
         
@@ -408,15 +495,16 @@ struct ServerView: View {
           }
           
           Text(user.name)
-            // Bolder with messages from them you haven't read, as the dot beside it shows.
-            .fontWeight(model.hasUnreadPrivateMessages(userID: user.id) ? .semibold : nil)
+            // Bolder with messages or an invitation from them you haven't seen, as the dot beside
+            // it shows.
+            .fontWeight(model.hasUnreadPrivateMessages(userID: user.id) || model.hasUnreadInvitation(from: user.id) ? .semibold : nil)
             .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary))
         }
         .opacity(user.isIdle ? 0.5 : 1.0)
 
         Spacer()
         
-        if model.hasUnreadPrivateMessages(userID: user.id) {
+        if model.hasUnreadPrivateMessages(userID: user.id) || model.hasUnreadInvitation(from: user.id) {
           Circle()
             .frame(width: 6, height: 6)
             .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary.opacity(0.7)))
@@ -428,29 +516,194 @@ struct ServerView: View {
       .tag(ServerNavigationType.user(userID: user.id))
       .serverThemedRow(for: ServerNavigationType.user(userID: user.id))
       .contextMenu {
-        if self.model.access?.contains(.canGetClientInfo) == true {
-          Button("Get Info", systemImage: "info.circle") {
-            Task {
-              if let info = try? await self.model.getClientInfoText(id: user.id) {
-                self.state.userInfo = info
-              }
-            }
-          }
-        }
+        self.userMenu(user)
+      }
+    }
+  }
 
-        Button("Send Message...", systemImage: "square.and.pencil") {
-          self.state.composeMessageUser = user
-        }
-        .disabled(self.model.access?.contains(.canSendMessages) != true || user.refusesPrivateMessages)
-
-        if self.model.access?.contains(.canDisconnectUsers) == true {
-          Divider()
-
-          Button("Disconnect User", systemImage: "nosign", role: .destructive) {
-            self.state.disconnectUserTarget = user
+  /// What can be done for someone, from the user list or a private chat they're in.
+  @ViewBuilder
+  private func userMenu(_ user: User) -> some View {
+    if self.model.access?.contains(.canGetClientInfo) == true {
+      Button("Get Info", systemImage: "info.circle") {
+        Task {
+          if let info = try? await self.model.getClientInfoText(id: user.id) {
+            self.state.userInfo = info
           }
         }
       }
+    }
+
+    Button("Send Message...", systemImage: "square.and.pencil") {
+      self.state.composeMessageUser = user
+    }
+    .disabled(self.model.access?.contains(.canSendMessages) != true || user.refusesPrivateMessages)
+
+    if self.model.access?.contains(.canCreateChat) == true && user.id != self.model.ownUserID {
+      self.privateChatInviteMenu(for: user)
+    }
+
+    if self.model.access?.contains(.canDisconnectUsers) == true {
+      Divider()
+
+      Button("Disconnect User", systemImage: "nosign", role: .destructive) {
+        self.state.disconnectUserTarget = user
+      }
+    }
+  }
+
+  /// Asking someone into a private chat: a new one, with them chosen, for whoever else and what
+  /// about, or one you're in, right away.
+  @ViewBuilder
+  private func privateChatInviteMenu(for user: User) -> some View {
+    let chats = self.model.privateChats(toInvite: user.id)
+    if chats.isEmpty {
+      Button("Invite to Private Chat...", systemImage: "bubble.left.and.bubble.right") {
+        self.state.privateChatInvite = PrivateChatInvite(chatID: nil, chosen: [user.id])
+      }
+      .disabled(user.refusesPrivateChat)
+    }
+    else {
+      Menu("Invite to Private Chat", systemImage: "bubble.left.and.bubble.right") {
+        Button("New Private Chat...") {
+          self.state.privateChatInvite = PrivateChatInvite(chatID: nil, chosen: [user.id])
+        }
+
+        Divider()
+
+        ForEach(chats) { chat in
+          Button(self.model.title(of: chat)) {
+            Task {
+              try? await self.model.inviteToPrivateChat(chat.id, userIDs: [user.id])
+            }
+          }
+        }
+      }
+      .disabled(user.refusesPrivateChat)
+    }
+  }
+
+  /// A private chat you're in, under the public one, with who's in it under it, which can be folded
+  /// away. With the pointer over it, a button in place of its dot leaves it, once that's confirmed.
+  @ViewBuilder
+  private func privateChatRow(_ chat: PrivateChat) -> some View {
+    let item = ServerNavigationType.privateChat(chatID: chat.id)
+    let row = HStack(spacing: 5) {
+      // The public chat's, for now.
+      Image("Section Chat")
+        .resizable()
+        .scaledToFit()
+        .frame(width: 20, height: 20)
+        .opacity(self.controlActiveState == .inactive ? 0.5 : 1.0)
+
+      Text(self.model.title(of: chat))
+        .lineLimit(1)
+        .truncationMode(.tail)
+
+      Spacer()
+
+      if self.hoveredPrivateChat == chat.id {
+        Button {
+          self.state.privateChatToLeave = chat.id
+        } label: {
+          // In the row's text color, as the Chat row's button is.
+          Image(systemName: "xmark")
+            .fontWeight(.medium)
+            .foregroundStyle(.primary)
+        }
+        .buttonStyle(SidebarRowButtonStyle())
+        .help("Leave Chat")
+        .padding(.trailing, 6)
+        .transition(.scale(scale: 0.5).combined(with: .opacity))
+      }
+      else if chat.unread {
+        Circle()
+          .frame(width: 6, height: 6)
+          .serverUnreadDot(opacity: 0.9)
+          .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 6))
+      }
+    }
+    // As the Chat row's button does.
+    .onHover { hovering in
+      withAnimation(.easeOut(duration: 0.15)) {
+        if hovering {
+          self.hoveredPrivateChat = chat.id
+        }
+        else if self.hoveredPrivateChat == chat.id {
+          self.hoveredPrivateChat = nil
+        }
+      }
+    }
+    .tag(item)
+    .serverThemedRow(for: item)
+    .contextMenu {
+      self.privateChatMenu(chat)
+    }
+
+    DisclosureGroup(isExpanded: Binding(
+      get: { !self.foldedPrivateChats.contains(chat.id) },
+      set: { expanded in
+        if expanded {
+          self.foldedPrivateChats.remove(chat.id)
+        }
+        else {
+          self.foldedPrivateChats.insert(chat.id)
+        }
+      }
+    )) {
+      ForEach(chat.users) { user in
+        self.privateChatMemberRow(user)
+      }
+    } label: {
+      row
+    }
+  }
+
+  /// Someone in a private chat, as the user list has them, with its menu. They're not to be chosen,
+  /// as the chat they're in is what's chosen.
+  private func privateChatMemberRow(_ user: User) -> some View {
+    HStack(spacing: 5) {
+      if let iconImage = HotlineState.getClassicIcon(Int(user.iconID)) {
+        Image(nsImage: iconImage)
+          .frame(width: 16, height: 16)
+          .padding(.leading, 2)
+          .padding(.trailing, 2)
+      }
+      else {
+        Image("User")
+          .frame(width: 16, height: 16)
+          .padding(.leading, 2)
+          .padding(.trailing, 2)
+      }
+
+      Text(user.name)
+        .lineLimit(1)
+        .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary))
+
+      Spacer()
+    }
+    .opacity(user.isIdle ? 0.5 : 1.0)
+    .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+    .contextMenu {
+      self.userMenu(user)
+    }
+  }
+
+  @ViewBuilder
+  private func privateChatMenu(_ chat: PrivateChat) -> some View {
+    if self.model.access?.contains(.canCreateChat) == true {
+      Button("Invite People...", systemImage: "person.badge.plus") {
+        self.state.privateChatInvite = PrivateChatInvite(chatID: chat.id)
+      }
+    }
+    Button("Change Subject...", systemImage: "character.cursor.ibeam") {
+      self.state.privateChatSubjectID = chat.id
+    }
+
+    Divider()
+
+    Button("Leave Chat...", systemImage: "rectangle.portrait.and.arrow.right") {
+      self.state.privateChatToLeave = chat.id
     }
   }
   
@@ -484,8 +737,14 @@ struct ServerView: View {
         case .files:
           FilesView(serverState: self.state)
         case .user(let userID):
-          MessageView(userID: userID)
-            .id(userID)
+          // Joining a private chat they invited you to goes to it.
+          MessageView(userID: userID) { chatID in
+            self.state.selection = .privateChat(chatID: chatID)
+          }
+          .id(userID)
+        case .privateChat(let chatID):
+          ChatView(serverState: self.state, chatID: chatID)
+            .id(chatID)
         }
     }
     .serverTheme(self.themeColors, window: self.state.window)
@@ -496,6 +755,62 @@ struct ServerView: View {
     }
     .sheet(item: self.$state.userInfo) { info in
       UserClientInfoSheet(info: info)
+    }
+    .sheet(item: self.$state.privateChatInvite) { invite in
+      PrivateChatInviteSheet(chatID: invite.chatID, chosen: invite.chosen) { chatID in
+        self.state.selection = .privateChat(chatID: chatID)
+      }
+      .environment(self.model)
+    }
+    .alert(
+      "Change Subject",
+      isPresented: Binding(
+        get: { self.state.privateChatSubjectID != nil },
+        set: { if !$0 { self.state.privateChatSubjectID = nil } }
+      )
+    ) {
+      TextField("Subject", text: self.$privateChatSubject)
+      Button("Cancel", role: .cancel) {}
+      Button("Change") {
+        if let chatID = self.privateChatSubjectID {
+          let subject = self.privateChatSubject.trimmingCharacters(in: .whitespacesAndNewlines)
+          Task {
+            try? await self.model.setPrivateChatSubject(subject, chatID: chatID)
+          }
+        }
+      }
+    } message: {
+      Text("Everyone in the chat will see it.")
+    }
+    .alert(
+      "Leave “\(self.state.privateChatToLeave.flatMap { self.model.privateChat($0) }.map { self.model.title(of: $0) } ?? "Private Chat")”?",
+      isPresented: Binding(
+        get: { self.state.privateChatToLeave != nil },
+        set: { if !$0 { self.state.privateChatToLeave = nil } }
+      )
+    ) {
+      Button("Leave", role: .destructive) {
+        if let chatID = self.state.privateChatToLeave {
+          Task {
+            await self.model.leavePrivateChat(chatID)
+          }
+        }
+      }
+    } message: {
+      Text("Private chats aren't saved, so what's been said in it will be gone.")
+    }
+    .onChange(of: self.state.privateChatSubjectID) { _, chatID in
+      // The chat, and its subject as it is, to change, until it's asked about another.
+      if let chatID {
+        self.privateChatSubjectID = chatID
+        self.privateChatSubject = self.model.privateChat(chatID)?.subject ?? ""
+      }
+    }
+    .onChange(of: self.model.privateChats.map(\.id)) { _, chatIDs in
+      // Once it's left or declined, back to the public chat.
+      if case .privateChat(let chatID) = self.state.selection, !chatIDs.contains(chatID) {
+        self.state.selection = .chat
+      }
     }
     .alert(
       "Are you sure you want to disconnect \(self.state.disconnectUserTarget?.name ?? "this user")?",

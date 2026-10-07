@@ -26,6 +26,16 @@ public enum HotlineEvent: Sendable {
   case userAccess(HotlineUserAccessOptions)
   /// Server sent a disconnect message (client should disconnect after receiving)
   case disconnectMessage(String)
+  /// Someone invited you to a private chat, with its subject if the server says
+  case chatInvitation(chatID: UInt32, userID: UInt16, name: String, subject: String)
+  /// A message in a private chat you're in
+  case privateChatMessage(chatID: UInt32, text: String)
+  /// Someone joined a private chat you're in, or their info there changed
+  case privateChatUserChanged(chatID: UInt32, user: HotlineUser)
+  /// Someone left a private chat you're in
+  case privateChatUserLeft(chatID: UInt32, userID: UInt16)
+  /// A private chat you're in has a new subject
+  case privateChatSubject(chatID: UInt32, subject: String)
 }
 
 // MARK: - Errors
@@ -400,7 +410,12 @@ public actor HotlineClient {
     switch transaction.type {
     case .chatMessage:
       if let text = transaction.getField(type: .data)?.getString() {
-        eventContinuation.yield(.chatMessage(text))
+        // A private chat's messages have its ID. Some servers give the public chat's as 0.
+        if let chatID = transaction.getField(type: .chatID)?.getInteger(), chatID != 0 {
+          eventContinuation.yield(.privateChatMessage(chatID: UInt32(truncatingIfNeeded: chatID), text: text))
+        } else {
+          eventContinuation.yield(.chatMessage(text))
+        }
       }
 
     case .notifyOfUserChange:
@@ -445,6 +460,37 @@ public actor HotlineClient {
     case .newMessage:
       if let message = transaction.getField(type: .data)?.getString() {
         eventContinuation.yield(.newsPost(message))
+      }
+
+    case .inviteToChat:
+      if let chatID = transaction.getField(type: .chatID)?.getInteger(),
+         let userID = transaction.getField(type: .userID)?.getUInt16() {
+        let name = transaction.getField(type: .userName)?.getString() ?? ""
+        // Not in the protocol, but some servers might send it.
+        let subject = transaction.getField(type: .chatSubject)?.getString() ?? ""
+        eventContinuation.yield(.chatInvitation(chatID: UInt32(truncatingIfNeeded: chatID), userID: userID, name: name, subject: subject))
+      }
+
+    case .notifyChatOfUserChange:
+      if let chatID = transaction.getField(type: .chatID)?.getInteger(),
+         let userID = transaction.getField(type: .userID)?.getUInt16(),
+         let name = transaction.getField(type: .userName)?.getString() {
+        let iconID = transaction.getField(type: .userIconID)?.getUInt16() ?? 0
+        let flags = transaction.getField(type: .userFlags)?.getUInt16() ?? 0
+        let user = HotlineUser(id: userID, iconID: iconID, status: flags, name: name)
+        eventContinuation.yield(.privateChatUserChanged(chatID: UInt32(truncatingIfNeeded: chatID), user: user))
+      }
+
+    case .notifyChatOfUserDelete:
+      if let chatID = transaction.getField(type: .chatID)?.getInteger(),
+         let userID = transaction.getField(type: .userID)?.getUInt16() {
+        eventContinuation.yield(.privateChatUserLeft(chatID: UInt32(truncatingIfNeeded: chatID), userID: userID))
+      }
+
+    case .notifyChatSubject:
+      if let chatID = transaction.getField(type: .chatID)?.getInteger() {
+        let subject = transaction.getField(type: .chatSubject)?.getString() ?? ""
+        eventContinuation.yield(.privateChatSubject(chatID: UInt32(truncatingIfNeeded: chatID), subject: subject))
       }
 
     case .disconnectMessage:
@@ -555,10 +601,93 @@ public actor HotlineClient {
   ///   - message: Text to send
   ///   - encoding: Text encoding (default: UTF-8)
   ///   - announce: Whether this is an announcement (admin only, default: false)
-  public func sendChat(_ message: String, encoding: String.Encoding = .utf8, announce: Bool = false) async throws {
+  public func sendChat(_ message: String, encoding: String.Encoding = .utf8, announce: Bool = false, chatID: UInt32? = nil) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .sendChat)
     transaction.setFieldString(type: .data, val: message, encoding: encoding)
     transaction.setFieldUInt16(type: .chatOptions, val: announce ? 1 : 0)
+    if let chatID {
+      transaction.setFieldUInt32(type: .chatID, val: chatID)
+    }
+
+    try await socket.send(transaction, endian: .big)
+  }
+
+  // MARK: - Private Chat
+
+  /// Start a private chat, inviting people to it
+  ///
+  /// - Parameter userIDs: Who to invite
+  /// - Returns: The new chat's ID
+  public func inviteToNewChat(userIDs: [UInt16]) async throws -> UInt32 {
+    var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .inviteToNewChat)
+    for userID in userIDs {
+      transaction.setFieldUInt16(type: .userID, val: userID)
+    }
+
+    let reply = try await self.sendTransaction(transaction)
+    guard let chatID = reply.getField(type: .chatID)?.getInteger() else {
+      throw HotlineClientError.invalidResponse
+    }
+    return UInt32(truncatingIfNeeded: chatID)
+  }
+
+  /// Invite someone to a private chat you're in
+  ///
+  /// - Parameters:
+  ///   - userID: Who to invite
+  ///   - chatID: The chat
+  public func inviteToChat(userID: UInt16, chatID: UInt32) async throws {
+    var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .inviteToChat)
+    transaction.setFieldUInt16(type: .userID, val: userID)
+    transaction.setFieldUInt32(type: .chatID, val: chatID)
+
+    try await socket.send(transaction, endian: .big)
+  }
+
+  /// Join a private chat you were invited to
+  ///
+  /// - Parameter chatID: The chat
+  /// - Returns: Its subject, and who's in it
+  public func joinChat(_ chatID: UInt32) async throws -> (subject: String, users: [HotlineUser]) {
+    var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .joinChat)
+    transaction.setFieldUInt32(type: .chatID, val: chatID)
+
+    let reply = try await self.sendTransaction(transaction)
+    let subject = reply.getField(type: .chatSubject)?.getString() ?? ""
+    let users = reply.getFieldList(type: .userNameWithInfo).map { $0.getUser() }
+    return (subject, users)
+  }
+
+  /// Turn down an invitation to a private chat
+  ///
+  /// - Parameter chatID: The chat
+  public func rejectChatInvite(_ chatID: UInt32) async throws {
+    var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .rejectChatInvite)
+    transaction.setFieldUInt32(type: .chatID, val: chatID)
+
+    try await socket.send(transaction, endian: .big)
+  }
+
+  /// Leave a private chat
+  ///
+  /// - Parameter chatID: The chat
+  public func leaveChat(_ chatID: UInt32) async throws {
+    var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .leaveChat)
+    transaction.setFieldUInt32(type: .chatID, val: chatID)
+
+    try await socket.send(transaction, endian: .big)
+  }
+
+  /// Set a private chat's subject, for everyone in it
+  ///
+  /// - Parameters:
+  ///   - subject: The subject
+  ///   - chatID: The chat
+  ///   - encoding: Text encoding (default: UTF-8)
+  public func setChatSubject(_ subject: String, chatID: UInt32, encoding: String.Encoding = .utf8) async throws {
+    var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .setChatSubject)
+    transaction.setFieldUInt32(type: .chatID, val: chatID)
+    transaction.setFieldString(type: .chatSubject, val: subject, encoding: encoding)
 
     try await socket.send(transaction, endian: .big)
   }

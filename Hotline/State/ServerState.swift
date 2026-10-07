@@ -16,6 +16,12 @@ class ServerState: Equatable {
   var userInfo: HotlineUserClientInfo? = nil
   /// Someone to disconnect from the server, once that's confirmed.
   var disconnectUserTarget: User? = nil
+  /// People to ask into a private chat, as they're being chosen.
+  var privateChatInvite: PrivateChatInvite? = nil
+  /// The private chat whose subject is being changed.
+  var privateChatSubjectID: UInt32? = nil
+  /// The private chat to leave, once that's confirmed.
+  var privateChatToLeave: UInt32? = nil
 
   /// The window showing this server, so the banner toolbar can bring it forward.
   @ObservationIgnored weak var window: NSWindow? = nil
@@ -46,6 +52,8 @@ enum ServerNavigationType: Identifiable, Hashable, Equatable {
 //      return "Accounts"
     case .user(let userID):
       return String(userID)
+    case .privateChat(let chatID):
+      return "Private Chat \(chatID)"
     }
   }
   
@@ -55,4 +63,14 @@ enum ServerNavigationType: Identifiable, Hashable, Equatable {
   case files
 //  case accounts
   case user(userID: UInt16)
+  case privateChat(chatID: UInt32)
+}
+
+/// People to ask into a private chat: a new one, or one you're in.
+struct PrivateChatInvite: Identifiable {
+  let id = UUID()
+  /// The chat they're asked into, or nil to start one.
+  let chatID: UInt32?
+  /// Who's chosen to begin with, as when it's from someone's menu.
+  var chosen: Set<UInt16> = []
 }

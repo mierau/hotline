@@ -8,6 +8,8 @@ enum ChatMessageType {
   case renamed
   /// Someone posting to the message board.
   case boardPost
+  /// A private chat's subject changing.
+  case subject
   case message
   case server
   case signOut
@@ -26,6 +28,8 @@ extension ChatMessageType {
       return "renamed"
     case .boardPost:
       return "boardPost"
+    case .subject:
+      return "subject"
     case .message:
       return "message"
     case .server:
@@ -47,6 +51,8 @@ extension ChatMessageType {
       self = .renamed
     case "boardPost":
       self = .boardPost
+    case "subject":
+      self = .subject
     case "message":
       self = .message
     case "server":

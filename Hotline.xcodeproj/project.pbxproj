@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DA84CB9C01984121C3D2D4F6 /* PrivateChatInvitationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0BD86934C8B0967BA56080 /* PrivateChatInvitationView.swift */; };
+		DA93897C2E39AAED7E40C269 /* PrivateChatInviteSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6C80FC103C893CFAC21C74 /* PrivateChatInviteSheet.swift */; };
+		DA68F7DC7CDC1E270E5C4C03 /* HotlineState+PrivateChats.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD2783B18E9F11E8BC6EDA1 /* HotlineState+PrivateChats.swift */; };
+		DAE1D77C9273D42E7C2772EC /* PrivateChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9D2F39C10A8E4D06A7797B /* PrivateChat.swift */; };
 		0080D3056237065F81E4BDF8 /* ChatImagePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DF11A389B4DE29AEAF66B70 /* ChatImagePreview.swift */; };
 		03B76AD263F0CFCEE5D9F844 /* ChatCodeHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE3ACA3E788C6BE871E20E0 /* ChatCodeHighlighter.swift */; };
 		11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11A726072BE0672A000C1DA7 /* FileDetails.swift */; };
@@ -166,6 +170,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		DA0BD86934C8B0967BA56080 /* PrivateChatInvitationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatInvitationView.swift; sourceTree = "<group>"; };
+		DA6C80FC103C893CFAC21C74 /* PrivateChatInviteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatInviteSheet.swift; sourceTree = "<group>"; };
+		DAD2783B18E9F11E8BC6EDA1 /* HotlineState+PrivateChats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HotlineState+PrivateChats.swift"; sourceTree = "<group>"; };
+		DA9D2F39C10A8E4D06A7797B /* PrivateChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChat.swift; sourceTree = "<group>"; };
 		0396E4EF8544986A8B51D08E /* BannerCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BannerCache.swift; sourceTree = "<group>"; };
 		05A0352CEAB8BAC6395F0CB6 /* CompactProArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactProArchive.swift; sourceTree = "<group>"; };
 		08FE19791A935E8871D7054A /* ChatSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSearch.swift; sourceTree = "<group>"; };
@@ -378,6 +386,7 @@
 				DAA15B162F50C98D00FAC1B2 /* HotlineState+EventHandlers.swift */,
 				DAA15B1C2F50C9E000FAC1B2 /* HotlineState+Chat.swift */,
 				DAA15B142F50C96700FAC1B2 /* HotlineState+Users.swift */,
+				DAD2783B18E9F11E8BC6EDA1 /* HotlineState+PrivateChats.swift */,
 				DAA15B182F50C9AE00FAC1B2 /* HotlineState+News.swift */,
 				DAA15B1A2F50C9D700FAC1B2 /* HotlineState+Files.swift */,
 			);
@@ -497,6 +506,8 @@
 				6FDF6C825424D089CCFD85EA /* ChatMessageRenderer.swift */,
 				6DF11A389B4DE29AEAF66B70 /* ChatImagePreview.swift */,
 				DA5A6F132F456DC900060F18 /* ChatInputField.swift */,
+				DA0BD86934C8B0967BA56080 /* PrivateChatInvitationView.swift */,
+				DA6C80FC103C893CFAC21C74 /* PrivateChatInviteSheet.swift */,
 				DA6549992BEC280E00EDB697 /* ServerMessageView.swift */,
 				DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */,
 			);
@@ -648,6 +659,7 @@
 				DADDB28A2B22B31F0024040D /* Tracker.swift */,
 				DADDB28C2B22B5920024040D /* Server.swift */,
 				DA32CD482B2931640053B98B /* User.swift */,
+				DA9D2F39C10A8E4D06A7797B /* PrivateChat.swift */,
 				11A726072BE0672A000C1DA7 /* FileDetails.swift */,
 				DA32CD4A2B29318E0053B98B /* FileInfo.swift */,
 				DAAEE66A2B3FBC2100A5BA07 /* TransferInfo.swift */,
@@ -869,6 +881,10 @@
 				DA5268BA2EB91B5E00DCB941 /* FileProgress.swift in Sources */,
 				DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */,
 				DAA15B152F50C96700FAC1B2 /* HotlineState+Users.swift in Sources */,
+				DA84CB9C01984121C3D2D4F6 /* PrivateChatInvitationView.swift in Sources */,
+				DA93897C2E39AAED7E40C269 /* PrivateChatInviteSheet.swift in Sources */,
+				DA68F7DC7CDC1E270E5C4C03 /* HotlineState+PrivateChats.swift in Sources */,
+				DAE1D77C9273D42E7C2772EC /* PrivateChat.swift in Sources */,
 				DAE734FF2B2E6750000C56F6 /* ChatView.swift in Sources */,
 				DA5268B52EB6840A00DCB941 /* TransfersView.swift in Sources */,
 				DA501BE42EBE9517001714F8 /* ServerBookmarkSheet.swift in Sources */,

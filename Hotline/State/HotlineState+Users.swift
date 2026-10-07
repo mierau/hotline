@@ -146,10 +146,12 @@ extension HotlineState {
     if let i = self.users.firstIndex(where: { $0.id == user.id }) {
       print("HotlineState: updating user \(self.users[i].name)")
       let oldName = self.users[i].name
+      let renamed = user.name != oldName
       self.users[i] = User(hotlineUser: user)
+      self.updatePrivateChats(for: self.users[i], renamedFrom: renamed ? oldName : nil)
 
       // Said in chat, so you can follow who's who.
-      if user.name != oldName {
+      if renamed {
         var chatMessage = ChatMessage(text: "\(oldName) is now known as \(user.name)", type: .renamed, date: Date())
         chatMessage.isAdmin = user.isAdmin
         self.recordChatMessage(chatMessage)

@@ -9,9 +9,9 @@ extension HotlineState {
 
   // MARK: - Message Board
 
-  /// Says in chat that someone posted to the board, and what about when Apple Intelligence can
-  /// say, linking to the post. In the order they're posted, as saying what one's about takes a
-  /// moment.
+  /// Says in chat and the private chats you're in that someone posted to the board, and what about
+  /// when Apple Intelligence can say, which it's asked just the once, linking to the post. In the
+  /// order they're posted, as saying what one's about takes a moment.
   func announceBoardPost(_ post: MessageBoardPost) {
     let previous = self.boardPostAnnouncement
     let link = self.boardLink(to: post)
@@ -25,12 +25,17 @@ extension HotlineState {
 
       let name = post.username
       let about = topic.map { " about \($0)" } ?? ""
-      var line = ChatMessage(text: "\(name ?? "Someone") posted to the board\(about)", type: .boardPost, date: Date())
-      line.isAdmin = name.flatMap { name in self.users.first(where: { $0.name == name })?.isAdmin } ?? false
-      if let link {
-        line.metadata = ChatStore.EntryMetadata(link: link.absoluteString)
+      let isAdmin = name.flatMap { name in self.users.first(where: { $0.name == name })?.isAdmin } ?? false
+      func line() -> ChatMessage {
+        var line = ChatMessage(text: "\(name ?? "Someone") posted to the board\(about)", type: .boardPost, date: Date())
+        line.isAdmin = isAdmin
+        if let link {
+          line.metadata = ChatStore.EntryMetadata(link: link.absoluteString)
+        }
+        return line
       }
-      self.recordChatMessage(line)
+      self.recordChatMessage(line())
+      self.recordInPrivateChats(line)
     }
   }
 

@@ -98,6 +98,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         AppState.openTransfersWindow?()
         NSApplication.shared.activate()
       }
+    } else if let type = userInfo["type"] as? String, type == "privateChat", let chatID = userInfo["chatID"] as? UInt32 {
+      Task { @MainActor in
+        AppState.shared.activeServerState?.selection = .privateChat(chatID: chatID)
+        NSApplication.shared.activate()
+      }
     } else if let userID = userInfo["userID"] as? UInt16 {
       Task { @MainActor in
         AppState.shared.activeServerState?.selection = .user(userID: userID)

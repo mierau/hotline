@@ -35,6 +35,8 @@ struct MessageView: View {
   @FocusState private var focusedMessageID: UUID?
 
   var userID: UInt16
+  /// Given a private chat they invited you to, once you've joined it, to go to it.
+  var onJoinPrivateChat: (UInt32) -> Void = { _ in }
 
   private static let relativeDateFormatter: RelativeDateTimeFormatter = {
     let formatter = RelativeDateTimeFormatter()
@@ -61,7 +63,7 @@ struct MessageView: View {
       self.messageList
     }
     .overlay {
-      if self.messages.isEmpty {
+      if self.messages.isEmpty && self.invitations.isEmpty {
         self.emptyState
       }
     }
@@ -93,12 +95,16 @@ struct MessageView: View {
     .onAppear {
       self.model.restorePrivateHistory(userID: self.userID)
       self.model.markPrivateMessagesAsRead(userID: self.userID)
+      self.model.markInvitationsAsRead(from: self.userID)
 
       let user = self.model.users.first(where: { $0.id == self.userID })
       self.username = user?.name
     }
     .onDisappear {
       self.model.setPrivateMessagesRead(userID: self.userID)
+    }
+    .onChange(of: self.invitations.count) {
+      self.model.markInvitationsAsRead(from: self.userID)
     }
     .onChange(of: self.model.privateMessages[self.userID]?.count) {
       self.model.markPrivateMessagesAsRead(userID: self.userID)
@@ -212,6 +218,11 @@ struct MessageView: View {
     }
   }
 
+  /// The private chats they've invited you to.
+  private var invitations: [PrivateChat] {
+    self.model.privateChatInvitations(from: self.userID)
+  }
+
   private var messages: [InstantMessage] {
     self.model.privateMessages[self.userID] ?? []
   }
@@ -301,6 +312,11 @@ struct MessageView: View {
         Spacer(minLength: 0)
 
         LazyVStack(alignment: .leading, spacing: 8) {
+          // Their invitations to private chats, until they're answered, above what they've said.
+          ForEach(self.invitations) { chat in
+            PrivateChatInvitationView(chat: chat, onJoin: self.onJoinPrivateChat)
+          }
+
           ForEach(self.displayMessages) { msg in
             self.messageCard(msg)
               .id(msg.id)

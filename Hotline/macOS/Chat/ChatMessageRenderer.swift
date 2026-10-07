@@ -112,6 +112,8 @@ enum ChatMessageRenderer {
         let start = text.length - (message.text as NSString).length
         text.addAttribute(.link, value: link, range: NSRange(location: start, length: text.length - start))
       }
+    case .subject:
+      text = self.presence(message, marker: .symbol("quote.closing"), options: options)
     case .signOut:
       text = self.divider(message, options: options)
     case .server:
@@ -211,8 +213,8 @@ enum ChatMessageRenderer {
     case symbol(String)
   }
 
-  /// Someone connecting, disconnecting, changing their name, or posting to the board, with what
-  /// marks it in the icon column. Without icons, that goes first, and the text where messages'
+  /// Someone connecting, disconnecting, changing their name, or posting to the board, or a private
+  /// chat's subject changing, with what marks it in the icon column. Without icons, that goes first, and the text where messages'
   /// wrapped lines start.
   private static func presence(_ message: ChatMessage, marker: Marker, options: Options) -> NSMutableAttributedString {
     let color = message.isAdmin ? options.adminColor ?? self.adminColor : options.secondaryColor ?? NSColor.secondaryLabelColor

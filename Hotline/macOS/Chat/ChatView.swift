@@ -11,6 +11,8 @@ struct ChatView: View {
   @Environment(\.dismiss) var dismiss
   @Environment(\.openWindow) private var openWindow
   @Bindable var serverState: ServerState
+  /// The private chat this is, or nil for the server's public chat.
+  var chatID: UInt32? = nil
   
   @State private var searchQuery: String = ""
   @State private var debouncedQuery: String = ""
@@ -23,8 +25,18 @@ struct ChatView: View {
   @State private var fileDetails: FileDetails?
   @State private var linkIndex = ChatLinkIndex()
 
+  /// The private chat this is, while you're in it.
+  private var privateChat: PrivateChat? {
+    self.chatID.flatMap { self.model.privateChat($0) }
+  }
+
+  /// What's been said here, in the public chat or the private one.
+  private var messages: [ChatMessage] {
+    self.chatID == nil ? self.model.chat : self.privateChat?.messages ?? []
+  }
+
   var displayedMessages: [ChatMessage] {
-    self.debouncedQuery.isEmpty ? self.model.chat : self.searchResults
+    self.debouncedQuery.isEmpty ? self.messages : self.searchResults
   }
 
   private var bannerView: some View {
@@ -64,12 +76,14 @@ struct ChatView: View {
         searchQuery: self.debouncedQuery,
         watchWords: HighlightWord.chatWords,
         isFiltered: !self.debouncedQuery.isEmpty,
-        cachedText: self.model.chatRenderedText,
-        cachedCount: self.model.chatRenderedCount,
-        onCacheUpdate: { text, count in
+        // The public chat's text, which is long, is kept for when it's back. A private chat's
+        // is short.
+        cachedText: self.chatID == nil ? self.model.chatRenderedText : nil,
+        cachedCount: self.chatID == nil ? self.model.chatRenderedCount : 0,
+        onCacheUpdate: self.chatID == nil ? { text, count in
           self.model.chatRenderedText = text
           self.model.chatRenderedCount = count
-        },
+        } : nil,
         openURL: { url in
           self.open(url)
         },
@@ -105,14 +119,14 @@ struct ChatView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .ignoresSafeArea(edges: .top)
       .modifier(SoftTopScrollEdge())
-      .onChange(of: self.model.chat.count) {
+      .onChange(of: self.messages.count) {
         if !self.searchQuery.isEmpty {
           self.performSearch()
         }
-        self.model.markPublicChatAsRead()
+        self.markAsRead()
       }
       .onAppear {
-        self.model.markPublicChatAsRead()
+        self.markAsRead()
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         VStack(spacing: 0) {
@@ -126,8 +140,35 @@ struct ChatView: View {
       }
       .searchable(text: self.$searchQuery, isPresented: self.$isSearching, placement: .toolbar, prompt: "Search")
       .background(Button("", action: { self.isSearching = true }).keyboardShortcut("f").hidden())
+      .navigationSubtitle(self.privateChat.map { self.model.title(of: $0) } ?? "")
       .toolbar {
-        if self.model.access?.contains(.canBroadcast) == true {
+        if let chatID = self.chatID {
+          if self.model.access?.contains(.canCreateChat) == true {
+            ToolbarItem(placement: .primaryAction) {
+              Button {
+                self.serverState.privateChatInvite = PrivateChatInvite(chatID: chatID)
+              } label: {
+                Label("Invite People", systemImage: "person.badge.plus")
+              }
+              .help("Invite People")
+            }
+          }
+          ToolbarItem(placement: .primaryAction) {
+            Menu {
+              Button("Change Subject...", systemImage: "character.cursor.ibeam") {
+                self.serverState.privateChatSubjectID = chatID
+              }
+              Divider()
+              Button("Leave Chat...", systemImage: "rectangle.portrait.and.arrow.right") {
+                self.serverState.privateChatToLeave = chatID
+              }
+            } label: {
+              Label("More", systemImage: "ellipsis")
+            }
+            .help("More")
+          }
+        }
+        else if self.model.access?.contains(.canBroadcast) == true {
           ToolbarItem(placement: .primaryAction) {
             Button {
               self.serverState.broadcastShown = true
@@ -165,34 +206,60 @@ struct ChatView: View {
   }
   
   private var inputBar: some View {
-    @Bindable var bindModel = self.model
+    let input = self.input
     return ChatInputField(
-      text: $bindModel.chatInput,
+      text: input,
       height: self.$inputHeight,
       // Yours as the user list shows it, when the chat shows icons.
       iconID: Prefs.shared.showChatIcons ? self.model.ownIconID : nil,
       namesToComplete: { self.namesToComplete() },
       onSubmit: { announce in
-        let message = self.model.chatInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = input.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if !message.isEmpty {
           Task {
-            try? await self.model.sendChat(message, announce: announce)
+            if let chatID = self.chatID {
+              try? await self.model.sendPrivateChat(message, chatID: chatID, announce: announce)
+            }
+            else {
+              try? await self.model.sendChat(message, announce: announce)
+            }
           }
         }
-        self.model.chatInput = ""
+        input.wrappedValue = ""
       }
     )
     .frame(maxWidth: .infinity)
     .frame(height: self.inputHeight)
   }
+
+  /// What you've typed and not sent, kept while you're elsewhere.
+  private var input: Binding<String> {
+    if let chatID = self.chatID {
+      return Binding(
+        get: { self.model.privateChatDrafts[chatID] ?? "" },
+        set: { self.model.privateChatDrafts[chatID] = $0 }
+      )
+    }
+    @Bindable var bindModel = self.model
+    return $bindModel.chatInput
+  }
+
+  private func markAsRead() {
+    if let chatID = self.chatID {
+      self.model.markPrivateChatAsRead(chatID)
+    }
+    else {
+      self.model.markPublicChatAsRead()
+    }
+  }
   
   /// The names Tab completes in the input: the people here, the ones who spoke last first, then
   /// the rest by name, and not you.
   private func namesToComplete() -> [String] {
-    var here = Set(self.model.users.map(\.name))
+    var here = Set((self.chatID == nil ? self.model.users : self.privateChat?.users ?? []).map(\.name))
     here.remove(Prefs.shared.username)
     var names: [String] = []
-    for message in self.model.chat.reversed() where names.count < here.count {
+    for message in self.messages.reversed() where names.count < here.count {
       if let name = message.username, here.contains(name), !names.contains(name) {
         names.append(name)
       }
@@ -300,6 +367,33 @@ struct ChatView: View {
     menu.addItem(ChatMenuItem("Send Message...", systemImage: "square.and.pencil", isEnabled: self.model.access?.contains(.canSendMessages) == true && !user.refusesPrivateMessages) {
       self.serverState.composeMessageUser = user
     })
+    // Asking them into a private chat, as the user list does: a new one, with them chosen, or one
+    // you're in, right away.
+    if self.model.access?.contains(.canCreateChat) == true && user.id != self.model.ownUserID {
+      let newChat = { self.serverState.privateChatInvite = PrivateChatInvite(chatID: nil, chosen: [user.id]) }
+      let chats = self.model.privateChats(toInvite: user.id)
+      if chats.isEmpty {
+        menu.addItem(ChatMenuItem("Invite to Private Chat...", systemImage: "bubble.left.and.bubble.right", isEnabled: !user.refusesPrivateChat, handler: newChat))
+      }
+      else {
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        submenu.addItem(ChatMenuItem("New Private Chat...", handler: newChat))
+        submenu.addItem(.separator())
+        for chat in chats {
+          submenu.addItem(ChatMenuItem(self.model.title(of: chat)) {
+            Task {
+              try? await self.model.inviteToPrivateChat(chat.id, userIDs: [user.id])
+            }
+          })
+        }
+        let item = NSMenuItem(title: "Invite to Private Chat", action: nil, keyEquivalent: "")
+        item.image = NSImage(systemSymbolName: "bubble.left.and.bubble.right", accessibilityDescription: nil)
+        item.isEnabled = !user.refusesPrivateChat
+        item.submenu = submenu
+        menu.addItem(item)
+      }
+    }
     if self.model.access?.contains(.canDisconnectUsers) == true {
       menu.addItem(.separator())
       menu.addItem(ChatMenuItem("Disconnect User", systemImage: "nosign") {
@@ -318,7 +412,13 @@ struct ChatView: View {
     
     let search = ChatSearch(self.searchQuery)
     let links = self.linkIndex
-    self.searchResults = self.model.searchChat { search.matches($0, links: links) }
+    // The public chat with its history, or what's been said in the private one.
+    if self.chatID == nil {
+      self.searchResults = self.model.searchChat { search.matches($0, links: links) }
+    }
+    else {
+      self.searchResults = self.messages.searched { search.matches($0, links: links) }
+    }
     self.debouncedQuery = self.searchQuery
   }
 }

@@ -410,13 +410,15 @@ class HotlineState: Equatable {
   /// your name. See `findOwnUser()`.
   var ownUserID: UInt16? = nil
 
+  /// You, as the user list has you, once that's known.
+  var ownUser: User? {
+    self.ownUserID.flatMap { id in self.users.first(where: { $0.id == id }) }
+  }
+
   /// Your icon as the user list shows it, which a server can choose for you, or until your entry
   /// is there, the one you chose.
   var ownIconID: Int {
-    if let id = self.ownUserID, let user = self.users.first(where: { $0.id == id }) {
-      return Int(user.iconID)
-    }
-    return self.iconID
+    self.ownUser.map { Int($0.iconID) } ?? self.iconID
   }
 
   // Chat
@@ -430,6 +432,12 @@ class HotlineState: Equatable {
   // Private Messages
   var privateMessages: [UInt16:[InstantMessage]] = [:]
   var unreadPrivateMessages: [UInt16:UInt16] = [:]
+
+  // Private Chats
+  /// The private chats you're in, and the ones you're invited to, in the order they came.
+  var privateChats: [PrivateChat] = []
+  /// What you've typed in each private chat and haven't sent.
+  var privateChatDrafts: [UInt32: String] = [:]
 
   // Message Board
   var messageBoard: [MessageBoardPost] = []
