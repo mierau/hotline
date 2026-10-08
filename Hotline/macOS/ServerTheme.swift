@@ -27,6 +27,11 @@ struct ServerTheme: Equatable {
   let card: NSColor
   /// The top of a post, where it says who posted it, a step from the card, with more of the color.
   let cardHeader: NSColor
+  /// Behind the connect form, about as light or dark as the system's under-page gray it has without
+  /// a theme, so the glass of the form's fields and buttons stands out from it as much. In light
+  /// mode, a little darker, as far as the page, for as much color as the banner has, as there's next
+  /// to no room for color as light as the gray.
+  let connectForm: NSColor
   /// The window's tint, for controls and what has focus, as light or dark as the system's accent
   /// colors are, to show as well on the content.
   let accent: NSColor?
@@ -59,6 +64,7 @@ struct ServerTheme: Equatable {
     self.page = dark ? surface(0.215, 0.024) : surface(0.955, 0.026)
     self.card = dark ? surface(0.285, 0.022) : surface(0.996, 0.006)
     self.cardHeader = dark ? surface(0.305, 0.026) : surface(0.975, 0.022)
+    self.connectForm = dark ? surface(0.277, 0.03) : surface(0.973 - 0.018 * intensity, 0.03)
     self.secondaryText = dark ? surface(0.685, 0.035) : surface(0.58, 0.045)
     self.tertiaryText = dark ? surface(0.46, 0.03) : surface(0.78, 0.035)
 
@@ -174,6 +180,20 @@ extension ShapeStyle where Self == ServerSecondaryStyle {
   }
 }
 
+/// What matters least, like how long ago: the server's theme's color for it, as chat's lines
+/// between days have, or the system's tertiary without one.
+struct ServerTertiaryStyle: ShapeStyle {
+  func resolve(in environment: EnvironmentValues) -> AnyShapeStyle {
+    environment.serverTheme.map { AnyShapeStyle(Color(nsColor: $0.tertiaryText)) } ?? AnyShapeStyle(.tertiary)
+  }
+}
+
+extension ShapeStyle where Self == ServerTertiaryStyle {
+  static var serverTertiary: ServerTertiaryStyle {
+    ServerTertiaryStyle()
+  }
+}
+
 /// Disclosure arrows in a server list's rows: the theme's color for what matters less, as the
 /// rows' dates and counts have, or without one, the primary color at half, as they've always been.
 struct ServerDisclosureStyle: ShapeStyle {
@@ -205,6 +225,9 @@ enum ServerSurface {
   case postHeader
   /// A message.
   case message
+  /// Behind the connect form: grayer than the window, so the glass of the form's fields and buttons
+  /// stands out from it.
+  case connectForm
 }
 
 extension View {
@@ -308,6 +331,8 @@ private struct ServerBackground: ViewModifier {
         return AnyShapeStyle(Color(nsColor: theme.card))
       case .postHeader:
         return AnyShapeStyle(Color(nsColor: theme.cardHeader))
+      case .connectForm:
+        return AnyShapeStyle(Color(nsColor: theme.connectForm))
       }
     }
     switch self.surface {
@@ -326,6 +351,8 @@ private struct ServerBackground: ViewModifier {
       return AnyShapeStyle(.quinary.opacity(self.colorScheme == .light ? 0.7 : 0.3))
     case .message:
       return self.colorScheme == .light ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor)) : AnyShapeStyle(.thickMaterial)
+    case .connectForm:
+      return AnyShapeStyle(Color(nsColor: .underPageBackgroundColor))
     }
   }
 }

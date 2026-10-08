@@ -13,6 +13,8 @@ struct ServerSuggestion: Identifiable, Hashable, Sendable {
   let source: Source
   var login: String? = nil
   var password: String? = nil
+  /// How many people are on it, for one a tracker lists, as the tracker says.
+  var users: Int = 0
 
   var id: String { "\(self.address.lowercased()):\(self.port)" }
 
@@ -98,7 +100,7 @@ final class ServerSuggestions {
     var servers: [ServerSuggestion] = []
     do {
       for try await server in HotlineTrackerClient().fetchServers(address: tracker.address, port: tracker.port) {
-        servers.append(ServerSuggestion(name: server.name ?? server.address, address: server.address, port: Int(server.port), source: .tracker))
+        servers.append(ServerSuggestion(name: server.name ?? server.address, address: server.address, port: Int(server.port), source: .tracker, users: Int(server.users)))
       }
     }
     catch {

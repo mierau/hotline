@@ -168,13 +168,12 @@ struct ServerView: View {
           Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Grayer than the window, so the glass of the fields and buttons stands out from it.
-        .background {
-          Color(nsColor: .underPageBackgroundColor)
-            .ignoresSafeArea()
-        }
+        .serverBackground(.connectForm)
+        // In the colors of the server that's typed or chosen, from its banner, when there's one from
+        // an earlier visit, as the banner is, and as the server's window will be.
+        .serverTheme(self.themeColors, window: self.state.window)
         .presentedWindowToolbarStyle(.unified(showsTitle: false))
-        // The gray all the way up, with nothing in the toolbar to set apart.
+        // The gray, or the theme's color, all the way up, with nothing in the toolbar to set apart.
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         // The form, whether or not it was connected before, and while connecting, the server.
         .navigationTitle(self.model.status == .disconnected || self.model.serverTitle.isBlank ? "Connect" : self.model.serverTitle)

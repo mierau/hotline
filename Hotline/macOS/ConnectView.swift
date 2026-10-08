@@ -27,10 +27,16 @@ struct ConnectView: View {
   /// Whether the suggestions show under the address: once something's typed, until one's chosen
   /// or they're put away.
   @State private var showsSuggestions: Bool = false
-  /// The suggestion picked out with the arrow keys or the pointer, for Return to choose.
+  /// The suggestion picked out with the arrow keys, which is in the address while it is.
   @State private var selectedSuggestion: ServerSuggestion.ID?
+  /// What was typed in the address, while a suggestion picked out is in its place: what's
+  /// suggested, and what the address goes back to.
+  @State private var typedAddress: String?
   /// Set as a suggestion goes into the address, so that doesn't bring the suggestions back.
   @State private var choosingSuggestion: Bool = false
+  /// The login a bookmark's address brought with it, as it was put in, to take back out when the
+  /// address goes on to another server.
+  @State private var filledLogin: FilledLogin?
   /// Whether the servers to connect to in a click have come in, a moment after the form shows.
   @State private var quickServersShown: Bool = false
   /// How wide the room for them is, for how many columns they're in.
@@ -58,7 +64,7 @@ struct ConnectView: View {
                 .controlSize(.mini)
               Text(self.status)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.serverSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 // From one step to the next.
@@ -109,21 +115,23 @@ struct ConnectView: View {
       self.quickServersShown = true
     }
     .onChange(of: self.address) {
-      // A bookmark's saved login comes with it.
-      if self.login.isBlank, let saved = self.suggestions.servers.first(where: { $0.completion == self.address && $0.login != nil }) {
-        self.login = saved.login ?? ""
-        self.password = saved.password ?? ""
-        withAnimation(.snappy) {
-          self.showsAccount = true
-        }
-      }
-      // Typing brings the suggestions back, but a suggestion going into the address doesn't.
+      self.fillSavedLogin()
+      // Typing brings the suggestions back, for what's typed now, but a suggestion going into the
+      // address doesn't.
       if self.choosingSuggestion {
         self.choosingSuggestion = false
       }
       else {
         self.showsSuggestions = true
         self.selectedSuggestion = nil
+        self.typedAddress = nil
+      }
+    }
+    .onChange(of: self.suggestionsVisible) {
+      // What's in the address stays, as what's typed, once they're put away.
+      if !self.suggestionsVisible {
+        self.selectedSuggestion = nil
+        self.typedAddress = nil
       }
     }
     .onChange(of: self.isConnecting) {
@@ -176,7 +184,7 @@ struct ConnectView: View {
           // A step up from the 13 pt of the rest of the app, for the one thing the window is for.
           .font(.system(size: 15))
           .focused(self.$focusedField, equals: .address)
-          .onKeyPress(keys: [.upArrow, .downArrow, .return, .escape, .tab]) { press in
+          .onKeyPress(keys: [.upArrow, .downArrow, .escape, .tab]) { press in
             self.handleKey(press)
           }
       }
@@ -194,7 +202,7 @@ struct ConnectView: View {
         isPresented: self.suggestionsVisible,
         bookmarks: matches.bookmarks,
         trackers: matches.trackers,
-        selection: self.$selectedSuggestion,
+        selection: self.selectedSuggestion,
         choose: { self.choose($0) },
         dismiss: { self.showsSuggestions = false }
       )
@@ -203,7 +211,7 @@ struct ConnectView: View {
 
   /// The bookmarks and trackers' servers with what's typed in their name or address.
   private var matches: (bookmarks: [ServerSuggestion], trackers: [ServerSuggestion]) {
-    self.suggestions.matching(self.typedServer.address)
+    self.suggestions.matching(Self.split(self.typedAddress ?? self.address).address)
   }
 
   /// Whether the suggestions are showing: while the address is typed in, in the front window,
@@ -216,9 +224,10 @@ struct ConnectView: View {
     return !matches.bookmarks.isEmpty || !matches.trackers.isEmpty
   }
 
-  /// The arrow keys move through the suggestions, Return chooses one, and Escape puts them away.
-  /// Tab chooses the one picked out, if there is one, and goes on to the login, opening it if it's
-  /// closed.
+  /// The arrow keys move through the suggestions, putting the one picked out in the address, and
+  /// Escape puts them away, with what was typed back in the address. Tab puts them away, keeping
+  /// what's in the address, and goes on to the login, opening it if it's closed. Return isn't
+  /// theirs: it connects, as it always does, to what's in the address.
   private func handleKey(_ press: KeyPress) -> KeyPress.Result {
     guard press.modifiers.isDisjoint(with: [.shift, .control, .option, .command]) else {
       return .ignored
@@ -236,32 +245,30 @@ struct ConnectView: View {
         self.showsSuggestions = true
       }
       else {
-        self.selectedSuggestion = suggestions[selected.map { min($0 + 1, suggestions.count - 1) } ?? 0].id
+        self.pick(suggestions[selected.map { min($0 + 1, suggestions.count - 1) } ?? 0])
       }
       return .handled
     case .upArrow:
       guard self.suggestionsVisible else {
         return .ignored
       }
-      // Up from the first, back to the address alone.
-      self.selectedSuggestion = selected.flatMap { $0 > 0 ? suggestions[$0 - 1].id : nil }
-      return .handled
-    case .return:
-      guard self.suggestionsVisible, let selected else {
-        return .ignored
+      // Up from the first, back to what was typed.
+      if let selected, selected > 0 {
+        self.pick(suggestions[selected - 1])
       }
-      self.choose(suggestions[selected])
+      else {
+        self.unpick()
+      }
       return .handled
     case .escape:
       guard self.suggestionsVisible else {
         return .ignored
       }
+      self.unpick()
       self.showsSuggestions = false
       return .handled
     case .tab:
-      if self.suggestionsVisible, let selected {
-        self.choose(suggestions[selected])
-      }
+      self.showsSuggestions = false
       withAnimation(.snappy) {
         self.showsAccount = true
       }
@@ -272,11 +279,66 @@ struct ConnectView: View {
     }
   }
 
+  /// Picks out a suggestion, putting it in the address in place of what was typed, after any login
+  /// typed before it, as a browser does, so the banner and colors follow it, and Return connects to
+  /// it.
+  private func pick(_ server: ServerSuggestion) {
+    let typed = self.typedAddress ?? self.address
+    self.typedAddress = typed
+    self.selectedSuggestion = server.id
+    self.setAddress(Self.split(typed).credentials + server.completion)
+  }
+
+  /// Back to what was typed, with nothing picked out.
+  private func unpick() {
+    if let typed = self.typedAddress {
+      self.setAddress(typed)
+    }
+    self.typedAddress = nil
+    self.selectedSuggestion = nil
+  }
+
   /// Puts a suggestion in the address, after any login typed before it, and the suggestions away.
   private func choose(_ server: ServerSuggestion) {
-    self.setAddress(self.typedServer.credentials + server.completion)
+    self.setAddress(Self.split(self.typedAddress ?? self.address).credentials + server.completion)
     self.showsSuggestions = false
-    self.selectedSuggestion = nil
+  }
+
+  /// A bookmark's saved login, put in with its server, whether that's typed or picked out from the
+  /// suggestions, and taken back out when the address goes on to another server, unless it's been
+  /// changed, so it's only ever sent to the server it's for. Not with a login typed before the
+  /// server, as in user:password@, which is the one it goes with.
+  private func fillSavedLogin() {
+    let typed = Server.parseServerAddress(self.address)
+    let saved = typed.login != nil ? nil : self.suggestions.servers.first {
+      $0.login != nil && $0.port == typed.port && $0.address.caseInsensitiveCompare(typed.host) == .orderedSame
+    }
+    if let filled = self.filledLogin, saved?.login != filled.login || saved?.password != filled.password {
+      if self.login == filled.login && self.password == filled.password {
+        self.login = ""
+        self.password = ""
+        withAnimation(.snappy) {
+          self.showsAccount = filled.accountShown
+        }
+      }
+      self.filledLogin = nil
+    }
+    if self.login.isBlank, let saved {
+      self.filledLogin = FilledLogin(login: saved.login ?? "", password: saved.password ?? "", accountShown: self.showsAccount)
+      self.login = saved.login ?? ""
+      self.password = saved.password ?? ""
+      withAnimation(.snappy) {
+        self.showsAccount = true
+      }
+    }
+  }
+
+  /// A bookmark's login and password as they were put in, and whether the login and password showed
+  /// before.
+  private struct FilledLogin {
+    let login: String
+    let password: String
+    let accountShown: Bool
   }
 
   /// Changes the address other than by typing, which doesn't bring up the suggestions.
@@ -288,13 +350,13 @@ struct ConnectView: View {
   }
 
 
-  /// What's typed in the address field, split into a login and password typed before the server,
-  /// as in user:password@, and the server's address.
-  private var typedServer: (credentials: String, address: String) {
-    guard let at = self.address.lastIndex(of: "@") else {
-      return ("", self.address)
+  /// An address split into a login and password typed before the server, as in user:password@, and
+  /// the server's address.
+  private static func split(_ address: String) -> (credentials: String, address: String) {
+    guard let at = address.lastIndex(of: "@") else {
+      return ("", address)
     }
-    return (String(self.address[...at]), String(self.address[self.address.index(after: at)...]))
+    return (String(address[...at]), String(address[address.index(after: at)...]))
   }
 
   /// The bookmarked servers, to connect to one, and a new bookmark for what's typed.
@@ -406,8 +468,9 @@ struct ConnectView: View {
         .frame(width: Self.addressHeight - 20, height: Self.addressHeight - 20)
     }
     .buttonStyle(RoundButtonStyle(prominent: !self.isConnecting))
-    // Return connects, unless it's to choose a suggestion, and Escape stops it.
-    .keyboardShortcut(self.isConnecting ? .cancelAction : self.suggestionsVisible && self.selectedSuggestion != nil ? nil : .defaultAction)
+    // Return connects, to a suggestion too, once it's picked out, as it's in the address then, and
+    // Escape stops it.
+    .keyboardShortcut(self.isConnecting ? .cancelAction : .defaultAction)
     .disabled(!self.isConnecting && self.address.isBlank)
     .help(self.isConnecting ? "Stop Connecting" : "Connect")
     .accessibilityLabel(self.isConnecting ? "Stop Connecting" : "Connect")
@@ -418,9 +481,8 @@ struct ConnectView: View {
       withAnimation(.snappy) {
         self.showsAccount.toggle()
       }
-      if self.showsAccount {
-        self.focusedField = .login
-      }
+      // To the login as it shows, and back to the address as it goes.
+      self.focusedField = self.showsAccount ? .login : .address
     } label: {
       HStack(spacing: 4) {
         Text("Log in with an account")
@@ -432,7 +494,8 @@ struct ConnectView: View {
           .rotationEffect(.degrees(self.showsAccount ? 90 : 0))
       }
       .font(.callout)
-      .foregroundStyle(.secondary)
+      // In the server's theme, as the form is, when it has one.
+      .foregroundStyle(.serverSecondary)
       // In a capsule while the pointer's over it, to show it's a button.
       .padding(.horizontal, 10)
       .padding(.vertical, 4)
@@ -523,7 +586,7 @@ private struct QuickServerButton: View {
                   Text(Self.age(of: lastConnected, now: .now))
                     .font(.caption)
                     .monospacedDigit()
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.serverTertiary)
                 }
                 .opacity(self.hovered ? 0 : 1)
               }
@@ -536,7 +599,8 @@ private struct QuickServerButton: View {
         }
       }
       .font(.callout)
-      .foregroundStyle(self.hovered ? .primary : .secondary)
+      // In the server's theme, as the form is, when it has one.
+      .foregroundStyle(self.hovered ? AnyShapeStyle(.primary) : AnyShapeStyle(.serverSecondary))
       .padding(.leading, 12)
       .padding(.trailing, 8)
       .frame(height: 26)
@@ -647,7 +711,7 @@ private struct SuggestionsPanel: NSViewRepresentable {
   let isPresented: Bool
   let bookmarks: [ServerSuggestion]
   let trackers: [ServerSuggestion]
-  @Binding var selection: ServerSuggestion.ID?
+  let selection: ServerSuggestion.ID?
   let choose: (ServerSuggestion) -> Void
   let dismiss: () -> Void
 
@@ -682,10 +746,12 @@ private struct SuggestionsPanel: NSViewRepresentable {
       SuggestionList(
         bookmarks: self.bookmarks,
         trackers: self.trackers,
-        selection: self.$selection,
+        selection: self.selection,
         choose: self.choose,
         maxHeight: max(min(room, SuggestionList.preferredMaxHeight), 2 * SuggestionList.rowHeight)
-      ),
+      )
+      // The form's theme, which doesn't reach the panel's window on its own.
+      .environment(\.serverTheme, context.environment.serverTheme),
       in: window
     )
   }
@@ -825,7 +891,8 @@ private struct SuggestionsPanel: NSViewRepresentable {
 private struct SuggestionList: View {
   let bookmarks: [ServerSuggestion]
   let trackers: [ServerSuggestion]
-  @Binding var selection: ServerSuggestion.ID?
+  /// The one picked out with the arrow keys.
+  let selection: ServerSuggestion.ID?
   let choose: (ServerSuggestion) -> Void
   /// How tall it can be, past which it scrolls.
   var maxHeight: CGFloat = Self.preferredMaxHeight
@@ -877,24 +944,22 @@ private struct SuggestionList: View {
       SuggestionRow(server: server, isSelected: server.id == self.selection)
     }
     .buttonStyle(.plain)
-    // Picked out by the pointer too, as in a menu.
-    .onHover { inside in
-      if inside {
-        self.selection = server.id
-      }
-      else if self.selection == server.id {
-        self.selection = nil
-      }
-    }
     .id(server.id)
   }
 }
 
-/// A suggested server: the globe from the address field, its name with its address under it, and
-/// a bookmark at the end if it's bookmarked, all in white on the accent while it's picked out.
+/// A suggested server: the globe from the address field and its name, and if it's bookmarked, its
+/// address under it and a bookmark at the end, or if a tracker lists it, how many are on it at the
+/// end, when anyone is, as the Servers window has it. All in white on the accent while it's picked
+/// out with the arrow keys, or in a server's theme, its color for what's selected, and on a light
+/// gray while the pointer's over it, which doesn't pick it out, as what's picked out is in the
+/// address.
 private struct SuggestionRow: View {
+  @Environment(\.serverTheme) private var theme
+
   let server: ServerSuggestion
   let isSelected: Bool
+  @State private var hovered = false
 
   var body: some View {
     let secondary = self.isSelected ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.secondary)
@@ -905,11 +970,13 @@ private struct SuggestionRow: View {
         Text(self.server.name)
           .font(.system(size: 13))
           .lineLimit(1)
-        Text(self.server.completion)
-          .font(.system(size: 11))
-          .foregroundStyle(secondary)
-          .lineLimit(1)
-          .truncationMode(.middle)
+        if self.server.source == .bookmark {
+          Text(self.server.completion)
+            .font(.system(size: 11))
+            .foregroundStyle(secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+        }
       }
       // Its room first, before the gap to the bookmark.
       .layoutPriority(1)
@@ -920,22 +987,47 @@ private struct SuggestionRow: View {
           .foregroundStyle(secondary)
           .accessibilityLabel("Bookmark")
       }
+      else if self.server.users > 0 {
+        HStack(spacing: 6) {
+          Text(self.server.users, format: .number)
+            .font(.system(size: 12))
+            .monospacedDigit()
+            .foregroundStyle(secondary)
+          // Still, rather than pulsing as it does there, in a list that's here and gone.
+          Circle()
+            .fill(self.isSelected ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.fileComplete))
+            .frame(width: 7, height: 7)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("^[\(self.server.users) user](inflect: true)"))
+      }
     }
     .foregroundStyle(self.isSelected ? Color.white : Color.primary)
     .padding(.horizontal, 10)
     .frame(height: SuggestionList.rowHeight)
-    .background(self.isSelected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    .background(self.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     .contentShape(Rectangle())
+    .onHover { hovering in
+      self.hovered = hovering
+    }
+  }
+
+  private var background: AnyShapeStyle {
+    if self.isSelected {
+      return AnyShapeStyle(self.theme?.selection.map { Color(nsColor: $0) } ?? .accentColor)
+    }
+    return self.hovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear)
   }
 }
 
-/// A round button, 10 points bigger than its label all around: blue glass when it's prominent and
-/// plain glass when not, or before macOS 26, a blue or gray circle. Unlike glassProminent and
-/// glass, which are two different buttons, it's the same button either way, so its symbol can turn
-/// from one to the other.
+/// A round button, 10 points bigger than its label all around: glass in the accent, or a server's
+/// theme's, when it's prominent and plain glass when not, or before macOS 26, a circle in the
+/// accent or gray. Unlike glassProminent and glass, which are two different buttons, it's the same
+/// button either way, so its symbol can turn from one to the other.
 private struct RoundButtonStyle: ButtonStyle {
   let prominent: Bool
   @Environment(\.isEnabled) private var isEnabled
+  @Environment(\.serverTheme) private var theme
 
   @ViewBuilder
   func makeBody(configuration: Configuration) -> some View {
@@ -946,7 +1038,7 @@ private struct RoundButtonStyle: ButtonStyle {
       .padding(10)
       .contentShape(Circle())
     if #available(macOS 26, *) {
-      label.glassEffect(tinted ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: Circle())
+      label.glassEffect(tinted ? .regular.tint(self.theme?.accent.map { Color(nsColor: $0) } ?? .accentColor).interactive() : .regular.interactive(), in: Circle())
     }
     else {
       label.background(tinted ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), in: Circle())
