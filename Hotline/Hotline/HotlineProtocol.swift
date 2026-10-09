@@ -633,12 +633,20 @@ struct HotlineTransactionField {
     self.init(type: type, dataSize: UInt16(8), data: [UInt8](val))
   }
   
+  /// The most a field holds, as its size is two bytes.
+  static let maximumDataSize = Int(UInt16.max)
+
   init(type: HotlineTransactionFieldType, string: String, encoding: String.Encoding = .ascii, encrypt: Bool = false) {
     var bytes = [UInt8](string.utf8)
     if encrypt {
         bytes = string.utf8.map { char in
             return 0xFF - char
         }
+    }
+    // Cut short, rather than crash, past what a field holds. What sends text that long should say
+    // so before it gets here.
+    if bytes.count > Self.maximumDataSize {
+      bytes = Array(bytes.prefix(Self.maximumDataSize))
     }
 
     self.init(type: type, dataSize: UInt16(bytes.count), data: [UInt8](bytes))

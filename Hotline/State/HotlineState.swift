@@ -443,8 +443,11 @@ class HotlineState: Equatable {
   var messageBoard: [MessageBoardPost] = []
   var messageBoardLoaded: Bool = false
   var messageBoardSignature: String?
-  /// A post for the board to show, by its `reference`, from a link to it in chat.
+  /// A post for the board to show, by its `reference`, from a link to it in chat, or once you've
+  /// posted it.
   var boardPostToReveal: String? = nil
+  /// What you're writing for the board and haven't posted, kept when the sheet's put away.
+  var boardDraft: String = ""
 
   // News
   var news: [NewsInfo] = []

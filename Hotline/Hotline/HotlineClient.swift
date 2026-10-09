@@ -54,6 +54,8 @@ public enum HotlineClientError: Error {
   case invalidResponse
   /// Login failed
   case loginFailed(String?)
+  /// More than a transaction's field can hold
+  case tooLong
   
   var userMessage: String {
     switch self {
@@ -69,6 +71,8 @@ public enum HotlineClientError: Error {
       "Server returned an invalid response"
     case .loginFailed(let message):
       message ?? "Login failed"
+    case .tooLong:
+      "Too long to send"
     }
   }
 }
@@ -1367,9 +1371,14 @@ public actor HotlineClient {
   /// - Parameter text: Message text
   public func postMessageBoard(_ text: String) async throws {
     guard !text.isEmpty else { return }
+    // As much as a field can hold, which a longer post would have been cut short to.
+    guard text.utf8.count <= HotlineTransactionField.maximumDataSize else {
+      throw HotlineClientError.tooLong
+    }
 
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .oldPostNews)
-    transaction.setFieldString(type: .data, val: text, encoding: .macOSRoman)
+    // With the line breaks Hotline has, as messages are sent.
+    transaction.setFieldString(type: .data, val: text.convertingLineEndings(to: .cr), encoding: .macOSRoman)
 
     try await self.socket.send(transaction, endian: .big)
   }
