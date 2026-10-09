@@ -12,6 +12,8 @@ class TransferInfo: Identifiable, Equatable, Hashable {
   var completed: Bool = false
   var failed: Bool = false
   var cancelled: Bool = false
+  /// Waiting its turn, as uploads go one at a time.
+  var waiting: Bool = false
   var done: Bool {
     self.completed || self.failed || self.cancelled
   }

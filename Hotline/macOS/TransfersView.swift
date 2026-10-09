@@ -311,6 +311,11 @@ struct TransferRow: View {
             .font(.subheadline)
             .foregroundStyle(.fileComplete)
         }
+        else if self.transfer.waiting {
+          Text("Waiting")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
         else {
           ProgressView(value: self.transfer.progress, total: 1.0)
             .progressViewStyle(.linear)

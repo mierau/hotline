@@ -74,7 +74,10 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
     }
     catch {
       self.downloadTask = nil
-      try? progressHandler?(.error(error))
+      // Stopped, from the transfers list or the Finder, which isn't a failure.
+      if !(error is CancellationError) {
+        try? progressHandler?(.error(error))
+      }
       throw error
     }
   }
@@ -188,7 +191,8 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
           // Create file with metadata
           fileHandle = try fm.createHotlineFile(at: destinationURL, infoFork: info)
 
-          // Create and configure progress
+          // Create and configure progress, as a file operation, for the Finder to show
+          self.transferProgress.kind = .file
           self.transferProgress.fileURL = destinationURL
           self.transferProgress.fileOperationKind = .downloading
           self.transferProgress.publish()
@@ -247,8 +251,11 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
       try? fileHandle?.close()
       try? fm.removeItem(at: destinationURL)
       self.transferProgress.unpublish()
-      
-      try? progressHandler?(.error(error))
+
+      // Stopped, from the transfers list or the Finder, which isn't a failure.
+      if !(error is CancellationError) {
+        try? progressHandler?(.error(error))
+      }
 
       throw error
     }

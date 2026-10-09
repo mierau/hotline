@@ -116,6 +116,7 @@
 		DAA15B1F2F50C9E600FAC1B2 /* HotlineState+Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA15B1E2F50C9E600FAC1B2 /* HotlineState+Connection.swift */; };
 		DAA98C3F2F479C20002C6334 /* FilesGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA98C3E2F479C20002C6334 /* FilesGridView.swift */; };
 		DAA98C412F479C32002C6334 /* FileActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA98C402F479C32002C6334 /* FileActions.swift */; };
+		B013987551694342F91BD785 /* FileDragOut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E11A048DC120BDB747B45F0 /* FileDragOut.swift */; platformFilters = (macos, ); };
 		DAA98C772F4CFEEE002C6334 /* IdentitySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA98C762F4CFEEE002C6334 /* IdentitySettingsView.swift */; };
 		DAA98C792F4CFEF5002C6334 /* NotificationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA98C782F4CFEF5002C6334 /* NotificationSettingsView.swift */; };
 		DAA98C7B2F4CFF0B002C6334 /* ChatSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA98C7A2F4CFF0B002C6334 /* ChatSettingsView.swift */; };
@@ -285,6 +286,7 @@
 		DAA15B1E2F50C9E600FAC1B2 /* HotlineState+Connection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HotlineState+Connection.swift"; sourceTree = "<group>"; };
 		DAA98C3E2F479C20002C6334 /* FilesGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesGridView.swift; sourceTree = "<group>"; };
 		DAA98C402F479C32002C6334 /* FileActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileActions.swift; sourceTree = "<group>"; };
+		7E11A048DC120BDB747B45F0 /* FileDragOut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDragOut.swift; sourceTree = "<group>"; };
 		DAA98C762F4CFEEE002C6334 /* IdentitySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentitySettingsView.swift; sourceTree = "<group>"; };
 		DAA98C782F4CFEF5002C6334 /* NotificationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSettingsView.swift; sourceTree = "<group>"; };
 		DAA98C7A2F4CFF0B002C6334 /* ChatSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSettingsView.swift; sourceTree = "<group>"; };
@@ -470,6 +472,7 @@
 				DA5268A22EB0741B00DCB941 /* FolderItemView.swift */,
 				DAA98C3E2F479C20002C6334 /* FilesGridView.swift */,
 				DAA98C402F479C32002C6334 /* FileActions.swift */,
+				7E11A048DC120BDB747B45F0 /* FileDragOut.swift */,
 				DA32F1CB2EC4175F00B243BC /* NewFolderPopover.swift */,
 				11A726092BE06759000C1DA7 /* FileDetailsSheet.swift */,
 				DAB4D87D2B4C8BCA0048A05C /* FilePreviewTextView.swift */,
@@ -902,6 +905,7 @@
 				DA72A0E22B4DAA4000A0F48A /* NewsArticle.swift in Sources */,
 				DAE734FB2B2E41F9000C56F6 /* TrackerView.swift in Sources */,
 				DAA98C412F479C32002C6334 /* FileActions.swift in Sources */,
+				B013987551694342F91BD785 /* FileDragOut.swift in Sources */,
 				DA5268A32EB0741B00DCB941 /* FolderItemView.swift in Sources */,
 				DAE136BA2B9D1147007D8307 /* HotlinePanelView.swift in Sources */,
 				DA501BE22EBE9018001714F8 /* GroupedIconView.swift in Sources */,

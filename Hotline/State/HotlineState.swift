@@ -457,6 +457,14 @@ class HotlineState: Equatable {
   // Files
   var files: [FileInfo] = []
   var filesLoaded: Bool = false
+  /// Uploads waiting their turn, as they go one at a time, and what's sending them, while one is.
+  @ObservationIgnored var queuedUploads: [(fileURL: URL, path: [String], transfer: TransferInfo)] = []
+  @ObservationIgnored var uploadQueue: Task<Void, Never>? = nil
+  /// Downloads waiting their turn, as they go one at a time too, and what's fetching them.
+  @ObservationIgnored var queuedDownloads: [QueuedDownload] = []
+  @ObservationIgnored var downloadQueue: Task<Void, Never>? = nil
+  /// Folders being listed again, as asked for, by where they are.
+  var refreshingFileLists: Set<[String]> = []
   /// Set by post-login when a link was used to connect to a new server.
   /// The view layer observes this to navigate to the target section.
   var pendingNavigation: (section: ServerNavigationType, filePath: [String]?)? = nil

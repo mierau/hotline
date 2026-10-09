@@ -1105,6 +1105,7 @@ enum HotlineTransactionFieldType: UInt16 {
   case fileModifyDate = 209
   case fileComment = 210 // Integer
   case fileNewName = 211 // String
+  case fileNewPath = 212 // Path
   case fileType = 213 // Integer
   case quotingMessage = 214 // String?
   case automaticResponse = 215 // String

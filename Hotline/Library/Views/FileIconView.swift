@@ -46,19 +46,24 @@ struct FileIconView: View {
   }
   #elseif os(macOS)
   private var fileIcon: Image {
-    let fileExtension = (self.filename as NSString).pathExtension
-    
+    Image(nsImage: NSWorkspace.shared.icon(for: Self.contentType(filename: self.filename, fileType: self.fileType)))
+  }
+
+  /// What a file is, by its extension, or without one, by its type code, as its icon shows.
+  static func contentType(filename: String, fileType: String?) -> UTType {
+    let fileExtension = (filename as NSString).pathExtension
+
     if !fileExtension.isEmpty,
        let uttype = UTType(filenameExtension: fileExtension) {
-      return Image(nsImage: NSWorkspace.shared.icon(for: uttype))
+      return uttype
     }
-    else if let fileType = self.fileType,
+    else if let fileType,
             let fileTypeExtension = FileManager.HFSTypeToExtension[fileType.lowercased()],
             let uttype = UTType(filenameExtension: fileTypeExtension) {
-      return Image(nsImage: NSWorkspace.shared.icon(for: uttype))
+      return uttype
     }
     else {
-      return Image(nsImage: NSWorkspace.shared.icon(for: UTType.data))
+      return .data
     }
   }
   #endif

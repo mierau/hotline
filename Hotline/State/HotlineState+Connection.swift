@@ -323,6 +323,19 @@ extension HotlineState {
     self.newsLookup = [:]
     self.files = []
     self.filesLoaded = false
+    // Uploads and downloads still waiting their turn won't get one now, and what's waiting to be
+    // told, as the Finder is of a download dropped on it, is told so.
+    for upload in self.queuedUploads {
+      upload.transfer.waiting = false
+      upload.transfer.failed = true
+    }
+    self.queuedUploads = []
+    for download in self.queuedDownloads {
+      download.transfer.waiting = false
+      download.transfer.failed = true
+      download.finished?(HotlineClientError.notConnected)
+    }
+    self.queuedDownloads = []
     self.pendingNavigation = nil
     self.accounts = []
     self.accountsLoaded = false

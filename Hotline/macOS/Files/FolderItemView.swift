@@ -3,27 +3,23 @@ import SwiftUI
 struct FolderItemView: View {
   @Environment(HotlineState.self) private var model: HotlineState
   @Environment(\.serverTheme) private var theme
+  @Environment(\.openWindow) private var openWindow
+  @Environment(FileDropTarget.self) private var dropTarget: FileDropTarget?
+  @Environment(\.filePlaces) private var places
+  @Environment(FileRename.self) private var rename: FileRename?
+  @Environment(\.fileNamePlaces) private var namePlaces
   
   @State var loading = false
-  @State var dragOver = false
+  /// Listing what's in it again, since it was last opened.
+  @State private var listing: Task<Void, Never>? = nil
   
   var file: FileInfo
   let depth: Int
-  
-  @MainActor private func uploadFile(file fileURL: URL) {
-    var filePath: [String] = [String](self.file.path)
-    if !self.file.isFolder {
-      filePath.removeLast()
-    }
-    
-    print("UPLOADING TO PATH: ", filePath)
-    
-    self.model.uploadFile(url: fileURL, path: filePath) { info in
-      Task {
-        // Refresh file listing to display newly uploaded file.
-        try? await model.getFileList(path: filePath)
-      }
-    }
+
+  /// How much is in it: as its own listing has it, once it's been listed, which is as up to date as
+  /// what's shown in it, or else as the folder it's in has it.
+  private var count: Int {
+    self.file.loaded ? self.file.children?.count ?? 0 : Int(self.file.fileSize)
   }
   
   var body: some View {
@@ -39,12 +35,14 @@ struct FolderItemView: View {
         Text(Image(systemName: file.expanded ? "chevron.down" : "chevron.right"))
           .fontWeight(.semibold)
           .font(.system(size: 10))
-          .foregroundStyle(dragOver ? AnyShapeStyle(Color.white.opacity(0.5)) : AnyShapeStyle(.serverDisclosure))
+          .foregroundStyle(.serverDisclosure)
       }
       .buttonStyle(.plain)
       .frame(width: 10)
       .padding(.leading, 4)
       .padding(.trailing, 8)
+      // Opening it, not selecting or dragging it.
+      .fileDragPassThrough()
       
       HStack(alignment: .center) {
         if file.isUnavailable {
@@ -74,60 +72,63 @@ struct FolderItemView: View {
       .frame(width: 16)
       .padding(.trailing, 6)
       
-      Text(file.name)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .foregroundStyle(dragOver ? Color.white : Color.primary)
-        .opacity(file.isUnavailable ? 0.5 : 1.0)
+      if let rename = self.rename, rename.file == self.file {
+        // As wide as the name, as it's typed, as the Finder's is.
+        FileNameField(rename: rename, file: self.file)
+          .fixedSize(horizontal: true, vertical: false)
+      }
+      else {
+        Text(self.rename?.name(of: self.file) ?? self.file.name)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .foregroundStyle(Color.primary)
+          .opacity(file.isUnavailable ? 0.5 : 1.0)
+          // Where its name is, for a click on it, once it's selected, to rename it.
+          .filePlace(self.file, in: self.namePlaces)
+      }
       
       if loading {
         ProgressView().controlSize(.mini).padding([.leading, .trailing], 5)
       }
       Spacer()
       if !file.isUnavailable {
-        Text(file.fileSize == 0 ? "Empty" : "^[\(file.fileSize) \("file")](inflect: true)")
-          .foregroundStyle(dragOver ? AnyShapeStyle(Color.white.opacity(0.75)) : AnyShapeStyle(.secondary))
+        Text(self.count == 0 ? "Empty" : "^[\(self.count) \("file")](inflect: true)")
+          .foregroundStyle(.secondary)
           .lineLimit(1)
           .padding(.trailing, 6)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(
-      RoundedRectangle(cornerRadius: 4.0)
-        .fill(dragOver ? Color(nsColor: self.theme?.selection ?? NSColor.selectedContentBackgroundColor) : Color.clear)
-        .padding(.horizontal, -6)
-        .padding(.vertical, -4)
-    )
-    .onChange(of: file.expanded) {
-      loading = false
-      if file.expanded {
-        Task {
-          loading = true
-          let _ = try? await model.getFileList(path: file.path)
-          loading = false
-        }
+    // Where it is in the list, for what's dropped on it to go into it.
+    .filePlace(self.file, in: self.places)
+    // Where what's dragged over it, or what's shown in it, would go, out to the row's edges, to meet
+    // the rows above and below it that show it too.
+    .background {
+      if let joins = self.dropTarget?.shows(self.file.path) {
+        FileDropHighlight(above: joins.above, below: joins.below)
+          .padding(.horizontal, -6)
+          .padding(.vertical, -4)
       }
     }
-    .onDrop(of: [.fileURL], isTargeted: $dragOver) { items in
-      guard let item = items.first,
-            let identifier = item.registeredTypeIdentifiers.first else {
-        return false
-      }
-      
-      item.loadItem(forTypeIdentifier: identifier, options: nil) { (urlData, error) in
-        DispatchQueue.main.async {
-          if let urlData = urlData as? Data,
-             let fileURL = URL(dataRepresentation: urlData, relativeTo: nil, isAbsolute: true) {
-            self.uploadFile(file: fileURL)
+    // Opened, what's in it, listed again, and shown once it's come, and not what was in it when it
+    // was last open until then, which would only go as the new listing came in, in its place.
+    .onChange(of: file.expanded) {
+      self.listing?.cancel()
+      self.loading = file.expanded
+      if file.expanded {
+        self.listing = Task {
+          let _ = try? await model.getFileList(path: file.path)
+          if !Task.isCancelled {
+            self.loading = false
           }
         }
       }
-      
-      return true
     }
+    // Inside the row's theming, which sets what the list draws for the row, from the outside.
+    .fileDragSource(self.file)
     .serverThemedRow(for: self.file)
     
-    if file.expanded {
+    if file.expanded && !self.loading {
       ForEach(file.children!, id: \.self) { childFile in
         if childFile.isFolder {
           FolderItemView(file: childFile, depth: self.depth + 1).tag(file.id)

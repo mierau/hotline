@@ -20,6 +20,11 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
   private var socket: NetSocket?
   private var downloadTask: Task<URL, Error>?
   private var folderProgress: Progress?
+  /// The folder it's downloading into, made for it, to take away again if it's stopped.
+  private var folderURL: URL?
+  /// Stopped, from the transfers list or the Finder, so however the transfer ends is that, and not
+  /// a failure.
+  private var cancelled = false
   
   private var estimator: TransferRateEstimator
 
@@ -64,8 +69,15 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
       self.downloadTask = nil
       return url
     } catch {
-      print("HotlineFolderDownloadClient[\(self.referenceNumber)]: Failed to download folder: \(error)")
       self.downloadTask = nil
+      // Stopped: what's come of it so far goes, as it does for a file.
+      if self.cancelled {
+        if let folderURL = self.folderURL {
+          try? FileManager.default.removeItem(at: folderURL)
+        }
+        throw CancellationError()
+      }
+      print("HotlineFolderDownloadClient[\(self.referenceNumber)]: Failed to download folder: \(error)")
       progressHandler?(.error(error))
       throw error
     }
@@ -73,6 +85,7 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
 
   /// Cancel the current download
   public func cancel() {
+    self.cancelled = true
     self.downloadTask?.cancel()
     self.downloadTask = nil
 
@@ -102,6 +115,10 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
     )
     self.socket = socket
     defer { Task { await socket.close() } }
+    // Stopped while connecting, before there was a connection to close.
+    if self.cancelled {
+      throw CancellationError()
+    }
 
     // Determine destination folder URL
     let fm = FileManager.default
@@ -121,11 +138,21 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
     // Create destination folder
     try? fm.removeItem(at: destinationURL)
     try fm.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+    self.folderURL = destinationURL
 
-    // Create and publish progress for the entire folder (shows in Finder)
+    // Create and publish progress for the entire folder (shows in Finder), as a file operation, by
+    // its URL as a folder, ending in a slash, which is how the Finder finds it, and which the URL of
+    // where it's dropped doesn't, as nothing was there yet.
     let progress = Progress(totalUnitCount: Int64(self.transferTotal))
-    progress.fileURL = destinationURL
+    progress.kind = .file
+    progress.fileURL = URL(fileURLWithPath: destinationURL.path, isDirectory: true)
     progress.fileOperationKind = .downloading
+    // Stopped with the button on the folder in the Finder.
+    progress.cancellationHandler = { [weak self] in
+      Task { @MainActor in
+        self?.cancel()
+      }
+    }
     progress.publish()
     defer { progress.unpublish() }
     self.folderProgress = progress
@@ -147,6 +174,10 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
 
     // Process each item in the folder
     while completedItemCount < self.folderItemCount {
+      if self.cancelled {
+        throw CancellationError()
+      }
+
       // Read item header
       let headerLenData = try await socket.read(2)
       let headerLen = Int(headerLenData.readUInt16(at: 0)!)

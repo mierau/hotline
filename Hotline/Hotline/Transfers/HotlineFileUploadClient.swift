@@ -21,6 +21,8 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
 
   private var socket: NetSocket?
   private var uploadTask: Task<Void, Error>?
+  /// Stopped, from the transfers list, so however the transfer ends is that, and not a failure.
+  private var cancelled = false
 
   public init?(
     fileURL: URL,
@@ -65,8 +67,11 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
       try await task.value
       self.uploadTask = nil
     } catch {
-      print("HotlineFileUploadClient[\(self.referenceNumber)]: Failed to upload file: \(error)")
       self.uploadTask = nil
+      if self.cancelled {
+        throw CancellationError()
+      }
+      print("HotlineFileUploadClient[\(self.referenceNumber)]: Failed to upload file: \(error)")
       progressHandler?(.error(error))
       throw error
     }
@@ -74,6 +79,7 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
 
   /// Cancel the current upload
   public func cancel() {
+    self.cancelled = true
     self.uploadTask?.cancel()
     self.uploadTask = nil
 
@@ -85,6 +91,21 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
   }
 
   // MARK: - Implementation
+
+  /// Waits for a server to close the connection, once it's taken what's been sent, but not forever,
+  /// for one that waits for the client to close it, or what's sent to it if it says anything.
+  private static func serverDone(with socket: NetSocket, within timeout: Duration) async {
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask {
+        _ = try? await socket.read(1)
+      }
+      group.addTask {
+        try? await Task.sleep(for: timeout)
+      }
+      await group.next()
+      group.cancelAll()
+    }
+  }
 
   private func updateProgress(sent: Int, speed: Double? = nil, estimate: TimeInterval? = nil) {
     self.transferSize = sent
@@ -117,6 +138,10 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
     )
     defer { Task { await socket.close() } }
     self.socket = socket
+    // Stopped while connecting, before there was a connection to close.
+    if self.cancelled {
+      throw CancellationError()
+    }
 
     // Get file metadata
     guard let infoFork = HotlineFileInfoFork(file: self.fileURL) else {
@@ -218,6 +243,10 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
 
       totalBytesSent += Int(resourceForkSize)
     }
+
+    // All of it's been sent, but the server may still be getting it, and writing it, and listing it
+    // as empty, until it's done, which it says by closing the connection.
+    await Self.serverDone(with: socket, within: .seconds(30))
 
     self.transferProgress.unpublish()
     progressHandler?(.completed(url: nil))

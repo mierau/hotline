@@ -43,6 +43,16 @@
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Hotline Server Item</string>
+			<key>UTTypeIdentifier</key>
+			<string>co.goodmake.hotline.server-item</string>
+		</dict>
+		<dict>
 			<key>UTTypeDescription</key>
 			<string>Hotline Bookmark</string>
 			<key>UTTypeIconFiles</key>

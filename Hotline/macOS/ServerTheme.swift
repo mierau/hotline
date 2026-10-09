@@ -144,11 +144,22 @@ extension EnvironmentValues {
   @Entry fileprivate var serverSecondaryColor: Color? = nil
 }
 
-/// A server-themed list's selection, and the color and corners its selected rows have in the theme.
+/// A server-themed list's selection, all of it, and the color and corners its selected rows have in
+/// the theme, and which of them have another selected right above them, or below, to be drawn as
+/// one with it, as the system's selection is.
 private struct ServerListSelection {
-  var selected: AnyHashable?
+  var selected: Set<AnyHashable>
   var color: NSColor?
   var cornerRadius: CGFloat
+  var joined: [AnyHashable: SelectionJoins] = [:]
+  /// The color selected rows have in a window that isn't in front, or else the theme's, fainter.
+  var unemphasized: NSColor? = nil
+}
+
+/// Which sides of a selected row another selected row is right next to.
+private struct SelectionJoins {
+  var above = false
+  var below = false
 }
 
 /// Admins' names: Hotline's red, or in a server's theme, its color for them.
@@ -246,14 +257,28 @@ extension View {
   /// and with its rows showing `selection`, the list's selection, in the theme's color, or as it is
   /// without one.
   func serverThemedList<Selection: Hashable>(selection: Selection?) -> some View {
-    self.modifier(ServerThemedList(selection: selection.map(AnyHashable.init)))
+    self.modifier(ServerThemedList(selection: Set(selection.map { [AnyHashable($0)] } ?? [])))
+  }
+
+  /// A server-themed list, as above, with more than one row selected at once, all of `selected`, of
+  /// `rows`, all of the list's, in the order they're shown, so that selected rows next to each other
+  /// are drawn as one.
+  func serverThemedList<Selection: Hashable>(selected: Set<Selection>, in rows: [Selection]) -> some View {
+    var joined: [AnyHashable: SelectionJoins] = [:]
+    for (index, row) in rows.enumerated() where selected.contains(row) {
+      joined[AnyHashable(row)] = SelectionJoins(
+        above: index > 0 && selected.contains(rows[index - 1]),
+        below: index < rows.count - 1 && selected.contains(rows[index + 1])
+      )
+    }
+    return self.modifier(ServerThemedList(selection: Set(selected.map(AnyHashable.init)), joined: joined))
   }
 
   /// A sidebar painted in the server's theme in place of its own background, with light text on a
   /// dark color and dark text on a light one, and its rows showing `selection`, its selection, in
   /// the theme's color, or as it is without one.
   func serverThemedSidebar<Selection: Hashable>(selection: Selection?) -> some View {
-    self.modifier(ServerThemedSidebar(selection: selection.map(AnyHashable.init)))
+    self.modifier(ServerThemedSidebar(selection: Set(selection.map { [AnyHashable($0)] } ?? [])))
   }
 
   /// A horizontal divider drawn as the server's theme draws lines, a pixel of its tertiary color, as
@@ -359,7 +384,8 @@ private struct ServerBackground: ViewModifier {
 
 private struct ServerThemedList: ViewModifier {
   @Environment(\.serverTheme) private var theme
-  let selection: AnyHashable?
+  let selection: Set<AnyHashable>
+  var joined: [AnyHashable: SelectionJoins] = [:]
 
   func body(content: Content) -> some View {
     content
@@ -368,8 +394,9 @@ private struct ServerThemedList: ViewModifier {
       // What matters less in the rows, in the theme's hue, or as it is without one.
       .foregroundStyle(.primary, self.theme == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(ServerSecondaryStyle()))
       .environment(\.serverSecondaryColor, self.theme.map { Color(nsColor: $0.secondaryText) })
-      // Where the system has its selection, inset as much, and as round.
-      .environment(\.serverListSelection, ServerListSelection(selected: self.selection, color: self.theme?.selection, cornerRadius: 6))
+      // Where the system has its selection, inset as much, and as round, and in a window that isn't in
+      // front, in the system's gray, as the Finder's is.
+      .environment(\.serverListSelection, ServerListSelection(selected: self.selection, color: self.theme?.selection, cornerRadius: 6, joined: self.joined, unemphasized: .unemphasizedSelectedContentBackgroundColor))
   }
 }
 
@@ -378,7 +405,7 @@ private struct ServerThemedList: ViewModifier {
 private struct ServerThemedSidebar: ViewModifier {
   @Environment(\.serverTheme) private var theme
   @Environment(\.colorScheme) private var colorScheme
-  let selection: AnyHashable?
+  let selection: Set<AnyHashable>
 
   func body(content: Content) -> some View {
     content
@@ -452,7 +479,7 @@ private struct ServerThemedRow: ViewModifier {
   func body(content: Content) -> some View {
     // The same views themed or not, so the table's highlight is switched by the same view each time.
     let selectionColor = self.selection?.color
-    let color = self.selection?.selected == self.item ? selectionColor : nil
+    let color = self.selection?.selected.contains(self.item) == true ? selectionColor : nil
     let emphasized = self.controlActiveState == .key
     let textOnColor = emphasized ? color.map { $0.isDarkColor ? ColorScheme.dark : .light } : nil
     // What matters less, on the selection, the text's color, part way to the selection's.
@@ -463,7 +490,7 @@ private struct ServerThemedRow: ViewModifier {
       .environment(\.serverSecondaryColor, secondaryOnColor ?? self.secondaryColor)
       // On the selection, the usual dot, in the text's color.
       .environment(\.serverUnreadColor, textOnColor == nil ? self.unreadColor : nil)
-      .listRowBackground(color.map { SelectionCapsule(color: $0, emphasized: emphasized, cornerRadius: self.selection?.cornerRadius ?? 8) })
+      .listRowBackground(color.map { SelectionCapsule(color: $0, emphasized: emphasized, unemphasized: self.selection?.unemphasized, cornerRadius: self.selection?.cornerRadius ?? 8, joins: self.selection?.joined[self.item] ?? SelectionJoins()) })
       .listRowSeparator(.hidden)
       .background { TableHighlight(isShown: selectionColor == nil) }
   }
@@ -502,15 +529,22 @@ private struct ServerUnreadDot: ViewModifier {
   }
 }
 
-/// A selected row's background, where the system's would be.
+/// A selected row's background, where the system's would be, square where another selected row's
+/// right next to it, for them to be one, in a window that isn't in front, in `unemphasized`, if
+/// there is one, or else fainter.
 private struct SelectionCapsule: View {
   let color: NSColor
   let emphasized: Bool
+  let unemphasized: NSColor?
   let cornerRadius: CGFloat
+  let joins: SelectionJoins
 
   var body: some View {
-    RoundedRectangle(cornerRadius: self.cornerRadius, style: .continuous)
-      .fill(Color(nsColor: self.color).opacity(self.emphasized ? 1 : 0.35))
+    let top = self.joins.above ? 0 : self.cornerRadius
+    let bottom = self.joins.below ? 0 : self.cornerRadius
+    let fill = self.emphasized ? Color(nsColor: self.color) : self.unemphasized.map { Color(nsColor: $0) } ?? Color(nsColor: self.color).opacity(0.35)
+    UnevenRoundedRectangle(topLeadingRadius: top, bottomLeadingRadius: bottom, bottomTrailingRadius: bottom, topTrailingRadius: top, style: .continuous)
+      .fill(fill)
       .padding(.horizontal, 10)
   }
 }

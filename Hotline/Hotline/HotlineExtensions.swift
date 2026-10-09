@@ -508,7 +508,9 @@ extension FileManager {
       return nil
     }
     
-    guard let fileName = fileURL.lastPathComponent.data(using: .macOSRoman, allowLossyConversion: true) else {
+    // The information fork as it's sent: with its name, and its comment, and the comment's length,
+    // which servers that read exactly as much as they're told need counted too.
+    guard let infoFork = HotlineFileInfoFork(file: fileURL)?.data() else {
       return nil
     }
     
@@ -521,8 +523,7 @@ extension FileManager {
     totalSize += UInt64(HotlineFileForkHeader.DataSize)
     
     // Add information fork size.
-    totalSize += UInt64(HotlineFileInfoFork.BaseDataSize)
-    totalSize += UInt64(fileName.count)
+    totalSize += UInt64(infoFork.count)
     
     // Add file fork sizes.
     if let forkSizes = try? self.getFileForkSizes(fileURL) {
@@ -591,14 +592,14 @@ extension FileManager {
       let isRegularFile = resourceValues.isRegularFile ?? false
       let isDirectory = resourceValues.isDirectory ?? false
 
-      // Count all items (files and folders)
-      if isRegularFile || isDirectory {
+      // As many as a folder upload sends, as the server takes exactly as many as it's told: folders,
+      // and files that can be read, but not links, which aren't followed.
+      if isDirectory {
         itemCount += 1
-
-        // Only add size for files, not folders
-        if isRegularFile, let fileSize = self.getFlattenedFileSize(fileURL) {
-          totalSize += fileSize
-        }
+      }
+      else if isRegularFile, let fileSize = self.getFlattenedFileSize(fileURL) {
+        itemCount += 1
+        totalSize += fileSize
       }
     }
 

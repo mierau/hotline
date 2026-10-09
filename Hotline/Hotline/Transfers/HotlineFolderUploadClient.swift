@@ -36,6 +36,9 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
 
   private var socket: NetSocket?
   private var uploadTask: Task<Void, Error>?
+  /// Stopped, from the transfers list or the Finder, so however the transfer ends is that, and not
+  /// a failure.
+  private var cancelled = false
 
   public init?(
     folderURL: URL,
@@ -83,8 +86,11 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
       try await task.value
       self.uploadTask = nil
     } catch {
-      print("HotlineFolderUploadClientNew[\(referenceNumber)]: Failed to upload folder: \(error)")
       self.uploadTask = nil
+      if self.cancelled {
+        throw CancellationError()
+      }
+      print("HotlineFolderUploadClientNew[\(referenceNumber)]: Failed to upload folder: \(error)")
       progressHandler?(.error(error))
       throw error
     }
@@ -92,6 +98,7 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
 
   /// Cancel the current upload
   public func cancel() {
+    self.cancelled = true
     uploadTask?.cancel()
     uploadTask = nil
 
@@ -131,12 +138,7 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
     // Build folder hierarchy (excluding root folder itself)
     try buildFolderHierarchy()
 
-    // Fast path if this is an empty folder
-    if self.totalItems == 0 {
-      progressHandler?(.completed(url: nil))
-      return
-    }
-    
+    // Even with nothing in it, as servers make the folder once it's connected for.
     // Note that we're connecting now.
     progressHandler?(.connecting)
 
@@ -148,6 +150,10 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
     
     self.socket = socket
     defer { Task { await socket.close() } }
+    // Stopped while connecting, before there was a connection to close.
+    if self.cancelled {
+      throw CancellationError()
+    }
 
     // Send magic header for folder upload
     try await socket.write(Data(endian: .big) {
@@ -171,8 +177,16 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
       switch stage {
 
       case .waitingForNextFile:
-        // Wait for server to send .nextFile action
-        let action = try await self.readAction(socket: socket)
+        // Wait for server to send .nextFile action, or once it has everything, for it to close,
+        // which some servers do, rather than ask for more.
+        let action: HotlineFolderAction
+        do {
+          action = try await self.readAction(socket: socket)
+        }
+        catch where itemIndex >= self.folderItems.count {
+          stage = .done
+          continue
+        }
         guard action == .nextFile else {
           throw HotlineTransferClientError.failedToTransfer
         }
@@ -288,10 +302,10 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
 
     // Recursively walk the folder
     func walkFolder(at url: URL, relativePath: [String]) throws {
-      let contents = try fm.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey], options: [.skipsHiddenFiles])
+      let contents = try fm.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey], options: [.skipsHiddenFiles])
 
       for itemURL in contents {
-        let resourceValues = try itemURL.resourceValues(forKeys: [.isDirectoryKey])
+        let resourceValues = try itemURL.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
         let isDirectory = resourceValues.isDirectory ?? false
         let itemName = itemURL.lastPathComponent
         let itemPath = relativePath + [itemName]
@@ -303,8 +317,9 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
           // Recurse into subfolder
           try walkFolder(at: itemURL, relativePath: itemPath)
 
-        } else {
-          // Add file to list and calculate size
+        } else if resourceValues.isRegularFile == true {
+          // Add file to list and calculate size, but not links, which aren't followed, as the
+          // count the server was told of the folder's items leaves them out.
           if let fileSize = FileManager.default.getFlattenedFileSize(itemURL) {
             folderItems.append(FolderItem(url: itemURL, pathComponents: itemPath, isFolder: false))
             transferTotal += Int(fileSize)
@@ -414,10 +429,17 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
     try await socket.write(infoForkData)
     bytesUploaded += infoForkData.count
 
-    // Create per-file progress for Finder
+    // Create per-file progress for Finder, as a file operation, which the button on the file there
+    // stops the whole folder's upload with
     let fileProgress = Progress(totalUnitCount: Int64(totalFileSize))
+    fileProgress.kind = .file
     fileProgress.fileURL = fileURL.resolvingSymlinksInPath()
     fileProgress.fileOperationKind = Progress.FileOperationKind.uploading
+    fileProgress.cancellationHandler = { [weak self] in
+      Task { @MainActor in
+        self?.cancel()
+      }
+    }
     fileProgress.publish()
 
     defer {

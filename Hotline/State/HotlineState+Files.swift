@@ -52,26 +52,15 @@ extension HotlineState {
       return nil
     }
 
-    let newFiles = hotlineFiles.map { FileInfo(hotlineFile: $0) }
+    var newFiles = hotlineFiles.map { FileInfo(hotlineFile: $0) }
 
     // Update UI state
     if path.isEmpty {
       self.filesLoaded = true
-      // Preserve children of existing folder nodes so that deep-linked
-      // folders loaded via ensureIntermediateFolders aren't destroyed
-      // when the root listing is (re-)fetched.
-      let existingByName = Dictionary(
-        self.files.compactMap { $0.isFolder ? ($0.name, $0) : nil },
-        uniquingKeysWith: { first, _ in first }
-      )
-      for newFile in newFiles {
-        if newFile.isFolder,
-           let existing = existingByName[newFile.name],
-           let existingChildren = existing.children, !existingChildren.isEmpty {
-          newFile.children = existingChildren
-          newFile.loaded = existing.loaded
-        }
-      }
+      // Preserve existing folder nodes, and what's known of their children, so that deep-linked
+      // folders loaded via ensureIntermediateFolders aren't destroyed when the root listing is
+      // (re-)fetched.
+      newFiles = Self.merged(newFiles, into: self.files)
       self.files = newFiles
     } else {
       // Ensure intermediate folder nodes exist so we can attach children
@@ -79,6 +68,7 @@ extension HotlineState {
 
       // Update parent's children
       let parentFile = self.findFile(in: self.files, at: path)
+      newFiles = Self.merged(newFiles, into: parentFile?.children)
       parentFile?.children = newFiles
       parentFile?.loaded = true
     }
@@ -87,6 +77,45 @@ extension HotlineState {
     self.storeFileListInCache(newFiles, for: path)
 
     return newFiles
+  }
+
+  /// Lists folders again, as asked for, as the server has them now, each once, one after another, as
+  /// gently on the server as it can be, and not one that's being listed again already, with what
+  /// hasn't changed in each kept as it was.
+  @MainActor
+  func refreshFileLists(_ paths: [[String]]) async {
+    var seen: Set<[String]> = []
+    for path in paths where seen.insert(path).inserted && !self.refreshingFileLists.contains(path) {
+      self.refreshingFileLists.insert(path)
+      self.invalidateFileListCache(for: path)
+      let _ = try? await self.getFileList(path: path)
+      self.refreshingFileLists.remove(path)
+    }
+  }
+
+  /// A folder's listing, with what hasn't changed since it was last listed kept as it was, so it's
+  /// shown, selected and open as it was, rather than all of it shown anew, and only what's changed
+  /// is new, though a folder that's changed keeps what's known of what's in it, and whether it's
+  /// open.
+  private static func merged(_ listed: [FileInfo], into existing: [FileInfo]?) -> [FileInfo] {
+    guard let existing, !existing.isEmpty else {
+      return listed
+    }
+    let byName = Dictionary(existing.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+    return listed.map { file in
+      guard let old = byName[file.name], old.isFolder == file.isFolder else {
+        return file
+      }
+      if old.type == file.type, old.creator == file.creator, old.fileSize == file.fileSize, old.isUnavailable == file.isUnavailable {
+        return old
+      }
+      if file.isFolder {
+        file.children = old.children
+        file.loaded = old.loaded
+        file.expanded = old.expanded
+      }
+      return file
+    }
   }
 
   func getFileDetails(_ fileName: String, path: [String]) async throws -> FileDetails? {
@@ -170,9 +199,21 @@ extension HotlineState {
   ///   - destination: Optional destination URL. If nil, downloads to Downloads folder.
   ///   - progressCallback: Optional callback for progress updates (receives TransferInfo and progress 0.0-1.0)
   ///   - callback: Optional completion callback (receives TransferInfo and final file URL)
+  ///   - transfer: How it's been shown, waiting its turn, if it has, to start, rather than a new one
+  ///   - failureCallback: Optional callback for when it doesn't download, once, with why
   @MainActor
-  func downloadFile(_ fileName: String, path: [String], to destination: URL? = nil, progress progressCallback: ((TransferInfo) -> Void)? = nil, complete callback: ((TransferInfo) -> Void)? = nil) {
-    guard let client = self.client else { return }
+  func downloadFile(_ fileName: String, path: [String], to destination: URL? = nil, transfer queued: TransferInfo? = nil, progress progressCallback: ((TransferInfo) -> Void)? = nil, complete callback: ((TransferInfo) -> Void)? = nil, failed failureCallback: ((Error) -> Void)? = nil) {
+    // Shown failed, if it was shown waiting, and why, once.
+    func fail(_ error: Error) {
+      queued?.waiting = false
+      queued?.failed = true
+      failureCallback?(error)
+    }
+
+    guard let client = self.client else {
+      fail(HotlineClientError.notConnected)
+      return
+    }
 
     var fullPath: [String] = []
     if path.count > 1 {
@@ -180,7 +221,10 @@ extension HotlineState {
     }
 
     Task { @MainActor [weak self] in
-      guard let self else { return }
+      guard let self else {
+        fail(CancellationError())
+        return
+      }
 
       // Request download from server
       let result: (referenceNumber: UInt32, transferSize: Int, fileSize: Int, waitingCount: Int)?
@@ -189,6 +233,7 @@ extension HotlineState {
       }
       catch {
         self.displayError(error, message: (error as? HotlineClientError)?.userMessage)
+        fail(error)
         return
       }
 
@@ -197,23 +242,30 @@ extension HotlineState {
             let address = server.address as String?,
             let port = server.port as Int?
       else {
+        fail(HotlineClientError.invalidResponse)
         return
       }
 
       let referenceNumber = result.referenceNumber
 
-      // Create transfer info for tracking (stored globally in AppState)
-      let transfer = TransferInfo(
+      // Create transfer info for tracking (stored globally in AppState), or start the one shown
+      // waiting for its turn.
+      let transfer = queued ?? TransferInfo(
         reference: referenceNumber,
         title: fileName,
         size: UInt(result.transferSize),
         serverID: self.id,
         serverName: self.serverName ?? self.serverTitle
       )
+      transfer.referenceNumber = referenceNumber
+      transfer.size = UInt(result.transferSize)
+      transfer.waiting = false
       transfer.isUpload = false
       transfer.downloadCallback = callback
       transfer.progressCallback = progressCallback
-      AppState.shared.addTransfer(transfer)
+      if queued == nil {
+        AppState.shared.addTransfer(transfer)
+      }
 
       // Create download client
       let downloadClient = HotlineFileDownloadClient(
@@ -225,7 +277,10 @@ extension HotlineState {
 
       // Create and store the download task
       let downloadTask = Task { @MainActor [weak self] in
-        guard self != nil else { return }
+        guard self != nil else {
+          failureCallback?(CancellationError())
+          return
+        }
 
         do {
           // Download file with progress tracking
@@ -268,13 +323,17 @@ extension HotlineState {
           print("HotlineState: Download complete - \(fileURL.path)")
 
         } catch is CancellationError {
-          // Download was cancelled
+          // Download was cancelled, from the transfers list, or the Finder, and comes off the list,
+          // as the list's own button takes it off.
           transfer.cancelled = true
+          AppState.shared.cancelTransfer(id: transfer.id)
+          failureCallback?(CancellationError())
           print("HotlineState: Download cancelled")
 
         } catch {
           // Mark as failed
           transfer.failed = true
+          failureCallback?(error)
           self?.postTransferNotification(title: "Download Failed", body: fileName, transfer: transfer)
           print("HotlineState: Download failed - \(error)")
         }
@@ -295,16 +354,30 @@ extension HotlineState {
   ///   - destination: Optional destination URL. If nil, downloads to Downloads folder.
   ///   - progressCallback: Optional callback for progress updates (receives TransferInfo)
   ///   - callback: Optional completion callback (receives TransferInfo and final folder URL)
+  ///   - transfer: How it's been shown, waiting its turn, if it has, to start, rather than a new one
+  ///   - failureCallback: Optional callback for when it doesn't download, once, with why
   @MainActor
   func downloadFolder(
     _ folderName: String,
     path: [String],
     to destination: URL? = nil,
+    transfer queued: TransferInfo? = nil,
     progress progressCallback: ((TransferInfo) -> Void)? = nil,
 //    itemProgress itemProgressCallback: ((TransferInfo, String, Int, Int) -> Void)? = nil,
-    complete callback: ((TransferInfo) -> Void)? = nil
+    complete callback: ((TransferInfo) -> Void)? = nil,
+    failed failureCallback: ((Error) -> Void)? = nil
   ) {
-    guard let client = self.client else { return }
+    // Shown failed, if it was shown waiting, and why, once.
+    func fail(_ error: Error) {
+      queued?.waiting = false
+      queued?.failed = true
+      failureCallback?(error)
+    }
+
+    guard let client = self.client else {
+      fail(HotlineClientError.notConnected)
+      return
+    }
 
     var fullPath: [String] = []
     if path.count > 1 {
@@ -312,33 +385,53 @@ extension HotlineState {
     }
 
     Task { @MainActor [weak self] in
-      guard let self else { return }
+      guard let self else {
+        fail(CancellationError())
+        return
+      }
 
-      // Request folder download from server
-      guard let result = try? await client.downloadFolder(name: folderName, path: fullPath),
+      // Request folder download from server, saying why it won't, as for a file.
+      let result: (referenceNumber: UInt32, transferSize: Int, itemCount: Int, waitingCount: Int)?
+      do {
+        result = try await client.downloadFolder(name: folderName, path: fullPath)
+      }
+      catch {
+        self.displayError(error, message: (error as? HotlineClientError)?.userMessage)
+        fail(error)
+        return
+      }
+
+      guard let result,
             let server = self.server,
             let address = server.address as String?,
             let port = server.port as Int?
       else {
+        fail(HotlineClientError.invalidResponse)
         return
       }
 
       let referenceNumber = result.referenceNumber
 
-      // Create transfer info for tracking (stored globally in AppState)
-      let transfer = TransferInfo(
+      // Create transfer info for tracking (stored globally in AppState), or start the one shown
+      // waiting for its turn.
+      let transfer = queued ?? TransferInfo(
         reference: referenceNumber,
         title: folderName,
         size: UInt(result.transferSize),
         serverID: self.id,
         serverName: self.serverName ?? self.serverTitle
       )
+      transfer.referenceNumber = referenceNumber
+      transfer.size = UInt(result.transferSize)
+      transfer.waiting = false
       transfer.isFolder = true
       transfer.folderName = folderName
       transfer.isUpload = false
       transfer.downloadCallback = callback
       transfer.progressCallback = progressCallback
-      AppState.shared.addTransfer(transfer)
+      if queued == nil {
+        AppState.shared.addTransfer(transfer)
+      }
 
       // Create download client
       let downloadClient = HotlineFolderDownloadClient(
@@ -351,7 +444,10 @@ extension HotlineState {
 
       // Create and store the download task
       let downloadTask = Task { @MainActor [weak self] in
-        guard self != nil else { return }
+        guard self != nil else {
+          failureCallback?(CancellationError())
+          return
+        }
 
         do {
           // Download folder with progress tracking
@@ -401,11 +497,16 @@ extension HotlineState {
           print("HotlineState: Folder download complete - \(folderURL.path)")
 
         } catch is CancellationError {
-          // Download was cancelled
+          // Download was cancelled, from the transfers list, or the Finder, and comes off the list,
+          // as the list's own button takes it off.
+          transfer.cancelled = true
+          AppState.shared.cancelTransfer(id: transfer.id)
+          failureCallback?(CancellationError())
           print("HotlineState: Folder download cancelled")
         } catch {
           // Mark as failed
           transfer.failed = true
+          failureCallback?(error)
           self?.postTransferNotification(title: "Download Failed", body: folderName, transfer: transfer)
           print("HotlineState: Folder download failed - \(error)")
         }
@@ -413,8 +514,9 @@ extension HotlineState {
         AppState.shared.unregisterTransferTask(for: transfer.id)
       }
 
-      // Store transfer
-      AppState.shared.registerTransferTask(downloadTask, transferID: transfer.id)
+      // Store transfer, with what downloads it, for stopping it to stop that, which the task
+      // being cancelled doesn't, as it's waiting on one of the client's own.
+      AppState.shared.registerTransferTask(downloadTask, transferID: transfer.id, client: downloadClient)
     }
   }
 
@@ -426,20 +528,35 @@ extension HotlineState {
   ///   - progressCallback: Optional callback for progress updates (receives TransferInfo)
   ///   - itemProgressCallback: Optional callback for per-item updates (receives TransferInfo with current file info)
   ///   - callback: Optional completion callback (receives TransferInfo when upload is complete)
+  ///   - transfer: How it's been shown, waiting its turn, if it has, to start, rather than a new one
+  ///   - failureCallback: Optional callback for when it doesn't upload, once, with why
   @MainActor
   func uploadFolder(
     url folderURL: URL,
     path: [String],
     progress progressCallback: ((TransferInfo) -> Void)? = nil,
     itemProgress itemProgressCallback: ((TransferInfo, String, Int, Int) -> Void)? = nil,
-    complete callback: ((TransferInfo) -> Void)? = nil
+    complete callback: ((TransferInfo) -> Void)? = nil,
+    transfer queued: TransferInfo? = nil,
+    failed failureCallback: ((Error) -> Void)? = nil
   ) {
-    guard let client = self.client else { return }
+    // Shown failed, if it was shown waiting, and why, once.
+    func fail(_ error: Error) {
+      queued?.waiting = false
+      queued?.failed = true
+      failureCallback?(error)
+    }
+
+    guard let client = self.client else {
+      fail(HotlineClientError.notConnected)
+      return
+    }
 
     let folderName = folderURL.lastPathComponent
 
     guard folderURL.isFileURL, !folderName.isEmpty else {
       print("HotlineState: Not a valid folder URL")
+      fail(CocoaError(.fileReadInvalidFileName))
       return
     }
 
@@ -449,30 +566,46 @@ extension HotlineState {
     guard FileManager.default.fileExists(atPath: folderPath, isDirectory: &isDirectory),
           isDirectory.boolValue == true else {
       print("HotlineState: URL is not a folder")
+      fail(CocoaError(.fileReadNoSuchFile))
       return
     }
 
     // Get the total size of the folder (all files)
     guard let (folderSize, fileCount) = FileManager.default.getFolderSize(folderURL) else {
       print("HotlineState: Could not determine folder size")
+      fail(CocoaError(.fileReadUnknown))
       return
     }
 
     print("HotlineState: Requesting upload for folder '\(folderName)' - \(fileCount) items, \(folderSize) bytes total")
 
     Task { @MainActor [weak self] in
-      guard let self else { return }
+      guard let self else {
+        fail(CancellationError())
+        return
+      }
 
       // Request folder upload from server.
       // The enumerator already omits the root folder, so report the full item count the server should expect.
       let reportedItemCount = fileCount
       print("HotlineState: Reporting \(reportedItemCount) items to server (enumerated count)")
-      guard let referenceNumber = try? await client.uploadFolder(name: folderName, path: path, fileCount: reportedItemCount, totalSize: UInt32(folderSize)),
+      // Saying why the server won't take it, as for a file.
+      let reference: UInt32?
+      do {
+        reference = try await client.uploadFolder(name: folderName, path: path, fileCount: reportedItemCount, totalSize: UInt32(folderSize))
+      }
+      catch {
+        self.displayError(error, message: (error as? HotlineClientError)?.userMessage)
+        fail(error)
+        return
+      }
+      guard let referenceNumber = reference,
             let server = self.server,
             let address = server.address as String?,
             let port = server.port as Int?
       else {
         print("HotlineState: Failed to get upload reference from server")
+        fail(HotlineClientError.invalidResponse)
         return
       }
 
@@ -489,26 +622,36 @@ extension HotlineState {
         reference: referenceNumber
       ) else {
         print("HotlineState: Failed to create folder upload client")
+        fail(HotlineTransferClientError.failedToTransfer)
         return
       }
 
-      // Create transfer info for tracking (stored globally in AppState)
-      let transfer = TransferInfo(
+      // Create transfer info for tracking (stored globally in AppState), or start the one shown
+      // waiting for its turn.
+      let transfer = queued ?? TransferInfo(
         reference: referenceNumber,
         title: folderName,
         size: UInt(folderSize),
         serverID: self.id,
         serverName: self.serverName ?? self.serverTitle
       )
+      transfer.referenceNumber = referenceNumber
+      transfer.size = UInt(folderSize)
+      transfer.waiting = false
       transfer.isFolder = true
       transfer.isUpload = true
       transfer.uploadCallback = callback
       transfer.progressCallback = progressCallback
-      AppState.shared.addTransfer(transfer)
+      if queued == nil {
+        AppState.shared.addTransfer(transfer)
+      }
 
       // Create and store the upload task
       let uploadTask = Task { @MainActor [weak self] in
-        guard self != nil else { return }
+        guard self != nil else {
+          failureCallback?(CancellationError())
+          return
+        }
 
         do {
           // Upload folder with progress tracking
@@ -549,11 +692,16 @@ extension HotlineState {
           print("HotlineState: Folder upload complete - \(folderName)")
 
         } catch is CancellationError {
-          // Upload was cancelled
+          // Upload was cancelled, from the transfers list, or the Finder, and comes off the list, as
+          // the list's own button takes it off.
+          transfer.cancelled = true
+          AppState.shared.cancelTransfer(id: transfer.id)
+          failureCallback?(CancellationError())
           print("HotlineState: Folder upload cancelled")
         } catch {
           // Mark as failed
           transfer.failed = true
+          failureCallback?(error)
           self?.postTransferNotification(title: "Upload Failed", body: folderName, transfer: transfer)
           print("HotlineState: Folder upload failed - \(error)")
         }
@@ -561,13 +709,30 @@ extension HotlineState {
         AppState.shared.unregisterTransferTask(for: transfer.id)
       }
 
-      // Store the task in AppState so it can be cancelled later
-      AppState.shared.registerTransferTask(uploadTask, transferID: transfer.id)
+      // Store the task in AppState so it can be cancelled later, with what uploads it, for stopping it
+      // to stop that, which the task being cancelled doesn't, as it's waiting on one of the client's
+      // own.
+      AppState.shared.registerTransferTask(uploadTask, transferID: transfer.id, client: uploadClient)
     }
   }
 
-  func uploadFile(url fileURL: URL, path: [String], complete callback: ((TransferInfo) -> Void)? = nil) {
-    guard let client = self.client else { return }
+  /// Upload a file to the server.
+  ///
+  /// - Parameters:
+  ///   - transfer: How it's been shown, waiting its turn, if it has, to start, rather than a new one
+  ///   - failureCallback: Optional callback for when it doesn't upload, once, with why
+  func uploadFile(url fileURL: URL, path: [String], transfer queued: TransferInfo? = nil, complete callback: ((TransferInfo) -> Void)? = nil, failed failureCallback: ((Error) -> Void)? = nil) {
+    // Shown failed, if it was shown waiting, and why, once.
+    func fail(_ error: Error) {
+      queued?.waiting = false
+      queued?.failed = true
+      failureCallback?(error)
+    }
+
+    guard let client = self.client else {
+      fail(HotlineClientError.notConnected)
+      return
+    }
 
     let fileName = fileURL.lastPathComponent
 
@@ -575,6 +740,7 @@ extension HotlineState {
 
     guard fileURL.isFileURL, !fileName.isEmpty else {
       print("HotlineState: Not a valid file URL")
+      fail(CocoaError(.fileReadInvalidFileName))
       return
     }
 
@@ -584,17 +750,22 @@ extension HotlineState {
     guard FileManager.default.fileExists(atPath: filePath, isDirectory: &fileIsDirectory),
           fileIsDirectory.boolValue == false else {
       print("HotlineState: File is a directory")
+      fail(CocoaError(.fileReadNoSuchFile))
       return
     }
 
     // Get the flattened file size (includes all forks and headers)
     guard let payloadSize = FileManager.default.getFlattenedFileSize(fileURL) else {
       print("HotlineState: Could not determine file size")
+      fail(CocoaError(.fileReadUnknown))
       return
     }
 
     Task { @MainActor [weak self] in
-      guard let self else { return }
+      guard let self else {
+        fail(CancellationError())
+        return
+      }
 
       let referenceNumber: UInt32?
 
@@ -603,6 +774,7 @@ extension HotlineState {
       }
       catch {
         self.displayError(error, message: (error as? HotlineClientError)?.userMessage)
+        fail(error)
         return
       }
 
@@ -614,6 +786,7 @@ extension HotlineState {
             let port = server.port as Int?
       else {
         print("HotlineState: Failed to get upload reference from server")
+        fail(HotlineClientError.invalidResponse)
         return
       }
 
@@ -630,24 +803,34 @@ extension HotlineState {
         reference: referenceNumber
       ) else {
         print("HotlineState: Failed to create upload client")
+        fail(HotlineTransferClientError.failedToTransfer)
         return
       }
 
-      // Create transfer info for tracking (stored globally in AppState)
-      let transfer = TransferInfo(
+      // Create transfer info for tracking (stored globally in AppState), or start the one shown
+      // waiting for its turn.
+      let transfer = queued ?? TransferInfo(
         reference: referenceNumber,
         title: fileName,
         size: UInt(payloadSize),
         serverID: self.id,
         serverName: self.serverName ?? self.serverTitle
       )
+      transfer.referenceNumber = referenceNumber
+      transfer.size = UInt(payloadSize)
+      transfer.waiting = false
       transfer.isUpload = true
       transfer.uploadCallback = callback
-      AppState.shared.addTransfer(transfer)
+      if queued == nil {
+        AppState.shared.addTransfer(transfer)
+      }
 
       // Create and store the upload task
       let uploadTask = Task { @MainActor [weak self] in
-        guard self != nil else { return }
+        guard self != nil else {
+          failureCallback?(CancellationError())
+          return
+        }
 
         do {
           // Upload file with progress tracking
@@ -682,11 +865,16 @@ extension HotlineState {
           print("HotlineState: Upload complete - \(fileName)")
 
         } catch is CancellationError {
-          // Upload was cancelled
+          // Upload was cancelled, from the transfers list, and comes off it, as the list's own button
+          // takes it off.
+          transfer.cancelled = true
+          AppState.shared.cancelTransfer(id: transfer.id)
+          failureCallback?(CancellationError())
           print("HotlineState: Upload cancelled")
         } catch {
           // Mark as failed
           transfer.failed = true
+          failureCallback?(error)
           self?.postTransferNotification(title: "Upload Failed", body: fileName, transfer: transfer)
           print("HotlineState: Upload failed - \(error)")
         }
@@ -694,8 +882,162 @@ extension HotlineState {
         AppState.shared.unregisterTransferTask(for: transfer.id)
       }
 
-      // Store the transfer
-      AppState.shared.registerTransferTask(uploadTask, transferID: transfer.id)
+      // Store the transfer, with what uploads it, for stopping it to stop that
+      AppState.shared.registerTransferTask(uploadTask, transferID: transfer.id, client: uploadClient)
+    }
+  }
+
+  /// Uploads files and folders to a folder on the server, one after another, in turn, as some
+  /// servers take only so many at once from each person, and turn away the rest. Each is in the
+  /// transfers list from the start, waiting its turn, and the folder's listed again as each gets
+  /// there.
+  @MainActor
+  func enqueueUploads(_ fileURLs: [URL], to path: [String]) {
+    for fileURL in fileURLs {
+      var isFolder: ObjCBool = false
+      guard FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false), isDirectory: &isFolder) else {
+        continue
+      }
+      let transfer = TransferInfo(
+        reference: 0,
+        title: fileURL.lastPathComponent,
+        size: isFolder.boolValue ? 0 : UInt(FileManager.default.getFlattenedFileSize(fileURL) ?? 0),
+        serverID: self.id,
+        serverName: self.serverName ?? self.serverTitle
+      )
+      transfer.isUpload = true
+      transfer.isFolder = isFolder.boolValue
+      transfer.waiting = true
+      AppState.shared.addTransfer(transfer)
+      self.queuedUploads.append((fileURL, path, transfer))
+    }
+
+    guard self.uploadQueue == nil else {
+      return
+    }
+    self.uploadQueue = Task { @MainActor [weak self] in
+      while let self, !self.queuedUploads.isEmpty {
+        let upload = self.queuedUploads.removeFirst()
+        // Not one taken off the transfers list while it waited.
+        guard AppState.shared.transfers.contains(where: { $0.id == upload.transfer.id }) else {
+          continue
+        }
+        if await self.upload(upload.fileURL, to: upload.path, as: upload.transfer) {
+          let _ = try? await self.getFileList(path: upload.path)
+        }
+      }
+      self?.uploadQueue = nil
+    }
+  }
+
+  /// A download waiting its turn: what it is, where it goes, how it's shown, and who's told once it's
+  /// done.
+  struct QueuedDownload {
+    let name: String
+    let path: [String]
+    let isFolder: Bool
+    let destination: URL?
+    let transfer: TransferInfo
+    let finished: ((Error?) -> Void)?
+  }
+
+  /// Downloads files and folders one after another, as uploads go, each in the transfers list from
+  /// the start, waiting its turn, to where it's asked for, or the downloads folder, and says when
+  /// each is there, or why it isn't, as for one dropped on the Finder, which waits to be told.
+  @MainActor
+  func enqueueDownload(_ file: FileInfo, to destination: URL? = nil, finished: ((Error?) -> Void)? = nil) {
+    let transfer = TransferInfo(
+      reference: 0,
+      title: file.name,
+      size: file.isFolder ? 0 : file.fileSize,
+      serverID: self.id,
+      serverName: self.serverName ?? self.serverTitle
+    )
+    transfer.isFolder = file.isFolder
+    transfer.folderName = file.isFolder ? file.name : nil
+    transfer.waiting = true
+    AppState.shared.addTransfer(transfer)
+    self.queuedDownloads.append(QueuedDownload(name: file.name, path: file.path, isFolder: file.isFolder, destination: destination, transfer: transfer, finished: finished))
+
+    guard self.downloadQueue == nil else {
+      return
+    }
+    self.downloadQueue = Task { @MainActor [weak self] in
+      while let self, !self.queuedDownloads.isEmpty {
+        let download = self.queuedDownloads.removeFirst()
+        // Not one taken off the transfers list while it waited.
+        guard AppState.shared.transfers.contains(where: { $0.id == download.transfer.id }) else {
+          download.finished?(CancellationError())
+          continue
+        }
+        download.finished?(await self.download(download))
+      }
+      self?.downloadQueue = nil
+    }
+  }
+
+  /// Downloads one that's had its turn, and says, once it's done, why it didn't get there, if it
+  /// didn't.
+  @MainActor
+  private func download(_ download: QueuedDownload) async -> Error? {
+    await withCheckedContinuation { continuation in
+      if download.isFolder {
+        self.downloadFolder(download.name, path: download.path, to: download.destination, transfer: download.transfer, complete: { _ in continuation.resume(returning: nil) }, failed: { continuation.resume(returning: $0) })
+      }
+      else {
+        self.downloadFile(download.name, path: download.path, to: download.destination, transfer: download.transfer, complete: { _ in continuation.resume(returning: nil) }, failed: { continuation.resume(returning: $0) })
+      }
+    }
+  }
+
+  /// Moves files and folders, by where they are, into a folder on the server, one after another,
+  /// but not one into itself, or where it is already, and lists again where they were and where
+  /// they've gone, and what those are in, whose counts of what's in them change.
+  @MainActor
+  func moveItems(at paths: [[String]], to folder: [String]) async {
+    guard let client = self.client else {
+      return
+    }
+    var changed: Set<[String]> = []
+    var failure: Error?
+    // Not what's in a folder that's moved too, which goes along with it.
+    let paths = paths.filter { path in !paths.contains { $0.count < path.count && path.starts(with: $0) } }
+    for path in paths {
+      guard let name = path.last else {
+        continue
+      }
+      let parent = Array(path.dropLast())
+      guard parent != folder, !folder.starts(with: path) else {
+        continue
+      }
+      do {
+        try await client.moveFile(name: name, path: parent, to: folder)
+        changed.formUnion([parent, folder])
+      }
+      catch {
+        failure = failure ?? error
+      }
+    }
+    // Why the first that couldn't be moved wasn't, once, and not for each.
+    if let failure {
+      self.displayError(failure, message: (failure as? HotlineClientError)?.userMessage)
+    }
+    for path in changed.union(changed.filter { !$0.isEmpty }.map { Array($0.dropLast()) }) {
+      self.invalidateFileListCache(for: path)
+      let _ = try? await self.getFileList(path: path)
+    }
+  }
+
+  /// Uploads one that's had its turn, and says, once it's done, whether it got there.
+  @MainActor
+  private func upload(_ fileURL: URL, to path: [String], as transfer: TransferInfo) async -> Bool {
+    await withCheckedContinuation { continuation in
+      if transfer.isFolder {
+        self.uploadFolder(url: fileURL, path: path, complete: { _ in continuation.resume(returning: true) }, transfer: transfer, failed: { _ in continuation.resume(returning: false) })
+      }
+      else {
+        self.uploadFile(url: fileURL, path: path, transfer: transfer, complete: { _ in continuation.resume(returning: true) }, failed: { _ in continuation.resume(returning: false) })
+      }
     }
   }
 

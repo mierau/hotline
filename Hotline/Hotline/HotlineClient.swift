@@ -923,6 +923,20 @@ public actor HotlineClient {
     try await self.sendTransaction(transaction)
   }
 
+  /// Move a file or folder into another folder
+  ///
+  /// - Parameters:
+  ///   - name: Name of the file or folder
+  ///   - path: Directory path it's in
+  ///   - newPath: Directory path to move it into (empty for root)
+  public func moveFile(name: String, path: [String], to newPath: [String]) async throws {
+    var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .moveFile)
+    transaction.setFieldString(type: .fileName, val: name)
+    transaction.setFieldPath(type: .filePath, val: path)
+    transaction.setFieldPath(type: .fileNewPath, val: newPath)
+    try await self.sendTransaction(transaction)
+  }
+
   // MARK: - News
 
   /// Get news categories at a path
