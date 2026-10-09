@@ -43,7 +43,11 @@ extension HotlineState {
       hotlineFiles = try await client.getFileList(path: path)
     }
     catch let error as HotlineClientError {
-      self.displayError(error, message: error.userMessage)
+      // Not for the folders a search goes through, some of which, like drop boxes, can't be
+      // opened, and which it goes on without.
+      if !suppressErrors {
+        self.displayError(error, message: error.userMessage)
+      }
       self.filesLoaded = true
       return nil
     }
