@@ -168,23 +168,9 @@ struct MessageBoardView: View {
 //              Divider()
             }
             
-            HStack(spacing: 0) {
-              if post.looksLikeASCIIArt && !post.hasCodeBlocks {
-                Text(post.body.attributedStringHighlightingLinks())
-                  .tint(Color("Link Color"))
-                  .font(.system(.body, design: .monospaced))
-                  .lineLimit(100)
-                  .lineSpacing(4)
-                  .textSelection(.enabled)
-                  .padding(.horizontal, 24)
-              } else {
-                BoardPostText(text: post.body)
-                  .padding(.horizontal, 24)
-              }
-
-              Spacer(minLength: 0)
+            BoardPostText(text: post.body, canQuote: self.canPost) {
+              self.quote(post)
             }
-            .padding(.vertical, 24)
           }
 //          .padding(.bottom, 16)
           .serverBackground(.post)
@@ -227,234 +213,314 @@ struct MessageBoardView: View {
   }
 }
 
-/// A post's words, as Markdown, with its code blocks, quotes and lists apart from them: code colored
-/// as chat colors it, quotes along a bar, and lists with their bullets and numbers. Worked out once
-/// for each post, rather than each time the board's drawn.
-private struct BoardPostText: View {
+/// A post's words, as the board shows them: styled as they were written, without the marks, on
+/// TextKit 2, as the editor has them. They're selectable all at once, from one end of the post to
+/// the other, but not on into the next post, and links go where they go, as they do in chat.
+private struct BoardPostText: NSViewRepresentable {
+  /// How far in from the post's edges its words are, as its header's are.
+  static let inset = NSSize(width: 24, height: 24)
+
   let text: String
+  /// Whether it can be quoted in a new post, which it can't if you can't post.
+  var canQuote = false
+  var quote: () -> Void = {}
 
-  fileprivate enum Part {
-    case words(String)
-    case code(String, language: String?)
-    case quote(String)
-    case list([ListItem])
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
   }
 
-  fileprivate struct ListItem {
-    /// A bullet, or the number and what's after it, as 2.
-    var mark: String
-    var words: String
+  func makeNSView(context: Context) -> BoardPostTextView {
+    let textView = BoardPostTextView(usingTextLayoutManager: true)
+    textView.configure()
+    textView.delegate = context.coordinator
+    return textView
   }
 
-  private final class Parts {
-    let parts: [Part]
+  func updateNSView(_ textView: BoardPostTextView, context: Context) {
+    context.coordinator.openURL = context.environment.openURL
+    textView.canQuote = self.canQuote
+    textView.quote = self.quote
+    textView.applyServerTheme(context.environment.serverTheme)
+    textView.show(self.text)
+  }
 
-    init(_ parts: [Part]) {
-      self.parts = parts
+  func sizeThatFits(_ proposal: ProposedViewSize, nsView textView: BoardPostTextView, context: Context) -> CGSize? {
+    guard let width = proposal.width, width.isFinite else {
+      return nil
     }
+    return CGSize(width: width, height: textView.height(forWidth: width))
   }
 
-  private static let cache = NSCache<NSString, Parts>()
+  final class Coordinator: NSObject, NSTextViewDelegate {
+    var openURL: OpenURLAction?
 
-  var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      ForEach(Array(self.parts.enumerated()), id: \.offset) { _, part in
-        switch part {
-        case .words(let words):
-          Self.markdown(words)
-        case .code(let code, let language):
-          BoardCodeBlock(code: code, language: language)
-        case .quote(let words):
-          HStack(alignment: .top, spacing: 9) {
-            RoundedRectangle(cornerRadius: 1.5)
-              .fill(.tertiary)
-              .frame(width: 3)
-            Self.markdown(words)
-              .foregroundStyle(.secondary)
-          }
-          .fixedSize(horizontal: false, vertical: true)
-        case .list(let items):
-          VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-              HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(item.mark)
-                  .foregroundStyle(.secondary)
-                  .monospacedDigit()
-                Self.markdown(item.words)
-              }
-              // All of an item's lines, and not just its first.
-              .fixedSize(horizontal: false, vertical: true)
-            }
-          }
-        }
+    // Through SwiftUI's openURL, so hotline:// links stay in the app.
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+      guard let url = (link as? URL) ?? (link as? String).flatMap({ URL(string: $0) }) else {
+        return false
       }
-    }
-  }
-
-  private static func markdown(_ words: String) -> some View {
-    Text(LocalizedStringKey(words.convertingLinksToMarkdown()))
-      .tint(Color("Link Color"))
-      .lineLimit(100)
-      .lineSpacing(4)
-      .textSelection(.enabled)
-  }
-
-  private var parts: [Part] {
-    if let parts = Self.cache.object(forKey: self.text as NSString) {
-      return parts.parts
-    }
-    let parts = Self.parts(of: self.text)
-    Self.cache.setObject(Parts(parts), forKey: self.text as NSString)
-    return parts
-  }
-
-  /// The code blocks, and the words between them, without the blank lines around them.
-  private static func parts(of text: String) -> [Part] {
-    let source = text as NSString
-    var parts: [Part] = []
-    var start = 0
-    for block in PostMarkdown.codeBlocks(in: source) {
-      parts += self.parts(ofWords: source.substring(with: NSRange(location: start, length: block.range.location - start)))
-      // Nothing for one with no code in it.
-      let code = source.substring(with: block.code).trimmingCharacters(in: .newlines)
-      if !code.isEmpty {
-        parts.append(.code(code, language: block.language))
-      }
-      start = NSMaxRange(block.range)
-    }
-    parts += self.parts(ofWords: source.substring(from: start))
-    return parts
-  }
-
-  /// Words, a line at a time: a quote's lines together, a list's items together, with any lines
-  /// after an item without a mark of their own going with it, and the rest together. A blank line
-  /// ends a quote or a list.
-  private static func parts(ofWords text: String) -> [Part] {
-    let source = text as NSString
-    var parts: [Part] = []
-    enum Kind {
-      case words, quote, list
-    }
-    var kind: Kind?
-    var lines: [String] = []
-    var items: [ListItem] = []
-    func finish() {
-      switch kind {
-      case .words:
-        let words = lines.joined(separator: "\n").trimmingCharacters(in: .newlines)
-        if !words.isBlank {
-          parts.append(.words(words))
-        }
-      case .quote:
-        parts.append(.quote(lines.joined(separator: "\n")))
-      case .list:
-        parts.append(.list(items))
-      case nil:
-        break
-      }
-      kind = nil
-      lines = []
-      items = []
-    }
-
-    var lineStart = 0
-    while lineStart < source.length {
-      let range = source.lineRange(for: NSRange(location: lineStart, length: 0))
-      let line = source.substring(with: range).trimmingCharacters(in: .newlines)
-      if let mark = PostMarkdown.lineMark(in: source, line: range) {
-        let words = String((line as NSString).substring(from: min(mark.length, (line as NSString).length)))
-        switch mark.kind {
-        case .quote:
-          if kind != .quote {
-            finish()
-            kind = .quote
-          }
-          lines.append(words)
-        case .bullet, .number:
-          if kind != .list {
-            finish()
-            kind = .list
-          }
-          items.append(ListItem(mark: mark.kind == .bullet ? "•" : mark.mark, words: words))
-        }
-      }
-      else if line.trimmingCharacters(in: .whitespaces).isEmpty {
-        if kind == .words {
-          lines.append(line)
-        }
-        else {
-          finish()
-        }
-      }
-      else if kind == .list, !items.isEmpty {
-        items[items.count - 1].words += "\n" + line.trimmingCharacters(in: .whitespaces)
+      if let openURL = self.openURL {
+        openURL(url)
       }
       else {
-        if kind != .words {
-          finish()
-          kind = .words
-        }
-        lines.append(line)
+        NSWorkspace.shared.open(url)
       }
-      lineStart = NSMaxRange(range)
+      return true
     }
-    finish()
-    return parts
   }
 }
 
-/// A code block in a post, as chat has them: its code colored when it names a language we know,
-/// with the language small above it, on a background of its own. Colored once for each block.
-private struct BoardCodeBlock: View {
-  let code: String
-  let language: String?
+/// A post's words on the board, to read, select and copy, but not to change. Selecting in one post
+/// leaves nothing selected in the one selected before it, so there's only ever one selection.
+///
+/// Don't use `layoutManager` here, even to read it. Asking for it switches the view to TextKit 1
+/// for good. Use `textLayoutManager` instead.
+private final class BoardPostTextView: NSTextView {
+  var canQuote = false
+  var quote: () -> Void = {}
 
-  private final class Highlighted {
-    let text: AttributedString
+  /// The post shown, as it's written, so it's only shown again when it changes.
+  private var shown: String?
+  /// How tall the words are at the width they were last measured at.
+  private var measured: (width: CGFloat, height: CGFloat)?
+  /// The post with the selection, if any has one.
+  private static weak var selecting: BoardPostTextView?
+  private var pointerTracking: NSTrackingArea?
+  /// For code blocks' backgrounds and quotes' bars, as in the editor, and the link under the
+  /// pointer, underlined, as in chat.
+  private let fragments = PostFragments.board()
 
-    init(_ text: AttributedString) {
-      self.text = text
+  /// Sets the view up for a post. Separate from init so `init(usingTextLayoutManager:)` can be used.
+  func configure() {
+    self.textLayoutManager?.delegate = self.fragments
+    self.isEditable = false
+    self.isSelectable = true
+    // Copied as rich text too, which pastes into a new post with its bold, italic, code and links.
+    self.isRichText = true
+    self.importsGraphics = false
+    self.drawsBackground = false
+    self.usesFindBar = false
+    self.isAutomaticLinkDetectionEnabled = false
+    self.focusRingType = .none
+    self.textContainerInset = BoardPostText.inset
+    self.textContainer?.lineFragmentPadding = 0
+    self.textContainer?.widthTracksTextView = true
+    self.textContainer?.size = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+    // As tall as SwiftUI makes it, which is as tall as its words.
+    self.isVerticallyResizable = false
+    self.isHorizontallyResizable = false
+    // Links keep the color they're styled in, without an underline, as the board's always had them.
+    // The pointer over them is handled here.
+    self.linkTextAttributes = [:]
+  }
+
+  func show(_ text: String) {
+    guard text != self.shown else {
+      return
+    }
+    self.shown = text
+    self.measured = nil
+    self.textStorage?.setAttributedString(PostMarkdown.shown(text))
+  }
+
+  /// How tall the post's words are, laid out at a width, with the room around them.
+  func height(forWidth width: CGFloat) -> CGFloat {
+    if let measured = self.measured, measured.width == width {
+      return measured.height
+    }
+    guard let layoutManager = self.textLayoutManager, let container = self.textContainer else {
+      return 0
+    }
+    let inset = BoardPostText.inset
+    container.size = NSSize(width: max(width - 2 * inset.width, 1), height: CGFloat.greatestFiniteMagnitude)
+    layoutManager.ensureLayout(for: layoutManager.documentRange)
+    let usage = layoutManager.usageBoundsForTextContainer
+
+    // TextKit leaves out the room before the first paragraph and after the last, which, for a code
+    // block at the top or bottom of the post, is where its background goes, past its code. So it's
+    // made around the words instead, for the block to be as far in from the post's edges as words.
+    var above: CGFloat = 0, below: CGFloat = 0
+    layoutManager.enumerateTextLayoutFragments(from: layoutManager.documentRange.location) { fragment in
+      if fragment is PostCodeLineFragment {
+        above = max(0, -(fragment.layoutFragmentFrame.minY + fragment.renderingSurfaceBounds.minY))
+      }
+      return false
+    }
+    layoutManager.enumerateTextLayoutFragments(from: layoutManager.documentRange.endLocation, options: .reverse) { fragment in
+      if fragment is PostCodeLineFragment {
+        below = max(0, fragment.layoutFragmentFrame.minY + fragment.renderingSurfaceBounds.maxY - usage.maxY)
+      }
+      return false
+    }
+    self.textContainerInset = NSSize(width: inset.width, height: inset.height + above)
+
+    let height = (usage.height + 2 * inset.height + above + below).rounded(.up)
+    self.measured = (width, height)
+    return height
+  }
+
+  override func becomeFirstResponder() -> Bool {
+    guard super.becomeFirstResponder() else {
+      return false
+    }
+    if let other = Self.selecting, other !== self {
+      other.setSelectedRange(NSRange(location: 0, length: 0))
+    }
+    Self.selecting = self
+    return true
+  }
+
+  // MARK: Pointer
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let area = self.pointerTracking {
+      self.removeTrackingArea(area)
+    }
+    let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+    self.addTrackingArea(area)
+    self.pointerTracking = area
+  }
+
+  // The pointing hand over a link, which is underlined, as chat has it, and the text pointer over
+  // the rest.
+  override func mouseMoved(with event: NSEvent) {
+    super.mouseMoved(with: event)
+    let link = self.link(at: self.convert(event.locationInWindow, from: nil))
+    self.underline(link)
+    (link != nil ? NSCursor.pointingHand : NSCursor.iBeam).set()
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    super.mouseExited(with: event)
+    self.underline(nil)
+  }
+
+  override func cursorUpdate(with event: NSEvent) {
+    if self.link(at: self.convert(event.locationInWindow, from: nil)) != nil {
+      NSCursor.pointingHand.set()
+    }
+    else {
+      super.cursorUpdate(with: event)
     }
   }
 
-  private static let cache = NSCache<NSString, Highlighted>()
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      if let language = self.language {
-        Text(language)
-          .font(.caption)
-          .foregroundStyle(.tertiary)
-      }
-      Text(self.highlighted)
-        .font(.system(size: NSFont.systemFontSize - 1, design: .monospaced))
-        .lineSpacing(3)
-        .textSelection(.enabled)
+  /// The link under a point, all of it, if the point's over one, and not just past the end of it,
+  /// as the nearest place between two characters can be.
+  private func link(at point: NSPoint) -> NSRange? {
+    guard let window = self.window, let storage = self.textStorage else {
+      return nil
     }
-    .padding(10)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color(nsColor: ChatMessageRenderer.codeBlockBackground), in: .rect(cornerRadius: 6))
+    let screenPoint = window.convertPoint(toScreen: self.convert(point, to: nil))
+    let index = self.characterIndex(for: screenPoint)
+    guard index != NSNotFound, index < storage.length,
+          self.firstRect(forCharacterRange: NSRange(location: index, length: 1), actualRange: nil).insetBy(dx: -1, dy: -1).contains(screenPoint) else {
+      return nil
+    }
+    var range = NSRange()
+    return storage.attribute(.link, at: index, longestEffectiveRange: &range, in: NSRange(location: 0, length: storage.length)) == nil ? nil : range
   }
 
-  private var highlighted: AttributedString {
-    let key = "\(self.language ?? "")\n\(self.code)" as NSString
-    if let highlighted = Self.cache.object(forKey: key) {
-      return highlighted.text
+  /// Underlines a link, and takes the underline off the one before, drawing again where they are.
+  private func underline(_ link: NSRange?) {
+    let before = self.fragments.hoveredLink
+    guard link != before else {
+      return
     }
-    let code = NSMutableAttributedString(string: self.code, attributes: [.foregroundColor: NSColor.textColor])
-    if let language = self.language.flatMap({ ChatCodeHighlighter.language(named: $0) }) {
-      ChatCodeHighlighter.highlight(code, in: NSRange(location: 0, length: code.length), as: language)
+    self.fragments.hoveredLink = link
+    for range in [before, link].compactMap({ $0 }) {
+      self.redrawText(in: self.rect(of: range))
     }
-    var highlighted = AttributedString()
-    code.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: code.length)) { color, range, _ in
-      var run = AttributedString(code.attributedSubstring(from: range).string)
-      if let color = color as? NSColor {
-        run.foregroundColor = Color(nsColor: color)
+  }
+
+  /// Where a range of the text is, all of the paragraphs it's in.
+  private func rect(of range: NSRange) -> NSRect? {
+    guard let layoutManager = self.textLayoutManager, let content = self.textContentStorage,
+          let start = content.location(content.documentRange.location, offsetBy: range.location),
+          let end = content.location(start, offsetBy: range.length) else {
+      return nil
+    }
+    var rect = NSRect.null
+    layoutManager.enumerateTextLayoutFragments(from: start) { fragment in
+      rect = rect.union(fragment.layoutFragmentFrame)
+      return fragment.rangeInElement.endLocation.compare(end) == .orderedAscending
+    }
+    let origin = self.textContainerOrigin
+    return rect.isNull ? nil : rect.offsetBy(dx: origin.x, dy: origin.y)
+  }
+
+  /// Draws again what's in a rect of the text, in the views TextKit draws it in, or all of it.
+  private func redrawText(in rect: NSRect?) {
+    func redraw(_ view: NSView) {
+      for subview in view.subviews {
+        if let rect, !subview.convert(subview.bounds, to: self).intersects(rect) {
+          continue
+        }
+        subview.needsDisplay = true
+        redraw(subview)
       }
-      highlighted += run
     }
-    Self.cache.setObject(Highlighted(highlighted), forKey: key)
-    return highlighted
+    redraw(self)
+  }
+
+  // MARK: Menu
+
+  /// What a text view's menu has for writing, which a post's words aren't for: Cut, Paste, and the
+  /// menus for fonts, spelling and substitutions.
+  private static let writing: Set<Selector> = [
+    #selector(NSText.cut(_:)),
+    #selector(NSText.paste(_:)),
+    #selector(NSTextView.pasteAsPlainText(_:)),
+    #selector(NSFontManager.addFontTrait(_:)),
+    #selector(NSText.showGuessPanel(_:)),
+    #selector(NSTextView.orderFrontSubstitutionsPanel(_:)),
+  ]
+
+  // Quote in New Post, as the rest of the post has it, and then what's for words to read and copy.
+  override func menu(for event: NSEvent) -> NSMenu? {
+    let menu = super.menu(for: event) ?? NSMenu()
+    for item in menu.items.reversed() {
+      let actions = [item.action] + (item.submenu?.items.map(\.action) ?? [])
+      if actions.contains(where: { $0.map(Self.writing.contains) ?? false }) {
+        menu.removeItem(item)
+      }
+    }
+    // Without the lines that went between what's gone.
+    for (index, item) in menu.items.enumerated().reversed() where item.isSeparatorItem {
+      if index == 0 || index == menu.items.count - 1 || menu.items[index + 1].isSeparatorItem {
+        menu.removeItem(at: index)
+      }
+    }
+    menu.insertItem(BoardQuoteMenuItem(canQuote: self.canQuote, quote: self.quote), at: 0)
+    menu.insertItem(.separator(), at: 1)
+    return menu
+  }
+}
+
+/// Quote in New Post, in a post's words' menu, which stays off when you can't post, as that menu
+/// turns its items on and off itself.
+private final class BoardQuoteMenuItem: NSMenuItem, NSMenuItemValidation {
+  private let canQuote: Bool
+  private let quote: () -> Void
+
+  init(canQuote: Bool, quote: @escaping () -> Void) {
+    self.canQuote = canQuote
+    self.quote = quote
+    super.init(title: "Quote in New Post", action: #selector(BoardQuoteMenuItem.choose), keyEquivalent: "")
+    self.target = self
+    self.image = NSImage(systemSymbolName: "quote.opening", accessibilityDescription: nil)
+  }
+
+  required init(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
+
+  @objc private func choose() {
+    self.quote()
+  }
+
+  func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    self.canQuote
   }
 }
 

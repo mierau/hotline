@@ -303,7 +303,8 @@ extension String {
     }
     return end > NSMaxRange(range) ? NSRange(location: range.location, length: end - range.location) : nil
   }
-  private static let linkSchemes: Set<String> = ["http", "https", "hotline", "mailto"]
+  /// The schemes a link can have, which open a page, a server, or an email, and not anything on this Mac.
+  static let linkSchemes: Set<String> = ["http", "https", "hotline", "mailto"]
 
   func isEmailAddress() -> Bool {
     self.wholeMatch(of: RegularExpressions.emailAddress) != nil
@@ -334,19 +335,6 @@ extension String {
     }
   }
   
-  /// Returns an `AttributedString` with detected URLs/emails as clickable
-  /// links, but no Markdown interpretation.  Useful for ASCII art or other
-  /// content where `_` and `*` should be rendered literally.
-  func attributedStringHighlightingLinks() -> AttributedString {
-    var result = AttributedString(self)
-    for link in self.detectedLinks().reversed() {
-      if let range = Range(link.range, in: result) {
-        result[range].link = link.url
-      }
-    }
-    return result
-  }
-
   func convertingLinksToMarkdown() -> String {
     // Except in links already written in Markdown, whose text and address would otherwise become
     // links of their own inside it.

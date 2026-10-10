@@ -313,8 +313,21 @@ struct MessageBoardTests {
   }
 
   @Test func bodyIsTrimmed() {
+    // But for the spaces its first line starts with, which a drawing can start with.
     let post = MessageBoardPost.parse("From user (Feb 10 12:00):\n  \n  Hello world  \n  ")
-    #expect(post.body == "Hello world")
+    #expect(post.body == "  Hello world")
+  }
+
+  @Test func drawingKeepsItsFirstLinesSpaces() {
+    let post = MessageBoardPost.parse("From user (Feb 10 12:00):\n   ___\n  / _ \\\n | (_) |\n  \\___/\n")
+    #expect(post.body == "   ___\n  / _ \\\n | (_) |\n  \\___/")
+  }
+
+  @Test func referenceIsTheSameWithTheFirstLinesSpaces() {
+    // As it was when the body was trimmed of them, so links made then still find the post.
+    let post = MessageBoardPost.parse("From user (Feb 10 12:00):\n   ___\n  |_|")
+    let trimmed = MessageBoardPost(username: "user", date: nil, rawDateString: "Feb 10 12:00", body: "___\n  |_|", yearInferred: false)
+    #expect(post.reference == trimmed.reference)
   }
 
   @Test func bodyWithoutHeaderIsTrimmed() {

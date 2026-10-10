@@ -5,9 +5,10 @@ import SwiftUI
 /// strikethrough, code, code blocks, links, quotes and lists, and so does what you write, as you
 /// write it, with the marks kept but faint, and code blocks colored as chat colors them. The
 /// buttons on the post's bottom edge, and their keys, put the marks around what's selected, or take
-/// them away. What you write stays when the sheet's put away without posting it, for the next time,
-/// until you leave the server. A post is only as long as a Hotline field holds, and near that, it
-/// says how much more there's room for.
+/// them away. A picture dropped in becomes a drawing of it, in characters, as ASCII art. What you
+/// write stays when the sheet's put away without posting it, for the next time, until you leave the
+/// server. A post is only as long as a Hotline field holds, and near that, it says how much more
+/// there's room for.
 struct MessageBoardEditorView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(HotlineState.self) private var model: HotlineState
@@ -20,26 +21,24 @@ struct MessageBoardEditorView: View {
   @State private var editor = PostEditorController()
   @State private var posting: Bool = false
   @State private var failed: Bool = false
+  /// How big it opens: as big as it was last made, or else as it's meant to be.
+  @State private var opening: CGSize = {
+    let saved = NSSizeFromString(Prefs.shared.boardPostSize)
+    return saved.width >= Self.smallest.width && saved.height >= Self.smallest.height ? saved : CGSize(width: 540, height: 480)
+  }()
+  /// How big it is, as it's shown, to keep once it's made bigger or smaller.
+  @State private var shown = ShownSize()
+
+  /// As small as there's room for the post in.
+  private static let smallest = CGSize(width: 440, height: 380)
 
   var body: some View {
     @Bindable var model = self.model
-    let post = Self.cleaned(self.model.boardDraft)
+    let post = MessageBoardPost.cleaned(self.model.boardDraft)
     let room = PostMarkdown.maximumLength - post.utf8.count
 
     VStack(alignment: .leading, spacing: 16) {
-      // What it's for, at the top, with the icon the board has in the sidebar.
-      HStack(alignment: .center, spacing: 12) {
-        Image("Section Board")
-          .resizable()
-          .scaledToFit()
-          .frame(width: 32, height: 32)
-
-        Text("New Post")
-          .font(.title3)
-          .fontWeight(.semibold)
-      }
-
-      // The post, as it'll be on the board.
+      // The post, as it'll be on the board, which is all there is to say what it's for.
       VStack(spacing: 0) {
         HStack(spacing: 8) {
           if let icon = HotlineState.getClassicIcon(self.model.ownIconID) {
@@ -76,7 +75,7 @@ struct MessageBoardEditorView: View {
         PostEditor(text: $model.boardDraft, controller: self.editor, bottomInset: PostFormattingBar.height / 2 + 6)
           .overlay(alignment: .topLeading) {
             if self.model.boardDraft.isEmpty {
-              Text("Write something…")
+              Text(self.placeholder)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, PostEditor.inset.width)
                 .padding(.vertical, PostEditor.inset.height)
@@ -100,7 +99,13 @@ struct MessageBoardEditorView: View {
       .padding(.bottom, PostFormattingBar.height / 2)
     }
     .padding(20)
-    .frame(minWidth: 440, idealWidth: 540, maxWidth: .infinity, minHeight: 380, idealHeight: 480, maxHeight: .infinity)
+    .frame(minWidth: Self.smallest.width, idealWidth: self.opening.width, maxWidth: .infinity, minHeight: Self.smallest.height, idealHeight: self.opening.height, maxHeight: .infinity)
+    .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+      self.shown.size = size
+    }
+    .background(ResizableSheet(smallest: Self.smallest, opening: self.opening, shown: self.shown))
+    // As big as it's meant to be, as above.
+    .presentationSizing(.fitted)
     .toolbar {
       if self.posting {
         ToolbarItem {
@@ -130,10 +135,16 @@ struct MessageBoardEditorView: View {
     }
   }
 
+  /// What the post says before anything's written in it: who it's for, by the server's name, as the
+  /// window has it, or else the board.
+  private var placeholder: String {
+    self.model.serverTitle.isBlank ? "Write a post for the board…" : "Write a post for \(self.model.serverTitle)…"
+  }
+
   /// Posts it, and once it's on the board, goes to it there. If it doesn't go through, it's still
   /// here to try again.
   private func post() {
-    let text = Self.cleaned(self.model.boardDraft)
+    let text = MessageBoardPost.cleaned(self.model.boardDraft)
     guard !text.isEmpty else {
       return
     }
@@ -163,15 +174,80 @@ struct MessageBoardEditorView: View {
       self.model.boardPostToReveal = posted?.reference
     }
   }
+}
 
-  /// What's written, without blank lines before it or spaces after it, which would only push it
-  /// apart on the board, but with any spaces at the start of its first line, as for a drawing.
-  static func cleaned(_ text: String) -> String {
-    var lines = text.components(separatedBy: .newlines)
-    while let first = lines.first, first.isBlank {
-      lines.removeFirst()
+/// How big the post is shown, kept where keeping it doesn't draw it again as it's resized, and how
+/// much more than it was asked to be, as SwiftUI shows a sheet, so it's asked for as big as it's to
+/// be next time, and doesn't grow each time.
+private final class ShownSize {
+  var size: CGSize = .zero
+  var extra: CGSize?
+}
+
+/// Lets the sheet it's in be resized, which a sheet isn't on its own, no smaller than the post needs
+/// room for, and keeps how big it's made, for the next time it opens.
+private struct ResizableSheet: NSViewRepresentable {
+  let smallest: CGSize
+  /// How big it was asked to be, as it opened.
+  let opening: CGSize
+  let shown: ShownSize
+
+  func makeNSView(context: Context) -> SheetView {
+    SheetView(smallest: self.smallest, opening: self.opening, shown: self.shown)
+  }
+
+  func updateNSView(_ view: SheetView, context: Context) {
+  }
+
+  final class SheetView: NSView {
+    private let smallest: CGSize
+    private let opening: CGSize
+    private let shown: ShownSize
+    private var watching: [NSObjectProtocol] = []
+
+    init(smallest: CGSize, opening: CGSize, shown: ShownSize) {
+      self.smallest = smallest
+      self.opening = opening
+      self.shown = shown
+      super.init(frame: .zero)
     }
-    return lines.joined(separator: "\n").replacing(/\s+\z/, with: "")
+
+    required init?(coder: NSCoder) {
+      fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      self.watching.forEach(NotificationCenter.default.removeObserver)
+      self.watching = []
+      guard let window = self.window else {
+        return
+      }
+      window.styleMask.insert(.resizable)
+      let shown = self.shown, smallest = self.smallest, opening = self.opening
+      // As small as the post, and what's around it, as SwiftUI doesn't keep a sheet's smallest size
+      // until it's being resized.
+      self.watching.append(NotificationCenter.default.addObserver(forName: NSWindow.willStartLiveResizeNotification, object: window, queue: .main) { [weak window] _ in
+        MainActor.assumeIsolated {
+          guard let window, let content = window.contentView?.frame.size, shown.size != .zero else {
+            return
+          }
+          window.contentMinSize = CGSize(width: smallest.width + content.width - shown.size.width, height: smallest.height + content.height - shown.size.height)
+          // Still as big as it opened, the first time.
+          if shown.extra == nil {
+            shown.extra = CGSize(width: shown.size.width - opening.width, height: shown.size.height - opening.height)
+          }
+        }
+      })
+      self.watching.append(NotificationCenter.default.addObserver(forName: NSWindow.didEndLiveResizeNotification, object: window, queue: .main) { _ in
+        MainActor.assumeIsolated {
+          if shown.size != .zero {
+            let extra = shown.extra ?? .zero
+            Prefs.shared.boardPostSize = NSStringFromSize(CGSize(width: shown.size.width - extra.width, height: shown.size.height - extra.height))
+          }
+        }
+      })
+    }
   }
 }
 
@@ -204,7 +280,7 @@ private struct PostFormattingBar: View {
       PostFormatButton("Code", systemImage: "chevron.left.forwardslash.chevron.right", key: "e") {
         self.editor.toggle(.code)
       }
-      .disabled(code == .block)
+      .disabled(code == .block || code == .drawing)
       PostFormatButton("Link", systemImage: "link", key: "k") {
         self.editor.link()
       }
@@ -254,7 +330,8 @@ private struct PostFormatButton: View {
       Image(systemName: self.systemImage)
         .font(.system(size: 13, weight: .medium))
         .frame(width: 32, height: Self.height)
-        .foregroundStyle(!self.isEnabled ? .tertiary : self.hovered ? .primary : .secondary)
+        // In the text's color, as any button that's on, and faint when it's off.
+        .foregroundStyle(self.isEnabled ? .primary : .tertiary)
         .background(.fill.tertiary.opacity(self.hovered && self.isEnabled ? 1 : 0), in: .capsule)
         .contentShape(.capsule)
     }

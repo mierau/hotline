@@ -12,6 +12,31 @@ final class PostEditorController {
   /// The kind of code what's selected is in, if it's in any.
   var codeContext: PostMarkdown.CodeContext?
 
+  /// What a page's title is, or nil if it doesn't come in time.
+  @ObservationIgnored var pageTitle: (URL) async -> String? = { url in
+    let provider = LPMetadataProvider()
+    provider.timeout = 8
+    return (try? await provider.startFetchingMetadata(for: url))?.title
+  }
+
+  /// Links waiting for their pages' titles, by where each one is, kept up with as the text around
+  /// it changes, until something in it changes, which lets it go.
+  @ObservationIgnored private var awaitingTitles: [UUID: NSRange] = [:]
+
+  /// Keeps the links waiting for titles where they are as the text changes: one after a change
+  /// moves with it, and one it's in, or across, is let go, as what's there now is what was written.
+  func textChanged(in edited: NSRange, changeInLength delta: Int) {
+    let replaced = NSRange(location: edited.location, length: max(0, edited.length - delta))
+    for (id, link) in self.awaitingTitles {
+      if NSMaxRange(replaced) <= link.location {
+        self.awaitingTitles[id] = NSRange(location: link.location + delta, length: link.length)
+      }
+      else if replaced.location < NSMaxRange(link) {
+        self.awaitingTitles[id] = nil
+      }
+    }
+  }
+
   /// Puts the style's marks around what's selected, with nothing selected, either side of where
   /// you're typing, or takes them away from something that has them already.
   func toggle(_ style: PostStyle) {
@@ -63,9 +88,15 @@ final class PostEditorController {
     self.replace(range, with: mark + selected + mark, selecting: NSRange(location: range.location + (mark as NSString).length, length: range.length))
   }
 
-  /// Makes what's selected a link. Words become its words, with where it goes to write next. An
-  /// address becomes where it goes, with its page's title for its words, once that comes, and the
-  /// site's name until then. In a link already, the link comes off, and its words stay.
+  /// A link's words, and where it goes, until they're written.
+  static let linkWords = "link text"
+  static let linkAddress = "https://example.com"
+
+  /// Makes what's selected a link. Words become its words, with an address for now where it goes,
+  /// selected to paste or write over. With nothing selected, it has words for now too, selected
+  /// first, and Tab goes on to where it goes. An address becomes where it goes, with its page's
+  /// title for its words, once that comes, and the site's name until then. In a link already, the
+  /// link comes off, and its words stay.
   func link() {
     guard let textView = self.textView else {
       return
@@ -84,10 +115,15 @@ final class PostEditorController {
       self.link(address: selected, url: url, replacing: range)
       return
     }
-    let link = "[\(selected)]()"
-    // The words first, if there aren't any, and then where it goes.
-    let caret = selected.isEmpty ? range.location + 1 : range.location + (link as NSString).length - 1
-    self.replace(range, with: link, selecting: NSRange(location: caret, length: 0))
+    // Written without its scheme, as the board would make a link of it, with it.
+    if let url = Self.addressWithoutScheme(selected) {
+      self.link(address: url.absoluteString, url: url, replacing: range)
+      return
+    }
+    let words = selected.isEmpty ? Self.linkWords : selected
+    let wordsRange = NSRange(location: range.location + 1, length: (words as NSString).length)
+    let addressRange = NSRange(location: NSMaxRange(wordsRange) + 2, length: (Self.linkAddress as NSString).length)
+    self.replace(range, with: "[\(words)](\(Self.linkAddress))", selecting: selected.isEmpty ? wordsRange : addressRange)
   }
 
   /// Words an address is pasted over become a link to it.
@@ -100,40 +136,43 @@ final class PostEditorController {
   }
 
   /// An address as a link, with the site's name for its words, selected to write over, and then
-  /// the page's title, if it comes before they're written over.
+  /// the page's title, when it comes, if nothing in the link has changed by then, wherever it's
+  /// moved to, and you're not in its words, about to write there.
   private func link(address: String, url: URL, replacing range: NSRange) {
     let site = Self.escaped(url.host()?.replacing(/^www\./, with: "") ?? address)
     let link = "[\(site)](\(address))"
-    self.replace(range, with: link, selecting: NSRange(location: range.location + 1, length: (site as NSString).length))
+    let siteLength = (site as NSString).length
+    self.replace(range, with: link, selecting: NSRange(location: range.location + 1, length: siteLength))
 
     guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
       return
     }
+    let id = UUID()
+    self.awaitingTitles[id] = NSRange(location: range.location, length: (link as NSString).length)
+    let pageTitle = self.pageTitle
     Task { @MainActor [weak self] in
-      let provider = LPMetadataProvider()
-      provider.timeout = 8
-      guard let fetched = (try? await provider.startFetchingMetadata(for: url))?.title?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !fetched.isEmpty,
-            let self, let textView = self.textView else {
+      let fetched = await pageTitle(url)
+      guard let self, let link = self.awaitingTitles.removeValue(forKey: id),
+            let title = fetched?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty,
+            let textView = self.textView else {
         return
       }
-      // Where it is now, if it's still as it was put in.
-      let found = (textView.string as NSString).range(of: link)
-      guard found.location != NSNotFound else {
-        return
-      }
-      let words = NSRange(location: found.location + 1, length: (site as NSString).length)
-      let title = Self.escaped(fetched)
-      let change = (title as NSString).length - words.length
-      // Still selected, it's the title that is now, and otherwise, what's selected stays put.
+      let words = NSRange(location: link.location + 1, length: siteLength)
+      // Still selected as it was put in, it's the title that's selected now, but anywhere else in
+      // its words, or at either end of them, you're about to write there, and they stay.
       var selection = textView.selectedRange()
+      if selection != words, NSMaxRange(selection) >= words.location, selection.location <= NSMaxRange(words) {
+        return
+      }
+      let escaped = Self.escaped(title)
+      let change = (escaped as NSString).length - words.length
       if selection == words {
         selection.length += change
       }
       else if selection.location >= NSMaxRange(words) {
         selection.location += change
       }
-      self.replace(words, with: title, selecting: selection)
+      self.replace(words, with: escaped, selecting: selection)
     }
   }
 
@@ -145,6 +184,19 @@ final class PostEditorController {
       return nil
     }
     return url
+  }
+
+  /// An address without its scheme, as it's selected, like apple.com, or a server's, with its port,
+  /// all of what's selected, with the scheme the board gives it as it makes a link of it. Not for
+  /// what's pasted, where words with a dot, like a file's name, can look like one.
+  private static func addressWithoutScheme(_ text: String) -> URL? {
+    let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty, !text.contains(where: \.isWhitespace),
+          let link = text.detectedLinks().first, link.range == text.startIndex..<text.endIndex,
+          ["http", "https", "hotline"].contains(link.url.scheme?.lowercased() ?? "") else {
+      return nil
+    }
+    return link.url
   }
 
   /// Words for a link, with brackets that would end its words early kept as brackets.
@@ -250,7 +302,7 @@ struct PostEditor: NSViewRepresentable {
     textView.delegate = context.coordinator
     textView.textStorage?.delegate = context.coordinator
     // For code blocks' backgrounds and quotes' bars, which the text can't draw on its own.
-    textView.textLayoutManager?.delegate = context.coordinator
+    textView.textLayoutManager?.delegate = PostFragments.editor
     textView.isInCode = { [weak coordinator = context.coordinator] in
       coordinator?.controller.codeContext != nil
     }
@@ -267,6 +319,8 @@ struct PostEditor: NSViewRepresentable {
     textView.textContainerInset = Self.inset
     // From the inset, as the card's top and the placeholder are.
     textView.textContainer?.lineFragmentPadding = 0
+    // For pictures dropped on it, as well as text.
+    textView.updateDragTypeRegistration()
     textView.font = PostMarkdown.font
     textView.typingAttributes = PostMarkdown.attributes
     textView.string = self.text
@@ -296,7 +350,7 @@ struct PostEditor: NSViewRepresentable {
     self.controller.textView = textView
   }
 
-  final class Coordinator: NSObject, NSTextViewDelegate, NSTextStorageDelegate, NSTextLayoutManagerDelegate {
+  final class Coordinator: NSObject, NSTextViewDelegate, NSTextStorageDelegate {
     var text: Binding<String>
     let controller: PostEditorController
 
@@ -352,21 +406,6 @@ struct PostEditor: NSViewRepresentable {
       return true
     }
 
-    // A code block's lines, with its background behind them, and a quote's, with its bar.
-    func textLayoutManager(_ textLayoutManager: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation, in textElement: NSTextElement) -> NSTextLayoutFragment {
-      guard let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else {
-        return NSTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
-      }
-      let attributes = paragraph.attributedString.attributes(at: 0, effectiveRange: nil)
-      if let line = (attributes[PostMarkdown.codeLineKey] as? Int).flatMap(PostMarkdown.CodeLine.init) {
-        return PostCodeLineFragment(textElement: textElement, range: textElement.elementRange, line: line)
-      }
-      if attributes[PostMarkdown.quoteLineKey] != nil {
-        return PostQuoteLineFragment(textElement: textElement, range: textElement.elementRange)
-      }
-      return NSTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
-    }
-
     // Styled again whenever the text changes: the lines the change is in, or all of it, when the
     // change moves where code blocks are.
     func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
@@ -374,6 +413,10 @@ struct PostEditor: NSViewRepresentable {
         return
       }
       self.code = PostMarkdown.restyle(textStorage, edited: editedRange, changeInLength: delta, after: self.code)
+      // The editor's text only changes on the main thread.
+      MainActor.assumeIsolated {
+        self.controller.textChanged(in: editedRange, changeInLength: delta)
+      }
     }
 
     // MARK: Code
@@ -425,12 +468,34 @@ struct PostEditor: NSViewRepresentable {
       case #selector(NSResponder.insertNewline(_:)):
         return self.insertNewline(in: textView)
       case #selector(NSResponder.insertTab(_:)):
-        return self.indent(in: textView, outward: false)
+        return self.moveInLink(textView, back: false) || self.indent(in: textView, outward: false)
       case #selector(NSResponder.insertBacktab(_:)):
-        return self.indent(in: textView, outward: true)
+        return self.moveInLink(textView, back: true) || self.indent(in: textView, outward: true)
       default:
         return false
       }
+    }
+
+    /// In a link, Tab goes on from its words to where it goes, selected, to paste or write over,
+    /// and from there, on past the link, as a form's fields do. Shift-Tab goes back to its words.
+    private func moveInLink(_ textView: NSTextView, back: Bool) -> Bool {
+      let selection = textView.selectedRange()
+      guard self.code.context(of: selection) == nil, let link = PostMarkdown.link(around: selection, in: textView.string as NSString) else {
+        return false
+      }
+      // Between the ]( after its words and the ) at its end.
+      let address = NSRange(location: NSMaxRange(link.words) + 2, length: NSMaxRange(link.range) - NSMaxRange(link.words) - 3)
+      let inWords = selection.location >= link.words.location && NSMaxRange(selection) <= NSMaxRange(link.words)
+      if back {
+        guard !inWords else {
+          return false
+        }
+        textView.setSelectedRange(link.words)
+      }
+      else {
+        textView.setSelectedRange(inWords ? address : NSRange(location: NSMaxRange(link.range), length: 0))
+      }
+      return true
     }
 
     private func insertNewline(in textView: NSTextView) -> Bool {
@@ -456,8 +521,9 @@ struct PostEditor: NSViewRepresentable {
       }
 
       let line = text.lineRange(for: selection)
-      // A new line in a code block starts as far in as the one before it, as in a code editor.
-      if self.code.context(of: selection) == .block {
+      // A new line in a code block starts as far in as the one before it, as in a code editor, and
+      // in a drawing, as far in as what's drawn on the one before.
+      if self.code.context(of: selection) == .block || self.code.context(of: selection) == .drawing {
         let indent = text.substring(with: line).prefix(while: { $0 == " " || $0 == "\t" })
         guard !indent.isEmpty else {
           return false
@@ -536,7 +602,7 @@ struct PostEditor: NSViewRepresentable {
 
 /// The post's text view, which pastes rich text, like what's copied from a web page or a note, as
 /// Markdown, so what was bold or a link still is, but as it is in code, and as plain text with
-/// Paste and Match Style.
+/// Paste and Match Style. A picture dropped or pasted in goes in as a drawing of it.
 final class PostTextView: NSTextView {
   /// Whether where you're writing is in code.
   var isInCode: () -> Bool = { false }
@@ -571,22 +637,178 @@ final class PostTextView: NSTextView {
     self.insertText(markdown, replacementRange: range)
     return true
   }
+
+  // MARK: Pictures
+
+  /// Picture files, and pictures, as well as text.
+  private static let pictureTypes: [NSPasteboard.PasteboardType] = [.fileURL, .tiff, .png]
+
+  override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+    let types = super.readablePasteboardTypes
+    return types + Self.pictureTypes.filter { !types.contains($0) }
+  }
+
+  override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+    let types = super.acceptableDragTypes
+    return types + Self.pictureTypes.filter { !types.contains($0) }
+  }
+
+  override func dragOperation(for dragInfo: NSDraggingInfo, type: NSPasteboard.PasteboardType) -> NSDragOperation {
+    PostPicture.hasPicture(dragInfo.draggingPasteboard) ? .copy : super.dragOperation(for: dragInfo, type: type)
+  }
+
+  // Where it's dropped, or what's selected, as for a paste.
+  override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+    guard PostPicture.hasPicture(pboard) else {
+      return super.readSelection(from: pboard, type: type)
+    }
+    guard let picture = PostPicture.picture(on: pboard) else {
+      return false
+    }
+    self.insertDrawing(of: picture)
+    return true
+  }
+
+  /// A picture's drawing, for the background it's written on, on lines of its own, as a drawing
+  /// has to be, with a line break before it, and after it, where it would share a line with words.
+  /// It's selected after, to take out again with Delete, as well as Undo.
+  private func insertDrawing(of picture: CGImage) {
+    let drawing = PostPicture.drawing(of: picture, onDark: self.effectiveAppearance.isDark)
+    guard !drawing.isEmpty else {
+      return
+    }
+    let text = self.string as NSString
+    let range = self.selectedRange()
+    func isLineBreak(_ index: Int) -> Bool {
+      text.character(at: index) == 0x0A || text.character(at: index) == 0x0D
+    }
+    let before = range.location > 0 && !isLineBreak(range.location - 1) ? "\n" : ""
+    let after = NSMaxRange(range) < text.length && !isLineBreak(NSMaxRange(range)) ? "\n" : ""
+    self.insertText(before + drawing + after, replacementRange: range)
+    self.setSelectedRange(NSRange(location: range.location + (before as NSString).length, length: (drawing as NSString).length))
+  }
 }
 
 // MARK: - Fragments
 
+/// Hands out the layout fragments for a code block's lines, with its background behind them, and a
+/// quote's, with its bar, which the text can't draw on its own: as a post's written, in the editor,
+/// or as the board shows it, where a code block's ``` lines are gone, and the link under the
+/// pointer is underlined, as in chat.
+final class PostFragments: NSObject, NSTextLayoutManagerDelegate {
+  /// In the editor, a code block's ``` lines are in it, and room enough above and below its code.
+  static let editor = PostFragments(padding: 5, underlinesLinks: false)
+
+  /// For a post on the board, which has one of its own, for the link under the pointer in it. A
+  /// code block has room of its own above and below its code, as far as its code is in from its
+  /// sides, and the language it names, above it.
+  static func board() -> PostFragments {
+    PostFragments(padding: PostMarkdown.codePadding, underlinesLinks: true)
+  }
+
+  /// The link under the pointer, in characters, which the fragment holding it underlines.
+  var hoveredLink: NSRange?
+
+  private let padding: CGFloat
+  private let underlinesLinks: Bool
+
+  private init(padding: CGFloat, underlinesLinks: Bool) {
+    self.padding = padding
+    self.underlinesLinks = underlinesLinks
+  }
+
+  func textLayoutManager(_ textLayoutManager: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation, in textElement: NSTextElement) -> NSTextLayoutFragment {
+    guard let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else {
+      return NSTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
+    }
+    let attributes = paragraph.attributedString.attributes(at: 0, effectiveRange: nil)
+    let fragment: PostLineFragment
+    if let line = (attributes[PostMarkdown.codeLineKey] as? Int).flatMap(PostMarkdown.CodeLine.init) {
+      fragment = PostCodeLineFragment(textElement: textElement, range: textElement.elementRange, line: line, padding: self.padding, language: attributes[PostMarkdown.codeLanguageKey] as? String)
+    }
+    else if attributes[PostMarkdown.quoteLineKey] != nil {
+      fragment = PostQuoteLineFragment(textElement: textElement, range: textElement.elementRange)
+    }
+    else if self.underlinesLinks {
+      fragment = PostLineFragment(textElement: textElement, range: textElement.elementRange)
+    }
+    else {
+      return NSTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
+    }
+    fragment.provider = self.underlinesLinks ? self : nil
+    return fragment
+  }
+}
+
+/// A paragraph of a post, which underlines the link under the pointer, if it's in it, as chat
+/// does. TextKit 2 doesn't draw underlines added as rendering attributes, only colors, so the
+/// fragment draws its own.
+class PostLineFragment: NSTextLayoutFragment {
+  weak var provider: PostFragments?
+
+  override func draw(at point: CGPoint, in context: CGContext) {
+    super.draw(at: point, in: context)
+    self.drawHoveredLink(at: point, in: context)
+  }
+
+  private func drawHoveredLink(at point: CGPoint, in context: CGContext) {
+    guard let link = self.provider?.hoveredLink,
+          let contentManager = self.textLayoutManager?.textContentManager,
+          let paragraph = self.textElement as? NSTextParagraph else {
+      return
+    }
+    // The link's characters, counted from the start of this paragraph.
+    let start = contentManager.offset(from: contentManager.documentRange.location, to: self.rangeInElement.location)
+    let local = NSIntersectionRange(NSRange(location: link.location - start, length: link.length), NSRange(location: 0, length: paragraph.attributedString.length))
+    guard local.length > 0 else {
+      return
+    }
+
+    let pixel = abs(context.convertToUserSpace(CGSize(width: 1, height: 1)).height)
+    context.saveGState()
+    for line in self.textLineFragments {
+      let range = NSIntersectionRange(line.characterRange, local)
+      guard range.length > 0 else {
+        continue
+      }
+      let attributes = line.attributedString.attributes(at: range.location, effectiveRange: nil)
+      let font = attributes[.font] as? NSFont ?? PostMarkdown.font
+      let color = attributes[.foregroundColor] as? NSColor ?? .textColor
+      let left = line.locationForCharacter(at: range.location).x
+      let right = line.locationForCharacter(at: NSMaxRange(range)).x
+      // Below the baseline by the font's underline position, on whole pixels so it's crisp, with
+      // the part of a pixel dropped the way the text drops it.
+      let baseline = point.y + line.typographicBounds.minY + line.glyphOrigin.y
+      let y = ((baseline - font.underlinePosition) / pixel).rounded(.down) * pixel
+      let thickness = max(pixel, (font.underlineThickness / pixel).rounded() * pixel)
+      context.setFillColor(color.cgColor)
+      context.fill(CGRect(x: point.x + line.typographicBounds.minX + left, y: y, width: right - left, height: thickness))
+    }
+    context.restoreGState()
+  }
+}
+
 /// A line of a code block, with its part of the block's background behind it, rounded at the top
 /// of the block's first line and the bottom of its last, and square where its lines meet, so they
-/// make one block, in the color chat's code blocks have.
-final class PostCodeLineFragment: NSTextLayoutFragment {
+/// make one block, in the color chat's code blocks have. On the board, the language the block names
+/// is above its first line, small and faint, as chat has it.
+final class PostCodeLineFragment: PostLineFragment {
   private let line: PostMarkdown.CodeLine
+  /// How far past its first and last lines' text the block goes, for room above and below its code.
+  private let padding: CGFloat
+  /// The language the block names, shown above its code, on its first line.
+  private let language: String?
 
-  /// How far past its first and last lines the block goes, for room above and below its code.
-  private static let overhang: CGFloat = 5
   private static let cornerRadius: CGFloat = 6
 
-  init(textElement: NSTextElement, range: NSTextRange?, line: PostMarkdown.CodeLine) {
+  private static var languageFont: NSFont {
+    .systemFont(ofSize: NSFont.smallSystemFontSize - 1)
+  }
+
+  init(textElement: NSTextElement, range: NSTextRange?, line: PostMarkdown.CodeLine, padding: CGFloat, language: String?) {
     self.line = line
+    self.padding = padding
+    self.language = language
     super.init(textElement: textElement, range: range)
   }
 
@@ -603,18 +825,18 @@ final class PostCodeLineFragment: NSTextLayoutFragment {
   }
 
   /// Across the whole width of the text, from the top of the line to the top of the next, but for
-  /// the block's first line, from the top of its text, as the room above the block isn't the
-  /// block's, and for its last, to the bottom of its text, as the room below isn't either, and nor
-  /// is a new line after it at the end of the post, which its fragment has too.
+  /// the block's first line, from the top of its text, and its language, as the room above the
+  /// block isn't the block's, and for its last, to the bottom of its text, as the room below isn't
+  /// either, and nor is a new line after it at the end of the post, which its fragment has too.
   private var backgroundBounds: CGRect {
     let width = self.textLayoutManager?.textContainer?.size.width ?? self.layoutFragmentFrame.width
     var top: CGFloat = 0
     var bottom = self.layoutFragmentFrame.height
     if self.isTop, let first = self.textLineFragments.first {
-      top = first.typographicBounds.minY - Self.overhang
+      top = first.typographicBounds.minY - self.padding - (self.language == nil ? 0 : PostMarkdown.codeLanguageHeight)
     }
     if self.isBottom, let last = self.textLineFragments.last(where: { $0.characterRange.length > 0 }) {
-      bottom = last.typographicBounds.maxY + Self.overhang
+      bottom = last.typographicBounds.maxY + self.padding
     }
     return CGRect(x: -self.layoutFragmentFrame.minX, y: top, width: width, height: bottom - top)
   }
@@ -643,13 +865,21 @@ final class PostCodeLineFragment: NSTextLayoutFragment {
     context.setFillColor(ChatMessageRenderer.codeBlockBackground.cgColor)
     context.fillPath()
     context.restoreGState()
+    if self.isTop, let language = self.language {
+      // In line with the code, in the room above it.
+      let label = NSAttributedString(string: language, attributes: [.font: Self.languageFont, .foregroundColor: NSColor.tertiaryLabelColor])
+      NSGraphicsContext.saveGraphicsState()
+      NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+      label.draw(at: CGPoint(x: rect.minX + PostMarkdown.codePadding, y: rect.minY + self.padding - 1))
+      NSGraphicsContext.restoreGraphicsState()
+    }
     super.draw(at: point, in: context)
   }
 }
 
 /// A line of a quote, with the bar along a quote's lines beside it, from the top of the line to the
 /// top of the next, so a quote's lines make one bar, as the board shows them.
-final class PostQuoteLineFragment: NSTextLayoutFragment {
+final class PostQuoteLineFragment: PostLineFragment {
   private static let barWidth: CGFloat = 3
 
   /// Not beside a new line after the quote at the end of the post, which the quote's last line's

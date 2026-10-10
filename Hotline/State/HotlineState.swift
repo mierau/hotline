@@ -70,63 +70,24 @@ struct MessageBoardPost: Identifiable, Hashable {
   /// True when the date had no explicit year and the year was inferred.
   let yearInferred: Bool
 
-  private static let drawingCharacters = CharacterSet(charactersIn: #"|/\_-=+*#@[]()<>{}^~`"#)
-
   /// What tells this post from the others, the same each time the board loads, unlike its ID: who
-  /// posted it, when, and what they wrote, hashed. Links to the post use it.
+  /// posted it, when, and what they wrote, hashed. Links to the post use it. What they wrote is
+  /// without the spaces its first line starts with, as it was before those were kept, so links
+  /// made before then still find it.
   var reference: String {
-    let text = "\(self.username ?? "")\n\(self.rawDateString ?? "")\n\(self.body)"
+    let text = "\(self.username ?? "")\n\(self.rawDateString ?? "")\n\(self.body.trimmingCharacters(in: .whitespacesAndNewlines))"
     return SHA256.hash(data: Data(text.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
   }
 
-  /// Heuristic: true when the post body contains ASCII art.
-  /// Looks for a contiguous run of 3+ lines where each line has a high
-  /// ratio of drawing characters, so mixed posts (art banner + normal
-  /// text) are still detected.
-  var looksLikeASCIIArt: Bool {
-    let lines = self.body.split(separator: "\n", omittingEmptySubsequences: false)
-    guard lines.count >= 3 else { return false }
-
-    var consecutiveArtLines = 0
-
-    for line in lines {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-      // Blank lines inside art are common — keep the run going.
-      if trimmed.isEmpty {
-        if consecutiveArtLines > 0 {
-          continue
-        } else {
-          consecutiveArtLines = 0
-          continue
-        }
-      }
-
-      var drawingCount = 0
-      var totalCount = 0
-
-      for scalar in trimmed.unicodeScalars {
-        guard scalar.isASCII, scalar != " " else { continue }
-        totalCount += 1
-        if Self.drawingCharacters.contains(scalar) {
-          drawingCount += 1
-        }
-      }
-
-      let ratio = totalCount > 0 ? Double(drawingCount) / Double(totalCount) : 0
-      let hasInternalSpacing = trimmed.range(of: #"\S {3,}\S"#, options: .regularExpression) != nil
-
-      if ratio > 0.30 || (ratio > 0.15 && hasInternalSpacing) {
-        consecutiveArtLines += 1
-        if consecutiveArtLines >= 3 {
-          return true
-        }
-      } else {
-        consecutiveArtLines = 0
-      }
+  /// What's written for a post, without blank lines before it or spaces after it, which would only
+  /// push it apart on the board, but with any spaces at the start of its first line, as for a
+  /// drawing.
+  static func cleaned(_ text: String) -> String {
+    var lines = text.components(separatedBy: .newlines)
+    while let first = lines.first, first.isBlank {
+      lines.removeFirst()
     }
-
-    return false
+    return lines.joined(separator: "\n").replacing(/\s+\z/, with: "")
   }
 
   private static let headerRegex = /^From\s+(.+)\s*\(([^)]+)\)\s*:?\s*$/
@@ -158,9 +119,8 @@ struct MessageBoardPost: Identifiable, Hashable {
 
     let username = String(match.1).trimmingCharacters(in: .whitespaces)
     let rawDate = String(match.2)
-    let body = lines.count > 1
-      ? String(lines[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-      : ""
+    // With the spaces its first line starts with, as a drawing's does.
+    let body = lines.count > 1 ? Self.cleaned(String(lines[1])) : ""
 
     let (date, yearInferred) = parseDate(rawDate)
     return MessageBoardPost(

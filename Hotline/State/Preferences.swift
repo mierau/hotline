@@ -130,6 +130,7 @@ enum PrefsKeys: String {
   case previewChatImages = "preview chat images"
   case downloadFolderBookmark = "download folder bookmark"
   case filesViewMode = "files view mode"
+  case boardPostSize = "board post size"
   case watchWords = "watch words"
   case recentServers = "recent servers"
   case showRecentServers = "show recent servers"
@@ -201,6 +202,7 @@ class Prefs {
     self.previewChatImages = UserDefaults.standard.bool(forKey: PrefsKeys.previewChatImages.rawValue)
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
+    self.boardPostSize = UserDefaults.standard.string(forKey: PrefsKeys.boardPostSize.rawValue) ?? ""
     self.showRecentServers = UserDefaults.standard.bool(forKey: PrefsKeys.showRecentServers.rawValue)
 
     self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: PrefsKeys.hasCompletedOnboarding.rawValue)
@@ -337,6 +339,12 @@ class Prefs {
 
   var filesViewMode: String {
     didSet { UserDefaults.standard.set(self.filesViewMode, forKey: PrefsKeys.filesViewMode.rawValue) }
+  }
+
+  /// How big the new post sheet was last made, to open it as big again, or nothing, for as big as
+  /// it opens on its own.
+  var boardPostSize: String {
+    didSet { UserDefaults.standard.set(self.boardPostSize, forKey: PrefsKeys.boardPostSize.rawValue) }
   }
 
   var watchWords: [HighlightWord] {
