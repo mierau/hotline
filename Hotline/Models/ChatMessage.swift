@@ -83,6 +83,12 @@ struct ChatMessage: Identifiable {
   static let parser = /^\s*([^\:]+):\s*([\s\S]+)$/
   static let emoteParser = /^\s*\*{3}\s+(.+)$/
 
+  /// Someone connecting or disconnecting, which the chat can be set not to show. They're kept
+  /// either way, so turning them back on shows them all.
+  var isConnection: Bool {
+    self.type == .joined || self.type == .left
+  }
+
   init(text: String, type: ChatMessageType, date: Date) {
     self.id = UUID()
     self.type = type

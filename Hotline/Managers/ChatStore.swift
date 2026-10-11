@@ -130,7 +130,7 @@ actor ChatStore {
       if peerName != nil {
         trimPrivateEntries(serverID: serverID, peerName: peerName!)
       } else {
-        trimEntries(serverID: serverID)
+        trimEntries(serverID: serverID, connections: entry.type == ChatMessageType.joined.storageKey || entry.type == ChatMessageType.left.storageKey)
       }
     }
     catch {
@@ -470,13 +470,16 @@ actor ChatStore {
       "SELECT address, port, serverName, createdAt, updatedAt FROM servers WHERE id = ?1"
     )
 
+    // Counted and trimmed by kind: lines about people connecting and disconnecting, when ?2 (or
+    // ?3) is 1, and everything else, when it's 0, so as many of each are kept, as the chat can
+    // hide the first.
     stmtCountEntries = try prepare(
-      "SELECT COUNT(*) FROM entries WHERE serverId = ?1 AND peerName IS NULL"
+      "SELECT COUNT(*) FROM entries WHERE serverId = ?1 AND peerName IS NULL AND (type IN ('joined', 'left')) = ?2"
     )
 
     stmtTrimEntries = try prepare("""
       DELETE FROM entries WHERE id IN (
-        SELECT id FROM entries WHERE serverId = ?1 AND peerName IS NULL ORDER BY date ASC LIMIT ?2
+        SELECT id FROM entries WHERE serverId = ?1 AND peerName IS NULL AND (type IN ('joined', 'left')) = ?3 ORDER BY date ASC LIMIT ?2
       )
       """)
 
@@ -592,10 +595,13 @@ actor ChatStore {
     return nil
   }
 
-  private func trimEntries(serverID: Int32) {
+  /// Keeps the latest `maxEntries` of the kind that was just added: lines about people connecting
+  /// and disconnecting, or everything else.
+  private func trimEntries(serverID: Int32, connections: Bool) {
     guard let countStmt = stmtCountEntries else { return }
     sqlite3_reset(countStmt)
     sqlite3_bind_int(countStmt, 1, serverID)
+    sqlite3_bind_int(countStmt, 2, connections ? 1 : 0)
 
     guard sqlite3_step(countStmt) == SQLITE_ROW else { return }
     let count = Int(sqlite3_column_int(countStmt, 0))
@@ -607,6 +613,7 @@ actor ChatStore {
     sqlite3_reset(trimStmt)
     sqlite3_bind_int(trimStmt, 1, serverID)
     sqlite3_bind_int(trimStmt, 2, Int32(excess))
+    sqlite3_bind_int(trimStmt, 3, connections ? 1 : 0)
     sqlite3_step(trimStmt)
   }
 

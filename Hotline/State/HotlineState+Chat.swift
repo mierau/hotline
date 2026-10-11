@@ -4,6 +4,8 @@ import SwiftUI
 
 extension HotlineState {
 
+  /// The most messages the chat keeps, and the most lines about people connecting and
+  /// disconnecting among them, which don't count toward the messages, since they can be hidden.
   static let maxChatMessages = 2000
   /// How many of the oldest messages go at once when the chat passes its limit. Removing text
   /// from the top of the chat view makes it lay out everything below again, about as slow for
@@ -283,8 +285,8 @@ extension HotlineState {
 
     if display && !skipDisplay {
       self.chat.append(message)
-      if self.chat.count > Self.maxChatMessages {
-        self.chat.removeFirst(self.chat.count - (Self.maxChatMessages - Self.chatTrimBatch))
+      if self.chat.count > Self.maxChatMessages, let trimmed = Self.trimmed(self.chat, to: Self.maxChatMessages, batch: Self.chatTrimBatch) {
+        self.chat = trimmed
         self.chatRenderedText = nil
         self.chatRenderedCount = 0
       }
@@ -315,6 +317,35 @@ extension HotlineState {
 
     Task {
       await ChatStore.shared.append(entry: entry, for: key, serverName: serverName)
+    }
+  }
+
+  /// The chat without its oldest lines, once it has more than `limit` of either kind: messages, or
+  /// lines about people connecting and disconnecting, which are counted apart, so lots of them
+  /// don't push out what's said, and lots said doesn't push them out. Whichever's over goes down
+  /// to `batch` fewer, so it isn't trimmed again with every line. Nil if neither's over.
+  static func trimmed(_ chat: [ChatMessage], to limit: Int, batch: Int = 0) -> [ChatMessage]? {
+    let connections = chat.reduce(0) { $0 + ($1.isConnection ? 1 : 0) }
+    let messages = chat.count - connections
+    guard messages > limit || connections > limit else {
+      return nil
+    }
+    // How many of the oldest of each go.
+    var messagesGoing = messages > limit ? messages - (limit - batch) : 0
+    var connectionsGoing = connections > limit ? connections - (limit - batch) : 0
+    return chat.filter { line in
+      if line.isConnection {
+        guard connectionsGoing > 0 else {
+          return true
+        }
+        connectionsGoing -= 1
+        return false
+      }
+      guard messagesGoing > 0 else {
+        return true
+      }
+      messagesGoing -= 1
+      return false
     }
   }
 
@@ -358,11 +389,7 @@ extension HotlineState {
         let effectiveHistory = hasContent ? historyMessages : []
 
         let combined = effectiveHistory + currentMessages
-        if combined.count > Self.maxChatMessages {
-          self.chat = Array(combined.suffix(Self.maxChatMessages))
-        } else {
-          self.chat = combined
-        }
+        self.chat = Self.trimmed(combined, to: Self.maxChatMessages) ?? combined
         let lastMessage = historyMessages.last
         self.lastPersistedMessageType = lastMessage?.type
         self.lastPersistedMessageDate = lastMessage?.date

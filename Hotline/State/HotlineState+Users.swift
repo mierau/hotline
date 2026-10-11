@@ -167,11 +167,10 @@ extension HotlineState {
       self.users.append(User(hotlineUser: user))
       self.findOwnUser()
 
-      if Prefs.shared.showJoinLeaveMessages {
-        var chatMessage = ChatMessage(text: "\(user.name) connected", type: .joined, date: Date())
-        chatMessage.isAdmin = user.isAdmin
-        self.recordChatMessage(chatMessage)
-      }
+      // Kept whether or not the chat shows them, so turning them on shows them all.
+      var chatMessage = ChatMessage(text: "\(user.name) connected", type: .joined, date: Date())
+      chatMessage.isAdmin = user.isAdmin
+      self.recordChatMessage(chatMessage)
     }
   }
 }

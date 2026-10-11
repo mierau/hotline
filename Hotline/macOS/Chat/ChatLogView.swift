@@ -17,7 +17,7 @@ struct ChatLogView: View {
 
   var body: some View {
     Group {
-      if self.isLoaded && self.messages.isEmpty {
+      if self.isLoaded && !self.messages.contains(where: { Prefs.shared.showJoinLeaveMessages || !$0.isConnection }) {
         ContentUnavailableView("No Chat History", systemImage: "bubble.left.and.bubble.right")
       }
       else {
@@ -33,7 +33,8 @@ struct ChatLogView: View {
           },
           fileLinkMenu: { self.fileLinkMenu(for: $0) },
           showsIcons: Prefs.shared.showChatIcons,
-          previewsImages: Prefs.shared.previewChatImages
+          previewsImages: Prefs.shared.previewChatImages,
+          showsConnections: Prefs.shared.showJoinLeaveMessages
         )
         .ignoresSafeArea(edges: .top)
         .modifier(SoftTopScrollEdge())
@@ -111,7 +112,8 @@ struct ChatLogView: View {
   private func search() {
     let search = ChatSearch(self.searchQuery)
     let links = self.linkIndex
-    self.searchResults = self.messages.searched { search.matches($0, links: links) }
+    let showsConnections = Prefs.shared.showJoinLeaveMessages
+    self.searchResults = self.messages.searched { (showsConnections || !$0.isConnection) && search.matches($0, links: links) }
     self.debouncedQuery = self.searchQuery
   }
 

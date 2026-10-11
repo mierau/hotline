@@ -22,6 +22,8 @@ struct ChatTranscriptView: NSViewRepresentable {
   var showsIcons = true
   /// Whether links to images have a preview under them.
   var previewsImages = true
+  /// Whether people connecting and disconnecting are shown, among the messages.
+  var showsConnections = true
 
   func makeCoordinator() -> Coordinator {
     Coordinator()
@@ -51,7 +53,7 @@ struct ChatTranscriptView: NSViewRepresentable {
     let coordinator = context.coordinator
     coordinator.onCacheUpdate = self.isFiltered ? nil : self.onCacheUpdate
     let theme = context.environment.serverTheme
-    coordinator.options = ChatMessageRenderer.Options(showsIcons: self.showsIcons, previewsImages: self.previewsImages, adminColor: theme?.admin, secondaryColor: theme?.secondaryText, tertiaryColor: theme?.tertiaryText)
+    coordinator.options = ChatMessageRenderer.Options(showsIcons: self.showsIcons, previewsImages: self.previewsImages, showsConnections: self.showsConnections, adminColor: theme?.admin, secondaryColor: theme?.secondaryText, tertiaryColor: theme?.tertiaryText)
 
     if let textView = coordinator.textView {
       textView.applyServerTheme(theme)
@@ -175,7 +177,7 @@ struct ChatTranscriptView: NSViewRepresentable {
     private static let renderingKey = NSAttributedString.Key("chatRendering")
 
     private var rendering: String {
-      "icons \(self.options.showsIcons), previews \(self.options.previewsImages), admins \(self.options.adminColor?.description ?? "red"), secondary \(self.options.secondaryColor?.description ?? "system"), tertiary \(self.options.tertiaryColor?.description ?? "system")"
+      "icons \(self.options.showsIcons), previews \(self.options.previewsImages), connections \(self.options.showsConnections), admins \(self.options.adminColor?.description ?? "red"), secondary \(self.options.secondaryColor?.description ?? "system"), tertiary \(self.options.tertiaryColor?.description ?? "system")"
     }
 
     private func saveText(_ storage: NSTextStorage) {
@@ -201,6 +203,7 @@ struct ChatTranscriptView: NSViewRepresentable {
     /// off the front (the chat keeps only the latest couple thousand) are deleted from the top.
     /// Any other change, like restored history or search results, rebuilds the text.
     func update(messages: [ChatMessage], isFiltered: Bool, cachedText: NSAttributedString?, cachedCount: Int) {
+      let messages = self.options.showsConnections ? messages : Self.withoutConnections(messages)
       if self.needsRebuild {
         self.needsRebuild = false
         self.rebuild(messages: messages, isFiltered: isFiltered, cachedText: cachedText, cachedCount: cachedCount)
@@ -220,6 +223,20 @@ struct ChatTranscriptView: NSViewRepresentable {
         self.renderedMessages = self.renderedMessages.filter { current.contains($0.key) }
         self.renderedContinuations = self.renderedContinuations.filter { current.contains($0.key) }
       }
+    }
+
+    /// The messages without people connecting and disconnecting, as if they weren't there: with one
+    /// date divider between sessions that had nothing else in them, rather than two together.
+    private static func withoutConnections(_ messages: [ChatMessage]) -> [ChatMessage] {
+      var shown: [ChatMessage] = []
+      shown.reserveCapacity(messages.count)
+      for message in messages where !message.isConnection {
+        if message.type == .signOut, shown.last?.type == .signOut {
+          continue
+        }
+        shown.append(message)
+      }
+      return shown
     }
 
     /// How many of the rendered messages are gone from the front of `messages`, if the rest are

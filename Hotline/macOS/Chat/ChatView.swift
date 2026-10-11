@@ -114,7 +114,9 @@ struct ChatView: View {
           self.userMenu(name: name, iconID: iconID)
         },
         showsIcons: Prefs.shared.showChatIcons,
-        previewsImages: Prefs.shared.previewChatImages
+        previewsImages: Prefs.shared.previewChatImages,
+        // A private chat's people coming and going are who's in it, so they're always shown.
+        showsConnections: self.chatID != nil || Prefs.shared.showJoinLeaveMessages
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .ignoresSafeArea(edges: .top)
@@ -414,7 +416,8 @@ struct ChatView: View {
     let links = self.linkIndex
     // The public chat with its history, or what's been said in the private one.
     if self.chatID == nil {
-      self.searchResults = self.model.searchChat { search.matches($0, links: links) }
+      let showsConnections = Prefs.shared.showJoinLeaveMessages
+      self.searchResults = self.model.searchChat { (showsConnections || !$0.isConnection) && search.matches($0, links: links) }
     }
     else {
       self.searchResults = self.messages.searched { search.matches($0, links: links) }

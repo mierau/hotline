@@ -85,11 +85,10 @@ extension HotlineState {
     if let existingUserIndex = self.users.firstIndex(where: { $0.id == UInt(userID) }) {
       let user = self.users.remove(at: existingUserIndex)
 
-      if Prefs.shared.showJoinLeaveMessages {
-        var chatMessage = ChatMessage(text: "\(user.name) disconnected", type: .left, date: Date())
-        chatMessage.isAdmin = user.isAdmin
-        self.recordChatMessage(chatMessage)
-      }
+      // Kept whether or not the chat shows them, so turning them on shows them all.
+      var chatMessage = ChatMessage(text: "\(user.name) disconnected", type: .left, date: Date())
+      chatMessage.isAdmin = user.isAdmin
+      self.recordChatMessage(chatMessage)
 
       if playsSound && Prefs.shared.playSounds && Prefs.shared.playLeaveSound {
         SoundEffects.play(.userLogout)

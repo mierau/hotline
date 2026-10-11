@@ -48,6 +48,8 @@ enum ChatMessageRenderer {
     var showsIcons = true
     /// Whether links to images have a preview under them.
     var previewsImages = true
+    /// Whether people connecting and disconnecting are shown.
+    var showsConnections = true
     /// Admins' names, and when they come and go, in place of Hotline's red, as a server's theme has
     /// them.
     var adminColor: NSColor? = nil
