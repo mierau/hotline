@@ -108,6 +108,10 @@ struct FileActions {
         var extendedInfo = info
         extendedInfo.creator = file.creator
         extendedInfo.type = file.type
+        // Through which connection, and where on the server, for audio or video, which plays as it
+        // comes, from wherever it's skipped to.
+        extendedInfo.hotlineID = model.id
+        extendedInfo.path = file.path
         openPreviewWindow(extendedInfo)
       }
     }

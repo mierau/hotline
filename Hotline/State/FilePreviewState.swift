@@ -1,11 +1,34 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AVFoundation
 
 enum FilePreviewType: Equatable {
   case unknown
   case image
   case text
   case pict
+}
+
+/// Audio or video playing while it downloads, and what's said of it.
+struct PlayingMedia {
+  enum Kind {
+    case audio
+    case video
+  }
+
+  let kind: Kind
+  let player: AVPlayer
+  /// How big a video is, turned the way it plays.
+  var size: CGSize = .zero
+  var title: String? = nil
+  var artist: String? = nil
+  var album: String? = nil
+  /// Its cover, when it has one the system can read.
+  #if os(iOS)
+  var cover: UIImage? = nil
+  #elseif os(macOS)
+  var cover: NSImage? = nil
+  #endif
 }
 
 /// State for a file preview download
@@ -41,7 +64,21 @@ final class FilePreviewState {
   var styledText: NSAttributedString? = nil
   /// What's in an archive, which is shown in place of it.
   var archive: [ArchiveEntry]? = nil
-  
+
+  /// Whether it's audio or video playing as it comes.
+  private(set) var isStreaming = false
+  /// Audio or video playing as it comes, once the player's read enough of it to tell which.
+  var playing: PlayingMedia? = nil
+  /// Whether audio or video playing as it comes can't be played after all, once that's known, when
+  /// it's shown once it's here, as any other file is.
+  private(set) var isUnplayable = false
+  /// Which parts of audio or video playing as it comes have, from 0 to 1, for showing where it can
+  /// play from.
+  private(set) var downloadedParts: [Range<Double>] = []
+
+  @ObservationIgnored private var stream: FilePreviewStream?
+  /// Whether the transfer the preview was opened with has been used, which can only be once.
+  @ObservationIgnored private var usedTransfer = false
   @ObservationIgnored private var previewClient: HotlineFilePreviewClient?
   @ObservationIgnored private var previewTask: Task<Void, Never>?
   /// Where a picture from the web is kept while its window's open.
@@ -62,12 +99,18 @@ final class FilePreviewState {
     // Cancel any existing download
     self.previewTask?.cancel()
     self.previewClient?.cleanup()
+    self.stopStreaming()
 
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
       do {
         if self.info.isArchive {
           try await self.readArchive()
+          return
+        }
+
+        if let type = self.info.playableType {
+          try await self.stream(type)
           return
         }
 
@@ -83,6 +126,7 @@ final class FilePreviewState {
           return
         }
 
+        self.usedTransfer = true
         let client = HotlineFilePreviewClient(
           fileName: self.info.name,
           address: self.info.address,
@@ -220,6 +264,141 @@ final class FilePreviewState {
     progress(written, expected)
   }
 
+  /// Audio or video, played as it comes, from wherever it's skipped to, until all of it has, when
+  /// it's the file, as any other preview's is.
+  private func stream(_ type: UTType) async throws {
+    guard let hotlineID = self.info.hotlineID, let path = self.info.path else {
+      throw HotlineClientError.notConnected
+    }
+    let info = self.info
+    // The transfer the preview was opened with, from the start, and then new ones, from wherever
+    // the player wants.
+    var first: (any FilePreviewTransfer)? = self.usedTransfer ? nil : HotlineFileStream(address: info.address, port: UInt16(info.port), reference: info.id, size: info.size, fromStart: true)
+    self.usedTransfer = true
+    let stream = FilePreviewStream(fileURL: HotlineFilePreviewClient.downloadURL(for: info.name, fileType: info.type), contentType: type) { offset in
+      if offset == 0, let transfer = first {
+        first = nil
+        return transfer
+      }
+      first = nil
+      guard let hotline = AppState.shared.hotline(id: hotlineID) else {
+        throw HotlineClientError.notConnected
+      }
+      return try await hotline.streamFile(info.name, path: path, from: offset)
+    }
+    stream.changed = { [weak self] in
+      self?.streamChanged()
+    }
+    self.stream = stream
+    self.isStreaming = true
+    self.state = .loading
+    self.progress = 0.0
+    self.transferred = 0
+    self.timeRemaining = nil
+    try stream.start(attributes: HotlineFilePreviewClient.attributes(fileType: info.type, fileCreator: info.creator))
+
+    let player = AVPlayer(playerItem: AVPlayerItem(asset: stream.asset))
+    player.actionAtItemEnd = .pause
+    let playing = await Self.playing(stream.asset, with: player)
+    // Shown once it's known, unless it's stopped, or can't play, when it's shown once it's here, as
+    // any other file is.
+    guard self.stream === stream, stream.error == nil else {
+      return
+    }
+    self.playing = playing
+    self.isUnplayable = playing == nil
+    // As soon as it's shown, as it is when it can play.
+    if playing != nil {
+      player.play()
+    }
+  }
+
+  /// How far audio or video playing as it comes has got, and once all of it has, the file.
+  private func streamChanged() {
+    guard let stream = self.stream else {
+      return
+    }
+    if let length = stream.length, length > 0 {
+      let transferred = stream.downloaded.count
+      self.total = length
+      self.transferred = transferred
+      self.progress = Double(transferred) / Double(length)
+      self.timeRemaining = stream.bytesPerSecond.map { Double(length - transferred) / $0 }
+      self.downloadedParts = stream.downloaded.rangeView.map { Double($0.lowerBound) / Double(length)..<Double($0.upperBound) / Double(length) }
+    }
+    if stream.isComplete {
+      if self.fileURL == nil {
+        self.state = .loaded
+        self.progress = 1.0
+        self.timeRemaining = nil
+        self.fileURL = stream.fileURL
+      }
+    }
+    else if stream.error != nil {
+      self.state = .failed
+      self.progress = 0.0
+    }
+  }
+
+  /// What's playing, once the player's read enough of it to tell: a video, and how big, or audio,
+  /// and what's said of it, or nothing, when it can't play.
+  private static func playing(_ asset: AVURLAsset, with player: AVPlayer) async -> PlayingMedia? {
+    do {
+      let (tracks, isPlayable) = try await asset.load(.tracks, .isPlayable)
+      guard isPlayable else {
+        return nil
+      }
+      if let video = tracks.first(where: { $0.mediaType == .video }) {
+        let (size, transform) = try await video.load(.naturalSize, .preferredTransform)
+        let turned = size.applying(transform)
+        let shown = CGSize(width: abs(turned.width), height: abs(turned.height))
+        if shown.width > 0, shown.height > 0 {
+          return PlayingMedia(kind: .video, player: player, size: shown)
+        }
+      }
+      guard tracks.contains(where: { $0.mediaType == .audio }) else {
+        return nil
+      }
+      var playing = PlayingMedia(kind: .audio, player: player)
+      let metadata = (try? await asset.load(.commonMetadata)) ?? []
+      func item(_ identifier: AVMetadataIdentifier) -> AVMetadataItem? {
+        AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: identifier).first
+      }
+      playing.title = try? await item(.commonIdentifierTitle)?.load(.stringValue)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      playing.artist = try? await item(.commonIdentifierArtist)?.load(.stringValue)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      playing.album = try? await item(.commonIdentifierAlbumName)?.load(.stringValue)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      if let artwork = try? await item(.commonIdentifierArtwork)?.load(.dataValue) {
+        #if os(iOS)
+        playing.cover = UIImage(data: artwork)
+        #elseif os(macOS)
+        playing.cover = NSImage(data: artwork).flatMap { $0.size.width > 0 && $0.size.height > 0 ? $0 : nil }
+        #endif
+      }
+      return playing
+    }
+    catch {
+      print("FilePreviewState: Can't play \(asset.url.lastPathComponent): \(error)")
+      return nil
+    }
+  }
+
+  /// Stops audio or video playing as it comes, and deletes what's come of it.
+  private func stopStreaming() {
+    self.playing?.player.pause()
+    self.playing = nil
+    if let stream = self.stream {
+      stream.stop()
+      HotlineFilePreviewClient.removeDownload(at: stream.fileURL)
+      if self.fileURL == stream.fileURL {
+        self.fileURL = nil
+      }
+    }
+    self.stream = nil
+    self.isStreaming = false
+    self.isUnplayable = false
+    self.downloadedParts = []
+  }
+
   /// The most of a resource fork read, for the map of a disk image's chunks.
   private static let resourceForkLimit = 4 * 1024 * 1024
 
@@ -258,11 +437,14 @@ final class FilePreviewState {
     self.previewTask?.cancel()
     self.previewTask = nil
     self.previewClient?.cancel()
+    self.stream?.stop()
+    self.playing?.player.pause()
   }
 
   func cleanup() {
     self.previewClient?.cleanup()
     self.previewClient = nil
+    self.stopStreaming()
     if let folder = self.webDownloadFolder {
       try? FileManager.default.removeItem(at: folder)
       self.webDownloadFolder = nil

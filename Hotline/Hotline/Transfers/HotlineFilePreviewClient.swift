@@ -181,20 +181,9 @@ public class HotlineFilePreviewClient {
     progressHandler: (@Sendable (HotlineTransferProgress) -> Void)?
   ) async throws -> URL {
 
-    // Create temporary file path in system temp directory.
-    // If the file has no extension but we know the type code,
-    // add the appropriate extension so QuickLook can identify it.
-    var previewFileName = self.fileName
-    if (previewFileName as NSString).pathExtension.isEmpty,
-       let fileType = self.fileType?.lowercased(),
-       let ext = FileManager.HFSTypeToExtension[fileType] {
-      previewFileName = "\(previewFileName).\(ext)"
-    }
-    // In a folder of its own, so it keeps its name, which is the one it goes by when it's shared or
-    // dragged out of a preview, without meeting another file of the same name.
-    let tempFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-    try FileManager.default.createDirectory(at: tempFolder, withIntermediateDirectories: true)
-    let tempFileURL = tempFolder.appendingPathComponent(previewFileName)
+    let tempFileURL = Self.downloadURL(for: self.fileName, fileType: self.fileType)
+    let previewFileName = tempFileURL.lastPathComponent
+    try FileManager.default.createDirectory(at: tempFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
     self.temporaryFileURL = tempFileURL
 
     progressHandler?(.connecting)
@@ -217,13 +206,7 @@ public class HotlineFilePreviewClient {
     progressHandler?(.connected)
 
     // Create temp file
-    var attributes: [FileAttributeKey: Any] = [:]
-    if let creator = self.fileCreator, !creator.isBlank {
-      attributes[.hfsCreatorCode] = creator.fourCharCode() as NSNumber
-    }
-    if let type = self.fileType, !type.isBlank {
-      attributes[.hfsTypeCode] = type.fourCharCode() as NSNumber
-    }
+    let attributes = Self.attributes(fileType: self.fileType, fileCreator: self.fileCreator)
     guard FileManager.default.createFile(atPath: tempFileURL.path, contents: nil, attributes: attributes) else {
       throw HotlineTransferClientError.failedToTransfer
     }
@@ -311,6 +294,33 @@ public class HotlineFilePreviewClient {
     print("HotlineFilePreviewClient[\(self.referenceNumber)]: Cleaned up temp file")
   }
 
+  /// Where a preview of a file is downloaded to: in a folder of its own in the temporary folder, so
+  /// it keeps its name, which is the one it goes by when it's shared or dragged out of a preview,
+  /// without meeting another file of the same name. One without an extension gets the one its type
+  /// code goes with, so Quick Look, and the player, can tell what it is.
+  public static func downloadURL(for fileName: String, fileType: String?) -> URL {
+    var previewFileName = fileName
+    if (previewFileName as NSString).pathExtension.isEmpty,
+       let fileType = fileType?.lowercased(),
+       let ext = FileManager.HFSTypeToExtension[fileType] {
+      previewFileName = "\(previewFileName).\(ext)"
+    }
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    return folder.appendingPathComponent(previewFileName)
+  }
+
+  /// A downloaded file's type and creator codes, as the server says they are.
+  public static func attributes(fileType: String?, fileCreator: String?) -> [FileAttributeKey: Any] {
+    var attributes: [FileAttributeKey: Any] = [:]
+    if let creator = fileCreator, !creator.isBlank {
+      attributes[.hfsCreatorCode] = creator.fourCharCode() as NSNumber
+    }
+    if let type = fileType, !type.isBlank {
+      attributes[.hfsTypeCode] = type.fourCharCode() as NSNumber
+    }
+    return attributes
+  }
+
   /// Deletes a file this downloaded, and the folder of its own it was put in. For a file that's
   /// kept after the preview's done with it, rather than cleaned up with it.
   public static func removeDownload(at url: URL) {
@@ -322,5 +332,101 @@ public class HotlineFilePreviewClient {
       return
     }
     try? FileManager.default.removeItem(at: folder)
+  }
+}
+
+/// A file's data fork as it comes, from wherever its transfer starts: a preview's, which some
+/// servers send just as it is, and others as a flattened file, or a download's, resumed partway
+/// through, which comes as a flattened file with its data fork from there on.
+actor HotlineFileStream: FilePreviewTransfer {
+  private let address: String
+  private let port: UInt16
+  private let reference: UInt32
+  private let transferSize: Int
+  /// Whether the transfer's from the start of the data fork, so what it says of its size is all
+  /// of it.
+  private let fromStart: Bool
+  private var socket: NetSocket?
+  /// What came before it could tell whether the transfer's a flattened file, which is the start of
+  /// the data fork when it isn't.
+  private var pending: Data?
+
+  /// The most read at a time.
+  private static let readSize = 256 * 1024
+
+  init(address: String, port: UInt16, reference: UInt32, size: Int, fromStart: Bool) {
+    self.address = address
+    self.port = port
+    self.reference = reference
+    self.transferSize = size
+    self.fromStart = fromStart
+  }
+
+  func open() async throws -> Int? {
+    let socket = try await NetSocket.connect(host: self.address, port: self.port + 1)
+    self.socket = socket
+    try await socket.write(Data(endian: .big) {
+      "HTXF".fourCharCode()
+      self.reference
+      UInt32.zero
+      UInt32.zero
+    })
+
+    var magic = Data()
+    while magic.count < 4 {
+      do {
+        magic += try await socket.read(upTo: 4 - magic.count)
+      }
+      catch NetSocketError.closed {
+        break
+      }
+    }
+    guard magic.elementsEqual("FILP".utf8) else {
+      // Just the data fork, as Mobius sends a preview, and the transfer's size is its size.
+      self.pending = magic
+      return self.fromStart ? self.transferSize : nil
+    }
+
+    guard let header = HotlineFileHeader(from: magic + (try await socket.read(HotlineFileHeader.DataSize - 4))) else {
+      throw HotlineTransferClientError.failedToTransfer
+    }
+    for _ in 0..<Int(header.forkCount) {
+      guard let fork = HotlineFileForkHeader(from: try await socket.read(HotlineFileForkHeader.DataSize)) else {
+        throw HotlineTransferClientError.failedToTransfer
+      }
+      if fork.isDataFork {
+        // From partway through, servers differ on whether it's the size of all of it or of what's
+        // left.
+        return self.fromStart ? Int(fork.dataSize) : nil
+      }
+      try await socket.skip(Int(fork.dataSize))
+    }
+    // No data fork, so there's nothing of it to come.
+    await socket.close()
+    self.socket = nil
+    return self.fromStart ? 0 : nil
+  }
+
+  func read() async throws -> Data? {
+    if let pending = self.pending {
+      self.pending = nil
+      if !pending.isEmpty {
+        return pending
+      }
+    }
+    guard let socket = self.socket else {
+      return nil
+    }
+    do {
+      return try await socket.read(upTo: Self.readSize)
+    }
+    catch NetSocketError.closed {
+      return nil
+    }
+  }
+
+  func close() async {
+    await self.socket?.close()
+    self.socket = nil
   }
 }

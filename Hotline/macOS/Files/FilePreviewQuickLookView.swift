@@ -21,11 +21,13 @@ struct FilePreviewQuickLookView: View {
   /// The file, once it's known whether it's a picture or video, so it isn't shown as a document
   /// first.
   @State private var checkedFile: URL? = nil
-  /// For an archive, which can't be copied to Downloads, as it isn't here, that it's being
-  /// downloaded, as any file is.
-  @State private var archiveDownloadStarted = false
+  /// For an archive, which can't be copied to Downloads, as it isn't here, or audio or video
+  /// that's still on its way, that it's being downloaded, as any file is.
+  @State private var downloadStarted = false
   /// Whether the title bar shows over a picture or video, which is darker under it while it does.
   @State private var showsTitleBar = true
+  /// The picture or video the window's been fitted to, which it's no smaller than after.
+  @State private var fittedMedia: Media? = nil
 
   @FocusState private var focusField: FilePreviewFocus?
 
@@ -33,19 +35,26 @@ struct FilePreviewQuickLookView: View {
     enum Kind {
       case picture
       case video
+      case audio
     }
 
     let kind: Kind
     let size: CGSize
     /// A picture, as it's drawn: as the system reads it, or a PICT as our decoder drew it.
     var image: NSImage? = nil
+    /// What plays audio or video that's playing as it comes.
+    var player: AVPlayer? = nil
+    /// Audio without a cover, which plays in the row it came in, in a window the same size.
+    var compact = false
   }
 
   /// What the window shows, as the file comes and once it has.
   private enum Content {
     case downloading
     case failed
-    case media(URL, Media)
+    /// A picture or video that's here, or audio or video playing as it comes, which carries on as
+    /// it was once all of it has.
+    case media(URL?, Media)
     case document(URL)
     case archive(ArchiveKind, [ArchiveEntry])
     case unpreviewable
@@ -63,10 +72,13 @@ struct FilePreviewQuickLookView: View {
       case .document(let fileURL):
         QuickLookPreviewView(fileURL: fileURL)
           .frame(minWidth: 400, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
+          .background { WindowGrowth(size: Self.documentSize) }
       case .archive(let kind, let entries):
         FilePreviewArchiveView(kind: kind, entries: entries)
+          .background { WindowGrowth(size: Self.documentSize) }
       case .unpreviewable:
         self.unpreviewableView
+          .background { WindowGrowth(size: Self.documentSize) }
       }
     }
     .focusable()
@@ -90,7 +102,7 @@ struct FilePreviewQuickLookView: View {
           Label("Download File...", systemImage: "arrow.down")
         }
         .help("Download File")
-        .disabled(self.info?.isArchive == true ? self.archiveDownloadStarted : self.preview?.fileURL == nil)
+        .disabled(!self.canDownload)
       }
       // An archive isn't here to share, only what's in it.
       if self.info?.isArchive != true {
@@ -112,11 +124,22 @@ struct FilePreviewQuickLookView: View {
       guard let fileURL = self.preview?.fileURL else {
         return
       }
+      // Audio or video playing as it came carries on as it is.
+      if self.preview?.playing != nil {
+        self.checkedFile = fileURL
+        return
+      }
       if self.preview?.previewType == .pict {
         self.media = self.preview?.image.map { Media(kind: .picture, size: $0.size, image: $0) }
       }
       else {
-        self.media = await Self.media(at: fileURL)
+        var media = await Self.media(at: fileURL)
+        // Playing as soon as it's shown.
+        if media?.kind == .video {
+          media?.player = AVPlayer(url: fileURL)
+          media?.player?.play()
+        }
+        self.media = media
       }
       self.checkedFile = fileURL
     }
@@ -131,24 +154,47 @@ struct FilePreviewQuickLookView: View {
     .onDisappear {
       self.preview?.cancel()
       self.preview?.cleanup()
+      self.media?.player?.pause()
       self.dismiss()
     }
-    // Pictures and videos in dark, as photo and video apps show them, and anything else as other
-    // windows are.
-    .preferredColorScheme(self.isPictureOrVideo ? .dark : nil)
+    // Pictures, videos and audio in dark, as photo, video and music apps show them, and anything
+    // else as other windows are.
+    .preferredColorScheme(self.isMedia ? .dark : nil)
   }
 
-  /// Whether the window's for a picture or a video: one its name says it is, from the start, or one
-  /// it turned out to be.
-  private var isPictureOrVideo: Bool {
+  /// Whether the window's for a picture, a video or audio: one its name says it is, from the start,
+  /// or one it turned out to be.
+  private var isMedia: Bool {
     if case .media = self.content {
       return true
     }
-    return self.info?.isPictureOrVideo == true
+    return self.info?.isMedia == true
   }
 
-  /// The bottom of a video, where its controls are, which are for using, not moving the window.
-  private static let videoControlsHeight: CGFloat = 64
+  /// Whether there's a file to download: the one that's here, or one that isn't yet, or can't be,
+  /// downloaded as any file is, once.
+  private var canDownload: Bool {
+    guard let info = self.info else {
+      return false
+    }
+    if info.isArchive || (self.preview?.isStreaming == true && self.preview?.fileURL == nil) {
+      return !self.downloadStarted
+    }
+    return self.preview?.fileURL != nil
+  }
+
+  /// The bottom of a video, where its controls are, which stay, with the title bar, while the
+  /// pointer's on them.
+  private static let videoControlsHeight: CGFloat = 90
+  /// How big the window is for a picture, a video or audio as it comes, below its title bar: just
+  /// big enough for its row, which audio without a cover stays in, and which anything else grows
+  /// from, to its own size.
+  static let compactSize = CGSize(width: 440, height: 104)
+  static let compactMinimumWidth: CGFloat = 380
+  /// How far in from the window's sides that row is.
+  static let compactInset: CGFloat = 16
+  /// How big the window is for anything else, below its title bar, at first.
+  static let documentSize = CGSize(width: 450, height: 498)
 
   /// Shares the file, or a PICT as the picture our decoder made of it, which more can open.
   @ViewBuilder
@@ -174,10 +220,24 @@ struct FilePreviewQuickLookView: View {
 
   /// What to show, going by how far the file's come and what it turned out to be.
   private var content: Content {
+    if let playing = self.preview?.playing {
+      switch playing.kind {
+      case .video:
+        return .media(self.preview?.fileURL, Media(kind: .video, size: playing.size, player: playing.player))
+      case .audio:
+        let compact = playing.cover == nil
+        return .media(self.preview?.fileURL, Media(kind: .audio, size: compact ? Self.compactSize : FilePreviewAudioView.coverSize, player: playing.player, compact: compact))
+      }
+    }
     switch self.preview?.state {
     case .failed:
       return .failed
     case .loaded:
+      // Not shown as a document while it's still being found out whether it plays, should all of
+      // it come first.
+      if self.preview?.isStreaming == true, self.preview?.isUnplayable == false {
+        return .downloading
+      }
       if let archive = self.preview?.archive, let kind = self.info?.archiveKind {
         return .archive(kind, archive)
       }
@@ -210,36 +270,53 @@ struct FilePreviewQuickLookView: View {
     }
   }
 
-  /// Into Downloads: a copy of the file that's here, or an archive, which isn't, downloaded as any
-  /// file is, from the server, with the rest of the transfers.
+  /// Into Downloads: a copy of the file that's here, or an archive, which isn't, or audio or video
+  /// that's still on its way, downloaded as any file is, from the server, with the rest of the
+  /// transfers.
   private func downloadFile() {
     guard let info = self.info else {
       return
     }
-    if info.isArchive {
-      guard let hotlineID = info.hotlineID, let hotline = AppState.shared.hotline(id: hotlineID), let path = info.path else {
-        return
-      }
-      hotline.downloadFile(info.name, path: path)
-      self.archiveDownloadStarted = true
-    }
-    else if let fileURL = self.preview?.fileURL {
+    if !info.isArchive, let fileURL = self.preview?.fileURL {
       FileManager.default.copyToDownloads(from: fileURL, using: info.name, bounceDock: true)
+    }
+    else if let hotlineID = info.hotlineID, let hotline = AppState.shared.hotline(id: hotlineID), let path = info.path {
+      hotline.downloadFile(info.name, path: path)
+      self.downloadStarted = true
     }
   }
 
-  /// A picture or video, edge to edge, under a title bar that comes and goes with the pointer, in a
-  /// window shaped like it that's moved by dragging it.
-  private func mediaView(_ fileURL: URL, media: Media) -> some View {
+  /// Audio without a cover, in the row it came in, in a window the same size, or anything else, in
+  /// the window shaped to it.
+  @ViewBuilder
+  private func mediaView(_ fileURL: URL?, media: Media) -> some View {
+    if media.compact, let playing = self.preview?.playing, let preview = self.preview {
+      FilePreviewAudioView(playing: playing, preview: preview)
+        .frame(minWidth: Self.compactMinimumWidth, maxWidth: .infinity, minHeight: Self.compactSize.height, maxHeight: Self.compactSize.height)
+        .background { CompactWindow() }
+    }
+    else {
+      self.shapedMediaView(fileURL, media: media)
+    }
+  }
+
+  /// A picture or video, or audio's cover, edge to edge, under a title bar that comes and goes with
+  /// the pointer, in a window shaped like it that's moved by dragging it.
+  private func shapedMediaView(_ fileURL: URL?, media: Media) -> some View {
     Group {
       if let image = media.image {
         PictureView(image: image)
       }
-      else {
-        VideoView(url: fileURL)
+      else if media.kind == .audio, let playing = self.preview?.playing, let preview = self.preview {
+        FilePreviewAudioView(playing: playing, preview: preview)
+      }
+      else if let player = media.player {
+        VideoView(player: player)
       }
     }
-    .frame(minWidth: MediaWindow.minimumSize.width, maxWidth: .infinity, minHeight: MediaWindow.minimumSize.height, maxHeight: .infinity)
+    // No taller at first than the row it came in, so the window grows from that to its shape in
+    // one go, and once it has, no smaller than a picture gets.
+    .frame(minWidth: MediaWindow.minimumSize.width, maxWidth: .infinity, minHeight: self.fittedMedia == media ? MediaWindow.minimumSize.height : Self.compactSize.height, maxHeight: .infinity)
     .ignoresSafeArea()
     // A shade behind the title bar, so it can be read over any picture: dark under Dark Mode's light
     // text, and light under light mode's dark text.
@@ -251,21 +328,32 @@ struct FilePreviewQuickLookView: View {
         .allowsHitTesting(false)
         .ignoresSafeArea()
     }
-    // Dragging it moves the window, as in QuickTime Player, except on a video's controls.
+    // Dragging it moves the window, as in QuickTime Player, from anywhere but a video's controls,
+    // which are over it. Audio's player moves it itself, from anywhere but its controls.
     .overlay {
-      Color.clear
-        .contentShape(.rect)
-        .gesture(WindowDragGesture())
-        // From the first click, while the window's behind others.
-        .allowsWindowActivationEvents(true)
-        .padding(.bottom, media.kind == .video ? Self.videoControlsHeight : 0)
-        .ignoresSafeArea()
+      if media.kind != .audio {
+        Color.clear
+          .contentShape(.rect)
+          .gesture(WindowDragGesture())
+          // From the first click, while the window's behind others.
+          .allowsWindowActivationEvents(true)
+          .ignoresSafeArea()
+      }
+    }
+    .overlay {
+      if media.kind == .video, let player = media.player {
+        // What's come of it along its timeline, as it's playing as it comes, or all of it.
+        VideoControls(player: player, downloaded: self.preview?.isStreaming == true ? self.preview?.downloadedParts ?? [] : [0..<1], shown: self.showsTitleBar)
+          .ignoresSafeArea()
+      }
     }
     .background {
-      MediaWindow(media: media) { shown in
+      MediaWindow(media: media, controlsHeight: media.kind == .video ? Self.videoControlsHeight : 0) { shown in
         withAnimation(shown ? .easeOut(duration: MediaWindow.showDuration) : .easeIn(duration: MediaWindow.hideDuration)) {
           self.showsTitleBar = shown
         }
+      } fitted: {
+        self.fittedMedia = media
       }
       // Under the title bar too, so going onto it isn't leaving.
       .ignoresSafeArea()
@@ -308,12 +396,13 @@ struct FilePreviewQuickLookView: View {
     }
   }
 
-  /// The file's icon, with its name beside it over whatever's to say about it, in the middle of the
-  /// window.
+  /// The file's icon, with its name beside it over whatever's to say about it: in the middle of the
+  /// window, or for a picture, a video or audio, along a window just big enough for it.
+  @ViewBuilder
   private func fileRow(failed: Bool = false, @ViewBuilder details: () -> some View) -> some View {
     // A document icon's page only fills the middle 31 pt of its 48 pt square, so this leaves about
     // 12 pt between the page and the text.
-    HStack(alignment: .center, spacing: 4) {
+    let row = HStack(alignment: .center, spacing: 4) {
       FileIconView(filename: self.info?.name ?? "", fileType: self.info?.type)
         .frame(width: 48, height: 48)
         .overlay(alignment: .bottomTrailing) {
@@ -333,9 +422,19 @@ struct FilePreviewQuickLookView: View {
         details()
       }
     }
-    // From the same place whatever's beside the icon, so it doesn't move when a download fails.
-    .frame(width: 320, alignment: .leading)
-    .frame(minWidth: 380, maxWidth: .infinity, minHeight: 200, maxHeight: .infinity)
+    if self.info?.isMedia == true {
+      row
+        .padding(.leading, Self.compactInset)
+        .padding(.trailing, Self.compactInset + 4)
+        .frame(minWidth: Self.compactMinimumWidth, idealWidth: Self.compactSize.width, maxWidth: .infinity, minHeight: Self.compactSize.height, idealHeight: Self.compactSize.height, maxHeight: Self.compactSize.height, alignment: .leading)
+        .background { CompactWindow() }
+    }
+    else {
+      row
+        // From the same place whatever's beside the icon, so it doesn't move when a download fails.
+        .frame(width: 320, alignment: .leading)
+        .frame(minWidth: 380, idealWidth: Self.documentSize.width, maxWidth: .infinity, minHeight: 200, idealHeight: Self.documentSize.height, maxHeight: .infinity)
+    }
   }
 
   private var unpreviewableView: some View {
@@ -450,16 +549,15 @@ private struct PictureView: NSViewRepresentable {
   }
 }
 
-/// A video, playing as soon as it's shown, in the player QuickTime Player has, with its controls
-/// floating over the bottom of it.
+/// A video, by the player playing it, which plays and stops with the preview, without the player's
+/// own controls, as the window has its own over it.
 private struct VideoView: NSViewRepresentable {
-  let url: URL
+  let player: AVPlayer
 
   func makeNSView(context: Context) -> AVPlayerView {
     let view = AVPlayerView()
-    view.controlsStyle = .floating
-    view.player = AVPlayer(url: self.url)
-    view.player?.play()
+    view.controlsStyle = .none
+    view.player = self.player
     return view
   }
 
@@ -467,7 +565,6 @@ private struct VideoView: NSViewRepresentable {
   }
 
   static func dismantleNSView(_ view: AVPlayerView, coordinator: ()) {
-    view.player?.pause()
     view.player = nil
   }
 
@@ -482,8 +579,13 @@ private struct VideoView: NSViewRepresentable {
 /// title bar.
 private struct MediaWindow: NSViewRepresentable {
   let media: FilePreviewQuickLookView.Media
+  /// How far up from its bottom its controls go, for a video, which stay while the pointer's on
+  /// them.
+  let controlsHeight: CGFloat
   /// Told when the title bar shows or hides.
   let titleBarShown: (Bool) -> Void
+  /// Told once the window's fitted to it.
+  let fitted: () -> Void
 
   static let showDuration = 0.2
   static let hideDuration = 0.4
@@ -492,16 +594,19 @@ private struct MediaWindow: NSViewRepresentable {
   static let minimumSize = NSSize(width: 320, height: 200)
 
   func makeNSView(context: Context) -> WindowView {
-    WindowView(media: self.media)
+    WindowView(media: self.media, controlsHeight: self.controlsHeight)
   }
 
   func updateNSView(_ view: WindowView, context: Context) {
     view.titleBarShown = self.titleBarShown
+    view.fitted = self.fitted
   }
 
   final class WindowView: NSView {
     let media: FilePreviewQuickLookView.Media
+    let controlsHeight: CGFloat
     var titleBarShown: ((Bool) -> Void)?
+    var fitted: (() -> Void)?
     private var showsTitleBar = true
     /// Where the pointer was when it last moved, on the screen.
     private var pointer: NSPoint?
@@ -512,8 +617,9 @@ private struct MediaWindow: NSViewRepresentable {
     /// says it moved when it didn't.
     private static let pointerSlop: CGFloat = 2
 
-    init(media: FilePreviewQuickLookView.Media) {
+    init(media: FilePreviewQuickLookView.Media, controlsHeight: CGFloat) {
       self.media = media
+      self.controlsHeight = controlsHeight
       super.init(frame: .zero)
       // All of the window, title bar too, as it's resized.
       self.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self))
@@ -529,8 +635,13 @@ private struct MediaWindow: NSViewRepresentable {
       guard let window = self.window else {
         return
       }
-      // The picture under the title bar, which is see-through over it.
-      window.styleMask.insert(.fullSizeContentView)
+      // The picture under the title bar, which is see-through over it, in a window that stays as
+      // it was till it's fitted to it, rather than losing the title bar's height.
+      if !window.styleMask.contains(.fullSizeContentView) {
+        let frame = window.frame
+        window.styleMask.insert(.fullSizeContentView)
+        window.setFrame(frame, display: false)
+      }
       window.titlebarAppearsTransparent = true
       // Shown at first, so it's clear it's there, then out of the way.
       self.pointer = NSEvent.mouseLocation
@@ -573,8 +684,13 @@ private struct MediaWindow: NSViewRepresentable {
 
     /// Hides the title bar, unless the pointer's on it, to use its buttons.
     @objc private func hideTitleBarUnlessUsed() {
-      guard let window = self.window, let titleBar = self.titleBar,
-            !titleBar.convert(titleBar.bounds, to: nil).contains(window.convertPoint(fromScreen: NSEvent.mouseLocation)) else {
+      guard let window = self.window, let titleBar = self.titleBar else {
+        return
+      }
+      // Unless the pointer's on it, to use its buttons, or on a video's controls.
+      let pointer = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+      let controls = NSRect(x: 0, y: 0, width: window.frame.width, height: self.controlsHeight)
+      guard !titleBar.convert(titleBar.bounds, to: nil).contains(pointer), !controls.contains(pointer) else {
         return
       }
       self.showTitleBar(false)
@@ -607,11 +723,14 @@ private struct MediaWindow: NSViewRepresentable {
         return
       }
       let size = self.media.size
+      // Any size, now, rather than only as tall as the row it came in.
+      window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
       let room = NSSize(width: screen.visibleFrame.width * 2 / 3, height: screen.visibleFrame.height * 2 / 3)
       let scale = min(1, room.width / size.width, room.height / size.height)
       let fitted = NSSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
-      // As SwiftUI made it from the smallest the picture gets, with the title bar.
-      let minimum = window.contentMinSize
+      // The smallest the picture gets, with the title bar, which it's kept to once it's fitted.
+      let titleBar = window.frame.height - window.contentLayoutRect.height
+      let minimum = NSSize(width: max(window.contentMinSize.width, MediaWindow.minimumSize.width), height: max(window.contentMinSize.height, MediaWindow.minimumSize.height + titleBar))
       if fitted.width >= minimum.width && fitted.height >= minimum.height {
         window.contentAspectRatio = size
       }
@@ -622,7 +741,153 @@ private struct MediaWindow: NSViewRepresentable {
       var frame = NSRect(x: window.frame.midX - frameSize.width / 2, y: window.frame.midY - frameSize.height / 2, width: frameSize.width, height: frameSize.height)
       frame.origin.x = min(max(frame.minX, screen.visibleFrame.minX), screen.visibleFrame.maxX - frame.width)
       frame.origin.y = min(max(frame.minY, screen.visibleFrame.minY), screen.visibleFrame.maxY - frame.height)
+      // Which is done once it returns.
       window.setFrame(frame, display: true, animate: true)
+      self.fitted?()
+    }
+  }
+}
+
+/// The window around the row a picture, a video or audio comes in, and audio without a cover plays
+/// in: as tall as the row, and as wide as it's made, from a little wider than the row at first.
+private struct CompactWindow: NSViewRepresentable {
+  func makeNSView(context: Context) -> WindowView {
+    WindowView()
+  }
+
+  func updateNSView(_ view: WindowView, context: Context) {
+  }
+
+  static func dismantleNSView(_ view: WindowView, coordinator: ()) {
+    view.release()
+  }
+
+  final class WindowView: NSView {
+    private weak var sizedWindow: NSWindow?
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      guard let window = self.window else {
+        return
+      }
+      self.sizedWindow = window
+      let size = FilePreviewQuickLookView.compactSize
+      window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: size.height)
+      // The row and its title bar as one.
+      window.titlebarAppearsTransparent = true
+      window.titlebarSeparatorStyle = .none
+      let content = window.contentRect(forFrameRect: window.frame)
+      guard content.height != size.height else {
+        return
+      }
+      var frame = window.frameRect(forContentRect: NSRect(x: content.midX - size.width / 2, y: content.maxY - size.height, width: size.width, height: size.height))
+      if let screen = window.screen ?? NSScreen.main {
+        frame.origin.x = min(max(frame.minX, screen.visibleFrame.minX), screen.visibleFrame.maxX - frame.width)
+        frame.origin.y = min(max(frame.minY, screen.visibleFrame.minY), screen.visibleFrame.maxY - frame.height)
+      }
+      window.setFrame(frame, display: true, animate: window.isVisible)
+    }
+
+    /// Lets the window be any height again, for what's shown in place of the row, unless it's
+    /// audio without a cover, whose row takes its place.
+    func release() {
+      guard let window = self.sizedWindow else {
+        return
+      }
+      DispatchQueue.main.async {
+        guard let content = window.contentView, !Self.isShown(in: content) else {
+          return
+        }
+        window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        window.titlebarSeparatorStyle = .automatic
+      }
+    }
+
+    private static func isShown(in view: NSView) -> Bool {
+      view is WindowView || view.subviews.contains { self.isShown(in: $0) }
+    }
+  }
+}
+
+/// Makes the window at least so big, for a document shown in a window that was just big enough for
+/// the row it came in, as a file named like a picture, a video or audio that isn't one is.
+private struct WindowGrowth: NSViewRepresentable {
+  let size: CGSize
+
+  func makeNSView(context: Context) -> GrowthView {
+    GrowthView(size: self.size)
+  }
+
+  func updateNSView(_ view: GrowthView, context: Context) {
+  }
+
+  final class GrowthView: NSView {
+    let size: CGSize
+
+    init(size: CGSize) {
+      self.size = size
+      super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+      fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      guard let window = self.window else {
+        return
+      }
+      // A title bar of its own again, over a document.
+      window.titlebarAppearsTransparent = false
+      let content = window.contentRect(forFrameRect: window.frame)
+      guard content.width < self.size.width || content.height < self.size.height else {
+        return
+      }
+      let grown = NSSize(width: max(content.width, self.size.width), height: max(content.height, self.size.height))
+      var frame = window.frameRect(forContentRect: NSRect(x: content.midX - grown.width / 2, y: content.maxY - grown.height, width: grown.width, height: grown.height))
+      if let screen = window.screen ?? NSScreen.main {
+        frame.origin.x = min(max(frame.minX, screen.visibleFrame.minX), screen.visibleFrame.maxX - frame.width)
+        frame.origin.y = min(max(frame.minY, screen.visibleFrame.minY), screen.visibleFrame.maxY - frame.height)
+      }
+      window.setFrame(frame, display: true, animate: window.isVisible)
+    }
+  }
+}
+
+/// A video's controls, over a shade along its bottom, shown with the title bar, and while it's
+/// paused.
+private struct VideoControls: View {
+  let player: AVPlayer
+  let downloaded: [Range<Double>]
+  /// Whether the title bar's shown.
+  let shown: Bool
+
+  @State private var playback: MediaPlayback? = nil
+
+  var body: some View {
+    let visible = self.shown || self.playback?.isPlaying == false
+    ZStack(alignment: .bottom) {
+      LinearGradient(colors: [.black.opacity(0), .black.opacity(0.35), .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
+        .frame(height: 110)
+        .allowsHitTesting(false)
+      if let playback = self.playback {
+        MediaControls(playback: playback, downloaded: self.downloaded, large: true)
+          .foregroundStyle(.white)
+          .padding(.horizontal, 20)
+          .padding(.bottom, 14)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+    .opacity(visible ? 1 : 0)
+    // Out of the way when they're hidden, so the video can be dragged by its bottom too.
+    .allowsHitTesting(visible)
+    .animation(.easeOut(duration: MediaWindow.showDuration), value: self.playback?.isPlaying)
+    .task {
+      self.playback = MediaPlayback(player: self.player)
+    }
+    .onDisappear {
+      self.playback?.stop()
     }
   }
 }

@@ -42,14 +42,33 @@ struct PreviewFileInfo: Identifiable, Codable {
     return .unknown
   }
 
-  /// A picture, a PICT among them, or a video, going by its name, or its type for a PICT.
-  var isPictureOrVideo: Bool {
+  /// A picture, a PICT among them, a video, or audio, going by its name, or its type for a PICT.
+  var isMedia: Bool {
     switch self.previewType {
     case .image, .pict:
       return true
     case .text, .unknown:
-      return UTType(filenameExtension: (self.name as NSString).pathExtension)?.conforms(to: .movie) == true
+      return self.fileType?.conforms(to: .movie) == true || self.playableType != nil
     }
+  }
+
+  /// What audio or video is, when it can play as it comes from the server, and be skipped about
+  /// in, through the connection it's from.
+  var playableType: UTType? {
+    guard self.webURL == nil, !self.isArchive, self.hotlineID != nil, self.path != nil,
+          let type = self.fileType, type.conforms(to: .audiovisualContent), FilePreviewStream.canPlay(type) else {
+      return nil
+    }
+    return type
+  }
+
+  /// What it is, going by its name, or its type code, for a file without an extension.
+  private var fileType: UTType? {
+    var fileExtension = (self.name as NSString).pathExtension
+    if fileExtension.isEmpty, let type = self.type?.lowercased(), let typeExtension = FileManager.HFSTypeToExtension[type] {
+      fileExtension = typeExtension
+    }
+    return UTType(filenameExtension: fileExtension)
   }
 }
 

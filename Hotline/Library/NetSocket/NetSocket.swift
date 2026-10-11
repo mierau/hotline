@@ -331,6 +331,20 @@ public actor NetSocket {
     return Data(slice)
   }
   
+  /// Read up to `count` bytes, as soon as any are available, without waiting for all of them
+  ///
+  /// - Throws: `NetSocketError.closed` once the connection has closed and everything that came
+  ///   before has been read
+  public func read(upTo count: Int) async throws -> Data {
+    precondition(count > 0, "count must be > 0")
+    try await self.ensureReadable(1)
+    let amount = min(count, self.availableBytes)
+    let slice = self.buffer[self.head..<(self.head + amount)]
+    self.head += amount
+    self.didConsume()
+    return Data(slice)
+  }
+
   /// Read a fixed-width integer in the given byte order
   public func read<T: FixedWidthInteger>(_ type: T.Type = T.self, endian: Endian = .big) async throws -> T {
     let size = MemoryLayout<T>.size

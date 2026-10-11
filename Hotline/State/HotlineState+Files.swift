@@ -1104,6 +1104,32 @@ extension HotlineState {
     return try await reader.read(upTo: length)
   }
 
+  /// A transfer of a file from `offset` in its data fork, to read as it comes, as a preview that
+  /// plays while it downloads does.
+  @MainActor
+  func streamFile(_ fileName: String, path: [String], from offset: Int) async throws -> HotlineFileStream {
+    guard let client = self.client, let server = self.server else {
+      throw HotlineClientError.notConnected
+    }
+
+    var fullPath: [String] = []
+    if path.count > 1 {
+      fullPath = Array(path[0..<path.count-1])
+    }
+
+    guard let transfer = try await client.downloadFile(name: fileName, path: fullPath, dataOffset: offset) else {
+      throw HotlineClientError.invalidResponse
+    }
+    print("HotlineState: Transfer \(transfer.referenceNumber) for \(fileName) from \(offset), transfer size \(transfer.transferSize), waiting \(transfer.waitingCount)")
+    return HotlineFileStream(
+      address: server.address,
+      port: UInt16(server.port),
+      reference: transfer.referenceNumber,
+      size: transfer.transferSize,
+      fromStart: offset == 0
+    )
+  }
+
   /// A file's resource fork, up to `limit` bytes of it, without its data fork, which is
   /// `dataForkSize` long.
   @MainActor

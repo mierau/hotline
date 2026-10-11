@@ -472,8 +472,15 @@ struct Application: App {
     .windowResizability(.automatic)
     .windowStyle(.titleBar)
     .windowToolbarStyle(.unified(showsTitle: true))
-    .defaultSize(width: 450, height: 550)
-    .defaultPosition(.center)
+    // As big as what it shows first: just big enough for a picture's, a video's or audio's row as
+    // it comes, which the window grows from to fit what it is, and bigger for anything else.
+    .defaultWindowPlacement { content, _ in
+      let size = content.sizeThatFits(.unspecified)
+      guard size.width.isFinite, size.height.isFinite, size.width >= 300, size.height >= 80 else {
+        return WindowPlacement(.center, size: CGSize(width: 450, height: 498))
+      }
+      return WindowPlacement(.center, size: size)
+    }
     .restorationBehavior(.disabled)
   }
 

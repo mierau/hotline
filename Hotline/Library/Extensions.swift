@@ -49,12 +49,14 @@ extension FileManager {
 // MARK: -
 
 extension View {
-  @ViewBuilder
+  /// The window's document, once there's a file for it, from behind what it shows, so that isn't
+  /// made again when there is, as a video playing in it would stop.
   func applyNavigationDocumentIfPresent(_ url: URL?) -> some View {
-    if let url {
-      self.navigationDocument(url)
-    } else {
-      self
+    self.background {
+      if let url {
+        Color.clear
+          .navigationDocument(url)
+      }
     }
   }
 }
