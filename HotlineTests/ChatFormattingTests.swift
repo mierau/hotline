@@ -205,6 +205,33 @@ struct ChatFormattingTests {
     #expect(links.map(\.absoluteString) == ["https://example.com/a", "hotline://127.0.0.1:5500/files/Readme.txt"])
   }
 
+  // MARK: Emotes
+
+  @Test func emoteWithALinkIsAnEmote() {
+    let message = ChatMessage(text: "\r *** macro what in the world https://apple.com okay", type: .message, date: Date())
+    #expect(message.isEmote)
+    #expect(message.username == nil)
+    let text = ChatMessageRenderer.render(message)
+    #expect(text.string == "macro what in the world https://apple.com okay")
+    let link = text.attribute(.link, at: (text.string as NSString).range(of: "apple.com").location, effectiveRange: nil) as? URL
+    #expect(link?.absoluteString == "https://apple.com")
+  }
+
+  @Test func messageWithALinkKeepsItsSender() {
+    let message = ChatMessage(text: "macro: see https://apple.com", type: .message, date: Date())
+    #expect(!message.isEmote)
+    #expect(message.username == "macro")
+    #expect(message.text == "see https://apple.com")
+  }
+
+  @Test func savedEmoteWithALinkIsPutBack() {
+    // As one was saved before emotes were told apart first, split at the link's colon.
+    let entry = ChatStore.Entry(id: UUID(), body: "//apple.com okay", username: "*** macro what in the world https", type: "message", date: Date())
+    let message = ChatMessage(entry: entry)
+    #expect(message?.isEmote == true)
+    #expect(message?.text == "*** macro what in the world https://apple.com okay")
+  }
+
   // MARK: Links to files
 
   @Test func linksToFoldersShowAFolder() {

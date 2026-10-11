@@ -196,15 +196,24 @@ enum ChatMessageRenderer {
     let italic = NSFont(descriptor: self.baseFont.fontDescriptor.withSymbolicTraits(.italic), size: self.baseFont.pointSize) ?? self.baseFont
 
     // Without the "*** " that marks an emote.
-    let displayText = message.text.firstMatch(of: ChatMessage.emoteParser).map { String($0.1) } ?? message.text
-    return NSMutableAttributedString(
-      string: self.lineSeparated(displayText),
+    let displayText = self.lineSeparated(message.text.firstMatch(of: ChatMessage.emoteParser).map { String($0.1) } ?? message.text)
+    let text = NSMutableAttributedString(
+      string: displayText,
       attributes: [
         .font: italic,
         .foregroundColor: options.secondaryColor ?? NSColor.secondaryLabelColor,
         .paragraphStyle: paragraph,
       ]
     )
+    // Its links, as a message's are.
+    if self.mightHaveLinks(displayText) {
+      for link in displayText.detectedLinks() {
+        text.addAttributes([.link: link.url, .foregroundColor: self.linkColor], range: NSRange(link.range, in: displayText))
+      }
+      self.shortenLongLinks(in: text)
+      self.showFileLinks(in: text)
+    }
+    return text
   }
 
   /// What marks a line about someone in the icon column: an arrow, or an SF Symbol.

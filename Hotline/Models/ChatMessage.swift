@@ -91,19 +91,20 @@ struct ChatMessage: Identifiable {
     self.isAdmin = false
     self.metadata = nil
 
+    // An emote before a name and what they said, as one with a link in it has a colon too.
     if
-      type == .message,
-      let match = text.firstMatch(of: ChatMessage.parser) {
-      self.username = String(match.1)
-      self.text = String(match.2)
-      self.isEmote = false
-    }
-    else if
       type == .message,
       text.firstMatch(of: ChatMessage.emoteParser) != nil {
       self.username = nil
       self.text = text
       self.isEmote = true
+    }
+    else if
+      type == .message,
+      let match = text.firstMatch(of: ChatMessage.parser) {
+      self.username = String(match.1)
+      self.text = String(match.2)
+      self.isEmote = false
     }
     else {
       self.username = nil
@@ -131,7 +132,10 @@ extension ChatMessage {
       return nil
     }
     if type == .message, let username = entry.username, !username.isEmpty {
-      self.init(text: "\(username): \(entry.body)", type: type, date: entry.date)
+      // An emote with a link in it, saved before emotes were told apart first as if what came
+      // before the link's colon were a name, put back as it was.
+      let separator = username.firstMatch(of: ChatMessage.emoteParser) != nil && entry.body.hasPrefix("//") ? ":" : ": "
+      self.init(text: username + separator + entry.body, type: type, date: entry.date)
     }
     else {
       self.init(text: entry.body, type: type, date: entry.date)
