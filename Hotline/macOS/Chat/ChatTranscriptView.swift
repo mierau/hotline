@@ -24,9 +24,19 @@ struct ChatTranscriptView: NSViewRepresentable {
   var previewsImages = true
   /// Whether people connecting and disconnecting are shown, among the messages.
   var showsConnections = true
+  /// Asked for older messages, as the start of what's shown comes near.
+  var onNearStart: (() -> Void)?
+  /// Told when the view leaves the newest message, or comes back to it.
+  var onAtBottomChange: ((Bool) -> Void)?
+  /// Goes to the newest message each time this changes.
+  var scrollToNewest = 0
 
   func makeCoordinator() -> Coordinator {
     Coordinator()
+  }
+
+  static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+    coordinator.saveForLater()
   }
 
   func makeNSView(context: Context) -> NSScrollView {
@@ -51,7 +61,7 @@ struct ChatTranscriptView: NSViewRepresentable {
 
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     let coordinator = context.coordinator
-    coordinator.onCacheUpdate = self.isFiltered ? nil : self.onCacheUpdate
+    coordinator.onCacheUpdate = self.onCacheUpdate
     let theme = context.environment.serverTheme
     coordinator.options = ChatMessageRenderer.Options(showsIcons: self.showsIcons, previewsImages: self.previewsImages, showsConnections: self.showsConnections, adminColor: theme?.admin, secondaryColor: theme?.secondaryText, tertiaryColor: theme?.tertiaryText)
 
@@ -70,6 +80,12 @@ struct ChatTranscriptView: NSViewRepresentable {
       textView.highlights = ChatTranscriptTextView.Highlights(query: self.searchQuery, watchWords: self.watchWords)
     }
 
+    coordinator.onNearStart = self.onNearStart
+    coordinator.onAtBottomChange = self.onAtBottomChange
+    if self.scrollToNewest != coordinator.scrollToNewest {
+      coordinator.scrollToNewest = self.scrollToNewest
+      coordinator.scrollToBottom()
+    }
     coordinator.update(
       messages: self.messages,
       isFiltered: self.isFiltered,
@@ -77,6 +93,11 @@ struct ChatTranscriptView: NSViewRepresentable {
       cachedCount: self.isFiltered ? 0 : self.cachedCount
     )
     coordinator.textView?.updateHighlights()
+    // A chat too short to scroll starts in view, and needs no scrolling to ask for more.
+    DispatchQueue.main.async {
+      coordinator.checkNearStart()
+      coordinator.reportAtBottom()
+    }
   }
 
   // MARK: - Coordinator
@@ -87,6 +108,11 @@ struct ChatTranscriptView: NSViewRepresentable {
       didSet { self.observeScrolling() }
     }
     var onCacheUpdate: ((NSAttributedString, Int) -> Void)?
+    var onNearStart: (() -> Void)?
+    var onAtBottomChange: ((Bool) -> Void)?
+    var scrollToNewest = 0
+    /// Where the view was last said to be, which a new one always says.
+    private var wasAtBottom: Bool?
     /// How messages are shown. When the settings change, or the server's theme, every message is
     /// rendered again.
     var options = ChatMessageRenderer.Options() {
@@ -101,6 +127,11 @@ struct ChatTranscriptView: NSViewRepresentable {
       }
     }
     private var needsRebuild = false
+    /// Whether the text's being brought up to date, which scrolls through places that aren't where
+    /// it ends up.
+    private var isUpdating = false
+    /// Whether the text is search results, rather than the chat.
+    private var isShowingResults = false
 
     /// The messages in the text view, in order.
     private var renderedIDs: [UUID] = []
@@ -133,7 +164,31 @@ struct ChatTranscriptView: NSViewRepresentable {
       clipView.postsBoundsChangedNotifications = true
       self.scrollObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clipView, queue: .main) { [weak self] _ in
         self?.textView?.viewDidScroll()
+        self?.checkNearStart()
+        self?.reportAtBottom()
       }
+    }
+
+    /// Says when the view's left the newest message, or come back to it, once it's settled.
+    func reportAtBottom() {
+      guard let onAtBottomChange = self.onAtBottomChange, !self.isUpdating, let textView = self.textView else {
+        return
+      }
+      let atBottom = textView.isAtBottom
+      if atBottom != self.wasAtBottom {
+        self.wasAtBottom = atBottom
+        onAtBottomChange(atBottom)
+      }
+    }
+
+    /// Asks for older messages once the start of what's shown is within a couple of screens.
+    func checkNearStart() {
+      guard let onNearStart = self.onNearStart, !self.isUpdating, !self.renderedIDs.isEmpty,
+            let textView = self.textView, let clipView = self.scrollView?.contentView,
+            let distance = textView.distanceFromStart, distance < clipView.bounds.height * 2 else {
+        return
+      }
+      onNearStart()
     }
 
     /// A message's text, rendered once each way.
@@ -180,8 +235,16 @@ struct ChatTranscriptView: NSViewRepresentable {
       "icons \(self.options.showsIcons), previews \(self.options.previewsImages), connections \(self.options.showsConnections), admins \(self.options.adminColor?.description ?? "red"), secondary \(self.options.secondaryColor?.description ?? "system"), tertiary \(self.options.tertiaryColor?.description ?? "system")"
     }
 
+    /// Keeps the chat's text for when it's shown again, as it goes, rather than copying all of it
+    /// with each message.
+    func saveForLater() {
+      if let storage = self.textView?.textStorage {
+        self.saveText(storage)
+      }
+    }
+
     private func saveText(_ storage: NSTextStorage) {
-      guard let onCacheUpdate = self.onCacheUpdate else {
+      guard let onCacheUpdate = self.onCacheUpdate, !self.isShowingResults else {
         return
       }
       let text = NSMutableAttributedString(attributedString: storage)
@@ -204,6 +267,17 @@ struct ChatTranscriptView: NSViewRepresentable {
     /// Any other change, like restored history or search results, rebuilds the text.
     func update(messages: [ChatMessage], isFiltered: Bool, cachedText: NSAttributedString?, cachedCount: Int) {
       let messages = self.options.showsConnections ? messages : Self.withoutConnections(messages)
+      self.isUpdating = true
+      defer {
+        self.isUpdating = false
+      }
+      // The chat, kept before search results take its place, to come back to when they're gone.
+      if isFiltered, !self.isShowingResults, self.renderedCount > 0 {
+        self.saveForLater()
+      }
+      defer {
+        self.isShowingResults = isFiltered
+      }
       if self.needsRebuild {
         self.needsRebuild = false
         self.rebuild(messages: messages, isFiltered: isFiltered, cachedText: cachedText, cachedCount: cachedCount)
@@ -212,6 +286,9 @@ struct ChatTranscriptView: NSViewRepresentable {
         if dropped > 0 || messages.count > self.renderedCount - dropped {
           self.trimAndAppend(messages: messages, dropped: dropped, isFiltered: isFiltered)
         }
+      }
+      else if let added = self.addedToFront(of: messages) {
+        self.prepend(messages: messages, added: added, isFiltered: isFiltered)
       }
       else if !messages.isEmpty || !self.renderedIDs.isEmpty {
         self.rebuild(messages: messages, isFiltered: isFiltered, cachedText: cachedText, cachedCount: cachedCount)
@@ -256,6 +333,69 @@ struct ChatTranscriptView: NSViewRepresentable {
       return dropped
     }
 
+    /// How many messages are new at the front of `messages`, if the rendered ones follow them, in the
+    /// same order, maybe with new ones after. Nil for any other kind of change.
+    private func addedToFront(of messages: [ChatMessage]) -> Int? {
+      guard let firstID = self.renderedIDs.first, let lastID = self.renderedIDs.last,
+            let added = messages.firstIndex(where: { $0.id == firstID }), added > 0,
+            messages.count >= added + self.renderedCount,
+            messages[added + self.renderedCount - 1].id == lastID else {
+        return nil
+      }
+      return added
+    }
+
+    /// Puts older messages above the ones shown, keeping what's in view where it is, and adds any
+    /// new ones after.
+    private func prepend(messages: [ChatMessage], added: Int, isFiltered: Bool) {
+      guard let textView = self.textView, let storage = textView.textStorage else {
+        return
+      }
+      let readingPosition = textView.anchorAtStart()
+      textView.clearHoveredLink()
+
+      let front = NSMutableAttributedString()
+      for index in 0..<added {
+        front.append(self.rendered(messages[index], continuing: self.continues(messages, at: index, isFiltered: isFiltered)))
+        front.append(NSAttributedString(string: "\n"))
+      }
+
+      storage.beginEditing()
+      // The message that was first, which may now go on from the one before it.
+      var firstRange = NSRange(location: 0, length: 0)
+      var firstGrowth = 0
+      if storage.length > 0, self.continues(messages, at: added, isFiltered: isFiltered) {
+        _ = storage.attribute(ChatMessageRenderer.messageIDKey, at: 0, longestEffectiveRange: &firstRange, in: NSRange(location: 0, length: storage.length))
+        let first = self.rendered(messages[added], continuing: true)
+        storage.replaceCharacters(in: firstRange, with: first)
+        firstGrowth = first.length - firstRange.length
+      }
+      storage.insert(front, at: 0)
+      storage.endEditing()
+
+      self.renderedIDs.insert(contentsOf: messages[..<added].map(\.id), at: 0)
+      textView.textWasReplaced()
+      textView.invalidateToolTips()
+
+      // What was in view, back where it was, below what came in.
+      switch readingPosition {
+      case .message(let offset, let distance):
+        var moved = offset + front.length
+        if firstRange.length > 0, offset >= NSMaxRange(firstRange) {
+          moved += firstGrowth
+        }
+        textView.keep(inPlace: .message(offset: moved, distance: distance))
+      case .bottom:
+        self.scrollToBottom()
+      case .top:
+        break
+      }
+
+      if messages.count > self.renderedCount {
+        self.trimAndAppend(messages: messages, dropped: 0, isFiltered: isFiltered)
+      }
+    }
+
     private func rebuild(messages: [ChatMessage], isFiltered: Bool, cachedText: NSAttributedString?, cachedCount: Int) {
       guard let textView = self.textView, let storage = textView.textStorage else {
         return
@@ -280,7 +420,6 @@ struct ChatTranscriptView: NSViewRepresentable {
         }
         storage.setAttributedString(text)
         self.renderedIDs = messages.map(\.id)
-        self.saveText(storage)
       }
 
       self.renderedIDs = messages.map(\.id)
@@ -347,7 +486,6 @@ struct ChatTranscriptView: NSViewRepresentable {
 
       self.renderedIDs.removeFirst(dropped)
       self.renderedIDs.append(contentsOf: newMessages.map(\.id))
-      self.saveText(storage)
       textView.invalidateToolTips()
 
       if wasAtBottom {

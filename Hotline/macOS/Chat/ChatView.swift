@@ -17,6 +17,11 @@ struct ChatView: View {
   @State private var searchQuery: String = ""
   @State private var debouncedQuery: String = ""
   @State private var searchResults: [ChatMessage] = []
+  /// Whether a search of what's saved might find more, from before what it's found.
+  @State private var searchHasMore = false
+  @State private var isSearchingMore = false
+  /// Goes to the newest message each time it changes.
+  @State private var scrollToNewest = 0
   @State private var isSearching: Bool = false
   @State private var searchTask: Task<Void, Never>?
   @State private var stableBannerFileURL: URL?
@@ -116,19 +121,64 @@ struct ChatView: View {
         showsIcons: Prefs.shared.showChatIcons,
         previewsImages: Prefs.shared.previewChatImages,
         // A private chat's people coming and going are who's in it, so they're always shown.
-        showsConnections: self.chatID != nil || Prefs.shared.showJoinLeaveMessages
+        showsConnections: self.chatID != nil || Prefs.shared.showJoinLeaveMessages,
+        // Older chat, or older results, as they're scrolled back to.
+        onNearStart: self.chatID == nil ? {
+          if self.debouncedQuery.isEmpty {
+            Task {
+              await self.model.loadOlderChat()
+            }
+          }
+          else {
+            self.searchMore()
+          }
+        } : nil,
+        // Reading back through the chat, or at its newest again, rather than in search results.
+        onAtBottomChange: self.chatID == nil ? { atBottom in
+          guard self.debouncedQuery.isEmpty else {
+            return
+          }
+          if atBottom {
+            self.model.catchUpChat()
+          }
+          else {
+            self.model.startReadingBack()
+          }
+        } : nil,
+        scrollToNewest: self.scrollToNewest
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .ignoresSafeArea(edges: .top)
       .modifier(SoftTopScrollEdge())
+      .overlay(alignment: .bottom) {
+        if self.chatID == nil, self.debouncedQuery.isEmpty, self.model.newWhileReadingBack > 0 {
+          NewMessagesButton(count: self.model.newWhileReadingBack) {
+            self.scrollToNewest += 1
+          }
+          .padding(.bottom, 12)
+          .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+      }
+      .animation(.easeOut(duration: 0.2), value: self.model.newWhileReadingBack > 0)
       .onChange(of: self.messages.count) {
         if !self.searchQuery.isEmpty {
-          self.performSearch()
+          if self.searchesSaved {
+            self.addNewResults()
+          }
+          else {
+            self.performSearch()
+          }
         }
         self.markAsRead()
       }
       .onAppear {
         self.markAsRead()
+      }
+      // Messages come in as usual while the chat isn't shown.
+      .onDisappear {
+        if self.chatID == nil {
+          self.model.catchUpChat()
+        }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         VStack(spacing: 0) {
@@ -186,6 +236,11 @@ struct ChatView: View {
         if self.searchQuery.isEmpty {
           self.debouncedQuery = ""
           self.searchResults = []
+          self.searchHasMore = false
+          // The chat comes back at its newest.
+          if self.chatID == nil {
+            self.model.catchUpChat()
+          }
         } else {
           let delay: Int = 50
           self.searchTask = Task {
@@ -414,15 +469,99 @@ struct ChatView: View {
     
     let search = ChatSearch(self.searchQuery)
     let links = self.linkIndex
-    // The public chat with its history, or what's been said in the private one.
+    let showsConnections = Prefs.shared.showJoinLeaveMessages
+    // All of the public chat that's saved, the newest first, and more as it's scrolled back.
+    if self.searchesSaved, let key = self.model.chatSessionKey {
+      let query = self.searchQuery
+      self.searchTask = Task {
+        let found = await search.savedResults(for: key, links: links, showsConnections: showsConnections)
+        guard !Task.isCancelled, self.searchQuery == query else {
+          return
+        }
+        self.searchResults = found.messages
+        self.searchHasMore = found.more
+        self.debouncedQuery = query
+      }
+      return
+    }
+    // The public chat as it is, when none of it's saved, or what's been said in the private one.
     if self.chatID == nil {
-      let showsConnections = Prefs.shared.showJoinLeaveMessages
       self.searchResults = self.model.searchChat { (showsConnections || !$0.isConnection) && search.matches($0, links: links) }
     }
     else {
       self.searchResults = self.messages.searched { search.matches($0, links: links) }
     }
+    self.searchHasMore = false
     self.debouncedQuery = self.searchQuery
+  }
+
+  /// Whether a search looks through all of the chat that's saved, rather than only what's here.
+  private var searchesSaved: Bool {
+    self.chatID == nil && Prefs.shared.chatHistoryRetention != .never && self.model.chatSessionKey != nil
+  }
+
+  /// More of what a search of what's saved finds, from before what it's found, as its results
+  /// are scrolled back.
+  private func searchMore() {
+    guard self.searchHasMore, !self.isSearchingMore, self.searchesSaved, let key = self.model.chatSessionKey else {
+      return
+    }
+    let query = self.debouncedQuery
+    let results = self.searchResults
+    let links = self.linkIndex
+    self.isSearchingMore = true
+    Task {
+      let found = await ChatSearch(query).savedResults(for: key, before: results, links: links, showsConnections: Prefs.shared.showJoinLeaveMessages)
+      self.isSearchingMore = false
+      guard self.debouncedQuery == query, self.searchResults.first?.id == results.first?.id else {
+        return
+      }
+      self.searchResults = found.messages
+      self.searchHasMore = found.more
+    }
+  }
+
+  /// What a search of what's saved finds among the messages that come while it's shown, after
+  /// what it's found, without starting it again, which would lose its place.
+  private func addNewResults() {
+    guard !self.debouncedQuery.isEmpty, let last = self.searchResults.last else {
+      self.performSearch()
+      return
+    }
+    let search = ChatSearch(self.debouncedQuery)
+    let links = self.linkIndex
+    let showsConnections = Prefs.shared.showJoinLeaveMessages
+    let newer = self.messages.reversed().prefix { $0.date > last.date }.reversed().filter { message in
+      (showsConnections || !message.isConnection) && search.matches(message, links: links)
+    }
+    if !newer.isEmpty {
+      self.searchResults += newer
+    }
+  }
+}
+
+/// Says there are messages newer than what you're reading back through, and how many, and goes to
+/// them.
+private struct NewMessagesButton: View {
+  let count: Int
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: self.action) {
+      Label(self.count == 1 ? "1 New Message" : "\(self.count.formatted()) New Messages", systemImage: "arrow.down")
+        .font(.system(size: 12, weight: .medium))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+        .overlay {
+          Capsule()
+            .strokeBorder(.separator, lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .help("Show the Newest Messages")
   }
 }
 

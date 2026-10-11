@@ -1352,8 +1352,9 @@ extension ChatTranscriptTextView {
     if let height = self.textHeight, height < clipView.bounds.height, self.frame.height > height + 0.5 {
       super.setFrameSize(NSSize(width: self.frame.width, height: height))
     }
-    let toolbarRoom = max(0, self.toolbarHeight - self.textContainerInset.height)
-    scrollView.topInset = max(toolbarRoom, clipView.bounds.height - scrollView.contentInsets.bottom - self.frame.height)
+    // Below the toolbar, with the text's own margin under it, as there is above the input bar,
+    // rather than starting right at its edge.
+    scrollView.topInset = max(self.toolbarHeight, clipView.bounds.height - scrollView.contentInsets.bottom - self.frame.height)
   }
 
   /// Sets the text view's height to the text's, which NSTextView doesn't do during a live resize.
@@ -1402,6 +1403,57 @@ extension ChatTranscriptTextView {
     }
     let offset = contentStorage.offset(from: contentStorage.documentRange.location, to: fragment.rangeInElement.location)
     return .message(offset: offset, distance: fragment.layoutFragmentFrame.minY - visibleTop)
+  }
+
+  /// Where the message at the top of the view is, even at the start of the chat, to keep it there
+  /// as older messages come in above it.
+  func anchorAtStart() -> Anchor {
+    let anchor = self.anchor()
+    guard case .top = anchor, let clipView = self.clipView, let textLayoutManager = self.textLayoutManager,
+          let first = textLayoutManager.textLayoutFragment(for: textLayoutManager.documentRange.location) else {
+      return anchor
+    }
+    return .message(offset: 0, distance: first.layoutFragmentFrame.minY - self.visibleTopOfText(in: clipView))
+  }
+
+  /// After text's put in above what's in view, keeps that where `anchor` says. What came in is laid
+  /// out first, so its real height, rather than TextKit 2's estimate, moves what's below it.
+  func keep(inPlace anchor: Anchor) {
+    guard !self.isFitting, let textLayoutManager = self.textLayoutManager, let contentStorage = self.textContentStorage else {
+      return
+    }
+    self.isFitting = true
+    defer {
+      self.isFitting = false
+      self.layOutViewportIfScrolledPast()
+    }
+    if case .message(let offset, _) = anchor,
+       let location = contentStorage.location(contentStorage.documentRange.location, offsetBy: offset),
+       let above = NSTextRange(location: contentStorage.documentRange.location, end: location) {
+      textLayoutManager.ensureLayout(for: above)
+    }
+    self.layOut(around: anchor)
+    for _ in 0..<8 {
+      let height = self.frame.height
+      self.matchTextHeight()
+      self.fitInsets()
+      self.scroll(to: anchor)
+      textLayoutManager.textViewportLayoutController.layoutViewport()
+      self.matchTextHeight()
+      if abs(self.frame.height - height) < 0.5 {
+        break
+      }
+    }
+    self.fitInsets()
+    self.scroll(to: anchor)
+  }
+
+  /// How far the view is from the start of the chat.
+  var distanceFromStart: CGFloat? {
+    guard let clipView = self.clipView else {
+      return nil
+    }
+    return clipView.bounds.minY - self.scrollRange(in: clipView).lowerBound
   }
 
   /// Scrolls back to where an anchor says. If its message is gone, the oldest message left goes at

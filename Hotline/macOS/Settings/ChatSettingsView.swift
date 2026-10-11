@@ -7,6 +7,8 @@ struct ChatSettingsView: View {
   @State private var servers: [ChatStore.ServerListing] = []
   @State private var serverToDelete: ChatStore.ServerListing?
   @State private var showDeleteAllConfirmation: Bool = false
+  /// How long to keep chat for, when that's less than now, to ask about first.
+  @State private var shorterRetention: ChatHistoryRetention?
 
   var body: some View {
     @Bindable var preferences = Prefs.shared
@@ -114,6 +116,29 @@ struct ChatSettingsView: View {
       }
 
       Section("Chat History") {
+        Picker("Keep chat history", selection: Binding(
+          get: { preferences.chatHistoryRetention },
+          set: { retention in
+            // Deleting what's saved is asked about first.
+            if preferences.chatHistoryRetention.keepsMore(than: retention), !self.servers.isEmpty {
+              self.shorterRetention = retention
+            }
+            else {
+              self.keepHistory(for: retention)
+            }
+          }
+        )) {
+          ForEach(ChatHistoryRetention.allCases) { retention in
+            Text(retention.title)
+              .tag(retention)
+          }
+        }
+        if preferences.chatHistoryRetention == .forever {
+          Label("Chat is kept forever, so it'll slowly take up more space. You can clear it any time.", systemImage: "info.circle")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+
         if self.servers.isEmpty {
           Text("No chat history")
             .foregroundStyle(.secondary)
@@ -132,7 +157,7 @@ struct ChatSettingsView: View {
 
               Spacer()
 
-              Text("\(server.entryCount) messages")
+              Text(server.entryCount == 1 ? "1 message" : "\(server.entryCount.formatted()) messages")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -190,6 +215,33 @@ struct ChatSettingsView: View {
         Text("This will permanently delete your \(server.metadata.serverName ?? server.metadata.id) chat history. This cannot be undone.")
       }
     }
+    .confirmationDialog(
+      self.shorterRetention == .never ? "Delete all chat history?" : "Delete older chat history?",
+      isPresented: Binding(
+        get: { self.shorterRetention != nil },
+        set: { if !$0 { self.shorterRetention = nil } }
+      ),
+      titleVisibility: .visible
+    ) {
+      if let retention = self.shorterRetention {
+        Button("Delete", role: .destructive) {
+          self.keepHistory(for: retention)
+          self.shorterRetention = nil
+        }
+      }
+      Button("Cancel", role: .cancel) {
+        self.shorterRetention = nil
+      }
+    } message: {
+      if let retention = self.shorterRetention {
+        if retention == .never {
+          Text("All of your saved chat and private messages will be permanently deleted, and new ones won't be saved. This cannot be undone.")
+        }
+        else {
+          Text("Chat and private messages older than \(retention.phrase) will be permanently deleted. This cannot be undone.")
+        }
+      }
+    }
     .confirmationDialog("Clear all chat histories?", isPresented: self.$showDeleteAllConfirmation, titleVisibility: .visible) {
       Button("Clear All", role: .destructive) {
         Task {
@@ -202,6 +254,15 @@ struct ChatSettingsView: View {
       Text("This will permanently delete all of your chat history across all of the servers you've connected to. This cannot be undone.")
     }
     .task {
+      self.servers = await ChatStore.shared.listServers()
+    }
+  }
+
+  /// Keeps chat for `retention` from now on, deleting what's older.
+  private func keepHistory(for retention: ChatHistoryRetention) {
+    Prefs.shared.chatHistoryRetention = retention
+    Task {
+      await ChatStore.shared.setRetention(retention)
       self.servers = await ChatStore.shared.listServers()
     }
   }

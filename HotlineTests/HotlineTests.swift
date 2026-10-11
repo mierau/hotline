@@ -68,3 +68,28 @@ struct ChatKeepingTests {
     #expect(trimmed?.filter(\.isConnection).count == 1)
   }
 }
+
+struct ChatHistoryRetentionTests {
+  private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+  @Test func keepsChatForAsLongAsItSays() {
+    #expect(ChatHistoryRetention.never.cutoff(from: self.now) == self.now)
+    #expect(ChatHistoryRetention.day.cutoff(from: self.now) == Calendar.current.date(byAdding: .day, value: -1, to: self.now))
+    #expect(ChatHistoryRetention.week.cutoff(from: self.now) == Calendar.current.date(byAdding: .day, value: -7, to: self.now))
+    #expect(ChatHistoryRetention.year.cutoff(from: self.now) == Calendar.current.date(byAdding: .year, value: -1, to: self.now))
+    #expect(ChatHistoryRetention.forever.cutoff(from: self.now) == nil)
+  }
+
+  @Test func keepingItForLessIsAskedAbout() {
+    #expect(ChatHistoryRetention.forever.keepsMore(than: .month))
+    #expect(ChatHistoryRetention.week.keepsMore(than: .never))
+    #expect(!ChatHistoryRetention.day.keepsMore(than: .week))
+    #expect(!ChatHistoryRetention.month.keepsMore(than: .month))
+  }
+
+  @Test func savedLinesAreFoundWithoutCase() {
+    #expect(ChatStore.searchText(body: "ÉCLAIR time", username: "Mars") == "mars\néclair time")
+    #expect(ChatStore.searchText(body: "files/My%20Maps/", username: nil).contains("my maps"))
+    #expect(ChatStore.folded("Zoë") == "zoë")
+  }
+}

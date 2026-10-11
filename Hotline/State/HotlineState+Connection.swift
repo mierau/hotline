@@ -52,6 +52,11 @@ extension HotlineState {
     self.chat = []
     self.chatRenderedText = nil
     self.chatRenderedCount = 0
+    self.chatScrollback = 0
+    self.hasOlderChat = true
+    self.isReadingBack = false
+    self.newerChat = []
+    self.newWhileReadingBack = 0
     self.restoreChatHistory(for: key)
     print("HotlineState.login(): Chat session set up")
 
@@ -312,6 +317,11 @@ extension HotlineState {
     self.chat = []
     self.chatRenderedText = nil
     self.chatRenderedCount = 0
+    self.chatScrollback = 0
+    self.hasOlderChat = true
+    self.isReadingBack = false
+    self.newerChat = []
+    self.newWhileReadingBack = 0
     self.privateMessages = [:]
     self.unreadPrivateMessages = [:]
     self.restoredPrivatePeers = []

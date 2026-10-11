@@ -25,6 +25,30 @@ struct ChatSearch {
     }
     return !self.kinds.isEmpty && !links.kinds(in: message).isDisjoint(with: self.kinds)
   }
+
+  /// How many lines of what's saved a search finds at a time, before more are looked for.
+  static let savedPageSize = 100
+
+  /// A page of what's saved of a server's chat that this finds, the newest, or from before the
+  /// oldest of `results`, in front of them, as the chat shows them: oldest first, with the
+  /// dividers where sessions ended between them. And whether there might be more before.
+  @MainActor
+  func savedResults(for key: ChatStore.SessionKey, before results: [ChatMessage] = [], links: ChatLinkIndex, showsConnections: Bool) async -> (messages: [ChatMessage], more: Bool) {
+    let linkSearch: ChatStore.LinkSearch = self.kinds.contains(.file) ? .files : self.kinds.contains(.link) ? .links : .none
+    let first = results.first { $0.type != .signOut }
+    let entries = await ChatStore.shared.search(for: key, text: self.text, links: linkSearch, before: first?.date, limit: Self.savedPageSize)
+    guard let oldest = entries.last?.date, let newest = entries.first?.date else {
+      return (results, false)
+    }
+    // Told for itself, as for links what's saved only knows which lines might have them.
+    let found = entries.reversed().compactMap(ChatMessage.init(entry:)).filter { message in
+      (showsConnections || !message.isConnection) && self.matches(message, links: links)
+    }
+    let dividers = await ChatStore.shared.dividers(for: key, from: oldest, through: first?.date ?? newest).compactMap(ChatMessage.init(entry:))
+    let known = Set(results.map(\.id))
+    let page = (found + dividers).filter { !known.contains($0.id) }.sorted { $0.date < $1.date }
+    return ((page + results).searched { _ in true }, entries.count == Self.savedPageSize)
+  }
 }
 
 /// Which messages have links, and links to files, worked out once for each, since finding links

@@ -7,6 +7,10 @@ extension HotlineState {
   /// The most messages the chat keeps, and the most lines about people connecting and
   /// disconnecting among them, which don't count toward the messages, since they can be hidden.
   static let maxChatMessages = 2000
+  /// How much older chat's brought in at a time, as the chat's scrolled back: this many messages,
+  /// and the lines about people connecting and disconnecting among them. Few enough to show
+  /// within a frame, and enough to stay ahead of scrolling.
+  static let chatPageSize = 100
   /// How many of the oldest messages go at once when the chat passes its limit. Removing text
   /// from the top of the chat view makes it lay out everything below again, about as slow for
   /// one message as for a few hundred, so a batch at a time keeps that to every couple hundred
@@ -284,11 +288,28 @@ extension HotlineState {
     if skipDisplay && skipPersist { return }
 
     if display && !skipDisplay {
-      self.chat.append(message)
-      if self.chat.count > Self.maxChatMessages, let trimmed = Self.trimmed(self.chat, to: Self.maxChatMessages, batch: Self.chatTrimBatch) {
-        self.chat = trimmed
-        self.chatRenderedText = nil
-        self.chatRenderedCount = 0
+      if self.isReadingBack, message.type == .message {
+        self.newWhileReadingBack += 1
+      }
+      // With whatever's been scrolled back to.
+      let limit = Self.maxChatMessages + self.chatScrollback
+      // While you're reading back through a chat that's full, what comes waits, rather than pushing
+      // out what you're reading, and after anything else that's waiting.
+      if self.isReadingBack, !self.newerChat.isEmpty || Self.trimmed(self.chat + [message], to: limit) != nil {
+        self.newerChat.append(message)
+        if let trimmed = Self.trimmed(self.newerChat, to: Self.maxChatMessages, batch: Self.chatTrimBatch) {
+          self.newerChat = trimmed
+        }
+      }
+      else {
+        self.chat.append(message)
+        if self.chat.count > limit, let trimmed = Self.trimmed(self.chat, to: limit, batch: Self.chatTrimBatch) {
+          self.chatScrollback = max(0, self.chatScrollback - (self.chat.count - trimmed.count))
+          self.hasOlderChat = true
+          self.chat = trimmed
+          self.chatRenderedText = nil
+          self.chatRenderedCount = 0
+        }
       }
     }
 
@@ -376,13 +397,17 @@ extension HotlineState {
 
     Task { [weak self] in
       guard let self else { return }
-      let result = await ChatStore.shared.loadHistory(for: key)
+      // The newest of it, with room for more to come before the oldest are trimmed, and more as
+      // the chat's scrolled back.
+      let entries = await ChatStore.shared.loadPage(for: key, count: Self.maxChatMessages - Self.chatTrimBatch)
 
       await MainActor.run {
         guard self.chatSessionKey == key, self.restoredChatSessionKey != key else { return }
 
         let currentMessages = self.chat
-        let historyMessages = result.entries.compactMap(ChatMessage.init(entry:))
+        // Without what's come since, which is saved as it comes, so may be among it.
+        let current = Set(currentMessages.map(\.id))
+        let historyMessages = entries.compactMap(ChatMessage.init(entry:)).filter { !current.contains($0.id) }
 
         // Skip history that has no real content (only sign-out/divider messages)
         let hasContent = historyMessages.contains { $0.type != .signOut }
@@ -390,19 +415,81 @@ extension HotlineState {
 
         let combined = effectiveHistory + currentMessages
         self.chat = Self.trimmed(combined, to: Self.maxChatMessages) ?? combined
-        let lastMessage = historyMessages.last
-        self.lastPersistedMessageType = lastMessage?.type
-        self.lastPersistedMessageDate = lastMessage?.date
+        self.chatScrollback = 0
+        self.hasOlderChat = true
+        let lastEntry = entries.last
+        self.lastPersistedMessageType = lastEntry.flatMap { ChatMessageType(storageKey: $0.type) }
+        self.lastPersistedMessageDate = lastEntry?.date
         self.unreadPublicChat = false
         self.restoredChatSessionKey = key
       }
     }
   }
 
-  func handleChatHistoryCleared() {
-    self.chat = []
+  /// Brings in a page of chat from before what's shown, from what's saved, as the chat's scrolled
+  /// back to its start.
+  @MainActor
+  func loadOlderChat() async {
+    guard self.hasOlderChat, !self.isLoadingOlderChat, let key = self.chatSessionKey, let oldest = self.chat.first else {
+      return
+    }
+    self.isLoadingOlderChat = true
+    // One more, for the oldest that's here, which comes again.
+    let entries = await ChatStore.shared.loadPage(for: key, through: oldest.date, count: Self.chatPageSize + 1)
+    self.isLoadingOlderChat = false
+    // Only if the chat still starts there, on the same server.
+    guard self.chatSessionKey == key, self.chat.first?.id == oldest.id else {
+      return
+    }
+    // Without the lines that are here already, from the same moment as the oldest.
+    let here = Set(self.chat.prefix { $0.date <= oldest.date }.map(\.id))
+    let older = entries.compactMap(ChatMessage.init(entry:)).filter { !here.contains($0.id) }
+    guard !older.isEmpty else {
+      self.hasOlderChat = false
+      return
+    }
+    self.chat.insert(contentsOf: older, at: 0)
+    self.chatScrollback += older.count
     self.chatRenderedText = nil
     self.chatRenderedCount = 0
+  }
+
+  /// Reading back through the chat, from its newest.
+  func startReadingBack() {
+    guard !self.isReadingBack else {
+      return
+    }
+    self.isReadingBack = true
+    self.newWhileReadingBack = 0
+  }
+
+  /// Back at the newest of the chat, after reading back: what came meanwhile, after what was there,
+  /// and only as much as the chat usually keeps.
+  func catchUpChat() {
+    let wasReadingBack = self.isReadingBack
+    self.isReadingBack = false
+    if self.newWhileReadingBack != 0 {
+      self.newWhileReadingBack = 0
+    }
+    guard wasReadingBack, !self.newerChat.isEmpty || self.chatScrollback > 0 else {
+      return
+    }
+    let caughtUp = self.chat + self.newerChat
+    self.newerChat = []
+    self.chat = Self.trimmed(caughtUp, to: Self.maxChatMessages, batch: Self.chatTrimBatch) ?? caughtUp
+    self.chatScrollback = 0
+    self.hasOlderChat = true
+    self.chatRenderedText = nil
+    self.chatRenderedCount = 0
+  }
+
+  func handleChatHistoryCleared() {
+    self.chat = []
+    self.newerChat = []
+    self.chatRenderedText = nil
+    self.chatRenderedCount = 0
+    self.chatScrollback = 0
+    self.hasOlderChat = true
     self.unreadPublicChat = false
     self.restoredChatSessionKey = nil
     self.lastPersistedMessageType = nil

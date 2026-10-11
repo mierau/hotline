@@ -385,8 +385,23 @@ class HotlineState: Equatable {
   var broadcastMessage: String = ""
   var chat: [ChatMessage] = []
   var chatInput: String = ""
-  var chatRenderedText: NSAttributedString?
-  var chatRenderedCount: Int = 0
+  /// The chat's text as it was last shown, and how many messages it has, kept for when it's shown
+  /// again. Nothing needs to change when they do.
+  @ObservationIgnored var chatRenderedText: NSAttributedString?
+  @ObservationIgnored var chatRenderedCount: Int = 0
+  /// How much older chat's been brought in from what's saved, as the chat's scrolled back, which
+  /// is kept past the usual limit while you're here.
+  @ObservationIgnored var chatScrollback = 0
+  /// Whether there might be chat saved from before the oldest that's shown.
+  @ObservationIgnored var hasOlderChat = true
+  @ObservationIgnored var isLoadingOlderChat = false
+  /// Whether you're reading back through the chat, rather than at its newest.
+  @ObservationIgnored var isReadingBack = false
+  /// What came while you were reading back, once the chat was full, which waits here, as much of it
+  /// as the chat keeps, rather than pushing out what you're reading.
+  @ObservationIgnored var newerChat: [ChatMessage] = []
+  /// How many messages have come since you started reading back.
+  var newWhileReadingBack = 0
   var unreadPublicChat: Bool = false
 
   // Private Messages

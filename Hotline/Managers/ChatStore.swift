@@ -5,6 +5,8 @@ actor ChatStore {
   static let shared = ChatStore()
   static let historyClearedNotification = Notification.Name("ChatStoreHistoryCleared")
   static let serverHistoryClearedNotification = Notification.Name("ChatStoreServerHistoryCleared")
+  /// Chat older than it's kept was deleted, as when keeping it for less.
+  static let historyPrunedNotification = Notification.Name("ChatStoreHistoryPruned")
 
   struct SessionKey: Hashable, Codable {
     let address: String
@@ -68,7 +70,21 @@ actor ChatStore {
     let metadata: Metadata?
   }
 
-  private let maxEntries = 2000
+  /// Lines a search should look at for links, which it then tells for itself.
+  enum LinkSearch: Int32 {
+    case none = 0
+    /// Any that might have a link.
+    case links = 1
+    /// Any with a link to a server.
+    case files = 2
+  }
+
+  /// How long chat is kept: anything older is deleted, first thing, before any of it's read, then
+  /// every so often, and with never, nothing's saved.
+  private var retention = ChatHistoryRetention.saved
+  private var lastPruned: Date?
+  /// How often chat older than it's kept is looked for, as it's used.
+  private static let pruneInterval: TimeInterval = 60 * 60
 
   private var db: OpaquePointer?
   private var stmtUpsertServer: OpaquePointer?
@@ -76,15 +92,18 @@ actor ChatStore {
   private var stmtInsertEntry: OpaquePointer?
   private var stmtLoadEntries: OpaquePointer?
   private var stmtLoadMetadata: OpaquePointer?
-  private var stmtCountEntries: OpaquePointer?
-  private var stmtTrimEntries: OpaquePointer?
+  private var stmtPageStart: OpaquePointer?
+  private var stmtLoadPage: OpaquePointer?
+  private var stmtSearch: OpaquePointer?
+  private var stmtDividers: OpaquePointer?
   private var stmtUpdateMetadata: OpaquePointer?
   private var stmtLoadPrivateEntries: OpaquePointer?
-  private var stmtCountPrivateEntries: OpaquePointer?
-  private var stmtTrimPrivateEntries: OpaquePointer?
   private var stmtMarkPrivateRead: OpaquePointer?
 
   func append(entry: Entry, for key: SessionKey, serverName: String?, peerName: String? = nil) async {
+    guard self.retention != .never else {
+      return
+    }
     do {
       try openIfNeeded()
 
@@ -122,16 +141,13 @@ actor ChatStore {
         sqlite3_bind_null(stmt, 8)
       }
       sqlite3_bind_int(stmt, 9, entry.isRead ? 1 : 0)
+      sqlite3_bind_text(stmt, 10, Self.searchText(body: entry.body, username: entry.username), -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
 
       if sqlite3_step(stmt) != SQLITE_DONE {
         print("ChatStore: failed to insert entry —", errorMessage())
       }
 
-      if peerName != nil {
-        trimPrivateEntries(serverID: serverID, peerName: peerName!)
-      } else {
-        trimEntries(serverID: serverID, connections: entry.type == ChatMessageType.joined.storageKey || entry.type == ChatMessageType.left.storageKey)
-      }
+      self.pruneIfDue()
     }
     catch {
       print("ChatStore: failed to append entry —", error)
@@ -231,6 +247,7 @@ actor ChatStore {
   func loadHistory(for key: SessionKey, peerName: String? = nil, limit: Int? = nil) async -> LoadResult {
     do {
       try openIfNeeded()
+      self.pruneIfDue()
 
       guard let serverID = findServerID(key: key) else {
         return LoadResult(entries: [], metadata: nil)
@@ -250,6 +267,166 @@ actor ChatStore {
       print("ChatStore: failed to load history —", error)
       return LoadResult(entries: [], metadata: nil)
     }
+  }
+
+  /// Keeps chat for `retention`, deleting what's older now.
+  func setRetention(_ retention: ChatHistoryRetention) async {
+    self.retention = retention
+    self.prune()
+    await MainActor.run {
+      NotificationCenter.default.post(name: Self.historyPrunedNotification, object: nil)
+    }
+  }
+
+  /// Deletes chat older than it's kept, if it hasn't lately.
+  private func pruneIfDue() {
+    if self.lastPruned.map({ Date().timeIntervalSince($0) > Self.pruneInterval }) ?? true {
+      self.prune()
+    }
+  }
+
+  /// Deletes chat older than it's kept, and the servers with none left.
+  private func prune() {
+    self.lastPruned = Date()
+    guard let cutoff = self.retention.cutoff(from: Date()) else {
+      return
+    }
+    do {
+      try openIfNeeded()
+      var stmt: OpaquePointer?
+      guard sqlite3_prepare_v2(db, "DELETE FROM entries WHERE date < ?1", -1, &stmt, nil) == SQLITE_OK else {
+        print("ChatStore: failed to prepare prune —", errorMessage())
+        return
+      }
+      defer { sqlite3_finalize(stmt) }
+      sqlite3_bind_double(stmt, 1, cutoff.timeIntervalSince1970)
+      if sqlite3_step(stmt) != SQLITE_DONE {
+        print("ChatStore: failed to prune —", errorMessage())
+      }
+      try execute("DELETE FROM servers WHERE NOT EXISTS (SELECT 1 FROM entries WHERE entries.serverId = servers.id)")
+    }
+    catch {
+      print("ChatStore: failed to prune —", error)
+    }
+  }
+
+  /// Some of a server's chat, oldest first: its latest `count` messages from `date` back, or from
+  /// its newest, with the lines among them about people connecting and disconnecting, which don't
+  /// count toward them, as they can be hidden. Lines from `date` itself come too, so none are
+  /// missed among ones from the same moment.
+  func loadPage(for key: SessionKey, through date: Date? = nil, count: Int) async -> [Entry] {
+    do {
+      try openIfNeeded()
+      self.pruneIfDue()
+      guard let serverID = findServerID(key: key), let startStmt = stmtPageStart, let stmt = stmtLoadPage else {
+        return []
+      }
+      let end = date?.timeIntervalSince1970 ?? Double.greatestFiniteMagnitude
+      // From the oldest of those messages, or everything, when there aren't that many.
+      var start = -Double.greatestFiniteMagnitude
+      sqlite3_reset(startStmt)
+      sqlite3_bind_int(startStmt, 1, serverID)
+      sqlite3_bind_double(startStmt, 2, end)
+      sqlite3_bind_int(startStmt, 3, Int32(max(0, count - 1)))
+      if sqlite3_step(startStmt) == SQLITE_ROW {
+        start = sqlite3_column_double(startStmt, 0)
+      }
+      sqlite3_reset(startStmt)
+
+      sqlite3_reset(stmt)
+      sqlite3_bind_int(stmt, 1, serverID)
+      sqlite3_bind_double(stmt, 2, start)
+      sqlite3_bind_double(stmt, 3, end)
+      return self.readEntries(stmt)
+    }
+    catch {
+      print("ChatStore: failed to load a page of history —", error)
+      return []
+    }
+  }
+
+  /// What's known of a server, and how many lines of its chat are kept.
+  func summary(for key: SessionKey) async -> (metadata: Metadata?, count: Int) {
+    do {
+      try openIfNeeded()
+      self.pruneIfDue()
+      guard let serverID = findServerID(key: key) else {
+        return (nil, 0)
+      }
+      var stmt: OpaquePointer?
+      var count = 0
+      if sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM entries WHERE serverId = ?1 AND peerName IS NULL AND type != 'signOut'", -1, &stmt, nil) == SQLITE_OK {
+        sqlite3_bind_int(stmt, 1, serverID)
+        if sqlite3_step(stmt) == SQLITE_ROW {
+          count = Int(sqlite3_column_int(stmt, 0))
+        }
+      }
+      sqlite3_finalize(stmt)
+      return (self.loadServerMetadata(serverID: serverID), count)
+    }
+    catch {
+      print("ChatStore: failed to summarize history —", error)
+      return (nil, 0)
+    }
+  }
+
+  /// A server's chat that a search finds, newest first, at most `limit` lines from before `date`,
+  /// or from the newest: those with `text` in them, and for links, those that might have them,
+  /// for the search to tell for itself.
+  func search(for key: SessionKey, text: String, links: LinkSearch, before date: Date?, limit: Int) async -> [Entry] {
+    do {
+      try openIfNeeded()
+      self.pruneIfDue()
+      guard let serverID = findServerID(key: key), let stmt = stmtSearch else {
+        return []
+      }
+      sqlite3_reset(stmt)
+      sqlite3_bind_int(stmt, 1, serverID)
+      sqlite3_bind_double(stmt, 2, date?.timeIntervalSince1970 ?? Double.greatestFiniteMagnitude)
+      sqlite3_bind_text(stmt, 3, Self.folded(text), -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+      sqlite3_bind_int(stmt, 4, links.rawValue)
+      sqlite3_bind_int(stmt, 5, Int32(limit))
+      return self.readEntries(stmt)
+    }
+    catch {
+      print("ChatStore: failed to search history —", error)
+      return []
+    }
+  }
+
+  /// Where a server's sessions ended, from `start` through `end`, oldest first, to show between
+  /// what a search finds.
+  func dividers(for key: SessionKey, from start: Date, through end: Date) async -> [Entry] {
+    do {
+      try openIfNeeded()
+      guard let serverID = findServerID(key: key), let stmt = stmtDividers else {
+        return []
+      }
+      sqlite3_reset(stmt)
+      sqlite3_bind_int(stmt, 1, serverID)
+      sqlite3_bind_double(stmt, 2, start.timeIntervalSince1970)
+      sqlite3_bind_double(stmt, 3, end.timeIntervalSince1970)
+      return self.readEntries(stmt)
+    }
+    catch {
+      print("ChatStore: failed to load dividers —", error)
+      return []
+    }
+  }
+
+  /// What a line's found by: who said it, and what, with its links' escapes decoded too, so a
+  /// file's name finds a link to it, without case.
+  static func searchText(body: String, username: String?) -> String {
+    var text = username.map { "\($0)\n\(body)" } ?? body
+    if body.contains("%"), let decoded = body.removingPercentEncoding, decoded != body {
+      text += "\n" + decoded
+    }
+    return self.folded(text)
+  }
+
+  /// Text without case, as lines are searched.
+  static func folded(_ text: String) -> String {
+    text.folding(options: .caseInsensitive, locale: nil)
   }
 
   func clearAll() async {
@@ -275,6 +452,7 @@ actor ChatStore {
   func listServers() async -> [ServerListing] {
     do {
       try openIfNeeded()
+      self.pruneIfDue()
     } catch {
       print("ChatStore: failed to list servers —", error)
       return []
@@ -418,8 +596,13 @@ actor ChatStore {
     // Schema migration: add isRead column if missing
     try migrateAddIsRead()
 
+    try migrateAddSearchText()
+    try execute("CREATE INDEX IF NOT EXISTS idx_entries_date ON entries(date)")
+
     try prepareStatements()
     cleanupLegacyDirectory()
+    // Before any of it's read, so nothing older than it's kept for is shown.
+    self.pruneIfDue()
   }
 
   private func migrateAddPeerName() throws {
@@ -443,6 +626,60 @@ actor ChatStore {
     }
   }
 
+  /// What each line's found by, worked out once for the lines saved before it was kept, which the
+  /// database's version says has been done.
+  private func migrateAddSearchText() throws {
+    var versionStmt: OpaquePointer?
+    var version: Int32 = 0
+    if sqlite3_prepare_v2(db, "PRAGMA user_version", -1, &versionStmt, nil) == SQLITE_OK, sqlite3_step(versionStmt) == SQLITE_ROW {
+      version = sqlite3_column_int(versionStmt, 0)
+    }
+    sqlite3_finalize(versionStmt)
+    guard version < 1 else {
+      return
+    }
+
+    var checkStmt: OpaquePointer?
+    let rc = sqlite3_prepare_v2(db, "SELECT searchText FROM entries LIMIT 1", -1, &checkStmt, nil)
+    sqlite3_finalize(checkStmt)
+    if rc != SQLITE_OK {
+      try execute("ALTER TABLE entries ADD COLUMN searchText TEXT")
+    }
+    defer {
+      try? self.execute("PRAGMA user_version = 1")
+    }
+
+    var select: OpaquePointer?
+    var update: OpaquePointer?
+    guard sqlite3_prepare_v2(db, "SELECT rowid, body, username FROM entries WHERE searchText IS NULL", -1, &select, nil) == SQLITE_OK,
+          sqlite3_prepare_v2(db, "UPDATE entries SET searchText = ?1 WHERE rowid = ?2", -1, &update, nil) == SQLITE_OK else {
+      sqlite3_finalize(select)
+      throw StoreError.sqlError(errorMessage())
+    }
+    defer {
+      sqlite3_finalize(select)
+      sqlite3_finalize(update)
+    }
+    var rows: [(rowID: Int64, text: String)] = []
+    while sqlite3_step(select) == SQLITE_ROW {
+      guard let body = columnText(select, 1) else {
+        continue
+      }
+      rows.append((sqlite3_column_int64(select, 0), Self.searchText(body: body, username: columnText(select, 2))))
+    }
+    guard !rows.isEmpty else {
+      return
+    }
+    try execute("BEGIN")
+    for row in rows {
+      sqlite3_reset(update)
+      sqlite3_bind_text(update, 1, row.text, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+      sqlite3_bind_int64(update, 2, row.rowID)
+      sqlite3_step(update)
+    }
+    try execute("COMMIT")
+  }
+
   private func prepareStatements() throws {
     stmtUpsertServer = try prepare("""
       INSERT INTO servers (address, port, serverName, createdAt, updatedAt)
@@ -457,8 +694,8 @@ actor ChatStore {
     )
 
     stmtInsertEntry = try prepare("""
-      INSERT OR REPLACE INTO entries (id, serverId, body, username, type, date, metadata, peerName, isRead)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+      INSERT OR REPLACE INTO entries (id, serverId, body, username, type, date, metadata, peerName, isRead, searchText)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
       """)
 
     stmtLoadEntries = try prepare("""
@@ -470,17 +707,34 @@ actor ChatStore {
       "SELECT address, port, serverName, createdAt, updatedAt FROM servers WHERE id = ?1"
     )
 
-    // Counted and trimmed by kind: lines about people connecting and disconnecting, when ?2 (or
-    // ?3) is 1, and everything else, when it's 0, so as many of each are kept, as the chat can
-    // hide the first.
-    stmtCountEntries = try prepare(
-      "SELECT COUNT(*) FROM entries WHERE serverId = ?1 AND peerName IS NULL AND (type IN ('joined', 'left')) = ?2"
-    )
+    // The oldest of a page's messages, the ?3rd before the newest through ?2, not counting lines
+    // about people connecting and disconnecting.
+    stmtPageStart = try prepare("""
+      SELECT date FROM entries
+      WHERE serverId = ?1 AND peerName IS NULL AND type NOT IN ('joined', 'left') AND date <= ?2
+      ORDER BY date DESC LIMIT 1 OFFSET ?3
+      """)
 
-    stmtTrimEntries = try prepare("""
-      DELETE FROM entries WHERE id IN (
-        SELECT id FROM entries WHERE serverId = ?1 AND peerName IS NULL AND (type IN ('joined', 'left')) = ?3 ORDER BY date ASC LIMIT ?2
-      )
+    stmtLoadPage = try prepare("""
+      SELECT id, body, username, type, date, metadata
+      FROM entries WHERE serverId = ?1 AND peerName IS NULL AND date >= ?2 AND date <= ?3 ORDER BY date ASC
+      """)
+
+    // Lines with ?3 in them, or for links, ?4 of 1, any that might have one, or for files, 2, a
+    // link to a server, newest first.
+    stmtSearch = try prepare("""
+      SELECT id, body, username, type, date, metadata
+      FROM entries
+      WHERE serverId = ?1 AND peerName IS NULL AND date < ?2 AND type NOT IN ('signOut', 'agreement')
+        AND (instr(searchText, ?3) > 0
+          OR (?4 = 1 AND (instr(body, '.') > 0 OR instr(body, '@') > 0))
+          OR (?4 = 2 AND instr(lower(body), 'hotline://') > 0))
+      ORDER BY date DESC LIMIT ?5
+      """)
+
+    stmtDividers = try prepare("""
+      SELECT id, body, username, type, date, metadata
+      FROM entries WHERE serverId = ?1 AND peerName IS NULL AND type = 'signOut' AND date >= ?2 AND date <= ?3 ORDER BY date ASC
       """)
 
     stmtUpdateMetadata = try prepare(
@@ -490,16 +744,6 @@ actor ChatStore {
     stmtLoadPrivateEntries = try prepare("""
       SELECT id, body, username, type, date, metadata, isRead
       FROM entries WHERE serverId = ?1 AND peerName = ?2 ORDER BY date DESC
-      """)
-
-    stmtCountPrivateEntries = try prepare(
-      "SELECT COUNT(*) FROM entries WHERE serverId = ?1 AND peerName = ?2"
-    )
-
-    stmtTrimPrivateEntries = try prepare("""
-      DELETE FROM entries WHERE id IN (
-        SELECT id FROM entries WHERE serverId = ?1 AND peerName = ?2 ORDER BY date ASC LIMIT ?3
-      )
       """)
 
     stmtMarkPrivateRead = try prepare(
@@ -528,10 +772,9 @@ actor ChatStore {
   private func closeDatabase() {
     let stmts: [OpaquePointer?] = [
       stmtUpsertServer, stmtGetServerID, stmtInsertEntry,
-      stmtLoadEntries, stmtLoadMetadata, stmtCountEntries,
-      stmtTrimEntries, stmtUpdateMetadata,
-      stmtLoadPrivateEntries, stmtCountPrivateEntries, stmtTrimPrivateEntries,
-      stmtMarkPrivateRead
+      stmtLoadEntries, stmtLoadMetadata, stmtPageStart,
+      stmtLoadPage, stmtSearch, stmtDividers, stmtUpdateMetadata,
+      stmtLoadPrivateEntries, stmtMarkPrivateRead
     ]
     for stmt in stmts {
       sqlite3_finalize(stmt)
@@ -541,12 +784,12 @@ actor ChatStore {
     stmtInsertEntry = nil
     stmtLoadEntries = nil
     stmtLoadMetadata = nil
-    stmtCountEntries = nil
-    stmtTrimEntries = nil
+    stmtPageStart = nil
+    stmtLoadPage = nil
+    stmtSearch = nil
+    stmtDividers = nil
     stmtUpdateMetadata = nil
     stmtLoadPrivateEntries = nil
-    stmtCountPrivateEntries = nil
-    stmtTrimPrivateEntries = nil
     stmtMarkPrivateRead = nil
 
     if let db {
@@ -595,53 +838,21 @@ actor ChatStore {
     return nil
   }
 
-  /// Keeps the latest `maxEntries` of the kind that was just added: lines about people connecting
-  /// and disconnecting, or everything else.
-  private func trimEntries(serverID: Int32, connections: Bool) {
-    guard let countStmt = stmtCountEntries else { return }
-    sqlite3_reset(countStmt)
-    sqlite3_bind_int(countStmt, 1, serverID)
-    sqlite3_bind_int(countStmt, 2, connections ? 1 : 0)
-
-    guard sqlite3_step(countStmt) == SQLITE_ROW else { return }
-    let count = Int(sqlite3_column_int(countStmt, 0))
-
-    guard count > maxEntries else { return }
-    let excess = count - maxEntries
-
-    guard let trimStmt = stmtTrimEntries else { return }
-    sqlite3_reset(trimStmt)
-    sqlite3_bind_int(trimStmt, 1, serverID)
-    sqlite3_bind_int(trimStmt, 2, Int32(excess))
-    sqlite3_bind_int(trimStmt, 3, connections ? 1 : 0)
-    sqlite3_step(trimStmt)
-  }
-
-  private func trimPrivateEntries(serverID: Int32, peerName: String) {
-    guard let countStmt = stmtCountPrivateEntries else { return }
-    sqlite3_reset(countStmt)
-    sqlite3_bind_int(countStmt, 1, serverID)
-    sqlite3_bind_text(countStmt, 2, peerName, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
-
-    guard sqlite3_step(countStmt) == SQLITE_ROW else { return }
-    let count = Int(sqlite3_column_int(countStmt, 0))
-
-    guard count > maxEntries else { return }
-    let excess = count - maxEntries
-
-    guard let trimStmt = stmtTrimPrivateEntries else { return }
-    sqlite3_reset(trimStmt)
-    sqlite3_bind_int(trimStmt, 1, serverID)
-    sqlite3_bind_text(trimStmt, 2, peerName, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
-    sqlite3_bind_int(trimStmt, 3, Int32(excess))
-    sqlite3_step(trimStmt)
-  }
-
   private func loadEntries(serverID: Int32, limit: Int?) -> [Entry] {
     guard let stmt = stmtLoadEntries else { return [] }
     sqlite3_reset(stmt)
     sqlite3_bind_int(stmt, 1, serverID)
 
+    let entries = self.readEntries(stmt)
+    if let limit, limit < entries.count {
+      return Array(entries.suffix(limit))
+    }
+    return entries
+  }
+
+  /// The lines a query gives, as id, body, username, type, date and metadata.
+  private func readEntries(_ stmt: OpaquePointer) -> [Entry] {
+    defer { sqlite3_reset(stmt) }
     let decoder = JSONDecoder()
     var entries: [Entry] = []
 
@@ -670,10 +881,6 @@ actor ChatStore {
         date: date,
         metadata: entryMetadata
       ))
-    }
-
-    if let limit, limit < entries.count {
-      return Array(entries.suffix(limit))
     }
     return entries
   }

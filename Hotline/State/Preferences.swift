@@ -128,6 +128,7 @@ enum PrefsKeys: String {
   case showJoinLeaveMessages = "show join leave messages"
   case showChatIcons = "show chat icons"
   case previewChatImages = "preview chat images"
+  case chatHistoryRetention = "chat history retention"
   case downloadFolderBookmark = "download folder bookmark"
   case filesViewMode = "files view mode"
   case boardPostSize = "board post size"
@@ -169,6 +170,7 @@ class Prefs {
       PrefsKeys.showJoinLeaveMessages.rawValue: true,
       PrefsKeys.showChatIcons.rawValue: true,
       PrefsKeys.previewChatImages.rawValue: true,
+      PrefsKeys.chatHistoryRetention.rawValue: ChatHistoryRetention.standard.rawValue,
       PrefsKeys.filesViewMode.rawValue: "grid",
       PrefsKeys.showRecentServers.rawValue: true,
       PrefsKeys.hasCompletedOnboarding.rawValue: false,
@@ -200,6 +202,7 @@ class Prefs {
     self.showJoinLeaveMessages = UserDefaults.standard.bool(forKey: PrefsKeys.showJoinLeaveMessages.rawValue)
     self.showChatIcons = UserDefaults.standard.bool(forKey: PrefsKeys.showChatIcons.rawValue)
     self.previewChatImages = UserDefaults.standard.bool(forKey: PrefsKeys.previewChatImages.rawValue)
+    self.chatHistoryRetention = ChatHistoryRetention.saved
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
     self.boardPostSize = UserDefaults.standard.string(forKey: PrefsKeys.boardPostSize.rawValue) ?? ""
@@ -337,6 +340,11 @@ class Prefs {
     didSet { UserDefaults.standard.set(self.previewChatImages, forKey: PrefsKeys.previewChatImages.rawValue) }
   }
 
+  /// How long chat, and private messages, are kept on this Mac, for when you're back.
+  var chatHistoryRetention: ChatHistoryRetention {
+    didSet { UserDefaults.standard.set(self.chatHistoryRetention.rawValue, forKey: PrefsKeys.chatHistoryRetention.rawValue) }
+  }
+
   var filesViewMode: String {
     didSet { UserDefaults.standard.set(self.filesViewMode, forKey: PrefsKeys.filesViewMode.rawValue) }
   }
@@ -426,4 +434,67 @@ class Prefs {
     return url.lastPathComponent
   }
 
+}
+
+/// How long chat, and private messages, are kept on this Mac, for when you're back on a server.
+enum ChatHistoryRetention: String, CaseIterable, Identifiable, Sendable {
+  case never
+  case day
+  case week
+  case month
+  case year
+  case forever
+
+  static let standard = ChatHistoryRetention.year
+
+  /// As it's set, which can be read from anywhere.
+  static var saved: ChatHistoryRetention {
+    UserDefaults.standard.string(forKey: PrefsKeys.chatHistoryRetention.rawValue).flatMap(ChatHistoryRetention.init(rawValue:)) ?? .standard
+  }
+
+  var id: String {
+    self.rawValue
+  }
+
+  var title: String {
+    switch self {
+    case .never: "Never"
+    case .day: "1 Day"
+    case .week: "1 Week"
+    case .month: "1 Month"
+    case .year: "1 Year"
+    case .forever: "Forever"
+    }
+  }
+
+  /// How long, in a sentence: chat older than a week.
+  var phrase: String {
+    switch self {
+    case .never: "now"
+    case .day: "a day"
+    case .week: "a week"
+    case .month: "a month"
+    case .year: "a year"
+    case .forever: "ever"
+    }
+  }
+
+  /// The oldest chat that's kept, as of `now`, or nil when it's all kept.
+  func cutoff(from now: Date) -> Date? {
+    let calendar = Calendar.current
+    switch self {
+    case .never: return now
+    case .day: return calendar.date(byAdding: .day, value: -1, to: now)
+    case .week: return calendar.date(byAdding: .day, value: -7, to: now)
+    case .month: return calendar.date(byAdding: .month, value: -1, to: now)
+    case .year: return calendar.date(byAdding: .year, value: -1, to: now)
+    case .forever: return nil
+    }
+  }
+
+  /// Whether changing to `other` deletes chat this keeps.
+  func keepsMore(than other: ChatHistoryRetention) -> Bool {
+    let order = Self.allCases
+    return order.firstIndex(of: self)! > order.firstIndex(of: other)!
+  }
 }

@@ -89,8 +89,8 @@ struct ChatMessage: Identifiable {
     self.type == .joined || self.type == .left
   }
 
-  init(text: String, type: ChatMessageType, date: Date) {
-    self.id = UUID()
+  init(text: String, type: ChatMessageType, date: Date, id: UUID = UUID()) {
+    self.id = id
     self.type = type
     self.date = date
     self.iconID = nil
@@ -141,10 +141,10 @@ extension ChatMessage {
       // An emote with a link in it, saved before emotes were told apart first as if what came
       // before the link's colon were a name, put back as it was.
       let separator = username.firstMatch(of: ChatMessage.emoteParser) != nil && entry.body.hasPrefix("//") ? ":" : ": "
-      self.init(text: username + separator + entry.body, type: type, date: entry.date)
+      self.init(text: username + separator + entry.body, type: type, date: entry.date, id: entry.id)
     }
     else {
-      self.init(text: entry.body, type: type, date: entry.date)
+      self.init(text: entry.body, type: type, date: entry.date, id: entry.id)
     }
     self.metadata = entry.metadata
     self.iconID = entry.metadata?.iconID
