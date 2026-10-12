@@ -1,5 +1,4 @@
 import SwiftUI
-import Textual
 import AppKit
 import Observation
 
@@ -58,13 +57,8 @@ struct AppUpdateView: View {
   
   private var releaseNotesSection: some View {
     ScrollView(.vertical) {
-      StructuredText(markdown: releaseNotesMarkdown())
-        .textual.structuredTextStyle(.gitHub)
-        .textual.textSelection(.enabled)
-        .font(.system(size: 12))
+      MarkdownText(text: releaseNotesMarkdown(), layout: Markdown.Layout(font: .systemFont(ofSize: 12), lineSpacing: 3), inset: NSSize(width: 12, height: 12))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 12)
-        .padding(.horizontal, 12)
     }
     .frame(minHeight: 220, maxHeight: 260)
     .background(

@@ -2,14 +2,15 @@ import AppKit
 import Kingfisher
 import UniformTypeIdentifiers
 
-/// Small previews of images linked in chat, shown under the message.
+/// Small previews of linked images, shown under the line with the link, in chat, on the board, in
+/// the news and in private messages.
 ///
-/// Each preview is a text attachment backed by a view, which TextKit 2 only creates while the
-/// message is on screen, so a long chat full of image links costs nothing until you scroll to them.
+/// Each preview is a text attachment backed by a view, which TextKit 2 only creates while the line
+/// is on screen, so a long chat full of image links costs nothing until you scroll to them.
 ///
-/// Previews are kept on disk once they've loaded, and so is each image's size, so when the chat
-/// opens again they show straight away, at their real size, without downloading again.
-enum ChatImagePreview {
+/// Previews are kept on disk once they've loaded, and so is each image's size, so when they're
+/// shown again they show straight away, at their real size, without downloading again.
+enum ImagePreview {
   /// Previews fit within this. Smaller images show at their own size, and tall ones, like a phone's
   /// screenshots, have room to be more than a sliver.
   static let maximumSize = CGSize(width: 240, height: 200)
@@ -35,7 +36,7 @@ enum ChatImagePreview {
   }
 
   /// In the app's Caches folder, which macOS can clear when space runs low. A preview that's gone
-  /// downloads again.
+  /// downloads again. Named for chat, where previews were first, so the ones kept then still are.
   private static let directory = URL.cachesDirectory
     .appending(path: Bundle.main.bundleIdentifier ?? "Hotline", directoryHint: .isDirectory)
     .appending(path: "Chat Image Previews", directoryHint: .isDirectory)
@@ -54,23 +55,23 @@ enum ChatImagePreview {
   }()
 
   /// The sizes of images previewed before.
-  static let sizes = ChatImagePreviewSizes(fileURL: directory.appending(path: "Sizes.plist", directoryHint: .notDirectory))
+  static let sizes = ImagePreviewSizes(fileURL: directory.appending(path: "Sizes.plist", directoryHint: .notDirectory))
 
   /// Links whose image couldn't be had, which aren't shown or tried again for a while.
-  static let failures = ChatImagePreviewFailures(fileURL: directory.appending(path: "Failures.plist", directoryHint: .notDirectory))
+  static let failures = ImagePreviewFailures(fileURL: directory.appending(path: "Failures.plist", directoryHint: .notDirectory))
 
   /// Downloads previews, turning away anything that isn't an image or is too big to be worth it.
   static let downloader: ImageDownloader = {
     let downloader = ImageDownloader(name: "Chat Image Previews")
     downloader.downloadTimeout = 20
-    downloader.delegate = ChatImageDownloadCheck.shared
+    downloader.delegate = ImageDownloadCheck.shared
     return downloader
   }()
 }
 
 /// Checks each preview's response before its data downloads.
-private final class ChatImageDownloadCheck: ImageDownloaderDelegate {
-  static let shared = ChatImageDownloadCheck()
+private final class ImageDownloadCheck: ImageDownloaderDelegate {
+  static let shared = ImageDownloadCheck()
 
   /// Bigger images don't download at all.
   private let sizeLimit: Int64 = 10 * 1024 * 1024
@@ -89,7 +90,7 @@ private final class ChatImageDownloadCheck: ImageDownloaderDelegate {
 /// Links whose image couldn't be had: while the app's open, and when the server said no, as long
 /// after as a preview that loaded is kept. One that couldn't be reached, which may be there next
 /// time, gets another try once the app opens again.
-final class ChatImagePreviewFailures: @unchecked Sendable {
+final class ImagePreviewFailures: @unchecked Sendable {
   private let fileURL: URL
   /// How long a link the server said no to isn't tried again.
   private let keepFor: TimeInterval
@@ -171,7 +172,7 @@ final class ChatImagePreviewFailures: @unchecked Sendable {
 
 /// The sizes of images previewed before, by link, so a preview is its real size from the start
 /// instead of growing into it when its image loads.
-final class ChatImagePreviewSizes: @unchecked Sendable {
+final class ImagePreviewSizes: @unchecked Sendable {
   private struct Entry {
     var size: CGSize
     var added: TimeInterval
@@ -267,21 +268,65 @@ final class ChatImagePreviewSizes: @unchecked Sendable {
   }
 }
 
+// MARK: - Text Views
+
+/// A text view showing links and previews of images, which knows what clicking them does.
+@MainActor
+protocol LinkActions: AnyObject {
+  /// Opens a link, as clicking it does.
+  var openURLAction: ((URL) -> Void)? { get }
+  /// Opens an image in a preview window, as clicking its preview does.
+  var openImageAction: ((URL) -> Void)? { get }
+  /// After a preview's grown, or shrunk, to fit its image, or gone.
+  func previewDidResize()
+}
+
+extension LinkActions {
+  /// What can be done with a link to an image, for its preview's menu: open the image in a preview
+  /// window, or the link the way a click on it does, or copy it, as macOS's menu for a link has.
+  func linkMenuItems(for url: URL) -> [NSMenuItem] {
+    var items: [NSMenuItem] = []
+    if let openImage = self.openImageAction {
+      items.append(ChatMenuItem("Open Image", systemImage: "photo") {
+        openImage(url)
+      })
+    }
+    let open = self.openURLAction
+    items.append(ChatMenuItem("Open Link", systemImage: "arrow.up.forward.app") {
+      if let open {
+        open(url)
+      }
+      else {
+        NSWorkspace.shared.open(url)
+      }
+    })
+    items.append(ChatMenuItem("Copy Link", systemImage: "link") {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    })
+    return items
+  }
+}
+
 // MARK: - Attachment
 
 /// A link to an image, shown as a preview.
-final class ChatImageAttachment: NSTextAttachment {
+final class ImageAttachment: NSTextAttachment {
   let url: URL
+  /// Whether it's all there is of its link, for an image written as one, ![like this](where it is),
+  /// rather than a preview under a link that's there too.
+  let standsForLink: Bool
   /// The image's size in pixels, once it's known, from loading it now or before.
   var imageSize: CGSize?
   /// Whether the preview takes up any room: from the start for an image that's loaded before, or
   /// else once its image starts to come in, so a link to one that can't be had shows nothing.
   var isShown: Bool
 
-  init(url: URL) {
+  init(url: URL, standsForLink: Bool = false) {
     self.url = url
-    self.imageSize = ChatImagePreview.sizes.size(for: url)
-    self.isShown = self.imageSize != nil && !ChatImagePreview.failures.contains(url)
+    self.standsForLink = standsForLink
+    self.imageSize = ImagePreview.sizes.size(for: url)
+    self.isShown = self.imageSize != nil && !ImagePreview.failures.contains(url)
     super.init(data: nil, ofType: nil)
     self.allowsTextAttachmentView = true
   }
@@ -297,7 +342,7 @@ final class ChatImageAttachment: NSTextAttachment {
   }
 
   override func viewProvider(for parentView: NSView?, location: any NSTextLocation, textContainer: NSTextContainer?) -> NSTextAttachmentViewProvider? {
-    let provider = ChatImagePreviewProvider(
+    let provider = ImagePreviewProvider(
       textAttachment: self,
       parentView: parentView,
       textLayoutManager: textContainer?.textLayoutManager,
@@ -308,16 +353,16 @@ final class ChatImageAttachment: NSTextAttachment {
   }
 
   var previewSize: CGSize {
-    ChatImagePreview.previewSize(forImageSize: self.imageSize)
+    ImagePreview.previewSize(forImageSize: self.imageSize)
   }
 }
 
-final class ChatImagePreviewProvider: NSTextAttachmentViewProvider {
+final class ImagePreviewProvider: NSTextAttachmentViewProvider {
   override func loadView() {
-    guard let attachment = self.textAttachment as? ChatImageAttachment else {
+    guard let attachment = self.textAttachment as? ImageAttachment else {
       return
     }
-    let view = ChatImagePreviewView(url: attachment.url)
+    let view = ImagePreviewView(url: attachment.url)
     view.showsPlaceholder = attachment.isShown
     view.onStart = { [weak self] in
       self?.show()
@@ -339,7 +384,7 @@ final class ChatImagePreviewProvider: NSTextAttachmentViewProvider {
     position: CGPoint
   ) -> CGRect {
     // A point, rather than nothing, which TextKit would take to mean the attachment's usual size.
-    guard let attachment = self.textAttachment as? ChatImageAttachment, attachment.isShown else {
+    guard let attachment = self.textAttachment as? ImageAttachment, attachment.isShown else {
       return CGRect(x: 0, y: 0, width: 1, height: 1)
     }
     let size = attachment.previewSize
@@ -349,32 +394,32 @@ final class ChatImagePreviewProvider: NSTextAttachmentViewProvider {
 
   /// Makes room for the preview once its image starts to come in, until it's here.
   private func show() {
-    guard let attachment = self.textAttachment as? ChatImageAttachment, !attachment.isShown else {
+    guard let attachment = self.textAttachment as? ImageAttachment, !attachment.isShown else {
       return
     }
     attachment.isShown = true
-    (self.view as? ChatImagePreviewView)?.showsPlaceholder = true
+    (self.view as? ImagePreviewView)?.showsPlaceholder = true
     self.layOutAgain()
   }
 
   /// Takes the preview away, for an image that can't be had: for good if the server `refused` it,
   /// or else until the app opens again.
   private func hide(refused: Bool) {
-    guard let attachment = self.textAttachment as? ChatImageAttachment else {
+    guard let attachment = self.textAttachment as? ImageAttachment else {
       return
     }
-    ChatImagePreview.failures.insert(attachment.url, refused: refused)
-    ChatImagePreview.sizes.forget(attachment.url)
+    ImagePreview.failures.insert(attachment.url, refused: refused)
+    ImagePreview.sizes.forget(attachment.url)
     guard attachment.isShown else {
       return
     }
     attachment.isShown = false
-    (self.view as? ChatImagePreviewView)?.showsPlaceholder = false
+    (self.view as? ImagePreviewView)?.showsPlaceholder = false
     self.layOutAgain()
   }
 
-  /// Lays the preview's line out again at its new size. Scrolled to the bottom of the chat, it
-  /// stays there.
+  /// Lays the preview's line out again at its new size, and tells the text view it's in, which can
+  /// keep its place, or grow to fit it.
   private func layOutAgain() {
     guard let textLayoutManager = self.textLayoutManager,
           let end = textLayoutManager.location(self.location, offsetBy: 1),
@@ -383,15 +428,19 @@ final class ChatImagePreviewProvider: NSTextAttachmentViewProvider {
     }
     textLayoutManager.invalidateLayout(for: range)
     textLayoutManager.textViewportLayoutController.layoutViewport()
+    // On the main thread, where the image's view says it's loaded.
+    MainActor.assumeIsolated {
+      (textLayoutManager.textContainer?.textView as? LinkActions)?.previewDidResize()
+    }
   }
 
   /// Once the image loads, remembers its size for next time and, unless the preview was already
   /// showing at the right size, lays the line out again at it.
   private func imageDidLoad(imageSize: CGSize) {
-    guard let attachment = self.textAttachment as? ChatImageAttachment, imageSize.width > 0, imageSize.height > 0 else {
+    guard let attachment = self.textAttachment as? ImageAttachment, imageSize.width > 0, imageSize.height > 0 else {
       return
     }
-    ChatImagePreview.sizes.remember(imageSize, for: attachment.url)
+    ImagePreview.sizes.remember(imageSize, for: attachment.url)
     let previousSize = attachment.previewSize
     let wasShown = attachment.isShown
     attachment.imageSize = imageSize
@@ -407,7 +456,7 @@ final class ChatImagePreviewProvider: NSTextAttachmentViewProvider {
 
 /// The preview itself: the image, rounded, filling its box. Clicking it opens the image in a
 /// preview window, dragging it takes the image along, and its menu has what a link's has.
-final class ChatImagePreviewView: NSView, NSDraggingSource {
+final class ImagePreviewView: NSView, NSDraggingSource {
   let url: URL
   /// Called once the image starts to come in.
   var onStart: (() -> Void)?
@@ -488,15 +537,15 @@ final class ChatImagePreviewView: NSView, NSDraggingSource {
       return
     }
     self.started = true
-    guard !ChatImagePreview.failures.contains(self.url) else {
+    guard !ImagePreview.failures.contains(self.url) else {
       self.onFail?(false)
       return
     }
 
     // From the cache if it's been shown before, which fades in only after a download.
     var options: KingfisherOptionsInfo = [
-      .targetCache(ChatImagePreview.cache),
-      .downloader(ChatImagePreview.downloader),
+      .targetCache(ImagePreview.cache),
+      .downloader(ImagePreview.downloader),
       .backgroundDecode,
       .transition(.fade(0.2)),
     ]
@@ -504,7 +553,7 @@ final class ChatImagePreviewView: NSView, NSDraggingSource {
     // screen it's on, so it's cached the same way everywhere. Not GIFs, which would lose their
     // animation.
     if self.url.pathExtension.lowercased() != "gif" {
-      options.append(.processor(DownsamplingImageProcessor(size: ChatImagePreview.maximumSize)))
+      options.append(.processor(DownsamplingImageProcessor(size: ImagePreview.maximumSize)))
       options.append(.scaleFactor(2))
     }
 
@@ -598,7 +647,7 @@ final class ChatImagePreviewView: NSView, NSDraggingSource {
     guard !self.dragged, self.bounds.contains(self.convert(event.locationInWindow, from: nil)) else {
       return
     }
-    let textView = self.transcript
+    let textView = self.textView
     if let openImage = textView?.openImageAction {
       openImage(self.url)
     }
@@ -610,19 +659,19 @@ final class ChatImagePreviewView: NSView, NSDraggingSource {
     }
   }
 
-  /// The transcript it's in.
-  private var transcript: ChatTranscriptTextView? {
+  /// The text view it's in.
+  private var textView: LinkActions? {
     var view = self.superview
-    while let current = view, !(current is ChatTranscriptTextView) {
+    while let current = view, !(current is LinkActions) {
       view = current.superview
     }
-    return view as? ChatTranscriptTextView
+    return view as? LinkActions
   }
 
   // MARK: Menu
 
   override func menu(for event: NSEvent) -> NSMenu? {
-    guard let items = self.transcript?.linkMenuItems(for: self.url) else {
+    guard let items = self.textView?.linkMenuItems(for: self.url) else {
       return nil
     }
     let menu = NSMenu()
@@ -645,7 +694,7 @@ final class ChatImagePreviewView: NSView, NSDraggingSource {
       return
     }
     self.dragged = true
-    let item = NSDraggingItem(pasteboardWriter: ChatImageFilePromise(url: self.url))
+    let item = NSDraggingItem(pasteboardWriter: ImageFilePromise(url: self.url))
     item.setDraggingFrame(self.imageView.frame, contents: image)
     self.beginDraggingSession(with: [item], event: down, source: self)
   }
@@ -657,9 +706,9 @@ final class ChatImagePreviewView: NSView, NSDraggingSource {
 
 // MARK: - Dragging Out
 
-/// A preview dragged out of chat: the image as a file, downloaded whole once it's dropped, and its
+/// A preview dragged out: the image as a file, downloaded whole once it's dropped, and its
 /// link, for anywhere a link goes rather than a file.
-final class ChatImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelegate {
+final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelegate {
   let url: URL
 
   private static let queue: OperationQueue = {

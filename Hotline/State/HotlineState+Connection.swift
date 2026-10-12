@@ -311,6 +311,8 @@ extension HotlineState {
     self.privateChats = []
     self.privateChatDrafts = [:]
     self.boardDraft = ""
+    self.newsDrafts = [:]
+    self.newsArticleTexts = [:]
     self.boardPostAnnouncement?.cancel()
     self.boardPostAnnouncement = nil
     self.boardPostToReveal = nil

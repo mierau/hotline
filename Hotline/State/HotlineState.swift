@@ -237,6 +237,18 @@ struct MessageBoardPost: Identifiable, Hashable {
   }
 }
 
+/// A news article being written, and not yet posted: its title, and what it says.
+struct NewsDraft {
+  /// Where it's to go: a topic, by its path, and the article it's a reply to, if it's one.
+  struct Place: Hashable {
+    var path: [String]
+    var parentID: UInt32
+  }
+
+  var title: String = ""
+  var text: String = ""
+}
+
 // MARK: - HotlineState
 
 @Observable @MainActor
@@ -426,6 +438,11 @@ class HotlineState: Equatable {
 
   // News
   var news: [NewsInfo] = []
+  /// What you're writing for the news and haven't posted, for each topic, or article you're replying
+  /// to, kept when the sheet's put away.
+  var newsDrafts: [NewsDraft.Place: NewsDraft] = [:]
+  /// What articles say, by where they are, once they've been read from the server.
+  var newsArticleTexts: [String: String] = [:]
   var newsLoaded: Bool = false
   var newsLookup: [String:NewsInfo] = [:]
 

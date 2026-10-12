@@ -10,7 +10,7 @@ import LinkPresentation
 final class PostEditorController {
   @ObservationIgnored weak var textView: NSTextView?
   /// The kind of code what's selected is in, if it's in any.
-  var codeContext: PostMarkdown.CodeContext?
+  var codeContext: Markdown.CodeContext?
 
   /// What a page's title is, or nil if it doesn't come in time.
   @ObservationIgnored var pageTitle: (URL) async -> String? = { url in
@@ -77,8 +77,8 @@ final class PostEditorController {
   }
 
   /// Puts a mark typed over what's selected around it instead, as Markdown editors do: * or _ for
-  /// italic, and again for bold, ~ for strikethrough, and ` for code. What's selected stays
-  /// selected, inside the marks, to type another around it.
+  /// italic, * again for bold, _ again for underline, ~ for strikethrough, and ` for code. What's
+  /// selected stays selected, inside the marks, to type another around it.
   func wrap(_ range: NSRange, in typed: String) {
     guard let textView = self.textView else {
       return
@@ -103,7 +103,7 @@ final class PostEditorController {
     }
     let text = textView.string as NSString
     let selection = textView.selectedRange()
-    if let link = PostMarkdown.link(around: selection, in: text) {
+    if let link = Markdown.link(around: selection, in: text) {
       let words = text.substring(with: link.words)
       self.replace(link.range, with: words, selecting: NSRange(location: link.range.location, length: (words as NSString).length))
       return
@@ -230,6 +230,7 @@ final class PostEditorController {
 enum PostStyle {
   case bold
   case italic
+  case underline
   case strikethrough
   case code
 
@@ -237,6 +238,7 @@ enum PostStyle {
     switch self {
     case .bold: "**"
     case .italic: "*"
+    case .underline: "__"
     case .strikethrough: "~~"
     case .code: "`"
     }
@@ -260,7 +262,7 @@ enum PostStyle {
     switch self {
     case .italic:
       return (before == 1 || before == 3) && (after == 1 || after == 3)
-    case .bold, .strikethrough:
+    case .bold, .underline, .strikethrough:
       return before >= 2 && after >= 2
     case .code:
       return before >= 1 && after >= 1
@@ -281,6 +283,8 @@ struct PostEditor: NSViewRepresentable {
   let controller: PostEditorController
   /// Room past the last line, to scroll it up past what's over the bottom of the editor.
   var bottomInset: CGFloat = 0
+  /// Whether you start writing here, once it's shown, or somewhere else, as in a title.
+  var startsHere = true
 
   func makeCoordinator() -> Coordinator {
     Coordinator(text: self.$text, controller: self.controller)
@@ -302,7 +306,7 @@ struct PostEditor: NSViewRepresentable {
     textView.delegate = context.coordinator
     textView.textStorage?.delegate = context.coordinator
     // For code blocks' backgrounds and quotes' bars, which the text can't draw on its own.
-    textView.textLayoutManager?.delegate = PostFragments.editor
+    textView.textLayoutManager?.delegate = context.coordinator.fragments
     textView.isInCode = { [weak coordinator = context.coordinator] in
       coordinator?.controller.codeContext != nil
     }
@@ -321,8 +325,8 @@ struct PostEditor: NSViewRepresentable {
     textView.textContainer?.lineFragmentPadding = 0
     // For pictures dropped on it, as well as text.
     textView.updateDragTypeRegistration()
-    textView.font = PostMarkdown.font
-    textView.typingAttributes = PostMarkdown.attributes
+    textView.font = Markdown.font
+    textView.typingAttributes = Markdown.attributes
     textView.string = self.text
     textView.applyServerTheme(self.theme)
 
@@ -332,9 +336,12 @@ struct PostEditor: NSViewRepresentable {
     scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: self.bottomInset, right: 0)
 
     self.controller.textView = textView
-    // Ready to write in, once it's in the sheet.
+    // Ready to write in, once it's in the sheet, at the end of what's written.
+    let startsHere = self.startsHere
     DispatchQueue.main.async {
-      textView.window?.makeFirstResponder(textView)
+      if startsHere {
+        textView.window?.makeFirstResponder(textView)
+      }
       textView.setSelectedRange(NSRange(location: (textView.string as NSString).length, length: 0))
     }
     return scrollView
@@ -347,12 +354,17 @@ struct PostEditor: NSViewRepresentable {
       textView.string = self.text
     }
     textView.applyServerTheme(self.theme)
+    context.coordinator.use(Markdown.Colors(theme: self.theme), in: textView)
     self.controller.textView = textView
   }
 
   final class Coordinator: NSObject, NSTextViewDelegate, NSTextStorageDelegate {
     var text: Binding<String>
     let controller: PostEditorController
+    /// For code blocks' backgrounds and quotes' bars.
+    let fragments = MarkdownFragments.editor()
+    /// What's written is styled in, a server's theme's colors, or the system's.
+    private var colors = Markdown.Colors()
 
     init(text: Binding<String>, controller: PostEditorController) {
       self.text = text
@@ -395,7 +407,7 @@ struct PostEditor: NSViewRepresentable {
       // makes them a link to it, as in Slack, once the paste is done with.
       if PostEditorController.address(string) != nil {
         let words = text.substring(with: range)
-        if PostEditorController.address(words) == nil, !words.contains(where: \.isNewline), PostMarkdown.link(around: range, in: text) == nil {
+        if PostEditorController.address(words) == nil, !words.contains(where: \.isNewline), Markdown.link(around: range, in: text) == nil {
           let address = string.trimmingCharacters(in: .whitespacesAndNewlines)
           DispatchQueue.main.async {
             self.controller.link(range, to: address)
@@ -412,17 +424,29 @@ struct PostEditor: NSViewRepresentable {
       guard editedMask.contains(.editedCharacters) else {
         return
       }
-      self.code = PostMarkdown.restyle(textStorage, edited: editedRange, changeInLength: delta, after: self.code)
+      self.code = Markdown.restyle(textStorage, edited: editedRange, changeInLength: delta, after: self.code, colors: self.colors)
       // The editor's text only changes on the main thread.
       MainActor.assumeIsolated {
         self.controller.textChanged(in: editedRange, changeInLength: delta)
       }
     }
 
+    /// Styles what's written in a server's theme's colors, or the system's, again, when they change.
+    func use(_ colors: Markdown.Colors, in textView: NSTextView) {
+      guard colors != self.colors else {
+        return
+      }
+      self.colors = colors
+      self.fragments.apply(colors)
+      if let storage = textView.textStorage {
+        self.code = Markdown.style(storage, colors: colors)
+      }
+    }
+
     // MARK: Code
 
     /// Where the code is, as of the last time the text was styled.
-    private var code = PostMarkdown.CodeRanges()
+    private var code = Markdown.CodeRanges()
     /// Whether you're writing in code, and what was on for words before you were.
     private var inCode = false
     private var spellingCorrection = false
@@ -480,7 +504,7 @@ struct PostEditor: NSViewRepresentable {
     /// and from there, on past the link, as a form's fields do. Shift-Tab goes back to its words.
     private func moveInLink(_ textView: NSTextView, back: Bool) -> Bool {
       let selection = textView.selectedRange()
-      guard self.code.context(of: selection) == nil, let link = PostMarkdown.link(around: selection, in: textView.string as NSString) else {
+      guard self.code.context(of: selection) == nil, let link = Markdown.link(around: selection, in: textView.string as NSString) else {
         return false
       }
       // Between the ]( after its words and the ) at its end.
@@ -506,14 +530,14 @@ struct PostEditor: NSViewRepresentable {
       }
 
       // After an opening ``` and its language, with no closing one, the closing one goes in too,
-      // with where you're writing on the line between them, in the block.
-      if let open = PostMarkdown.codeBlocks(in: text, includingUnclosed: true).last, !open.isClosed {
+      // with where you're writing on the line between them, in the block, as far in as the opening
+      // one, on a line of its own.
+      if let open = Markdown.codeBlocks(in: text, includingUnclosed: true).last, !open.isClosed {
         let line = text.lineRange(for: NSRange(location: open.range.location, length: 0))
         let lineEnd = Self.contentEnd(of: line, in: text)
-        if selection.location == lineEnd {
-          let opening = text.substring(with: NSRange(location: line.location, length: lineEnd - line.location))
-          let indent = opening.prefix(while: { $0 == " " })
-          let fence = opening.dropFirst(indent.count).prefix(while: { $0 == "`" })
+        if selection.location == lineEnd, open.code.location >= lineEnd {
+          let indent = open.opensOwnLine ? text.substring(with: line).prefix(while: { $0 == " " }) : ""
+          let fence = String(repeating: "`", count: open.ticks)
           textView.insertText("\n\n" + indent + fence, replacementRange: selection)
           textView.setSelectedRange(NSRange(location: selection.location + 1, length: 0))
           return true
@@ -533,7 +557,7 @@ struct PostEditor: NSViewRepresentable {
       }
 
       // In a list or a quote, a new line goes on with it, or from one with nothing in it, ends it.
-      guard self.code.context(of: selection) == nil, let mark = PostMarkdown.lineMark(in: text, line: line), selection.location >= line.location + mark.length else {
+      guard self.code.context(of: selection) == nil, let mark = Markdown.lineMark(in: text, line: line), selection.location >= line.location + mark.length else {
         return false
       }
       let lineEnd = Self.contentEnd(of: line, in: text)
@@ -620,7 +644,7 @@ final class PostTextView: NSTextView {
     let rich = pasteboard.types?.contains(where: { [.rtf, .rtfd, .html].contains($0) }) ?? false
     guard rich, !self.isInCode(),
           let pasted = pasteboard.readObjects(forClasses: [NSAttributedString.self])?.first as? NSAttributedString,
-          var markdown = PostMarkdown.markdown(from: pasted) else {
+          var markdown = Markdown.markdown(from: pasted) else {
       return false
     }
     let text = self.string as NSString
@@ -689,218 +713,188 @@ final class PostTextView: NSTextView {
   }
 }
 
-// MARK: - Fragments
+// MARK: - Sheet
 
-/// Hands out the layout fragments for a code block's lines, with its background behind them, and a
-/// quote's, with its bar, which the text can't draw on its own: as a post's written, in the editor,
-/// or as the board shows it, where a code block's ``` lines are gone, and the link under the
-/// pointer is underlined, as in chat.
-final class PostFragments: NSObject, NSTextLayoutManagerDelegate {
-  /// In the editor, a code block's ``` lines are in it, and room enough above and below its code.
-  static let editor = PostFragments(padding: 5, underlinesLinks: false)
+/// How big the post is shown, kept where keeping it doesn't draw it again as it's resized, and how
+/// much more than it was asked to be, as SwiftUI shows a sheet, so it's asked for as big as it's to
+/// be next time, and doesn't grow each time.
+final class ShownSize {
+  var size: CGSize = .zero
+  var extra: CGSize?
+}
 
-  /// For a post on the board, which has one of its own, for the link under the pointer in it. A
-  /// code block has room of its own above and below its code, as far as its code is in from its
-  /// sides, and the language it names, above it.
-  static func board() -> PostFragments {
-    PostFragments(padding: PostMarkdown.codePadding, underlinesLinks: true)
+/// Lets the sheet it's in be resized, which a sheet isn't on its own, no smaller than the post needs
+/// room for, and keeps how big it's made, for the next time it opens.
+struct ResizableSheet: NSViewRepresentable {
+  let smallest: CGSize
+  /// How big it was asked to be, as it opened.
+  let opening: CGSize
+  let shown: ShownSize
+  /// Keeps how big it's been made.
+  let keep: (CGSize) -> Void
+
+  func makeNSView(context: Context) -> SheetView {
+    SheetView(smallest: self.smallest, opening: self.opening, shown: self.shown, keep: self.keep)
   }
 
-  /// The link under the pointer, in characters, which the fragment holding it underlines.
-  var hoveredLink: NSRange?
-
-  private let padding: CGFloat
-  private let underlinesLinks: Bool
-
-  private init(padding: CGFloat, underlinesLinks: Bool) {
-    self.padding = padding
-    self.underlinesLinks = underlinesLinks
+  func updateNSView(_ view: SheetView, context: Context) {
   }
 
-  func textLayoutManager(_ textLayoutManager: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation, in textElement: NSTextElement) -> NSTextLayoutFragment {
-    guard let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else {
-      return NSTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
+  final class SheetView: NSView {
+    private let smallest: CGSize
+    private let opening: CGSize
+    private let shown: ShownSize
+    private let keep: (CGSize) -> Void
+    private var watching: [NSObjectProtocol] = []
+
+    init(smallest: CGSize, opening: CGSize, shown: ShownSize, keep: @escaping (CGSize) -> Void) {
+      self.smallest = smallest
+      self.opening = opening
+      self.shown = shown
+      self.keep = keep
+      super.init(frame: .zero)
     }
-    let attributes = paragraph.attributedString.attributes(at: 0, effectiveRange: nil)
-    let fragment: PostLineFragment
-    if let line = (attributes[PostMarkdown.codeLineKey] as? Int).flatMap(PostMarkdown.CodeLine.init) {
-      fragment = PostCodeLineFragment(textElement: textElement, range: textElement.elementRange, line: line, padding: self.padding, language: attributes[PostMarkdown.codeLanguageKey] as? String)
+
+    required init?(coder: NSCoder) {
+      fatalError("init(coder:) has not been implemented")
     }
-    else if attributes[PostMarkdown.quoteLineKey] != nil {
-      fragment = PostQuoteLineFragment(textElement: textElement, range: textElement.elementRange)
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      self.watching.forEach(NotificationCenter.default.removeObserver)
+      self.watching = []
+      guard let window = self.window else {
+        return
+      }
+      window.styleMask.insert(.resizable)
+      let shown = self.shown, smallest = self.smallest, opening = self.opening, keep = self.keep
+      // As small as the post, and what's around it, as SwiftUI doesn't keep a sheet's smallest size
+      // until it's being resized.
+      self.watching.append(NotificationCenter.default.addObserver(forName: NSWindow.willStartLiveResizeNotification, object: window, queue: .main) { [weak window] _ in
+        MainActor.assumeIsolated {
+          guard let window, let content = window.contentView?.frame.size, shown.size != .zero else {
+            return
+          }
+          window.contentMinSize = CGSize(width: smallest.width + content.width - shown.size.width, height: smallest.height + content.height - shown.size.height)
+          // Still as big as it opened, the first time.
+          if shown.extra == nil {
+            shown.extra = CGSize(width: shown.size.width - opening.width, height: shown.size.height - opening.height)
+          }
+        }
+      })
+      self.watching.append(NotificationCenter.default.addObserver(forName: NSWindow.didEndLiveResizeNotification, object: window, queue: .main) { _ in
+        MainActor.assumeIsolated {
+          if shown.size != .zero {
+            let extra = shown.extra ?? .zero
+            keep(CGSize(width: shown.size.width - extra.width, height: shown.size.height - extra.height))
+          }
+        }
+      })
     }
-    else if self.underlinesLinks {
-      fragment = PostLineFragment(textElement: textElement, range: textElement.elementRange)
+  }
+}
+
+// MARK: - Formatting
+
+/// The formatting posts can have, a click or a key away, in glass over the bottom of the post.
+struct PostFormattingBar: View {
+  /// How tall it is: its buttons, and the glass around them.
+  static let height: CGFloat = PostFormatButton.height + 2 * Self.padding
+  private static let padding: CGFloat = 3
+
+  let editor: PostEditorController
+
+  var body: some View {
+    // None of it shows in code, so it's off there, but for taking code off `code`.
+    let code = self.editor.codeContext
+    HStack(spacing: 0) {
+      PostFormatButton("Bold", systemImage: "bold", key: "b") {
+        self.editor.toggle(.bold)
+      }
+      .disabled(code != nil)
+      PostFormatButton("Italic", systemImage: "italic", key: "i") {
+        self.editor.toggle(.italic)
+      }
+      .disabled(code != nil)
+      PostFormatButton("Underline", systemImage: "underline", key: "u") {
+        self.editor.toggle(.underline)
+      }
+      .disabled(code != nil)
+      PostFormatButton("Strikethrough", systemImage: "strikethrough", key: "x", modifiers: [.command, .shift]) {
+        self.editor.toggle(.strikethrough)
+      }
+      .disabled(code != nil)
+      PostFormatButton("Code", systemImage: "chevron.left.forwardslash.chevron.right", key: "e") {
+        self.editor.toggle(.code)
+      }
+      .disabled(code == .block || code == .drawing)
+      PostFormatButton("Link", systemImage: "link", key: "k") {
+        self.editor.link()
+      }
+      .disabled(code != nil)
+    }
+    .padding(Self.padding)
+    .modifier(PostFormattingBackground())
+  }
+}
+
+/// Glass, from macOS 26, or before it, a fill.
+private struct PostFormattingBackground: ViewModifier {
+  func body(content: Content) -> some View {
+    if #available(macOS 26, *) {
+      content.glassEffect(.regular, in: .capsule)
     }
     else {
-      return NSTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
+      content.background(.fill.quaternary, in: .capsule)
     }
-    fragment.provider = self.underlinesLinks ? self : nil
-    return fragment
   }
 }
 
-/// A paragraph of a post, which underlines the link under the pointer, if it's in it, as chat
-/// does. TextKit 2 doesn't draw underlines added as rendering attributes, only colors, so the
-/// fragment draws its own.
-class PostLineFragment: NSTextLayoutFragment {
-  weak var provider: PostFragments?
+/// A formatting button: its symbol, a light fill behind it while the pointer's over it, and its
+/// name and key as its help.
+struct PostFormatButton: View {
+  static let height: CGFloat = 26
 
-  override func draw(at point: CGPoint, in context: CGContext) {
-    super.draw(at: point, in: context)
-    self.drawHoveredLink(at: point, in: context)
+  let title: String
+  let systemImage: String
+  let key: KeyEquivalent
+  let modifiers: EventModifiers
+  let action: () -> Void
+
+  @Environment(\.isEnabled) private var isEnabled
+  @State private var hovered: Bool = false
+
+  init(_ title: String, systemImage: String, key: KeyEquivalent, modifiers: EventModifiers = .command, action: @escaping () -> Void) {
+    self.title = title
+    self.systemImage = systemImage
+    self.key = key
+    self.modifiers = modifiers
+    self.action = action
   }
 
-  private func drawHoveredLink(at point: CGPoint, in context: CGContext) {
-    guard let link = self.provider?.hoveredLink,
-          let contentManager = self.textLayoutManager?.textContentManager,
-          let paragraph = self.textElement as? NSTextParagraph else {
-      return
+  var body: some View {
+    Button(action: self.action) {
+      Image(systemName: self.systemImage)
+        .font(.system(size: 13, weight: .medium))
+        .frame(width: 32, height: Self.height)
+        // In the text's color, as any button that's on, and faint when it's off.
+        .foregroundStyle(self.isEnabled ? .primary : .tertiary)
+        .background(.fill.tertiary.opacity(self.hovered && self.isEnabled ? 1 : 0), in: .capsule)
+        .contentShape(.capsule)
     }
-    // The link's characters, counted from the start of this paragraph.
-    let start = contentManager.offset(from: contentManager.documentRange.location, to: self.rangeInElement.location)
-    let local = NSIntersectionRange(NSRange(location: link.location - start, length: link.length), NSRange(location: 0, length: paragraph.attributedString.length))
-    guard local.length > 0 else {
-      return
-    }
-
-    let pixel = abs(context.convertToUserSpace(CGSize(width: 1, height: 1)).height)
-    context.saveGState()
-    for line in self.textLineFragments {
-      let range = NSIntersectionRange(line.characterRange, local)
-      guard range.length > 0 else {
-        continue
+    .buttonStyle(.plain)
+    .keyboardShortcut(self.key, modifiers: self.modifiers)
+    .help("\(self.title) (\(self.shortcut))")
+    .accessibilityLabel(self.title)
+    .onHover { hovering in
+      withAnimation(.easeOut(duration: 0.12)) {
+        self.hovered = hovering
       }
-      let attributes = line.attributedString.attributes(at: range.location, effectiveRange: nil)
-      let font = attributes[.font] as? NSFont ?? PostMarkdown.font
-      let color = attributes[.foregroundColor] as? NSColor ?? .textColor
-      let left = line.locationForCharacter(at: range.location).x
-      let right = line.locationForCharacter(at: NSMaxRange(range)).x
-      // Below the baseline by the font's underline position, on whole pixels so it's crisp, with
-      // the part of a pixel dropped the way the text drops it.
-      let baseline = point.y + line.typographicBounds.minY + line.glyphOrigin.y
-      let y = ((baseline - font.underlinePosition) / pixel).rounded(.down) * pixel
-      let thickness = max(pixel, (font.underlineThickness / pixel).rounded() * pixel)
-      context.setFillColor(color.cgColor)
-      context.fill(CGRect(x: point.x + line.typographicBounds.minX + left, y: y, width: right - left, height: thickness))
     }
-    context.restoreGState()
-  }
-}
-
-/// A line of a code block, with its part of the block's background behind it, rounded at the top
-/// of the block's first line and the bottom of its last, and square where its lines meet, so they
-/// make one block, in the color chat's code blocks have. On the board, the language the block names
-/// is above its first line, small and faint, as chat has it.
-final class PostCodeLineFragment: PostLineFragment {
-  private let line: PostMarkdown.CodeLine
-  /// How far past its first and last lines' text the block goes, for room above and below its code.
-  private let padding: CGFloat
-  /// The language the block names, shown above its code, on its first line.
-  private let language: String?
-
-  private static let cornerRadius: CGFloat = 6
-
-  private static var languageFont: NSFont {
-    .systemFont(ofSize: NSFont.smallSystemFontSize - 1)
   }
 
-  init(textElement: NSTextElement, range: NSTextRange?, line: PostMarkdown.CodeLine, padding: CGFloat, language: String?) {
-    self.line = line
-    self.padding = padding
-    self.language = language
-    super.init(textElement: textElement, range: range)
-  }
-
-  required init?(coder: NSCoder) {
-    fatalError("init(coder:) has not been implemented")
-  }
-
-  private var isTop: Bool {
-    self.line == .first || self.line == .only
-  }
-
-  private var isBottom: Bool {
-    self.line == .last || self.line == .only
-  }
-
-  /// Across the whole width of the text, from the top of the line to the top of the next, but for
-  /// the block's first line, from the top of its text, and its language, as the room above the
-  /// block isn't the block's, and for its last, to the bottom of its text, as the room below isn't
-  /// either, and nor is a new line after it at the end of the post, which its fragment has too.
-  private var backgroundBounds: CGRect {
-    let width = self.textLayoutManager?.textContainer?.size.width ?? self.layoutFragmentFrame.width
-    var top: CGFloat = 0
-    var bottom = self.layoutFragmentFrame.height
-    if self.isTop, let first = self.textLineFragments.first {
-      top = first.typographicBounds.minY - self.padding - (self.language == nil ? 0 : PostMarkdown.codeLanguageHeight)
-    }
-    if self.isBottom, let last = self.textLineFragments.last(where: { $0.characterRange.length > 0 }) {
-      bottom = last.typographicBounds.maxY + self.padding
-    }
-    return CGRect(x: -self.layoutFragmentFrame.minX, y: top, width: width, height: bottom - top)
-  }
-
-  override var renderingSurfaceBounds: CGRect {
-    super.renderingSurfaceBounds.union(self.backgroundBounds)
-  }
-
-  override func draw(at point: CGPoint, in context: CGContext) {
-    let rect = self.backgroundBounds.offsetBy(dx: point.x, dy: point.y)
-    let top = self.isTop ? Self.cornerRadius : 0
-    let bottom = self.isBottom ? Self.cornerRadius : 0
-    let path = CGMutablePath()
-    path.move(to: CGPoint(x: rect.minX, y: rect.minY + top))
-    path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY), tangent2End: CGPoint(x: rect.minX + top, y: rect.minY), radius: top)
-    path.addLine(to: CGPoint(x: rect.maxX - top, y: rect.minY))
-    path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY), tangent2End: CGPoint(x: rect.maxX, y: rect.minY + top), radius: top)
-    path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottom))
-    path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY), tangent2End: CGPoint(x: rect.maxX - bottom, y: rect.maxY), radius: bottom)
-    path.addLine(to: CGPoint(x: rect.minX + bottom, y: rect.maxY))
-    path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY), tangent2End: CGPoint(x: rect.minX, y: rect.maxY - bottom), radius: bottom)
-    path.closeSubpath()
-
-    context.saveGState()
-    context.addPath(path)
-    context.setFillColor(ChatMessageRenderer.codeBlockBackground.cgColor)
-    context.fillPath()
-    context.restoreGState()
-    if self.isTop, let language = self.language {
-      // In line with the code, in the room above it.
-      let label = NSAttributedString(string: language, attributes: [.font: Self.languageFont, .foregroundColor: NSColor.tertiaryLabelColor])
-      NSGraphicsContext.saveGraphicsState()
-      NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-      label.draw(at: CGPoint(x: rect.minX + PostMarkdown.codePadding, y: rect.minY + self.padding - 1))
-      NSGraphicsContext.restoreGraphicsState()
-    }
-    super.draw(at: point, in: context)
-  }
-}
-
-/// A line of a quote, with the bar along a quote's lines beside it, from the top of the line to the
-/// top of the next, so a quote's lines make one bar, as the board shows them.
-final class PostQuoteLineFragment: PostLineFragment {
-  private static let barWidth: CGFloat = 3
-
-  /// Not beside a new line after the quote at the end of the post, which the quote's last line's
-  /// fragment has too, but which isn't the quote's.
-  private var barBounds: CGRect {
-    var height = self.layoutFragmentFrame.height
-    if self.textLineFragments.count > 1, let last = self.textLineFragments.last, last.characterRange.length == 0 {
-      height = last.typographicBounds.minY
-    }
-    return CGRect(x: -self.layoutFragmentFrame.minX + 1, y: 0, width: Self.barWidth, height: height)
-  }
-
-  override var renderingSurfaceBounds: CGRect {
-    super.renderingSurfaceBounds.union(self.barBounds)
-  }
-
-  override func draw(at point: CGPoint, in context: CGContext) {
-    context.saveGState()
-    context.setFillColor(NSColor.tertiaryLabelColor.cgColor)
-    context.fill(self.barBounds.offsetBy(dx: point.x, dy: point.y))
-    context.restoreGState()
-    super.draw(at: point, in: context)
+  /// The key, as menus show it.
+  private var shortcut: String {
+    (self.modifiers.contains(.shift) ? "⇧" : "") + "⌘" + String(self.key.character).uppercased()
   }
 }

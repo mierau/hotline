@@ -248,6 +248,25 @@ extension HotlineState {
     return try await client.getNewsArticle(id: UInt32(articleID), path: path, flavor: flavor)
   }
 
+  /// Reads what the article at a place says from the server, once, and keeps it, as plain text when
+  /// the server has it that way, as they all do. False if it couldn't be read.
+  @discardableResult
+  @MainActor
+  func loadNewsArticleText(at place: String) async -> Bool {
+    if self.newsArticleTexts[place] != nil {
+      return true
+    }
+    guard let article = self.newsLookup[place], let articleID = article.articleID else {
+      return false
+    }
+    let flavor = article.articleFlavors?.first { $0 == "text/plain" } ?? article.articleFlavors?.first ?? "text/plain"
+    guard let text = try? await self.getNewsArticle(id: articleID, at: article.path, flavor: flavor) else {
+      return false
+    }
+    self.newsArticleTexts[place] = text
+    return true
+  }
+
   @discardableResult
   @MainActor
   func postNewsArticle(title: String, body: String, at path: [String], parentID: UInt32 = 0) async throws -> NewsInfo? {

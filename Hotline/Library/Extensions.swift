@@ -255,8 +255,14 @@ extension String {
       }
     }
 
-    // IP addresses and ports, which data detectors don't find.
-    for match in self.matches(of: RegularExpressions.serverAddress) {
+    // IP addresses and ports, which data detectors don't find, in text with a digit after a :, as a
+    // port has, which most text hasn't, and looking for them takes a while.
+    var afterColon = false
+    let mightHavePort = self.utf16.contains { unit in
+      defer { afterColon = unit == 0x3A }
+      return afterColon && (0x30...0x39).contains(unit)
+    }
+    for match in mightHavePort ? self.matches(of: RegularExpressions.serverAddress) : [] {
       let address = self[match.range]
       let octets = address.split(separator: ":")[0].split(separator: ".").compactMap { Int($0) }
       guard octets.count == 4, octets.allSatisfy({ $0 <= 255 }),

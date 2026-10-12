@@ -67,9 +67,9 @@ final class ChatLinkIndex {
       return kinds
     }
     var kinds: Kinds = []
-    for url in ChatMessageRenderer.links(in: message.text) {
+    for url in Markdown.links(in: message.text) {
       kinds.insert(.link)
-      if ChatMessageRenderer.fileName(ofHotlineLink: url) != nil {
+      if Markdown.fileName(ofHotlineLink: url) != nil {
         kinds.insert(.file)
         break
       }

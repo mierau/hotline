@@ -159,6 +159,8 @@ public struct HotlineUserAccessOptions: OptionSet, Sendable {
   static let canSendPrivateMessages = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(19))
   static let canReadMessageBoard = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(20))
   static let canPostMessageBoard = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(21))
+  /// Posting to the news, which Hotline lets you do with the board's privilege.
+  static let canPostNews = HotlineUserAccessOptions.canPostMessageBoard
   static let canDisconnectUsers = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(22))
   static let cantBeDisconnected = HotlineUserAccessOptions(rawValue: 1 << HotlineUserAccessOptions.accessIndexToBit(23))
   

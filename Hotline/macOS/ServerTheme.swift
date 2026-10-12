@@ -7,36 +7,36 @@ import SwiftUI
 /// banner's hue and some of its color, so text and controls read on it as well as on the usual
 /// colors. Lightness and color here are as they look, in Oklab, where a yellow and a blue of the
 /// same lightness look as light as each other, which they don't at the same HSB brightness.
+///
+/// Everything else is on one of three grays in the banner's hue, steps far enough apart to tell
+/// from each other: the page, deepest, the content, and cards, raised from it. Over them, the
+/// accent is a color of its own, not another shade of the banner's, for what's selected and what
+/// has focus, as the system's grays have its blue. Admins' names have another, one of the banner's
+/// that stands apart from both, or Hotline's red, as they have without a theme.
 struct ServerTheme: Equatable {
   /// The sidebar's color.
   let sidebar: NSColor
-  /// The color that comes into the sidebar toward its bottom corner: the banner's accent, as it is,
-  /// or in dark mode, brighter.
+  /// The color that comes into the sidebar toward its bottom corner: the banner's own accent, from
+  /// its picture, or without one, a shade of its color, as it is, or in dark mode, brighter.
   let sidebarGlow: NSColor?
-  /// Admins' names in the sidebar: the accent, as the unread dots are, or without one, Hotline's red,
-  /// as light or dark as it has to be to read on it.
+  /// Admins' names in the sidebar, in their color, as light or dark as it has to be to read on it.
   let sidebarAdmin: NSColor
   /// The accent, as light or dark as it has to be to stand out on the sidebar, for what's marked
   /// there, like unread dots and transfers' progress.
   let sidebarAccent: NSColor?
-  /// Behind chat, news and files.
-  let content: NSColor
-  /// Behind the board's posts and messages, and news's topics, a step deeper than the content.
+  /// The deepest step: behind the board's posts and messages, news's topics, the replies to an
+  /// article, and the connect form.
   let page: NSColor
-  /// The board's posts and messages, raised from the page.
+  /// The middle step: behind chat, news and files, and across the top of a post.
+  let content: NSColor
+  /// The step raised from the content: the board's posts and messages, and replies in the news.
   let card: NSColor
-  /// The top of a post, where it says who posted it, a step from the card, with more of the color.
-  let cardHeader: NSColor
-  /// Behind the connect form, about as light or dark as the system's under-page gray it has without
-  /// a theme, so the glass of the form's fields and buttons stands out from it as much. In light
-  /// mode, a little darker, as far as the page, for as much color as the banner has, as there's next
-  /// to no room for color as light as the gray.
-  let connectForm: NSColor
   /// The window's tint, for controls and what has focus, as light or dark as the system's accent
   /// colors are, to show as well on the content.
   let accent: NSColor?
-  /// Admins' names in chat and messages, and when they come and go: the accent, as in the sidebar,
-  /// or without one, Hotline's red, as light or dark as it has to be to read on the content.
+  /// Admins' names in chat and messages, and when they come and go: one of the banner's colors that
+  /// stands apart from it and the accent, or Hotline's red, as bright as Hotline's red, and as light
+  /// or dark as it has to be to read on the content.
   let admin: NSColor
   /// Selected rows, in the sidebar and lists, about as dark as the system's selection, for white text
   /// on it.
@@ -60,11 +60,9 @@ struct ServerTheme: Equatable {
       OKLCH(lightness: lightness, chroma: chroma * intensity, hue: banner.hue).color
     }
     let contentLightness = dark ? 0.245 : 0.979
+    self.page = dark ? surface(0.21, 0.024) : surface(0.95, 0.026)
     self.content = surface(contentLightness, dark ? 0.024 : 0.022)
-    self.page = dark ? surface(0.215, 0.024) : surface(0.955, 0.026)
-    self.card = dark ? surface(0.285, 0.022) : surface(0.996, 0.006)
-    self.cardHeader = dark ? surface(0.305, 0.026) : surface(0.975, 0.022)
-    self.connectForm = dark ? surface(0.277, 0.03) : surface(0.973 - 0.018 * intensity, 0.03)
+    self.card = dark ? surface(0.29, 0.022) : surface(0.996, 0.006)
     self.secondaryText = dark ? surface(0.685, 0.035) : surface(0.58, 0.045)
     self.tertiaryText = dark ? surface(0.46, 0.03) : surface(0.78, 0.035)
 
@@ -78,10 +76,11 @@ struct ServerTheme: Equatable {
       ? colors.backgroundColor
       : OKLCH(lightness: sidebarLightness, chroma: banner.chroma * sidebarLightness / max(banner.lightness, 0.01), hue: banner.hue).color
 
-    // A banner without a colorful color for text takes its accent from its background's.
-    let accent = colors.accentColor ?? colors.backgroundColor.contrastingShade
-    self.sidebarGlow = dark ? accent?.withBrightness(atLeast: 0.8) : accent
-    let hue = accent.map { OKLCH($0) }
+    // The banner's own colors, as they are, which a banner without a colorful color for text takes
+    // from its background's.
+    let glow = colors.accentColor ?? colors.backgroundColor.contrastingShade
+    self.sidebarGlow = dark ? glow?.withBrightness(atLeast: 0.8) : glow
+    let hue = Self.accent(colors, banner: banner)
     self.accent = hue.map {
       let range = dark ? 0.62...0.75 : 0.45...0.65
       return OKLCH(lightness: min(max($0.lightness, range.lowerBound), range.upperBound), chroma: max($0.chroma, 0.12), hue: $0.hue).color
@@ -99,20 +98,58 @@ struct ServerTheme: Equatable {
     }
     // The system's, in the accent's hue.
     self.textSelection = hue.map { OKLCH(lightness: dark ? 0.49 : 0.867, chroma: dark ? 0.077 : 0.068, hue: $0.hue).color }
-    self.sidebarAdmin = Self.admin(hue, on: self.sidebar)
-    self.admin = Self.admin(hue, on: self.content)
+    let adminColor = Self.admin(colors, banner: banner, accent: hue)
+    self.sidebarAdmin = Self.admin(adminColor, on: self.sidebar)
+    self.admin = Self.admin(adminColor, on: self.content)
     // As much contrast as marks need, a little less than text.
     let sidebar = self.sidebar
     self.sidebarAccent = hue.map { Self.standingOut($0, on: sidebar, enough: 3) }
   }
 
-  /// Admins' names: `color`, or without one, Hotline's red, made to read on `background` as well as
-  /// text should, or as well as the sidebar's own white or black text does, if that's less.
-  private static func admin(_ color: OKLCH?, on background: NSColor) -> NSColor {
-    let color = color ?? OKLCH(NSColor(named: "Hotline Red") ?? .systemRed)
-    let enough = min(4.5, contrastRatio(background.luminance, background.isDarkColor ? 1 : 0))
-    return standingOut(color, on: background, enough: enough)
+  /// The color the accent's made from, one of its own, not a shade of the banner's: the banner's own
+  /// accent, from its picture, if it's far enough around from the banner's color, a sixth of the
+  /// way, past the hues next to it, or else the system's blue, or on a banner too near blue, its
+  /// orange, whichever's further around. Nil for a gray banner without one, for the system's accent.
+  private static func accent(_ colors: ColorArt, banner: OKLCH) -> OKLCH? {
+    if let own = colors.accentColor.map(OKLCH.init), banner.isGray || own.hueDistance(to: banner) >= .pi / 3 {
+      return own
+    }
+    if banner.isGray {
+      return nil
+    }
+    return [OKLCH.systemBlue, OKLCH.systemOrange].max { $0.hueDistance(to: banner) < $1.hueDistance(to: banner) }
   }
+
+  /// The color admins' names are made from: of the banner's colors, the one that stands furthest
+  /// apart from its background's and the accent's, if that's far enough, a sixth of the way around,
+  /// for admins' names to stand out from both. Or else Hotline's red, as they are without a theme,
+  /// or on a banner too near red, the accent.
+  private static func admin(_ colors: ColorArt, banner: OKLCH, accent: OKLCH?) -> OKLCH {
+    func apart(_ color: OKLCH) -> Double {
+      min(banner.isGray ? .pi : color.hueDistance(to: banner), accent.map { color.hueDistance(to: $0) } ?? .pi)
+    }
+    if let own = colors.accentColors.map(OKLCH.init).max(by: { apart($0) < apart($1) }), apart(own) >= .pi / 3 {
+      return own
+    }
+    if banner.isGray || Self.hotlineRed.hueDistance(to: banner) >= .pi / 3 {
+      return Self.hotlineRed
+    }
+    return accent ?? Self.hotlineRed
+  }
+
+  /// Admins' names: `color`, made as vivid as Hotline's red, and no darker, as a banner's can be much
+  /// darker, which reads, but not as brightly as admins' names do without a theme, and then to read
+  /// on `background` as well as text should, or as well as the sidebar's own white or black text
+  /// does, if that's less.
+  private static func admin(_ color: OKLCH, on background: NSColor) -> NSColor {
+    let red = Self.hotlineRed
+    let bright = OKLCH(lightness: max(color.lightness, red.lightness), chroma: max(color.chroma, red.chroma), hue: color.hue)
+    let enough = min(4.5, contrastRatio(background.luminance, background.isDarkColor ? 1 : 0))
+    return standingOut(bright, on: background, enough: enough)
+  }
+
+  /// The color of admins' names without a theme.
+  private static let hotlineRed = OKLCH(NSColor(named: "Hotline Red") ?? .systemRed)
 
   /// `color`, made as little lighter or darker as it takes to have `enough` contrast with
   /// `background`, or if it can't, as near as it gets.
@@ -220,24 +257,28 @@ extension ShapeStyle where Self == ServerDisclosureStyle {
 }
 
 /// What a view's background is for in a server window, which gives its color in the server's theme,
-/// or without one, the color it's always had.
+/// one of its three steps, or without one, the color it's always had.
 enum ServerSurface {
-  /// Behind chat, news and files.
+  /// Behind chat, news and files: the content.
   case content
-  /// Behind the board's posts and messages.
+  /// Behind the board's posts and messages: the page.
   case page
+  /// Behind the replies to a news article: the page, or without a theme, a gray of its own, as the
+  /// replies have no shadows or lines to set them apart from the board's nearly white page.
+  case thread
   /// Behind a list to pick from, above what's picked, like news's topics above the article, and the
-  /// toolbar over them. In the server's theme, it's a step deeper than the content, to set it apart,
-  /// and without one, it's clear, as the list has its own.
+  /// toolbar over them. In the server's theme, it's the page, to set it apart, and without one, it's
+  /// clear, as the list has its own.
   case browser
-  /// A post on the board.
+  /// A post on the board: a card.
   case post
-  /// The top of a post on the board, with its signature, and who posted it and when.
+  /// The top of a post on the board, with its signature, and who posted it and when: the content,
+  /// a step down from the card.
   case postHeader
-  /// A message.
+  /// A message: a card.
   case message
-  /// Behind the connect form: grayer than the window, so the glass of the form's fields and buttons
-  /// stands out from it.
+  /// Behind the connect form: the page, or without a theme, the system's under-page gray, so the
+  /// glass of the form's fields and buttons stands out from it.
   case connectForm
 }
 
@@ -336,30 +377,23 @@ private struct ServerThemeModifier: ViewModifier {
   }
 }
 
-private struct ServerBackground: ViewModifier {
-  @Environment(\.serverTheme) private var theme
-  @Environment(\.colorScheme) private var colorScheme
+/// The color of a background in a server window, for what it's for, as `serverBackground` paints it,
+/// for filling a shape of its own, like a reply joined to what it replies to.
+struct ServerSurfaceStyle: ShapeStyle {
   let surface: ServerSurface
 
-  func body(content: Content) -> some View {
-    content.background(self.style, ignoresSafeAreaEdges: .all)
-  }
-
-  private var style: AnyShapeStyle {
-    if let theme = self.theme {
+  func resolve(in environment: EnvironmentValues) -> AnyShapeStyle {
+    if let theme = environment.serverTheme {
       switch self.surface {
-      case .content:
-        return AnyShapeStyle(Color(nsColor: theme.content))
-      case .page, .browser:
+      case .page, .thread, .browser, .connectForm:
         return AnyShapeStyle(Color(nsColor: theme.page))
+      case .content, .postHeader:
+        return AnyShapeStyle(Color(nsColor: theme.content))
       case .post, .message:
         return AnyShapeStyle(Color(nsColor: theme.card))
-      case .postHeader:
-        return AnyShapeStyle(Color(nsColor: theme.cardHeader))
-      case .connectForm:
-        return AnyShapeStyle(Color(nsColor: theme.connectForm))
       }
     }
+    let colorScheme = environment.colorScheme
     switch self.surface {
     case .content:
       if #available(macOS 26.0, *) {
@@ -367,18 +401,34 @@ private struct ServerBackground: ViewModifier {
       }
       return AnyShapeStyle(Color(nsColor: .textBackgroundColor))
     case .page:
-      return AnyShapeStyle(Color(nsColor: .underPageBackgroundColor).opacity(self.colorScheme == .light ? 0.25 : 1))
+      return AnyShapeStyle(Color(nsColor: .underPageBackgroundColor).opacity(colorScheme == .light ? 0.25 : 1))
+    case .thread:
+      return AnyShapeStyle(Color.primary.opacity(colorScheme == .light ? 0.05 : 0.06))
     case .browser:
       return AnyShapeStyle(Color.clear)
     case .post:
       return AnyShapeStyle(Color(nsColor: .textBackgroundColor))
     case .postHeader:
-      return AnyShapeStyle(.quinary.opacity(self.colorScheme == .light ? 0.7 : 0.3))
+      return AnyShapeStyle(.quinary.opacity(colorScheme == .light ? 0.7 : 0.3))
     case .message:
-      return self.colorScheme == .light ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor)) : AnyShapeStyle(.thickMaterial)
+      return colorScheme == .light ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor)) : AnyShapeStyle(.thickMaterial)
     case .connectForm:
       return AnyShapeStyle(Color(nsColor: .underPageBackgroundColor))
     }
+  }
+}
+
+extension ShapeStyle where Self == ServerSurfaceStyle {
+  static func serverSurface(_ surface: ServerSurface) -> ServerSurfaceStyle {
+    ServerSurfaceStyle(surface: surface)
+  }
+}
+
+private struct ServerBackground: ViewModifier {
+  let surface: ServerSurface
+
+  func body(content: Content) -> some View {
+    content.background(.serverSurface(self.surface), ignoresSafeAreaEdges: .all)
   }
 }
 
@@ -408,8 +458,12 @@ private struct ServerThemedSidebar: ViewModifier {
   let selection: Set<AnyHashable>
 
   func body(content: Content) -> some View {
+    // In a window that isn't in front, the selection's a wash of white, or on a light sidebar, of
+    // black, as the system's sidebar's is, and not the accent, fainter, which mixes with the
+    // sidebar's color into a muddy one, as the accent's another color.
+    let unemphasized = self.theme.map { $0.sidebar.isDarkColor ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.1) }
     content
-      .environment(\.serverListSelection, ServerListSelection(selected: self.selection, color: self.theme?.selection, cornerRadius: 8))
+      .environment(\.serverListSelection, ServerListSelection(selected: self.selection, color: self.theme?.selection, cornerRadius: 8, unemphasized: unemphasized))
       .environment(\.serverAdminColor, self.theme.map { Color(nsColor: $0.sidebarAdmin) })
       .environment(\.serverUnreadColor, self.theme?.sidebarAccent.map { Color(nsColor: $0) })
       .scrollContentBackground(self.theme == nil ? .automatic : .hidden)
@@ -677,6 +731,10 @@ private struct OKLCH {
     self.hue = hue
   }
 
+  /// The system's blue and orange, in light mode, as the system's accent and its orange are.
+  static let systemBlue = OKLCH(lightness: 0.603, chroma: 0.218, hue: 257.4 / 180 * .pi)
+  static let systemOrange = OKLCH(lightness: 0.753, chroma: 0.172, hue: 55.7 / 180 * .pi)
+
   init(_ color: NSColor) {
     let color = color.usingColorSpace(.sRGB) ?? .black
     let red = linearSRGB(color.redComponent), green = linearSRGB(color.greenComponent), blue = linearSRGB(color.blueComponent)
@@ -725,6 +783,17 @@ private struct OKLCH {
       return value <= 0.0031308 ? 12.92 * value : 1.055 * pow(value, 1 / 2.4) - 0.055
     }
     return NSColor(srgbRed: srgb[0], green: srgb[1], blue: srgb[2], alpha: 1)
+  }
+
+  /// Whether it's gray enough that any color stands apart from it.
+  var isGray: Bool {
+    self.chroma < 0.03
+  }
+
+  /// How far around its hue is from another color's, from none to halfway, in radians.
+  func hueDistance(to other: OKLCH) -> Double {
+    let distance = abs(self.hue - other.hue).truncatingRemainder(dividingBy: 2 * .pi)
+    return min(distance, 2 * .pi - distance)
   }
 }
 

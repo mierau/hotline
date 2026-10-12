@@ -2,8 +2,9 @@ import SwiftUI
 
 /// Writing a post for the board, in a card like the ones there, with your name and icon at the top
 /// as everyone's are, so it's your post as it'll be. The board shows Markdown's bold, italic,
-/// strikethrough, code, code blocks, links, quotes and lists, and so does what you write, as you
-/// write it, with the marks kept but faint, and code blocks colored as chat colors them. The
+/// underline, strikethrough, code, code blocks, links, headings, quotes and lists, and so does what
+/// you write, as you write it, with the marks kept but faint, and code blocks colored as chat
+/// colors them. The
 /// buttons on the post's bottom edge, and their keys, put the marks around what's selected, or take
 /// them away. A picture dropped in becomes a drawing of it, in characters, as ASCII art. What you
 /// write stays when the sheet's put away without posting it, for the next time, until you leave the
@@ -35,7 +36,7 @@ struct MessageBoardEditorView: View {
   var body: some View {
     @Bindable var model = self.model
     let post = MessageBoardPost.cleaned(self.model.boardDraft)
-    let room = PostMarkdown.maximumLength - post.utf8.count
+    let room = Markdown.maximumLength - post.utf8.count
 
     VStack(alignment: .leading, spacing: 16) {
       // The post, as it'll be on the board, which is all there is to say what it's for.
@@ -61,7 +62,7 @@ struct MessageBoardEditorView: View {
             Text(room >= 0 ? "\(room.formatted()) left" : "\((-room).formatted()) too long")
               .monospacedDigit()
               .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
-              .help("A post can be up to \(PostMarkdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
+              .help("A post can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
           }
           else {
             Text("now")
@@ -103,7 +104,9 @@ struct MessageBoardEditorView: View {
     .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
       self.shown.size = size
     }
-    .background(ResizableSheet(smallest: Self.smallest, opening: self.opening, shown: self.shown))
+    .background(ResizableSheet(smallest: Self.smallest, opening: self.opening, shown: self.shown) { size in
+      Prefs.shared.boardPostSize = NSStringFromSize(size)
+    })
     // As big as it's meant to be, as above.
     .presentationSizing(.fitted)
     .toolbar {
@@ -173,181 +176,5 @@ struct MessageBoardEditorView: View {
       let posted = self.model.messageBoard.first(where: { $0.body == text }) ?? self.model.messageBoard.first
       self.model.boardPostToReveal = posted?.reference
     }
-  }
-}
-
-/// How big the post is shown, kept where keeping it doesn't draw it again as it's resized, and how
-/// much more than it was asked to be, as SwiftUI shows a sheet, so it's asked for as big as it's to
-/// be next time, and doesn't grow each time.
-private final class ShownSize {
-  var size: CGSize = .zero
-  var extra: CGSize?
-}
-
-/// Lets the sheet it's in be resized, which a sheet isn't on its own, no smaller than the post needs
-/// room for, and keeps how big it's made, for the next time it opens.
-private struct ResizableSheet: NSViewRepresentable {
-  let smallest: CGSize
-  /// How big it was asked to be, as it opened.
-  let opening: CGSize
-  let shown: ShownSize
-
-  func makeNSView(context: Context) -> SheetView {
-    SheetView(smallest: self.smallest, opening: self.opening, shown: self.shown)
-  }
-
-  func updateNSView(_ view: SheetView, context: Context) {
-  }
-
-  final class SheetView: NSView {
-    private let smallest: CGSize
-    private let opening: CGSize
-    private let shown: ShownSize
-    private var watching: [NSObjectProtocol] = []
-
-    init(smallest: CGSize, opening: CGSize, shown: ShownSize) {
-      self.smallest = smallest
-      self.opening = opening
-      self.shown = shown
-      super.init(frame: .zero)
-    }
-
-    required init?(coder: NSCoder) {
-      fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidMoveToWindow() {
-      super.viewDidMoveToWindow()
-      self.watching.forEach(NotificationCenter.default.removeObserver)
-      self.watching = []
-      guard let window = self.window else {
-        return
-      }
-      window.styleMask.insert(.resizable)
-      let shown = self.shown, smallest = self.smallest, opening = self.opening
-      // As small as the post, and what's around it, as SwiftUI doesn't keep a sheet's smallest size
-      // until it's being resized.
-      self.watching.append(NotificationCenter.default.addObserver(forName: NSWindow.willStartLiveResizeNotification, object: window, queue: .main) { [weak window] _ in
-        MainActor.assumeIsolated {
-          guard let window, let content = window.contentView?.frame.size, shown.size != .zero else {
-            return
-          }
-          window.contentMinSize = CGSize(width: smallest.width + content.width - shown.size.width, height: smallest.height + content.height - shown.size.height)
-          // Still as big as it opened, the first time.
-          if shown.extra == nil {
-            shown.extra = CGSize(width: shown.size.width - opening.width, height: shown.size.height - opening.height)
-          }
-        }
-      })
-      self.watching.append(NotificationCenter.default.addObserver(forName: NSWindow.didEndLiveResizeNotification, object: window, queue: .main) { _ in
-        MainActor.assumeIsolated {
-          if shown.size != .zero {
-            let extra = shown.extra ?? .zero
-            Prefs.shared.boardPostSize = NSStringFromSize(CGSize(width: shown.size.width - extra.width, height: shown.size.height - extra.height))
-          }
-        }
-      })
-    }
-  }
-}
-
-// MARK: - Formatting
-
-/// The formatting the board shows, a click or a key away, in glass over the bottom of the post.
-private struct PostFormattingBar: View {
-  /// How tall it is: its buttons, and the glass around them.
-  static let height: CGFloat = PostFormatButton.height + 2 * Self.padding
-  private static let padding: CGFloat = 3
-
-  let editor: PostEditorController
-
-  var body: some View {
-    // None of it shows in code, so it's off there, but for taking code off `code`.
-    let code = self.editor.codeContext
-    HStack(spacing: 0) {
-      PostFormatButton("Bold", systemImage: "bold", key: "b") {
-        self.editor.toggle(.bold)
-      }
-      .disabled(code != nil)
-      PostFormatButton("Italic", systemImage: "italic", key: "i") {
-        self.editor.toggle(.italic)
-      }
-      .disabled(code != nil)
-      PostFormatButton("Strikethrough", systemImage: "strikethrough", key: "x", modifiers: [.command, .shift]) {
-        self.editor.toggle(.strikethrough)
-      }
-      .disabled(code != nil)
-      PostFormatButton("Code", systemImage: "chevron.left.forwardslash.chevron.right", key: "e") {
-        self.editor.toggle(.code)
-      }
-      .disabled(code == .block || code == .drawing)
-      PostFormatButton("Link", systemImage: "link", key: "k") {
-        self.editor.link()
-      }
-      .disabled(code != nil)
-    }
-    .padding(Self.padding)
-    .modifier(PostFormattingBackground())
-  }
-}
-
-/// Glass, from macOS 26, or before it, a fill.
-private struct PostFormattingBackground: ViewModifier {
-  func body(content: Content) -> some View {
-    if #available(macOS 26, *) {
-      content.glassEffect(.regular, in: .capsule)
-    }
-    else {
-      content.background(.fill.quaternary, in: .capsule)
-    }
-  }
-}
-
-/// A formatting button: its symbol, a light fill behind it while the pointer's over it, and its
-/// name and key as its help.
-private struct PostFormatButton: View {
-  static let height: CGFloat = 26
-
-  let title: String
-  let systemImage: String
-  let key: KeyEquivalent
-  let modifiers: EventModifiers
-  let action: () -> Void
-
-  @Environment(\.isEnabled) private var isEnabled
-  @State private var hovered: Bool = false
-
-  init(_ title: String, systemImage: String, key: KeyEquivalent, modifiers: EventModifiers = .command, action: @escaping () -> Void) {
-    self.title = title
-    self.systemImage = systemImage
-    self.key = key
-    self.modifiers = modifiers
-    self.action = action
-  }
-
-  var body: some View {
-    Button(action: self.action) {
-      Image(systemName: self.systemImage)
-        .font(.system(size: 13, weight: .medium))
-        .frame(width: 32, height: Self.height)
-        // In the text's color, as any button that's on, and faint when it's off.
-        .foregroundStyle(self.isEnabled ? .primary : .tertiary)
-        .background(.fill.tertiary.opacity(self.hovered && self.isEnabled ? 1 : 0), in: .capsule)
-        .contentShape(.capsule)
-    }
-    .buttonStyle(.plain)
-    .keyboardShortcut(self.key, modifiers: self.modifiers)
-    .help("\(self.title) (\(self.shortcut))")
-    .accessibilityLabel(self.title)
-    .onHover { hovering in
-      withAnimation(.easeOut(duration: 0.12)) {
-        self.hovered = hovering
-      }
-    }
-  }
-
-  /// The key, as menus show it.
-  private var shortcut: String {
-    (self.modifiers.contains(.shift) ? "⇧" : "") + "⌘" + String(self.key.character).uppercased()
   }
 }

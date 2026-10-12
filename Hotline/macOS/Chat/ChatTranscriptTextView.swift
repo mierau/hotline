@@ -6,7 +6,7 @@ import AppKit
 ///
 /// Don't use `layoutManager` here, even to read it. Asking for it switches the view to TextKit 1
 /// for good. Use `textLayoutManager` and `textContentStorage` instead.
-final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTipOwner {
+final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTipOwner, LinkActions {
   /// The room either side of the chat.
   static let horizontalMargin: CGFloat = 16
   /// Where the chat's lines start, which the input under the chat lines your icon and what you type
@@ -44,12 +44,12 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
 
   private let fragments = ChatLayoutFragmentProvider()
 
-  /// The lines between days, and code blocks' languages, in place of the system's tertiary color, as
-  /// a server's theme has it.
-  var tertiaryColor: NSColor? {
+  /// The lines between days, code blocks' languages and backgrounds, and quotes' bars, in a server's
+  /// theme's colors, or the system's.
+  var colors = Markdown.Colors() {
     didSet {
-      if self.tertiaryColor != oldValue {
-        self.fragments.tertiaryColor = self.tertiaryColor ?? .tertiaryLabelColor
+      if self.colors != oldValue {
+        self.fragments.apply(self.colors)
         self.redrawVisibleText()
       }
     }
@@ -283,7 +283,7 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
   /// its own inside the text view, and those don't draw again when the text view does.
   private func redrawVisibleText(in rect: NSRect? = nil) {
     func redraw(_ view: NSView) {
-      for subview in view.subviews where !(subview is ChatImagePreviewView) {
+      for subview in view.subviews where !(subview is ImagePreviewView) {
         if let rect, !subview.convert(subview.bounds, to: self).intersects(rect) {
           continue
         }
@@ -426,7 +426,7 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     // Over any other link, macOS's own menu has Open Link and Copy Link. For a link to an image,
     // Open Image comes first.
     if let menu, menu.items.contains(where: { $0.action == NSSelectorFromString("copyLink:") }),
-       let url = self.link(near: point), ChatImagePreview.canPreview(url), let openImage = self.openImageAction {
+       let url = self.link(near: point), ImagePreview.canPreview(url), let openImage = self.openImageAction {
       menu.insertItem(ChatMenuItem("Open Image", systemImage: "photo") {
         openImage(url)
       }, at: 0)
@@ -435,29 +435,9 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     return menu
   }
 
-  /// What can be done with a link to an image, for its preview's menu: open the image in a preview
-  /// window, or the link the way a click on it does, or copy it, as macOS's menu for a link has.
-  func linkMenuItems(for url: URL) -> [NSMenuItem] {
-    var items: [NSMenuItem] = []
-    if let openImage = self.openImageAction {
-      items.append(ChatMenuItem("Open Image", systemImage: "photo") {
-        openImage(url)
-      })
-    }
-    let open = self.openURLAction
-    items.append(ChatMenuItem("Open Link", systemImage: "arrow.up.forward.app") {
-      if let open {
-        open(url)
-      }
-      else {
-        NSWorkspace.shared.open(url)
-      }
-    })
-    items.append(ChatMenuItem("Copy Link", systemImage: "link") {
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(url.absoluteString, forType: .string)
-    })
-    return items
+  /// The chat keeps its place as a preview grows to fit its image, as it does whenever what's on
+  /// screen is laid out again.
+  func previewDidResize() {
   }
 
   /// The link at a point, found the way macOS's menu for a link finds it: from where an insertion
@@ -535,7 +515,7 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
       return nil
     }
     var link = NSRange()
-    guard let url = storage.attribute(ChatMessageRenderer.fileLinkKey, at: index, longestEffectiveRange: &link, in: message) as? URL else {
+    guard let url = storage.attribute(Markdown.fileLinkKey, at: index, longestEffectiveRange: &link, in: message) as? URL else {
       return nil
     }
     return (url, self.frame(of: link, at: point))
@@ -579,7 +559,7 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     }
     if let superview = self.superview, var view = self.hitTest(superview.convert(point, from: self)) {
       while view !== self {
-        if view is ChatImagePreviewView {
+        if view is ImagePreviewView {
           return .pointingHand
         }
         guard let parent = view.superview else {
@@ -678,19 +658,11 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
   /// as can be seen, and hides it anywhere else. After a copy, it stays away from that block until
   /// the pointer has left it.
   private func updateCopyCodeButton(at point: NSPoint) {
-    guard let fragment = self.layoutFragment(at: point) as? ChatLayoutFragment,
-          let bounds = fragment.codeBlockBounds,
-          let range = self.characterRange(for: fragment.rangeInElement) else {
+    guard let block = self.codeBlock(at: point), block.frame.contains(point) else {
       self.hideCopyCodeButton()
       return
     }
-    let origin = self.textContainerOrigin
-    let block = bounds.offsetBy(dx: fragment.layoutFragmentFrame.minX + origin.x, dy: fragment.layoutFragmentFrame.minY + origin.y)
-    guard block.contains(point) else {
-      self.hideCopyCodeButton()
-      return
-    }
-    guard range != self.copiedCodeRange else {
+    guard block.range != self.copiedCodeRange else {
       return
     }
     self.copiedCodeRange = nil
@@ -706,10 +678,48 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     }
     let size = ChatCopyCodeButton.size
     let inset: CGFloat = 5
-    let top = min(max(block.minY, self.visibleTop) + inset, block.maxY - size - inset)
-    button.place(at: NSPoint(x: block.maxX - inset, y: top))
-    self.copyCodeRange = range
+    let top = min(max(block.frame.minY, self.visibleTop) + inset, block.frame.maxY - size - inset)
+    button.place(at: NSPoint(x: block.frame.maxX - inset, y: top))
+    self.copyCodeRange = block.range
     button.show()
+  }
+
+  /// The code block under a point: its lines, from the first to the last, and where its background
+  /// is in the view.
+  private func codeBlock(at point: NSPoint) -> (range: NSRange, frame: NSRect)? {
+    guard let textLayoutManager = self.textLayoutManager,
+          let fragment = self.layoutFragment(at: point) as? MarkdownCodeLineFragment else {
+      return nil
+    }
+    // Back to its first line, and on to its last.
+    var first = fragment, last = fragment
+    if !fragment.isTop {
+      textLayoutManager.enumerateTextLayoutFragments(from: fragment.rangeInElement.location, options: [.reverse, .ensuresLayout]) { candidate in
+        guard let line = candidate as? MarkdownCodeLineFragment else {
+          return false
+        }
+        first = line
+        return !line.isTop
+      }
+    }
+    if !fragment.isBottom {
+      textLayoutManager.enumerateTextLayoutFragments(from: fragment.rangeInElement.location, options: [.ensuresLayout]) { candidate in
+        guard let line = candidate as? MarkdownCodeLineFragment else {
+          return false
+        }
+        last = line
+        return !line.isBottom
+      }
+    }
+    guard let start = self.characterRange(for: first.rangeInElement)?.location,
+          let end = self.characterRange(for: last.rangeInElement).map(NSMaxRange), end > start else {
+      return nil
+    }
+    let origin = self.textContainerOrigin
+    func background(of line: MarkdownCodeLineFragment) -> NSRect {
+      line.backgroundBounds.offsetBy(dx: line.layoutFragmentFrame.minX + origin.x, dy: line.layoutFragmentFrame.minY + origin.y)
+    }
+    return (NSRange(location: start, length: end - start), background(of: first).union(background(of: last)))
   }
 
   /// After the text under the pointer moves without the pointer moving.
@@ -844,7 +854,7 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
   /// What clicking a link shown as `text` does, or nil if nothing.
   func toolTipText(for url: URL, shownAs text: String) -> String? {
     // A file shows only its name, so the whole link is what's worth knowing.
-    if ChatMessageRenderer.fileName(ofHotlineLink: url) != nil {
+    if Markdown.fileName(ofHotlineLink: url) != nil {
       return url.absoluteString.removingPercentEncoding ?? url.absoluteString
     }
     if url.scheme?.lowercased() == "hotline" {
@@ -904,26 +914,10 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
       let selected = self.selectedRanges
         .map(\.rangeValue)
         .filter { $0.length > 0 && NSMaxRange($0) <= storage.length }
-        .map { Self.plainText(storage.attributedSubstring(from: $0)) }
+        .map { Markdown.plainText(storage.attributedSubstring(from: $0)) }
       pboard.setString(selected.joined(separator: "\n"), forType: .string)
     }
     return wrote
-  }
-
-  private static func plainText(_ text: NSAttributedString) -> String {
-    var plain = ""
-    text.enumerateAttribute(ChatMessageRenderer.fileLinkKey, in: NSRange(location: 0, length: text.length)) { value, range, _ in
-      if let url = value as? URL {
-        plain += url.absoluteString
-        return
-      }
-      text.enumerateAttribute(ChatMessageRenderer.fullLinkKey, in: range) { written, part, _ in
-        plain += (written as? String) ?? (text.string as NSString).substring(with: part)
-      }
-    }
-    return plain
-      .replacingOccurrences(of: "\u{FFFC}", with: "")
-      .replacingOccurrences(of: "\u{2028}", with: "\n")
   }
 }
 
@@ -1546,24 +1540,22 @@ extension ChatTranscriptTextView {
 
 // MARK: - Layout Fragments
 
-/// Hands out layout fragments that draw what the text alone can't.
-final class ChatLayoutFragmentProvider: NSObject, NSTextLayoutManagerDelegate {
-  /// The link or name under the pointer, in characters, which the fragment holding it underlines.
-  var hoveredLink: NSRange?
-  /// The color of the lines between days, and code blocks' languages.
-  var tertiaryColor: NSColor = .tertiaryLabelColor
+/// Hands out layout fragments that draw what the text alone can't: the sender's icon, a server
+/// message's background, and the line through a date divider, as well as what Markdown's do, for
+/// code blocks, quotes, lines across, and the link under the pointer.
+final class ChatLayoutFragmentProvider: MarkdownFragments {
+  init() {
+    super.init(codePadding: ChatMessageRenderer.codeBlockPadding)
+  }
 
-  func textLayoutManager(_ textLayoutManager: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation, in textElement: NSTextElement) -> NSTextLayoutFragment {
+  override func textLayoutManager(_ textLayoutManager: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation, in textElement: NSTextElement) -> NSTextLayoutFragment {
     guard let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else {
       return NSTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
     }
 
     let attributes = paragraph.attributedString.attributes(at: 0, effectiveRange: nil)
     let decoration: ChatLayoutFragment.Decoration
-    if attributes[ChatMessageRenderer.codeBlockKey] != nil {
-      decoration = .codeBlock
-    }
-    else if attributes[ChatMessageRenderer.serverMessageKey] != nil {
+    if attributes[ChatMessageRenderer.serverMessageKey] != nil {
       decoration = .serverMessage
     }
     else if attributes[ChatMessageRenderer.dividerKey] != nil {
@@ -1573,7 +1565,7 @@ final class ChatLayoutFragmentProvider: NSObject, NSTextLayoutManagerDelegate {
       decoration = .icon(ChatLayoutFragment.icon(savedIconID: (attributes[ChatMessageRenderer.iconIDKey] as? NSNumber)?.uintValue))
     }
     else {
-      decoration = .none
+      return self.fragment(for: textElement) ?? NSTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
     }
     let fragment = ChatLayoutFragment(textElement: textElement, range: textElement.elementRange, decoration: decoration)
     fragment.provider = self
@@ -1581,21 +1573,17 @@ final class ChatLayoutFragmentProvider: NSObject, NSTextLayoutManagerDelegate {
   }
 }
 
-/// A message's layout fragment, with what it draws behind its text: the sender's icon before
-/// their name (wide icons run under the name, as in the user list), the rounded background of a
-/// server message or a code block, or the line through a date divider. It also underlines a link
-/// under the pointer.
-final class ChatLayoutFragment: NSTextLayoutFragment {
+/// A message's first line, with the sender's icon before their name (wide icons run under the
+/// name, as in the user list), or a server message, with its rounded background, or a date divider,
+/// with the line through it. It also underlines a link under the pointer, as every line does.
+final class ChatLayoutFragment: MarkdownLineFragment {
   enum Decoration {
-    case none
     case icon(NSImage?)
     case serverMessage
     case divider
-    case codeBlock
   }
 
   let decoration: Decoration
-  weak var provider: ChatLayoutFragmentProvider?
 
   private static let iconHeight: CGFloat = 16
   /// Room for the widest icons.
@@ -1615,11 +1603,6 @@ final class ChatLayoutFragment: NSTextLayoutFragment {
 
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
-  }
-
-  /// How far in from the container's edges text starts.
-  private var lineFragmentPadding: CGFloat {
-    self.textLayoutManager?.textContainer?.lineFragmentPadding ?? 0
   }
 
   /// The text's lines, in the fragment's coordinates.
@@ -1648,24 +1631,9 @@ final class ChatLayoutFragment: NSTextLayoutFragment {
     return CGRect(x: self.iconMidX - width / 2, y: self.iconMidY - height / 2, width: width, height: height)
   }
 
-  /// The language a code block names, which shows above its code.
-  private lazy var codeLanguage: String? = {
-    guard case .codeBlock = self.decoration, let text = (self.textElement as? NSTextParagraph)?.attributedString, text.length > 0 else {
-      return nil
-    }
-    return text.attribute(ChatMessageRenderer.codeLanguageKey, at: 0, effectiveRange: nil) as? String
-  }()
-
-  private static var codeLanguageFont: NSFont {
-    .systemFont(ofSize: NSFont.smallSystemFontSize - 1)
-  }
-
   /// Where the decoration draws, in the fragment's coordinates. For icons, room for any icon.
   private var decorationBounds: CGRect {
     switch self.decoration {
-    case .none:
-      return .null
-
     case .icon:
       return CGRect(x: self.iconMidX - Self.widestIcon / 2, y: self.iconMidY - Self.iconHeight / 2, width: Self.widestIcon, height: Self.iconHeight)
 
@@ -1682,17 +1650,6 @@ final class ChatLayoutFragment: NSTextLayoutFragment {
       let left = self.lineFragmentPadding - self.layoutFragmentFrame.minX
       let right = width - self.lineFragmentPadding - self.layoutFragmentFrame.minX
       return CGRect(x: left, y: line.midY, width: right - left, height: 1)
-
-    case .codeBlock:
-      // Around the code, from where a message's wrapped lines start across to the right margin,
-      // and the language it names above it.
-      let text = self.textBounds
-      let width = self.textLayoutManager?.textContainer?.size.width ?? self.layoutFragmentFrame.width
-      let left = self.lineFragmentPadding + self.codeBlockIndent - self.layoutFragmentFrame.minX
-      let right = width - self.lineFragmentPadding - self.layoutFragmentFrame.minX
-      let padding = ChatMessageRenderer.codeBlockPadding.height
-      let top = text.minY - padding - (self.codeLanguage == nil ? 0 : ChatMessageRenderer.codeLanguageHeight)
-      return CGRect(x: left, y: top, width: right - left, height: text.maxY + padding - top)
     }
   }
 
@@ -1719,29 +1676,8 @@ final class ChatLayoutFragment: NSTextLayoutFragment {
     return (origin + line.locationForCharacter(at: start).x)...(origin + line.locationForCharacter(at: end).x)
   }
 
-  /// Where a code block's background starts: where its lines do, less its padding.
-  private lazy var codeBlockIndent: CGFloat = {
-    let padding = ChatMessageRenderer.codeBlockPadding.width
-    guard let text = (self.textElement as? NSTextParagraph)?.attributedString, text.length > 0,
-          let style = text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle else {
-      return ChatMessageRenderer.textIndent + ChatMessageRenderer.hangingIndent
-    }
-    return style.headIndent - padding
-  }()
-
-  /// Where a code block's background is, in the fragment's coordinates, if this is one.
-  var codeBlockBounds: CGRect? {
-    guard case .codeBlock = self.decoration else {
-      return nil
-    }
-    return self.decorationBounds
-  }
-
   override func draw(at point: CGPoint, in context: CGContext) {
     switch self.decoration {
-    case .none:
-      break
-
     case .icon(let icon):
       if let icon, var rect = self.iconFrame?.offsetBy(dx: point.x, dy: point.y) {
         // Messages can sit part of a pixel off, and the icons are pixel art, which blurs when it's
@@ -1783,70 +1719,8 @@ final class ChatLayoutFragment: NSTextLayoutFragment {
         context.fill(CGRect(x: segment.lowerBound, y: y, width: segment.upperBound - segment.lowerBound, height: pixel))
       }
       context.restoreGState()
-
-    case .codeBlock:
-      let rect = self.decorationBounds.offsetBy(dx: point.x, dy: point.y)
-      context.saveGState()
-      context.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-      context.setFillColor(ChatMessageRenderer.codeBlockBackground.cgColor)
-      context.fillPath()
-      context.restoreGState()
-      if let language = self.codeLanguage {
-        // Small and faint, in line with the code.
-        let label = NSAttributedString(string: language, attributes: [
-          .font: Self.codeLanguageFont,
-          .foregroundColor: self.provider?.tertiaryColor ?? .tertiaryLabelColor,
-        ])
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-        label.draw(at: CGPoint(x: rect.minX + ChatMessageRenderer.codeBlockPadding.width, y: rect.minY + ChatMessageRenderer.codeBlockPadding.height - 1))
-        NSGraphicsContext.restoreGraphicsState()
-      }
     }
 
     super.draw(at: point, in: context)
-    self.drawHoveredLink(at: point, in: context)
-  }
-
-  /// Underlines the link or name under the pointer, if it's in this message. TextKit 2 doesn't draw
-  /// underlines added as rendering attributes, only colors, so the fragment draws its own.
-  private func drawHoveredLink(at point: CGPoint, in context: CGContext) {
-    guard let link = self.provider?.hoveredLink,
-          let contentManager = self.textLayoutManager?.textContentManager,
-          let paragraph = self.textElement as? NSTextParagraph else {
-      return
-    }
-    // The link's characters, counted from the start of this message.
-    let start = contentManager.offset(from: contentManager.documentRange.location, to: self.rangeInElement.location)
-    let local = NSIntersectionRange(NSRange(location: link.location - start, length: link.length), NSRange(location: 0, length: paragraph.attributedString.length))
-    guard local.length > 0 else {
-      return
-    }
-
-    let pixel = abs(context.convertToUserSpace(CGSize(width: 1, height: 1)).height)
-    context.saveGState()
-    for line in self.textLineFragments {
-      var range = NSIntersectionRange(line.characterRange, local)
-      // Not under a file's icon.
-      if range.length > 1, (line.attributedString.string as NSString).character(at: range.location) == 0xFFFC {
-        range = NSRange(location: range.location + 1, length: range.length - 1)
-      }
-      guard range.length > 0 else {
-        continue
-      }
-      let attributes = line.attributedString.attributes(at: range.location, effectiveRange: nil)
-      let font = attributes[.font] as? NSFont ?? ChatMessageRenderer.baseFont
-      let color = attributes[.foregroundColor] as? NSColor ?? .textColor
-      let left = line.locationForCharacter(at: range.location).x
-      let right = line.locationForCharacter(at: NSMaxRange(range)).x
-      // Below the baseline by the font's underline position, on whole pixels so it's crisp, with
-      // the part of a pixel dropped the way the text drops it.
-      let baseline = point.y + line.typographicBounds.minY + line.glyphOrigin.y
-      let y = ((baseline - font.underlinePosition) / pixel).rounded(.down) * pixel
-      let thickness = max(pixel, (font.underlineThickness / pixel).rounded() * pixel)
-      context.setFillColor(color.cgColor)
-      context.fill(CGRect(x: point.x + line.typographicBounds.minX + left, y: y, width: right - left, height: thickness))
-    }
-    context.restoreGState()
   }
 }

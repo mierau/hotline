@@ -1,5 +1,4 @@
 import SwiftUI
-import Textual
 import UniformTypeIdentifiers
 
 private struct SoftScrollEdgeEffect: ViewModifier {
@@ -25,6 +24,7 @@ private struct ComposeContext: Identifiable {
 struct MessageView: View {
   @Environment(HotlineState.self) private var model: HotlineState
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.openWindow) private var openWindow
 
   @State private var userInfo: HotlineUserClientInfo?
   @State private var disconnectConfirmShown: Bool = false
@@ -32,6 +32,8 @@ struct MessageView: View {
   @State private var username: String?
   @State private var composeContext: ComposeContext? = nil
   @State private var deleteMessageID: UUID? = nil
+  /// A linked file's info, from its link's menu.
+  @State private var fileDetails: FileDetails?
   @FocusState private var focusedMessageID: UUID?
 
   var userID: UInt16
@@ -184,6 +186,9 @@ struct MessageView: View {
     }
     .sheet(item: self.$userInfo) { info in
       UserClientInfoSheet(info: info)
+    }
+    .sheet(item: self.$fileDetails) { details in
+      FileDetailsSheet(details: details)
     }
     .alert("Are you sure you want to disconnect \(self.username ?? "this user")?", isPresented: self.$disconnectConfirmShown) {
       Button("Disconnect", role: .destructive) {
@@ -410,14 +415,10 @@ struct MessageView: View {
     return msg.text
   }
 
-  @ViewBuilder
   private func messageCardBody(_ msg: InstantMessage) -> some View {
-    HStack(spacing: 0) {
-      StructuredText(markdown: self.messageBodyText(msg).convertingLinksToMarkdown())
-        .textual.textSelection(.enabled)
-
-      Spacer(minLength: 0)
-    }
+    MarkdownText(text: self.messageBodyText(msg), fileLinkMenu: { url in
+      FileLinkMenu(model: self.model, openWindow: self.openWindow, showInfo: { self.fileDetails = $0 }).menu(for: url)
+    })
   }
 
   @ViewBuilder

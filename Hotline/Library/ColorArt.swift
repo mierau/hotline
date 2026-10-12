@@ -41,19 +41,25 @@ struct ColorArt: Equatable {
   let primaryColor: NSColor
   let secondaryColor: NSColor
   let detailColor: NSColor
-  /// The banner's color for theming things alongside its background, like a selection: the biggest
-  /// part of it that's colorful and of another hue, or on a gray or black background, the biggest
-  /// colorful part, like a logo. It's made to stand out against the background. Nil when the
-  /// banner has nothing of another color.
-  let accentColor: NSColor?
+  /// The banner's colors for theming things alongside its background, biggest first: each part of
+  /// it that's colorful and of another hue, or on a gray or black background, each colorful part,
+  /// like a logo, its lettering, or lines across it. Each is made to stand out against the
+  /// background. Empty when the banner has nothing of another color.
+  let accentColors: [NSColor]
 //  let scaledImage: NSImage
+
+  /// The biggest of the banner's colors, for theming things alongside its background, like a
+  /// selection.
+  var accentColor: NSColor? {
+    self.accentColors.first
+  }
 
   static func == (lhs: ColorArt, rhs: ColorArt) -> Bool {
     return lhs.backgroundColor == rhs.backgroundColor &&
            lhs.primaryColor == rhs.primaryColor &&
            lhs.secondaryColor == rhs.secondaryColor &&
            lhs.detailColor == rhs.detailColor &&
-           lhs.accentColor == rhs.accentColor
+           lhs.accentColors == rhs.accentColors
   }
   
   static func analyze(image: NSImage) -> ColorArt? {
@@ -78,7 +84,7 @@ struct ColorArt: Equatable {
                     primaryColor: colors.primary,
                     secondaryColor: colors.secondary,
                     detailColor: colors.detail,
-                    accentColor: colors.accent)
+                    accentColors: colors.accents)
   }
   
   // MARK: - Image Scaling
@@ -135,7 +141,7 @@ struct ColorArt: Equatable {
   
   // MARK: - Image Analysis
   
-  private static func analyzeImage(_ image: NSImage) -> (background: NSColor, primary: NSColor, secondary: NSColor, detail: NSColor, accent: NSColor?)? {
+  private static func analyzeImage(_ image: NSImage) -> (background: NSColor, primary: NSColor, secondary: NSColor, detail: NSColor, accents: [NSColor])? {
     guard let colors = self.imageColors(image) else {
       return nil
     }
@@ -166,7 +172,7 @@ struct ColorArt: Equatable {
       detailColor = darkBackground ? .white : .black
     }
 
-    let accentColor = self.accentColor(in: groups, background: backgroundColor)
+    let accentColors = self.accentColors(in: groups, background: backgroundColor)
 
     // Convert all colors to calibrated RGB color space for consistency
     // This ensures all colors are in the same color space and prevents
@@ -176,9 +182,9 @@ struct ColorArt: Equatable {
     let finalPrimary = primaryColor!.usingColorSpace(rgbColorSpace) ?? primaryColor!
     let finalSecondary = secondaryColor!.usingColorSpace(rgbColorSpace) ?? secondaryColor!
     let finalDetail = detailColor!.usingColorSpace(rgbColorSpace) ?? detailColor!
-    let finalAccent = accentColor.map { $0.usingColorSpace(rgbColorSpace) ?? $0 }
+    let finalAccents = accentColors.map { $0.usingColorSpace(rgbColorSpace) ?? $0 }
 
-    return (finalBackground, finalPrimary, finalSecondary, finalDetail, finalAccent)
+    return (finalBackground, finalPrimary, finalSecondary, finalDetail, finalAccents)
   }
   
   // MARK: - Colors
@@ -270,32 +276,32 @@ struct ColorArt: Equatable {
     return groups.sorted { $0.count > $1.count }
   }
 
-  /// The biggest group that's colorful, at least half a percent of the image, so not a speck, and
-  /// of another hue than the background, or on a gray or nearly black background, any colorful
-  /// one. Made to stand out against the background: if it's too near its brightness, it's made
-  /// deeper on a bright background and brighter on a dark one, and a little more colorful.
-  private static func accentColor(in groups: [ColorGroup], background: NSColor) -> NSColor? {
+  /// The groups that are colorful, at least half a percent of the image, so not specks, and of
+  /// another hue than the background, or on a gray or nearly black background, any colorful ones,
+  /// biggest first. Each is made to stand out against the background: if it's too near its
+  /// brightness, it's made deeper on a bright background and brighter on a dark one, and a little
+  /// more colorful.
+  private static func accentColors(in groups: [ColorGroup], background: NSColor) -> [NSColor] {
     guard let background = background.usingColorSpace(.genericRGB) else {
-      return nil
+      return []
     }
     let total = groups.reduce(0) { $0 + $1.count }
     // Nearly black has no hue to speak of, whatever its saturation works out to.
     let grayBackground = background.saturationComponent < 0.15 || background.brightnessComponent < 0.2
-    for group in groups.dropFirst() where CGFloat(group.count) >= CGFloat(total) * 0.005 {
+    let brightness = background.brightnessComponent
+    return groups.dropFirst().filter { CGFloat($0.count) >= CGFloat(total) * 0.005 }.compactMap { group in
       guard let color = group.color.usingColorSpace(.genericRGB), color.saturationComponent >= 0.2 else {
-        continue
+        return nil
       }
       let hueDistance = abs(color.hueComponent - background.hueComponent)
       guard grayBackground || min(hueDistance, 1 - hueDistance) >= 25 / 360 else {
-        continue
+        return nil
       }
-      let brightness = background.brightnessComponent
       guard abs(color.brightnessComponent - brightness) < 0.3 else {
         return color
       }
       return NSColor(colorSpace: .genericRGB, hue: color.hueComponent, saturation: min(color.saturationComponent + 0.15, 1), brightness: brightness >= 0.55 ? brightness - 0.3 : min(brightness + 0.3, 1), alpha: 1)
     }
-    return nil
   }
   
   // MARK: - Text Color Detection

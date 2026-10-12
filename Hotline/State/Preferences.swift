@@ -132,6 +132,7 @@ enum PrefsKeys: String {
   case downloadFolderBookmark = "download folder bookmark"
   case filesViewMode = "files view mode"
   case boardPostSize = "board post size"
+  case newsArticleSize = "news article size"
   case watchWords = "watch words"
   case recentServers = "recent servers"
   case showRecentServers = "show recent servers"
@@ -206,6 +207,7 @@ class Prefs {
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
     self.boardPostSize = UserDefaults.standard.string(forKey: PrefsKeys.boardPostSize.rawValue) ?? ""
+    self.newsArticleSize = UserDefaults.standard.string(forKey: PrefsKeys.newsArticleSize.rawValue) ?? ""
     self.showRecentServers = UserDefaults.standard.bool(forKey: PrefsKeys.showRecentServers.rawValue)
 
     self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: PrefsKeys.hasCompletedOnboarding.rawValue)
@@ -353,6 +355,11 @@ class Prefs {
   /// it opens on its own.
   var boardPostSize: String {
     didSet { UserDefaults.standard.set(self.boardPostSize, forKey: PrefsKeys.boardPostSize.rawValue) }
+  }
+
+  /// How big the new article sheet was last made, as for the board's.
+  var newsArticleSize: String {
+    didSet { UserDefaults.standard.set(self.newsArticleSize, forKey: PrefsKeys.newsArticleSize.rawValue) }
   }
 
   var watchWords: [HighlightWord] {

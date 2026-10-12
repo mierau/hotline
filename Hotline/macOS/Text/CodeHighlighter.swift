@@ -1,10 +1,10 @@
 import AppKit
 
-/// Colors code in a chat code block by its language, simply, the way a code editor would at a
-/// glance: keywords, strings, comments, numbers, the names of types, and the keys in settings files. It doesn't know every
-/// language, or every corner of the ones it does, just enough to make code pasted into chat easy
-/// to read.
-enum ChatCodeHighlighter {
+/// Colors code in a code block by its language, simply, the way a code editor would at a glance:
+/// keywords, strings, comments, numbers, the names of types, and the keys in settings files. It
+/// doesn't know every language, or every corner of the ones it does, just enough to make code
+/// pasted into chat, or a post, easy to read.
+enum CodeHighlighter {
 
   // MARK: Languages
 

@@ -1,5 +1,4 @@
 import SwiftUI
-import Textual
 import SplitView
 
 struct NewsView: View {
@@ -9,17 +8,20 @@ struct NewsView: View {
   @Environment(\.serverTheme) private var theme
   
   @State private var selection: NewsInfo?
-  @State private var articleText: String?
 //  @State private var splitHidden: SideHolder = SideHolder(.bottom)
   @State private var splitFraction = FractionHolder.usingUserDefaults(0.25, key: "News Split Fraction")
   @State private var editorOpen: Bool = false
-  @State private var replyOpen: Bool = false
+  /// The article being replied to, in the sheet for it, and what the reply starts with.
+  @State private var replyingTo: NewsInfo?
+  @State private var replyQuote = ""
   @State private var loading: Bool = false
   @State private var newFolderShown: Bool = false
   @State private var newCategoryShown: Bool = false
   @State private var confirmDeleteShown: Bool = false
   @State private var conflictAlertShown: Bool = false
   @State private var pendingCreate: PendingNewsCreate?
+  /// A linked file's info, from its link's menu.
+  @State private var fileDetails: FileDetails?
   
   var body: some View {
     NavigationStack {
@@ -64,6 +66,9 @@ struct NewsView: View {
         loading = false
       }
     }
+    .sheet(item: self.$fileDetails) { details in
+      FileDetailsSheet(details: details)
+    }
     .sheet(isPresented: $editorOpen) {
     } content: {
       if let selection = selection {
@@ -78,14 +83,10 @@ struct NewsView: View {
         EmptyView()
       }
     }
-    .sheet(isPresented: $replyOpen) {
-    } content: {
-      if let selection = selection, selection.type == .article {
-        NewsEditorView(editorTitle: "Reply to \(selection.articleUsername ?? "Article")", isReply: true, path: selection.path, parentID: UInt32(selection.articleID!), selection: self.$selection, title: selection.name.replyToString())
-      }
-      else {
-        EmptyView()
-      }
+    .sheet(item: self.$replyingTo) {
+      self.replyQuote = ""
+    } content: { article in
+      NewsEditorView(editorTitle: "Reply to \(article.articleUsername ?? "Article")", isReply: true, path: article.path, parentID: UInt32(article.articleID ?? 0), selection: self.$selection, title: article.name.replyToString(), quote: self.replyQuote)
     }
     .alert("Are you sure you want to permanently delete \"\(self.selection?.name ?? "this item")\"?", isPresented: self.$confirmDeleteShown) {
       Button("Delete", role: .destructive) {
@@ -132,19 +133,19 @@ struct NewsView: View {
           Image(systemName: "square.and.pencil")
         }
         .help("New article under current topic")
-        .disabled(selection?.type != .category && selection?.type != .article)
+        .disabled(selection?.type != .category && selection?.type != .article || !self.canPost)
       }
       
       ToolbarItem {
         Button {
           if selection?.type == .article {
-            replyOpen = true
+            self.replyingTo = selection
           }
         } label: {
           Image(systemName: "arrowshape.turn.up.left")
         }
         .help("Reply to selected article")
-        .disabled(selection?.type != .article)
+        .disabled(selection?.type != .article || !self.canPost)
       }
       
       if #available(macOS 26.0, *) {
@@ -245,14 +246,14 @@ struct NewsView: View {
       } label: {
         Label("New Article", systemImage: "square.and.pencil")
       }
-      .disabled(!canPost)
+      .disabled(!canPost || !self.canPost)
       
       Button {
-        self.replyOpen = true
+        self.replyingTo = selectedItem
       } label: {
         Label("Reply...", systemImage: "arrowshape.turn.up.left")
       }
-      .disabled(!canReply)
+      .disabled(!canReply || !self.canPost)
       
       Divider()
       
@@ -293,23 +294,13 @@ struct NewsView: View {
       }
     }
     .onChange(of: selection) {
-      self.articleText = nil
       if let article = selection, article.type == .article {
         article.read = true
-        if let articleFlavor = article.articleFlavors?.first,
-           let articleID = article.articleID {
-          Task {
-            if let articleText = try? await self.model.getNewsArticle(id: articleID, at: article.path, flavor: articleFlavor) {
-              self.articleText = articleText
-            }
-          }
 //          if self.splitHidden.side != nil {
 //            withAnimation(.easeOut(duration: 0.15)) {
 //              self.splitHidden.side = nil
 //            }
 //          }
-          
-        }
       }
 //      else {
 //        if self.splitHidden.side != .bottom {
@@ -347,58 +338,35 @@ struct NewsView: View {
     .frame(maxWidth: .infinity)
   }
   
+  /// The article chosen, in its conversation, with the replies to it, and the replies to those.
   private var articleViewer: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 0) {
-        if let selection = selection, selection.type == .article {
-          if let poster = selection.articleUsername, let postDate = selection.articleDate {
-            HStack(alignment: .firstTextBaseline) {
-              Text(poster)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .textSelection(.enabled)
-                .padding(.bottom, 16)
-              Spacer()
-              Text("\(NewsItemView.dateFormatter.string(from: postDate))")
-                .foregroundStyle(.serverSecondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .textSelection(.enabled)
-                .padding(.bottom, 16)
-            }
-          }
-          
-          Divider()
-            .serverThemedDivider()
-          
-          Text(selection.name).font(.title)
-            .textSelection(.enabled)
-            .padding(.bottom, 8)
-            .padding(.top, 16)
-          
-          if let newsText = self.articleText {
-            StructuredText(markdown: newsText.convertingLinksToMarkdown())
-              .textual.textSelection(.enabled)
-              .padding(.top, 16)
-          }
-        }
-        else {
-          ContentUnavailableView {
-            Label("No Article", systemImage: "richtext.page")
-          } description: {
-            Text("Select an article to read")
-          }
-          .frame(maxWidth: .infinity)
-          .padding(.top, 24)
+    Group {
+      if let selection, selection.type == .article {
+        NewsThreadView(article: selection, canReply: self.canPost) { article, quote in
+          self.replyQuote = quote
+          self.replyingTo = article
+        } fileLinkMenu: { url in
+          FileLinkMenu(model: self.model, openWindow: self.openWindow, showInfo: { self.fileDetails = $0 }).menu(for: url)
         }
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-      .padding()
+      else {
+        ContentUnavailableView {
+          Label("No Article", systemImage: "richtext.page")
+        } description: {
+          Text("Select an article to read")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.top, 40)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .transition(.move(edge: .bottom))
     .serverBackground(.content)
+  }
+
+  /// Whether you can post to the news, and reply in it.
+  private var canPost: Bool {
+    self.model.access?.contains(.canPostNews) == true
   }
   
   // MARK: - Helpers

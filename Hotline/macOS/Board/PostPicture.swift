@@ -79,7 +79,7 @@ enum PostPicture {
   /// A character's cell, as the board lays out a drawing: as wide as the font's characters, as tall
   /// as a line, and how far down it the baseline is.
   private static let cell: (width: CGFloat, height: CGFloat, baseline: CGFloat) = {
-    let font = PostMarkdown.codeFont
+    let font = Markdown.codeFont
     let width = ("M" as NSString).size(withAttributes: [.font: font]).width
     let content = NSTextContentStorage()
     let layoutManager = NSTextLayoutManager()
@@ -113,7 +113,7 @@ enum PostPicture {
   private static let glyphs: [Glyph] = {
     let scale: CGFloat = 8
     let width = Int((cell.width * scale).rounded(.up)), height = Int((cell.height * scale).rounded(.up))
-    let font = PostMarkdown.codeFont
+    let font = Markdown.codeFont
     return characters.map { character in
       let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)!
       context.setFillColor(gray: 1, alpha: 1)

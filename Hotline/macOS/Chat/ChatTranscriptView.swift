@@ -67,7 +67,7 @@ struct ChatTranscriptView: NSViewRepresentable {
 
     if let textView = coordinator.textView {
       textView.applyServerTheme(theme)
-      textView.tertiaryColor = theme?.tertiaryText
+      textView.colors = coordinator.options.layout.colors
       textView.openURLAction = self.openURL
       let openWindow = context.environment.openWindow
       textView.openImageAction = { url in

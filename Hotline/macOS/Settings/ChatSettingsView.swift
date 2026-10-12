@@ -16,7 +16,10 @@ struct ChatSettingsView: View {
     Form {
       Toggle("Show connections in chat", isOn: $preferences.showJoinLeaveMessages)
       Toggle("Show user icons in chat", isOn: $preferences.showChatIcons)
-      Toggle("Preview image links in chat", isOn: $preferences.previewChatImages)
+      Toggle(isOn: $preferences.previewChatImages) {
+        Text("Preview image links")
+        Text("In chat, on the message board, in the news, and in messages.")
+      }
 
       Section("Highlighted Words") {
         HStack(spacing: 8) {
