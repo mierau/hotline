@@ -1,21 +1,14 @@
 import SwiftUI
 
-/// The Server menu, for the server window in front.
+/// The commands for the server window in front: its sections at the top of the View menu, as what
+/// the window shows, and what you can do on the server in the Server menu.
 struct ServerMenuCommands: Commands {
   @FocusedValue(\.activeHotlineModel) private var activeHotline: HotlineState?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
 
   var body: some Commands {
-    CommandMenu("Server") {
-      Button("Broadcast Message...", systemImage: "megaphone") {
-        self.activeServerState?.broadcastShown = true
-      }
-      .disabled(self.activeHotline?.access?.contains(.canBroadcast) != true)
-      // ⌘B is Bold, in the Format menu.
-      .keyboardShortcut(.init("b"), modifiers: [.command, .shift])
-
-      Divider()
-
+    // Which section the window shows, as Finder and Calendar have their ⌘1 to ⌘4 in View.
+    CommandGroup(before: .toolbar) {
       Button("Chat", systemImage: "bubble.left") {
         self.activeServerState?.selection = .chat
       }
@@ -39,8 +32,15 @@ struct ServerMenuCommands: Commands {
       }
       .disabled(self.activeHotline?.status != .loggedIn)
       .keyboardShortcut(.init("4"), modifiers: .command)
+    }
 
-      Divider()
+    CommandMenu("Server") {
+      Button("Broadcast Message...", systemImage: "megaphone") {
+        self.activeServerState?.broadcastShown = true
+      }
+      .disabled(self.activeHotline?.access?.contains(.canBroadcast) != true)
+      // ⌘B is Bold, in the Format menu.
+      .keyboardShortcut(.init("b"), modifiers: [.command, .shift])
 
       Button("Manage Accounts...", systemImage: "person.2") {
         self.activeServerState?.accountsShown = true
