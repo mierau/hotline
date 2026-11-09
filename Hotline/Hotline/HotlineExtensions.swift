@@ -1,5 +1,6 @@
 import Foundation
 import CoreServices
+import NetSocket
 
 enum LineEnding {
   case lf // Unix-style (\n)

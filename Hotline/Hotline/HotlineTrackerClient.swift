@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import NetSocket
 
 struct HotlineTracker: Identifiable, Equatable {
   let id: UUID = UUID()

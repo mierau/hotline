@@ -1,5 +1,5 @@
 {
-  "originHash" : "8d66f7178e71e74e6b0ce704717e378bb15045452152ba5ce7a5e64e4bfdb5bf",
+  "originHash" : "b28f59d5488bf5907a66373120004f7e48e33d65f3cb24c35ae2b882d6ea1353",
   "pins" : [
     {
       "identity" : "kingfisher",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "8648fe649c5d62be38721110f835821906e9242a",
         "version" : "8.13.0"
+      }
+    },
+    {
+      "identity" : "netsocket",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mierau/netsocket",
+      "state" : {
+        "revision" : "f9d268b541602ada82d7c7bba1b0992e26a752c2",
+        "version" : "0.1.0"
       }
     },
     {

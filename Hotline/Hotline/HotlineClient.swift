@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import NetSocket
 
 // MARK: - Events
 

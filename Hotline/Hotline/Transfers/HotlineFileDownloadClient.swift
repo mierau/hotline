@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import NetSocket
 
 public enum HotlineDownloadLocation: Sendable {
   case url(URL)

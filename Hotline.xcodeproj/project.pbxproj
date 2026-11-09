@@ -62,6 +62,7 @@
 		DA432D4730A14F54000179F6 /* HelpMenuCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432D4630A14F54000179F6 /* HelpMenuCommands.swift */; platformFilters = (macos, ); };
 		DA432D4930A14F5B000179F6 /* ServerMenuCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432D4830A14F5B000179F6 /* ServerMenuCommands.swift */; platformFilters = (macos, ); };
 		DA432D4B30A14F5C000179F6 /* WindowMenuCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432D4A30A14F5C000179F6 /* WindowMenuCommands.swift */; platformFilters = (macos, ); };
+		DA432D4E30A15FFF000179F6 /* NetSocket in Frameworks */ = {isa = PBXBuildFile; productRef = DA432D4D30A15FFF000179F6 /* NetSocket */; };
 		DA4B8F3A2EA6FB3C00CBFD53 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */; platformFilter = ios; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
@@ -83,8 +84,6 @@
 		DA5268B12EB2708E00DCB941 /* HotlineState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268B02EB2708E00DCB941 /* HotlineState.swift */; };
 		DA5268B32EB6806E00DCB941 /* HotlineFileDownloadClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268B22EB6806E00DCB941 /* HotlineFileDownloadClient.swift */; };
 		DA5268B52EB6840A00DCB941 /* TransfersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268B42EB6840A00DCB941 /* TransfersView.swift */; };
-		DA5268B82EB916AF00DCB941 /* TransferRateEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268B72EB916AF00DCB941 /* TransferRateEstimator.swift */; };
-		DA5268BA2EB91B5E00DCB941 /* FileProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268B92EB91B5E00DCB941 /* FileProgress.swift */; };
 		DA5268BC2EB95A7700DCB941 /* HotlineFolderDownloadClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5268BB2EB95A7700DCB941 /* HotlineFolderDownloadClient.swift */; };
 		DA55AC732BE42AF000034857 /* AsyncLinkPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */; platformFilters = (macos, ); };
 		DA55AC752BE4888300034857 /* InstantMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA55AC742BE4888300034857 /* InstantMessage.swift */; };
@@ -146,7 +145,6 @@
 		DAC0E4232EC78E1100E999DB /* UserClientInfoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC0E4222EC78E1100E999DB /* UserClientInfoSheet.swift */; };
 		DAC3D9832BC33FD000A727C9 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC3D9822BC33FD000A727C9 /* AppState.swift */; };
 		DAC6B2E02EAC6236004E2CBA /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC6B2DE2EAC6236004E2CBA /* ChatStore.swift */; };
-		DAC6B2E22EAEE9FE004E2CBA /* NetSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC6B2E12EAEE9EF004E2CBA /* NetSocket.swift */; };
 		DAC6B2E42EAFE92F004E2CBA /* SpinningGlobeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC6B2E32EAFE92F004E2CBA /* SpinningGlobeView.swift */; };
 		DAC87F072C5010E80060FADF /* HotlineExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC87F062C5010E80060FADF /* HotlineExtensions.swift */; };
 		DACCE5E12EABE4B4008CDD92 /* AppUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DACCE5E02EABE4B4008CDD92 /* AppUpdate.swift */; platformFilters = (macos, ); };
@@ -269,8 +267,6 @@
 		DA5268B02EB2708E00DCB941 /* HotlineState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineState.swift; sourceTree = "<group>"; };
 		DA5268B22EB6806E00DCB941 /* HotlineFileDownloadClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineFileDownloadClient.swift; sourceTree = "<group>"; };
 		DA5268B42EB6840A00DCB941 /* TransfersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransfersView.swift; sourceTree = "<group>"; };
-		DA5268B72EB916AF00DCB941 /* TransferRateEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferRateEstimator.swift; sourceTree = "<group>"; };
-		DA5268B92EB91B5E00DCB941 /* FileProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileProgress.swift; sourceTree = "<group>"; };
 		DA5268BB2EB95A7700DCB941 /* HotlineFolderDownloadClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineFolderDownloadClient.swift; sourceTree = "<group>"; };
 		DA55AC722BE42AF000034857 /* AsyncLinkPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncLinkPreview.swift; sourceTree = "<group>"; };
 		DA55AC742BE4888300034857 /* InstantMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstantMessage.swift; sourceTree = "<group>"; };
@@ -332,7 +328,6 @@
 		DAC0E4222EC78E1100E999DB /* UserClientInfoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserClientInfoSheet.swift; sourceTree = "<group>"; };
 		DAC3D9822BC33FD000A727C9 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		DAC6B2DE2EAC6236004E2CBA /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
-		DAC6B2E12EAEE9EF004E2CBA /* NetSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetSocket.swift; sourceTree = "<group>"; };
 		DAC6B2E32EAFE92F004E2CBA /* SpinningGlobeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpinningGlobeView.swift; sourceTree = "<group>"; };
 		DAC87F062C5010E80060FADF /* HotlineExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineExtensions.swift; sourceTree = "<group>"; };
 		DACCE5E02EABE4B4008CDD92 /* AppUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdate.swift; sourceTree = "<group>"; };
@@ -383,6 +378,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DA501BEE2EBEC42E001714F8 /* Kingfisher in Frameworks */,
+				DA432D4E30A15FFF000179F6 /* NetSocket in Frameworks */,
 				DACCE5EF2EAC19C9008CDD92 /* SwiftUIIntrospect in Frameworks */,
 				DA72A0E02B4DA8CA00A0F48A /* SplitView in Frameworks */,
 			);
@@ -587,16 +583,6 @@
 			path = News;
 			sourceTree = "<group>";
 		};
-		DA5268B62EB916AB00DCB941 /* NetSocket */ = {
-			isa = PBXGroup;
-			children = (
-				DAC6B2E12EAEE9EF004E2CBA /* NetSocket.swift */,
-				DA5268B92EB91B5E00DCB941 /* FileProgress.swift */,
-				DA5268B72EB916AF00DCB941 /* TransferRateEstimator.swift */,
-			);
-			path = NetSocket;
-			sourceTree = "<group>";
-		};
 		DA9CAFAE2B126D5700CDA197 = {
 			isa = PBXGroup;
 			children = (
@@ -661,7 +647,6 @@
 				DA55AC782BE6A1AD00034857 /* RegularExpressions.swift */,
 				DA6980822BFFD06C003E434B /* BookmarkDocument.swift */,
 				DA501BE02EBE844F001714F8 /* Views */,
-				DA5268B62EB916AB00DCB941 /* NetSocket */,
 				4862DCD4AE1AB6E7CAD61D80 /* QuickDraw */,
 				DABFCC272B1530BE009F40D2 /* Utility */,
 			);
@@ -812,6 +797,7 @@
 				DA72A0DF2B4DA8CA00A0F48A /* SplitView */,
 				DACCE5EE2EAC19C9008CDD92 /* SwiftUIIntrospect */,
 				DA501BED2EBEC42E001714F8 /* Kingfisher */,
+				DA432D4D30A15FFF000179F6 /* NetSocket */,
 			);
 			productName = Hotline;
 			productReference = DA9CAFB72B126D5700CDA197 /* Hotline.app */;
@@ -849,6 +835,7 @@
 				DA72A0DE2B4DA8CA00A0F48A /* XCRemoteSwiftPackageReference "SplitView" */,
 				DACCE5ED2EAC19C9008CDD92 /* XCRemoteSwiftPackageReference "SwiftUI-Introspect" */,
 				DA501BEC2EBEC42E001714F8 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				DA432D4C30A15FFF000179F6 /* XCRemoteSwiftPackageReference "netsocket" */,
 			);
 			productRefGroup = DA9CAFB82B126D5700CDA197 /* Products */;
 			projectDirPath = "";
@@ -918,7 +905,6 @@
 				DA3429B02EBA70790010784E /* HotlineFolderUploadClient.swift in Sources */,
 				DA5268AB2EB11EA300DCB941 /* ColorArt.swift in Sources */,
 				DA2863D82B37AD1C00A7D050 /* SettingsView.swift in Sources */,
-				DA5268BA2EB91B5E00DCB941 /* FileProgress.swift in Sources */,
 				DA7725412B21435B006C5ABB /* ObservableScrollView.swift in Sources */,
 				DAA15B152F50C96700FAC1B2 /* HotlineState+Users.swift in Sources */,
 				DA84CB9C01984121C3D2D4F6 /* PrivateChatInvitationView.swift in Sources */,
@@ -942,7 +928,6 @@
 				DA501BE22EBE9018001714F8 /* GroupedIconView.swift in Sources */,
 				11A726082BE0672A000C1DA7 /* FileDetails.swift in Sources */,
 				DA9CAFBD2B126D5700CDA197 /* TrackerView.swift in Sources */,
-				DA5268B82EB916AF00DCB941 /* TransferRateEstimator.swift in Sources */,
 				DA3429B52EBA8A450010784E /* FilePreviewState.swift in Sources */,
 				F9136A5AAAAD65347077F94A /* FilePreviewStream.swift in Sources */,
 				DA6980792BF80525003E434B /* BetterTextEditor.swift in Sources */,
@@ -989,7 +974,6 @@
 				DA432D4530A14F51000179F6 /* FileMenuCommands.swift in Sources */,
 				DA5268AD2EB12FE200DCB941 /* ServerState.swift in Sources */,
 				DA77253F2B21176D006C5ABB /* NewsView.swift in Sources */,
-				DAC6B2E22EAEE9FE004E2CBA /* NetSocket.swift in Sources */,
 				DA501BEB2EBE95B4001714F8 /* TrackerBookmarkServerView.swift in Sources */,
 				DA99218E2C51AA5D0058FA6C /* HotlineDataBuilder.swift in Sources */,
 				DA872B132BDDBF78008B1012 /* HotlinePanel.swift in Sources */,
@@ -1366,6 +1350,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		DA432D4C30A15FFF000179F6 /* XCRemoteSwiftPackageReference "netsocket" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mierau/netsocket";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.0;
+			};
+		};
 		DA501BEC2EBEC42E001714F8 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/onevcat/Kingfisher";
@@ -1393,6 +1385,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		DA432D4D30A15FFF000179F6 /* NetSocket */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DA432D4C30A15FFF000179F6 /* XCRemoteSwiftPackageReference "netsocket" */;
+			productName = NetSocket;
+		};
 		DA501BED2EBEC42E001714F8 /* Kingfisher */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DA501BEC2EBEC42E001714F8 /* XCRemoteSwiftPackageReference "Kingfisher" */;

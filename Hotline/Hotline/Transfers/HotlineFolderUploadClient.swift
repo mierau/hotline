@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import NetSocket
 
 /// Item progress callback for folder uploads
 public struct HotlineFolderItemUploadProgress: Sendable {

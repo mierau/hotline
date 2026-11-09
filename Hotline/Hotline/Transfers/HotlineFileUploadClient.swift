@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import NetSocket
 
 @MainActor
 public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
