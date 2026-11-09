@@ -1,13 +1,13 @@
 {
-  "originHash" : "b28f59d5488bf5907a66373120004f7e48e33d65f3cb24c35ae2b882d6ea1353",
+  "originHash" : "4bc536bcc633bd9cb31b4cfe9920b1064313f2979baa2b91a433bd7d058ba0b4",
   "pins" : [
     {
       "identity" : "kingfisher",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/onevcat/Kingfisher",
       "state" : {
-        "revision" : "8648fe649c5d62be38721110f835821906e9242a",
-        "version" : "8.13.0"
+        "revision" : "80e7d020ea0a76b65431ebba839046cea2e7ea8e",
+        "version" : "8.15.0"
       }
     },
     {
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/siteline/SwiftUI-Introspect",
       "state" : {
-        "revision" : "821a3d468fcf603cc4aa66ddb8542e91bd80b6c2",
-        "version" : "26.1.0"
+        "revision" : "453fe2e2ee3cc90885a68cb61bc5067637e7ad98",
+        "version" : "26.2.0"
       }
     }
   ],
