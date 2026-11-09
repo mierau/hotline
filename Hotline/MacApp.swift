@@ -68,6 +68,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
   }
   
+  /// Asks first when quitting would stop transfers or lose posts being written.
+  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    guard let losses = AppState.shared.quitLosses else {
+      return .terminateNow
+    }
+
+    // Quitting from the Dock leaves another app in front, where the alert would be missed.
+    NSApplication.shared.activate()
+
+    let alert = NSAlert()
+    alert.messageText = "Quit Hotline?"
+    alert.informativeText = losses
+    alert.addButton(withTitle: "Quit")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+  }
+
   func applicationWillTerminate(_ notification: Notification) {
     AppLaunchState.shared.launchState = .terminated
   }

@@ -1,35 +1,12 @@
 import SwiftUI
 
-/// The Server menu. Connect opens the server picked in the Servers window; the rest act on the
-/// server window in front.
+/// The Server menu, for the server window in front.
 struct ServerMenuCommands: Commands {
-  @Environment(\.openWindow) private var openWindow
-
-  @FocusedValue(\.trackerSelection) private var trackerSelection: TrackerSelection?
   @FocusedValue(\.activeHotlineModel) private var activeHotline: HotlineState?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
 
   var body: some Commands {
     CommandMenu("Server") {
-      Button("Connect", systemImage: "globe.americas.fill") {
-        if let server = self.trackerSelection?.server {
-          self.openWindow(id: "server", value: server)
-        }
-      }
-      .disabled(self.trackerSelection?.server == nil)
-      .keyboardShortcut(.downArrow, modifiers: .command)
-
-      Button("Disconnect", systemImage: "xmark") {
-        if let hotline = self.activeHotline {
-          Task {
-            await hotline.disconnect()
-          }
-        }
-      }
-      .disabled(self.activeHotline?.status == .disconnected)
-
-      Divider()
-
       Button("Broadcast Message...", systemImage: "megaphone") {
         self.activeServerState?.broadcastShown = true
       }
@@ -68,6 +45,20 @@ struct ServerMenuCommands: Commands {
         self.activeServerState?.accountsShown = true
       }
       .disabled(self.activeHotline?.status != .loggedIn || self.activeHotline?.access?.contains(.canOpenUsers) != true)
+
+      Divider()
+
+      // Last, as it ends the session. It asks first when that would lose something.
+      Button("Disconnect", systemImage: "xmark") {
+        if let hotline = self.activeHotline,
+           let state = self.activeServerState,
+           !state.askBeforeDisconnecting(.disconnect, from: hotline) {
+          Task {
+            await hotline.disconnect()
+          }
+        }
+      }
+      .disabled(self.activeHotline?.status != .loggedIn)
     }
   }
 }

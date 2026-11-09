@@ -96,6 +96,39 @@ final class AppState {
       Prefs.shared.showBannerToolbar = true
     }
   }
+
+  // MARK: - Quitting
+
+  /// What quitting would lose, as sentences for an alert, or nil when it wouldn't lose anything:
+  /// transfers that haven't finished, and posts being written in server windows.
+  @MainActor
+  var quitLosses: String? {
+    var sentences: [String] = []
+
+    let unfinished = self.transfers.filter { !$0.done }.count
+    if unfinished == 1 {
+      sentences.append("1 transfer hasn't finished and will stop.")
+    }
+    else if unfinished > 1 {
+      sentences.append("\(unfinished) transfers haven't finished and will stop.")
+    }
+
+    let writing = self.serverWindows.compactMap { window -> (posts: String, server: String)? in
+      guard let posts = window.hotline.postsBeingWritten else {
+        return nil
+      }
+      let server = window.hotline.serverTitle.isBlank ? "a server" : window.hotline.serverTitle
+      return (posts, server)
+    }
+    if writing.count == 1, let only = writing.first {
+      sentences.append("The \(only.posts) you're writing on \(only.server) will be lost.")
+    }
+    else if writing.count > 1 {
+      sentences.append("Posts you're writing on \(writing.count) servers will be lost.")
+    }
+
+    return sentences.isEmpty ? nil : sentences.joined(separator: " ")
+  }
   #endif
 
   var cloudKitReady: Bool = false

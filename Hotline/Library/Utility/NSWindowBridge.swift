@@ -44,3 +44,55 @@ struct WindowConfigurator: NSViewRepresentable {
   
   func updateNSView(_ nsView: NSView, context: Context) { }
 }
+
+/// Asks before a window closes, when closing it would lose something. SwiftUI can't keep a window
+/// open, so this stands in as the window's delegate, and passes everything else on to the delegate
+/// SwiftUI gave the window.
+final class WindowCloseGuard: NSObject, NSWindowDelegate {
+  /// The delegate the window had, which still gets every other message.
+  nonisolated(unsafe) private weak var original: NSWindowDelegate?
+  /// Whether the window can close now. When it can't, this asks, and returns false.
+  private var shouldClose: @MainActor (NSWindow) -> Bool
+
+  /// Where a window keeps its guard, as a window doesn't keep its delegate.
+  private static var key: UInt8 = 0
+
+  private init(original: NSWindowDelegate?, shouldClose: @escaping @MainActor (NSWindow) -> Bool) {
+    self.original = original
+    self.shouldClose = shouldClose
+    super.init()
+  }
+
+  /// Guards the window, or updates the guard it has, wrapping whatever delegate it has now.
+  @MainActor
+  static func guardClosing(_ window: NSWindow, shouldClose: @escaping @MainActor (NSWindow) -> Bool) {
+    if let existing = window.delegate as? WindowCloseGuard {
+      existing.shouldClose = shouldClose
+      return
+    }
+
+    let closeGuard = WindowCloseGuard(original: window.delegate, shouldClose: shouldClose)
+    objc_setAssociatedObject(window, &Self.key, closeGuard, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    window.delegate = closeGuard
+  }
+
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    guard self.shouldClose(sender) else {
+      return false
+    }
+    return self.original?.windowShouldClose?(sender) ?? true
+  }
+
+  // MARK: - Passing Messages On
+
+  nonisolated override func responds(to aSelector: Selector!) -> Bool {
+    super.responds(to: aSelector) || (self.original?.responds(to: aSelector) ?? false)
+  }
+
+  nonisolated override func forwardingTarget(for aSelector: Selector!) -> Any? {
+    if self.original?.responds(to: aSelector) == true {
+      return self.original
+    }
+    return super.forwardingTarget(for: aSelector)
+  }
+}

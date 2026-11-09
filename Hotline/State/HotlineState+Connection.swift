@@ -261,6 +261,52 @@ extension HotlineState {
     print("HotlineState.disconnect(): disconnect() complete")
   }
 
+  // MARK: - What Disconnecting Loses
+
+  /// The posts being written here and not sent yet, which disconnecting clears, as a phrase like
+  /// "board post" or "board post and 2 news posts". Nil when there aren't any.
+  var postsBeingWritten: String? {
+    var posts: [String] = []
+    if !self.boardDraft.isBlank {
+      posts.append("board post")
+    }
+
+    let newsPosts = self.newsDrafts.values.filter { !$0.text.isBlank }.count
+    if newsPosts == 1 {
+      posts.append("news post")
+    }
+    else if newsPosts > 1 {
+      posts.append("\(newsPosts) news posts")
+    }
+
+    return posts.isEmpty ? nil : posts.joined(separator: " and ")
+  }
+
+  /// What disconnecting would lose, as a sentence for an alert, or nil when it wouldn't lose
+  /// anything. Transfers already under way keep going on their own connections, so only the ones
+  /// still waiting their turn count, along with posts being written.
+  var disconnectLosses: String? {
+    let waiting = self.queuedDownloads.count + self.queuedUploads.count
+    var transfers: String? = nil
+    if waiting == 1 {
+      transfers = "1 waiting transfer will be cancelled"
+    }
+    else if waiting > 1 {
+      transfers = "\(waiting) waiting transfers will be cancelled"
+    }
+
+    switch (transfers, self.postsBeingWritten) {
+    case (let transfers?, let posts?):
+      return "\(transfers), and the \(posts) you're writing will be lost."
+    case (let transfers?, nil):
+      return "\(transfers)."
+    case (nil, let posts?):
+      return "The \(posts) you're writing will be lost."
+    case (nil, nil):
+      return nil
+    }
+  }
+
   /// Handle connection closure (server-initiated or after user disconnect)
   private func handleConnectionClosed() {
     print("HotlineState: handleConnectionClosed() entered")

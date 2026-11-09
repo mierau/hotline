@@ -283,6 +283,8 @@ struct ServerView: View {
       // Leaving it is the last time you were on it.
       if old == .loggedIn && new != .loggedIn {
         Prefs.shared.rememberServer(address: self.server.address, port: self.server.port)
+        // There's nothing left to lose, so there's no disconnect to confirm.
+        self.state.disconnectToConfirm = nil
       }
     }
     .onChange(of: self.model.serverTitle) {
@@ -340,6 +342,35 @@ struct ServerView: View {
         Text(message)
       }
     }
+    // Disconnecting or closing the window, when that would lose something. Neither button is
+    // red, as it's what was chosen.
+    .alert(
+      self.disconnectConfirmationTitle,
+      isPresented: Binding(
+        get: { self.state.disconnectToConfirm != nil },
+        set: { if !$0 { self.state.disconnectToConfirm = nil } }
+      ),
+      presenting: self.state.disconnectToConfirm
+    ) { confirmation in
+      switch confirmation.action {
+      case .disconnect:
+        Button("Disconnect") {
+          Task {
+            await self.model.disconnect()
+          }
+        }
+        .keyboardShortcut(.defaultAction)
+      case .closeWindow:
+        Button("Close") {
+          // Closing it directly doesn't ask again.
+          self.state.window?.close()
+        }
+        .keyboardShortcut(.defaultAction)
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: { confirmation in
+      Text(confirmation.losses)
+    }
     .focusedSceneValue(\.activeHotlineModel, model)
     .focusedSceneValue(\.activeServerState, state)
     .focusedSceneValue(\.focusedAppWindow, .server)
@@ -349,6 +380,18 @@ struct ServerView: View {
         // connect form, so only record a real window. It's weak, so it clears when the window closes.
         if let window {
           self.state.window = window
+
+          // Closing the window disconnects, so it asks first when that would lose something.
+          let model = self.model
+          let state = self.state
+          WindowCloseGuard.guardClosing(window) { [weak model, weak state] window in
+            guard let model, let state, state.askBeforeDisconnecting(.closeWindow, from: model) else {
+              return true
+            }
+            // A tab that isn't showing comes forward to ask.
+            window.makeKeyAndOrderFront(nil)
+            return false
+          }
         }
       }
     }
@@ -931,6 +974,15 @@ struct ServerView: View {
     Task {
       await self.model.disconnect()
     }
+  }
+
+  /// The title for confirming a disconnect, from the Server menu or from closing the window.
+  private var disconnectConfirmationTitle: String {
+    let name = self.model.serverTitle.isBlank ? "the server" : self.model.serverTitle
+    if self.state.disconnectToConfirm?.action == .closeWindow {
+      return "Close and disconnect from \(name)?"
+    }
+    return "Disconnect from \(name)?"
   }
 
   private func connectionStatusToLabel(status: HotlineConnectionStatus) -> String {

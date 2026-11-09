@@ -22,6 +22,8 @@ class ServerState: Equatable {
   var privateChatSubjectID: UInt32? = nil
   /// The private chat to leave, once that's confirmed.
   var privateChatToLeave: UInt32? = nil
+  /// Disconnecting, or closing the window, once that's confirmed, as it would lose something.
+  var disconnectToConfirm: DisconnectConfirmation? = nil
 
   /// The window showing this server, so the banner toolbar can bring it forward.
   @ObservationIgnored weak var window: NSWindow? = nil
@@ -35,6 +37,32 @@ class ServerState: Equatable {
   static func == (lhs: ServerState, rhs: ServerState) -> Bool {
     return lhs.id == rhs.id
   }
+
+  /// Asks first when disconnecting would lose something, like transfers waiting their turn or a
+  /// post being written. Returns whether it's asking; when it isn't, go ahead.
+  @MainActor
+  func askBeforeDisconnecting(_ action: DisconnectConfirmation.Action, from hotline: HotlineState) -> Bool {
+    guard hotline.status == .loggedIn, let losses = hotline.disconnectLosses else {
+      return false
+    }
+
+    self.disconnectToConfirm = DisconnectConfirmation(action: action, losses: losses)
+    return true
+  }
+}
+
+/// Disconnecting from a server, waiting to be confirmed because it would lose something.
+struct DisconnectConfirmation {
+  enum Action {
+    /// Disconnect, and stay in the window.
+    case disconnect
+    /// Close the window, which disconnects.
+    case closeWindow
+  }
+
+  let action: Action
+  /// What would be lost, as a sentence for the alert.
+  let losses: String
 }
 
 enum ServerNavigationType: Identifiable, Hashable, Equatable {

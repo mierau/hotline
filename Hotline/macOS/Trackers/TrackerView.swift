@@ -19,11 +19,6 @@ enum TrackerSelection: Hashable {
   }
 }
 
-extension FocusedValues {
-  /// What's selected in the Servers window, for the Server menu.
-  @Entry var trackerSelection: TrackerSelection?
-}
-
 struct TrackerView: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.openWindow) private var openWindow
@@ -237,37 +232,8 @@ struct TrackerView: View {
         }
       }
     } primaryAction: { items in
-      guard let clickedItem = items.first else {
-        return
-      }
-      
-      switch clickedItem {
-      case .bookmark(let bookmark):
-        if bookmark.type == .server {
-          if let s = bookmark.server {
-            openWindow(id: "server", value: s)
-          }
-        }
-        else if bookmark.type == .tracker {
-          if NSEvent.modifierFlags.contains(.option) {
-            trackerSheetBookmark = bookmark
-          }
-          else {
-            self.toggleExpanded(for: bookmark)
-          }
-        }
-        
-      case .bookmarkServer(let bookmarkServer):
-        openWindow(id: "server", value: bookmarkServer.server)
-      
-      case .bonjourGroup:
-        AppState.shared.bonjourState.isExpanded.toggle()
-        
-      case .bonjourServer(let bonjourServer):
-        if let server = bonjourServer.server {
-          openWindow(id: "server", value: server)
-        }
-        
+      if let item = items.first {
+        self.open(item)
       }
     }
     .fileExporter(isPresented: $bookmarkExportActive, document: bookmarkExport, contentTypes: [.data], defaultFilename: "\(bookmarkExport?.bookmark.name ?? "Hotline Bookmark").hlbm", onCompletion: { result in
@@ -377,9 +343,51 @@ struct TrackerView: View {
     }
     .searchable(text: $searchText, isPresented: $isSearching, placement: .automatic, prompt: "Search")
     .background(Button("", action: { isSearching = true }).keyboardShortcut("f").hidden())
-    .focusedSceneValue(\.trackerSelection, self.selection)
+    // Command-Down Arrow opens the selected item, as double-clicking it does, like in the Finder.
+    .background {
+      Button("") {
+        if let selection = self.selection {
+          self.open(selection)
+        }
+      }
+      .keyboardShortcut(.downArrow, modifiers: .command)
+      .disabled(self.selection == nil)
+      .hidden()
+    }
   }
-  
+
+  /// Opens an item in the list: connects to a server, or shows or hides a tracker's servers. With
+  /// Option held, a tracker opens for editing instead.
+  private func open(_ item: TrackerSelection) {
+    switch item {
+    case .bookmark(let bookmark):
+      if bookmark.type == .server {
+        if let server = bookmark.server {
+          self.openWindow(id: "server", value: server)
+        }
+      }
+      else if bookmark.type == .tracker {
+        if NSEvent.modifierFlags.contains(.option) {
+          self.trackerSheetBookmark = bookmark
+        }
+        else {
+          self.toggleExpanded(for: bookmark)
+        }
+      }
+
+    case .bookmarkServer(let bookmarkServer):
+      self.openWindow(id: "server", value: bookmarkServer.server)
+
+    case .bonjourGroup:
+      AppState.shared.bonjourState.isExpanded.toggle()
+
+    case .bonjourServer(let bonjourServer):
+      if let server = bonjourServer.server {
+        self.openWindow(id: "server", value: server)
+      }
+    }
+  }
+
   @ViewBuilder
   func bookmarkServerContextMenu(_ server: BookmarkServer) -> some View {
     Button {
