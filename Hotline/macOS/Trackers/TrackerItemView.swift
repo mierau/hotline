@@ -5,6 +5,10 @@ struct TrackerItemView: View {
   let isExpanded: Bool
   let isLoading: Bool
   let count: Int
+  /// Whether it couldn't be reached, the last time it was asked, which a button where its spinner
+  /// was asks it again.
+  var isUnreachable: Bool = false
+  var onReconnect: (() -> Void)? = nil
   let onToggleExpanded: () -> Void
   @Environment(\.appearsActive) private var appearsActive
 
@@ -37,6 +41,16 @@ struct TrackerItemView: View {
           ProgressView()
             .padding([.leading, .trailing], 2)
             .controlSize(.mini)
+        }
+        else if isUnreachable, let onReconnect {
+          Button(action: onReconnect) {
+            Image(systemName: "arrow.clockwise")
+              .font(.system(size: 11, weight: .semibold))
+              .foregroundStyle(.secondary)
+          }
+          .buttonStyle(.plain)
+          .padding([.leading, .trailing], 2)
+          .help("Reconnect")
         }
         Spacer(minLength: 0)
         if isExpanded && count > 0 {
@@ -74,11 +88,10 @@ struct TrackerItemView: View {
   }
 }
 
-/// In place of a tracker's servers, when it couldn't be reached, or stopped answering, with a
-/// button to ask it again.
+/// In place of a tracker's servers, when it couldn't be reached, or stopped answering. Its row
+/// has the button that asks it again.
 struct TrackerUnreachableRow: View {
   let bookmark: Bookmark
-  let reconnect: () -> Void
 
   /// Where the tracker is, with its port, when it isn't the usual one.
   private var address: String {
@@ -93,12 +106,6 @@ struct TrackerUnreachableRow: View {
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: 0)
-      Button(action: self.reconnect) {
-        Image(systemName: "arrow.clockwise")
-      }
-      .buttonStyle(.borderless)
-      .controlSize(.small)
-      .help("Reconnect")
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }

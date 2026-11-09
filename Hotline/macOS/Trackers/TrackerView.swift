@@ -153,18 +153,18 @@ struct TrackerView: View {
           bookmark: bookmark,
           isExpanded: self.expandedTrackers.contains(bookmark),
           isLoading: self.loadingTrackers.contains(bookmark),
-          count: self.trackerServers[bookmark]?.count ?? 0
+          count: self.trackerServers[bookmark]?.count ?? 0,
+          isUnreachable: self.expandedTrackers.contains(bookmark) && self.unreachableTrackers.contains(bookmark),
+          onReconnect: { self.reconnect(bookmark) }
         ) {
           self.toggleExpanded(for: bookmark)
         }
         .tag(TrackerSelection.bookmark(bookmark))
 
         if bookmark.type == .tracker && self.expandedTrackers.contains(bookmark) {
-          // Said in place of its servers, and not to select, with a way to ask it again.
+          // Said in place of its servers, and not to select.
           if self.unreachableTrackers.contains(bookmark) && !self.loadingTrackers.contains(bookmark) {
-            TrackerUnreachableRow(bookmark: bookmark) {
-              self.reconnect(bookmark)
-            }
+            TrackerUnreachableRow(bookmark: bookmark)
             .moveDisabled(true)
             .deleteDisabled(true)
             .selectionDisabled()
