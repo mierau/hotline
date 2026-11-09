@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct TrackerItemView: View {
+  /// Where a tracker's name starts in its row: past the disclosure button, its padding, and the
+  /// tracker's icon, with the spacing between them.
+  static let nameInset: CGFloat = 4 + 10 + 2 + 6 + 16 + 6
+
   let bookmark: Bookmark
   let isExpanded: Bool
   let isLoading: Bool
@@ -100,7 +104,7 @@ struct TrackerUnreachableRow: View {
 
   var body: some View {
     HStack(spacing: 6) {
-      Text("Could not connect to tracker: \(self.address)")
+      Text("Could not connect to \(self.address)")
         .italic()
         .foregroundStyle(.secondary)
         .lineLimit(1)
@@ -109,4 +113,14 @@ struct TrackerUnreachableRow: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
+}
+
+#Preview("Unreachable tracker") {
+  let tracker = Bookmark(type: .tracker, name: "Featured Servers", address: "hltracker.com", port: HotlinePorts.DefaultTrackerPort)
+  return List {
+    TrackerItemView(bookmark: tracker, isExpanded: true, isLoading: false, count: 0, isUnreachable: true, onReconnect: {}) {}
+    TrackerUnreachableRow(bookmark: tracker)
+      .padding(.leading, TrackerItemView.nameInset)
+  }
+  .frame(width: 420, height: 120)
 }

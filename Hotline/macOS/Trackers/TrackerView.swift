@@ -168,7 +168,8 @@ struct TrackerView: View {
             .moveDisabled(true)
             .deleteDisabled(true)
             .selectionDisabled()
-            .padding(.leading, 16 + 8 + 10)
+            // Lined up with the tracker's name, above it.
+            .padding(.leading, TrackerItemView.nameInset)
           }
           ForEach(self.filteredServers(for: bookmark), id: \.self) { trackedServer in
             TrackerBookmarkServerView(server: trackedServer)
