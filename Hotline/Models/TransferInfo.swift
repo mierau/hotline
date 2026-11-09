@@ -14,10 +14,27 @@ class TransferInfo: Identifiable, Equatable, Hashable {
   var cancelled: Bool = false
   /// Waiting its turn, as uploads go one at a time.
   var waiting: Bool = false
+  /// Where it is in the server's line, 1 for next, while the server's sending other downloads
+  /// first, as it does once all its slots are full, or nil once it's started, or wasn't in one.
+  var queuePosition: Int? = nil
   var done: Bool {
     self.completed || self.failed || self.cancelled
   }
   
+  /// Where it is in the server's line, as "3rd in queue on The Mobius Strip", while it's in one.
+  var queueDescription: String? {
+    guard let position = self.queuePosition else {
+      return nil
+    }
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .ordinal
+    let place = position == 1 ? "Next" : formatter.string(from: position as NSNumber) ?? "\(position)"
+    guard let server = self.serverName, !server.isEmpty else {
+      return "\(place) in queue"
+    }
+    return "\(place) in queue on \(server)"
+  }
+
   var progress: Double = 0.0
   var speed: Double? = nil
   var timeRemaining: TimeInterval? = nil

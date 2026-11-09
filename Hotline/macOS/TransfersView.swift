@@ -311,10 +311,25 @@ struct TransferRow: View {
             .font(.subheadline)
             .foregroundStyle(.fileComplete)
         }
+        else if let queue = self.transfer.queueDescription {
+          // Its place in the server's line, counting down as the line moves, with the clock close
+          // by, as a label's icon column would leave it far from the words.
+          HStack(spacing: 4) {
+            Image(systemName: "clock")
+            Text(queue)
+              .contentTransition(.numericText())
+          }
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .help("The server sends a few downloads at a time. This one starts on its own when its turn comes.")
+        }
         else if self.transfer.waiting {
-          Text("Waiting")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+          HStack(spacing: 4) {
+            Image(systemName: "clock")
+            Text("Waiting")
+          }
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
         }
         else {
           ProgressView(value: self.transfer.progress, total: 1.0)
@@ -322,6 +337,7 @@ struct TransferRow: View {
             .controlSize(.large)
         }
       }
+      .animation(.snappy(duration: 0.35), value: self.transfer.queuePosition)
     }
   }
   
@@ -404,5 +420,25 @@ struct TransferRow: View {
 #Preview {
   TransfersView()
     .environment(AppState.shared)
+}
+
+#Preview("Waiting") {
+  let queued = TransferInfo(reference: 1, title: "Hotline.b27.zip", size: 6_900_000, serverID: UUID(), serverName: "The Mobius Strip")
+  queued.queuePosition = 3
+  let next = TransferInfo(reference: 2, title: "KDXClient1600.sit", size: 746_000, serverID: UUID(), serverName: "The Mobius Strip")
+  next.queuePosition = 1
+  let waiting = TransferInfo(reference: 0, title: "README.md", size: 1_000, serverID: UUID())
+  waiting.waiting = true
+  let going = TransferInfo(reference: 3, title: "MacPaint 3.0b1.zip", size: 3_800_000, serverID: UUID())
+  going.progress = 0.4
+  return VStack(alignment: .leading, spacing: 16) {
+    TransferRow(transfer: queued)
+    TransferRow(transfer: next)
+    TransferRow(transfer: waiting)
+    TransferRow(transfer: going)
+  }
+  .padding()
+  .frame(width: 480)
+  .environment(AppState.shared)
 }
 

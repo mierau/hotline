@@ -260,6 +260,8 @@ extension HotlineState {
       transfer.referenceNumber = referenceNumber
       transfer.size = UInt(result.transferSize)
       transfer.waiting = false
+      // In the server's line, if all its slots are full, until it starts.
+      transfer.queuePosition = result.waitingCount > 0 ? result.waitingCount : nil
       transfer.isUpload = false
       transfer.downloadCallback = callback
       transfer.progressCallback = progressCallback
@@ -296,6 +298,7 @@ extension HotlineState {
             case .unconnected, .connected, .connecting:
               transfer.progressCallback?(transfer)
             case .transfer(name: _, size: _, total: _, progress: let progress, speed: let speed, estimate: let estimate):
+              transfer.queuePosition = nil
               transfer.timeRemaining = estimate
               transfer.speed = speed
               transfer.progress = progress
@@ -424,6 +427,8 @@ extension HotlineState {
       transfer.referenceNumber = referenceNumber
       transfer.size = UInt(result.transferSize)
       transfer.waiting = false
+      // In the server's line, if all its slots are full, until it starts.
+      transfer.queuePosition = result.waitingCount > 0 ? result.waitingCount : nil
       transfer.isFolder = true
       transfer.folderName = folderName
       transfer.isUpload = false
@@ -464,6 +469,7 @@ extension HotlineState {
             case .unconnected, .connected, .connecting:
               transfer.progressCallback?(transfer)
             case .transfer(name: _, size: _, total: _, progress: let progress, speed: let speed, estimate: let estimate):
+              transfer.queuePosition = nil
               transfer.timeRemaining = estimate
               transfer.speed = speed
               transfer.progress = progress
@@ -990,6 +996,17 @@ extension HotlineState {
         self.downloadFile(download.name, path: download.path, to: download.destination, transfer: download.transfer, complete: { _ in continuation.resume(returning: nil) }, failed: { continuation.resume(returning: $0) })
       }
     }
+  }
+
+  /// A download moving up in the server's line, as the server says, while it's waiting there, and
+  /// not once it's started, which it might say after, or for one that isn't shown, like a preview's.
+  @MainActor
+  func handleDownloadQueued(reference: UInt32, position: Int) {
+    guard let transfer = AppState.shared.transfers.first(where: { $0.serverID == self.id && $0.referenceNumber == reference && !$0.isUpload }),
+          !transfer.done, transfer.progress == 0 else {
+      return
+    }
+    transfer.queuePosition = position > 0 ? position : nil
   }
 
   /// Moves files and folders, by where they are, into a folder on the server, one after another,

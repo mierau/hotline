@@ -767,6 +767,9 @@ extension HotlineState {
 
     case .privateChatSubject(let chatID, let subject):
       self.handlePrivateChatSubject(chatID: chatID, subject: subject)
+
+    case .downloadQueued(let reference, let position):
+      self.handleDownloadQueued(reference: reference, position: position)
     }
   }
 }

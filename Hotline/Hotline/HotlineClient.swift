@@ -37,6 +37,9 @@ public enum HotlineEvent: Sendable {
   case privateChatUserLeft(chatID: UInt32, userID: UInt16)
   /// A private chat you're in has a new subject
   case privateChatSubject(chatID: UInt32, subject: String)
+  /// A download's moved up in the server's line, which it's in while all the server's download
+  /// slots are full: its reference number, and its place, 1 for next
+  case downloadQueued(reference: UInt32, position: Int)
 }
 
 // MARK: - Errors
@@ -496,6 +499,12 @@ public actor HotlineClient {
       if let chatID = transaction.getField(type: .chatID)?.getInteger() {
         let subject = transaction.getField(type: .chatSubject)?.getString() ?? ""
         eventContinuation.yield(.privateChatSubject(chatID: UInt32(truncatingIfNeeded: chatID), subject: subject))
+      }
+
+    case .downloadInfo:
+      if let reference = transaction.getField(type: .referenceNumber)?.getUInt32(),
+         let position = transaction.getField(type: .waitingCount)?.getInteger() {
+        eventContinuation.yield(.downloadQueued(reference: reference, position: position))
       }
 
     case .disconnectMessage:

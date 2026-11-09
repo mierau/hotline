@@ -1007,6 +1007,11 @@ struct ServerView: View {
 
 struct ServerTransferRow: View {
   let transfer: TransferInfo
+
+  /// Whether it's waiting its turn, after your other downloads, or in the server's line.
+  private var waiting: Bool {
+    self.transfer.waiting || self.transfer.queuePosition != nil
+  }
     
   @Environment(\.controlActiveState) private var controlActiveState
   @Environment(\.serverTheme) private var theme
@@ -1042,12 +1047,28 @@ struct ServerTransferRow: View {
       Spacer(minLength: 0)
       
       if !self.transfer.done {
-        ProgressView(value: min(max(self.transfer.progress, 0.0), 1.0), total: 1.0)
-          .progressViewStyle(.linear)
-          .controlSize(.extraLarge)
-          // In the server's theme, in its accent, as it stands out on the sidebar.
-          .tint(self.theme?.sidebarAccent.map { Color(nsColor: $0) })
-          .frame(maxWidth: 40)
+        // A clock while it waits its turn, after your other downloads, or in the server's line, and
+        // its bar, growing in, once it's going.
+        ZStack(alignment: .trailing) {
+          if self.waiting {
+            Image(systemName: "clock")
+              .font(.system(size: 12))
+              .foregroundStyle(.secondary)
+              .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
+              .help(self.transfer.queueDescription ?? "Waiting")
+              .transition(.opacity)
+          }
+          else {
+            ProgressView(value: min(max(self.transfer.progress, 0.0), 1.0), total: 1.0)
+              .progressViewStyle(.linear)
+              .controlSize(.extraLarge)
+              // In the server's theme, in its accent, as it stands out on the sidebar.
+              .tint(self.theme?.sidebarAccent.map { Color(nsColor: $0) })
+              .frame(maxWidth: 40)
+              .transition(.scale(scale: 0, anchor: .trailing).combined(with: .opacity))
+          }
+        }
+        .animation(.snappy(duration: 0.35), value: self.waiting)
       }
       
       if self.hovered {
@@ -1239,4 +1260,21 @@ struct ServerTransferRow: View {
       }
     }
   }
+}
+
+#Preview("Transfers in the sidebar") {
+  let queued = TransferInfo(reference: 1, title: "Hotline.b27.zip", size: 6_900_000, serverID: UUID(), serverName: "The Mobius Strip")
+  queued.queuePosition = 3
+  let waiting = TransferInfo(reference: 0, title: "README.md", size: 1_000, serverID: UUID())
+  waiting.waiting = true
+  let going = TransferInfo(reference: 3, title: "MacPaint 3.0b1.zip", size: 3_800_000, serverID: UUID())
+  going.progress = 0.4
+  return List {
+    ServerTransferRow(transfer: queued)
+    ServerTransferRow(transfer: waiting)
+    ServerTransferRow(transfer: going)
+  }
+  .listStyle(.sidebar)
+  .frame(width: 240, height: 140)
+  .environment(HotlineState())
 }
