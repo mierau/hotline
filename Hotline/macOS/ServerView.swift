@@ -632,7 +632,7 @@ struct ServerView: View {
     let item = ServerNavigationType.privateChat(chatID: chat.id)
     let row = HStack(spacing: 5) {
       // The public chat's, for now.
-      Image("Section Chat")
+      Image("Section Private Chat")
         .resizable()
         .scaledToFit()
         .frame(width: 20, height: 20)
@@ -839,7 +839,7 @@ struct ServerView: View {
         }
       }
     } message: {
-      Text("Private chats aren't saved, so what's been said in it will be gone.")
+      Text("Private chats are not saved, so what has been said here will be forgotten.")
     }
     .onChange(of: self.state.privateChatSubjectID) { _, chatID in
       // The chat, and its subject as it is, to change, until it's asked about another.
