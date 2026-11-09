@@ -453,18 +453,23 @@ struct FilesView: View {
   // MARK: - List View
 
   private var listView: some View {
+    // None of the keys while a name's being written, where they're for moving in it, typing a
+    // space, and giving the name with Return.
     self.listContent
       .onKeyPress(.rightArrow) {
+        guard self.rename.file == nil else { return .ignored }
         let folders = self.selectedFiles.filter(\.isFolder)
         folders.forEach { $0.expanded = true }
         return folders.isEmpty ? .ignored : .handled
       }
       .onKeyPress(.leftArrow) {
+        guard self.rename.file == nil else { return .ignored }
         let folders = self.selectedFiles.filter(\.isFolder)
         folders.forEach { $0.expanded = false }
         return folders.isEmpty ? .ignored : .handled
       }
       .onKeyPress(.space) {
+        guard self.rename.file == nil else { return .ignored }
         if let s = self.selectedFile, s.isPreviewable {
           self.actions.previewFile(s)
           return .handled
@@ -472,7 +477,7 @@ struct FilesView: View {
         return .ignored
       }
       .onKeyPress(.downArrow, phases: .down) { press in
-        guard press.modifiers.contains(.command) else { return .ignored }
+        guard self.rename.file == nil, press.modifiers.contains(.command) else { return .ignored }
         if let s = self.selectedFile, s.isFolder {
           self.folderPath = s.path
           return .handled
@@ -480,7 +485,7 @@ struct FilesView: View {
         return .ignored
       }
       .onKeyPress(.upArrow, phases: .down) { press in
-        guard press.modifiers.contains(.command) else { return .ignored }
+        guard self.rename.file == nil, press.modifiers.contains(.command) else { return .ignored }
         // Not from a search's results, which aren't in the folder above, as Back isn't there either.
         if !self.folderPath.isEmpty && !self.isShowingSearchResults {
           self.folderPath.removeLast()
@@ -489,7 +494,7 @@ struct FilesView: View {
         return .ignored
       }
       .onKeyPress(.return) {
-        guard !self.selection.isEmpty else {
+        guard self.rename.file == nil, !self.selection.isEmpty else {
           return .ignored
         }
         self.open(self.selectedFiles)

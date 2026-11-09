@@ -196,6 +196,7 @@ struct FilesGridView: View {
   @Environment(HotlineState.self) private var model: HotlineState
   @Environment(\.serverTheme) private var theme
   @Environment(FileDropTarget.self) private var dropTarget: FileDropTarget?
+  @Environment(FileRename.self) private var rename: FileRename?
 
   @Binding var selection: Set<FileInfo>
   @Binding var folderPath: [String]
@@ -229,6 +230,11 @@ struct FilesGridView: View {
   private var columnsPerRow: Int {
     let available = self.gridWidth - (gridPadding * 2)
     return max(1, Int((available + gridColumnSpacing) / (gridColumnMin + gridColumnSpacing)))
+  }
+
+  /// Whether a name's being written, in place of one of the icons' names.
+  private var isRenaming: Bool {
+    self.rename?.file != nil
   }
 
   var body: some View {
@@ -341,15 +347,20 @@ struct FilesGridView: View {
         .transition(.opacity)
       }
     }
+    // None of the keys while a name's being written, where they're for moving in it, typing a
+    // space, and giving the name with Return.
     .onKeyPress(.return) {
       let selected = self.selectedItems
-      guard !selected.isEmpty else {
+      guard !self.isRenaming, !selected.isEmpty else {
         return .ignored
       }
       self.open(selected)
       return .handled
     }
     .onKeyPress(.space) {
+      guard !self.isRenaming else {
+        return .ignored
+      }
       let selected = self.selectedItems
       if selected.count == 1, let s = selected.first, s.isPreviewable {
         self.actions.previewFile(s)
@@ -358,12 +369,21 @@ struct FilesGridView: View {
       return .ignored
     }
     .onKeyPress(.rightArrow, phases: [.down, .repeat]) { press in
-      self.moveSelectionHorizontally(by: 1, extending: press.modifiers.contains(.shift))
+      guard !self.isRenaming else {
+        return .ignored
+      }
+      return self.moveSelectionHorizontally(by: 1, extending: press.modifiers.contains(.shift))
     }
     .onKeyPress(.leftArrow, phases: [.down, .repeat]) { press in
-      self.moveSelectionHorizontally(by: -1, extending: press.modifiers.contains(.shift))
+      guard !self.isRenaming else {
+        return .ignored
+      }
+      return self.moveSelectionHorizontally(by: -1, extending: press.modifiers.contains(.shift))
     }
     .onKeyPress(keys: [.downArrow], phases: [.down, .repeat]) { press in
+      guard !self.isRenaming else {
+        return .ignored
+      }
       if press.modifiers.contains(.command) {
         let selected = self.selectedItems
         guard !selected.isEmpty else {
@@ -378,6 +398,9 @@ struct FilesGridView: View {
       return self.moveSelectionVertically(by: 1, extending: press.modifiers.contains(.shift))
     }
     .onKeyPress(keys: [.upArrow], phases: [.down, .repeat]) { press in
+      guard !self.isRenaming else {
+        return .ignored
+      }
       if press.modifiers.contains(.command) {
         if !self.folderPath.isEmpty && !self.isShowingSearchResults {
           self.folderPath.removeLast()
