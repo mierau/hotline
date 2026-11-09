@@ -107,10 +107,10 @@ final class AppState {
 
     let unfinished = self.transfers.filter { !$0.done }.count
     if unfinished == 1 {
-      sentences.append("1 transfer hasn't finished and will stop.")
+      sentences.append("1 transfer is still active and will be stopped.")
     }
     else if unfinished > 1 {
-      sentences.append("\(unfinished) transfers haven't finished and will stop.")
+      sentences.append("\(unfinished) transfers are still active and will be stopped.")
     }
 
     let writing = self.serverWindows.compactMap { window -> (posts: String, server: String)? in
