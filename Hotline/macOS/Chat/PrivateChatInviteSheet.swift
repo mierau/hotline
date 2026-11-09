@@ -51,7 +51,7 @@ struct PrivateChatInviteSheet: View {
     VStack(alignment: .leading, spacing: 16) {
       // What it's for, at the top, with the icon private chats have in the sidebar.
       HStack(alignment: .top, spacing: 12) {
-        Image("Section Users")
+        Image("Section Private Chat")
           .resizable()
           .scaledToFit()
           .frame(width: 32, height: 32)
