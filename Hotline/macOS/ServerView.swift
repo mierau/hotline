@@ -443,7 +443,7 @@ struct ServerView: View {
                 }
                 .buttonStyle(SidebarRowButtonStyle())
                 .help("New Private Chat")
-                .padding(.trailing, 6)
+                .padding(.trailing, 2)
                 .transition(.scale(scale: 0.5).combined(with: .opacity))
               }
             }
@@ -655,7 +655,7 @@ struct ServerView: View {
         }
         .buttonStyle(SidebarRowButtonStyle())
         .help("Leave Chat")
-        .padding(.trailing, 6)
+        .padding(.trailing, 2)
         .transition(.scale(scale: 0.5).combined(with: .opacity))
       }
       else if chat.unread {
