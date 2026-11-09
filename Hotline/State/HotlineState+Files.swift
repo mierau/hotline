@@ -970,7 +970,9 @@ extension HotlineState {
           download.finished?(CancellationError())
           continue
         }
-        download.finished?(await self.download(download))
+        // Not in the call to `finished`, which, when there's no one to tell, would skip it.
+        let error = await self.download(download)
+        download.finished?(error)
       }
       self?.downloadQueue = nil
     }
