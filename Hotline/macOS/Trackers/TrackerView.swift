@@ -19,6 +19,11 @@ enum TrackerSelection: Hashable {
   }
 }
 
+extension FocusedValues {
+  /// What's selected in the Servers window, for the Server menu.
+  @Entry var trackerSelection: TrackerSelection?
+}
+
 struct TrackerView: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.openWindow) private var openWindow
@@ -38,9 +43,9 @@ struct TrackerView: View {
   @State private var fetchTasks: [Bookmark: Task<Void, Never>] = [:]
   @State private var searchText: String = ""
   @State private var isSearching = false
+  @State private var selection: TrackerSelection? = nil
 
   @Query(sort: \Bookmark.order) private var bookmarks: [Bookmark]
-  @Binding var selection: TrackerSelection?
 
   private var filteredBookmarks: [Bookmark] {
     guard !self.searchText.isEmpty else {
@@ -372,6 +377,7 @@ struct TrackerView: View {
     }
     .searchable(text: $searchText, isPresented: $isSearching, placement: .automatic, prompt: "Search")
     .background(Button("", action: { isSearching = true }).keyboardShortcut("f").hidden())
+    .focusedSceneValue(\.trackerSelection, self.selection)
   }
   
   @ViewBuilder
@@ -581,15 +587,7 @@ struct TrackerView: View {
 }
 
 #if DEBUG
-private struct TrackerViewPreview: View {
-  @State var selection: TrackerSelection? = nil
-
-  var body: some View {
-    TrackerView(selection: $selection)
-  }
-}
-
 #Preview {
-  TrackerViewPreview()
+  TrackerView()
 }
 #endif

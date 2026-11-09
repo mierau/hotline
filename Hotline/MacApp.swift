@@ -120,21 +120,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
 @main
 struct Application: App {
-  @Environment(\.scenePhase) private var scenePhase
   @Environment(\.openWindow) private var openWindow
   @Environment(\.dismissWindow) private var dismissWindow
-  @Environment(\.openURL) private var openURL
-  
+
   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-  
-  @State private var hotlinePanel: HotlinePanel? = nil
-  @State private var selection: TrackerSelection? = nil
+
   @Bindable private var update = AppUpdate.shared
 
-  @FocusedValue(\.activeHotlineModel) private var activeHotline: HotlineState?
-  @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
-  @FocusedValue(\.focusedAppWindow) private var focusedAppWindow: FocusedAppWindow?
-  
   private var modelContainer: ModelContainer = {
     let schema = Schema([
       Bookmark.self,
@@ -163,7 +155,7 @@ struct Application: App {
   var body: some Scene {
     // MARK: Tracker Window
     Window("Servers", id: "servers") {
-      TrackerView(selection: $selection)
+      TrackerView()
         .frame(minWidth: 250, minHeight: 250)
         .focusedSceneValue(\.focusedAppWindow, .servers)
     }
@@ -180,13 +172,13 @@ struct Application: App {
           self.dismissWindow(id: "servers")
           self.openWindow(id: "onboarding")
         } else if Prefs.shared.showBannerToolbar {
-          self.showBannerWindow()
+          AppState.shared.showBannerToolbar()
         }
       }
     }
     .onChange(of: Prefs.shared.hasCompletedOnboarding) {
       if Prefs.shared.hasCompletedOnboarding && Prefs.shared.showBannerToolbar {
-        self.showBannerWindow()
+        AppState.shared.showBannerToolbar()
       }
     }
     .onChange(of: self.update.showWindow) {
@@ -274,23 +266,7 @@ struct Application: App {
     .defaultPosition(.center)
     .commandsRemoved() // Remove About that was automatically added to Window menu.
     .commands {
-      CommandGroup(replacing: CommandGroupPlacement.appInfo) {
-        Button("About Hotline", systemImage: "info.circle") {
-          openWindow(id: "about")
-        }
-                
-        Button("Check for Updates...", systemImage: "questionmark.diamond") {
-          Task {
-            await AppUpdate.shared.checkForUpdatesManually()
-          }
-        }
-      }
-      CommandGroup(replacing: .appSettings) {
-        Button("Settings...", systemImage: "gearshape") {
-          openWindow(id: "settings")
-        }
-        .keyboardShortcut(",", modifiers: .command)
-      }
+      AppMenuCommands()
     }
     
     // MARK: Update Window
@@ -305,128 +281,15 @@ struct Application: App {
     .commandsRemoved()
     
     // MARK: Server Window
-    WindowGroup(id: "server", for: Server.self) { server in
-      ServerView(server: server)
-        .frame(minWidth: 430, minHeight: 300)
-    } defaultValue: {
-      Server(name: nil, description: nil, address: "")
-    }
-//    .windowStyle(.hiddenTitleBar)
-    .defaultSize(width: 780, height: 640)
-    .defaultPosition(.center)
-    .modelContainer(self.modelContainer)
-    .onChange(of: activeServerState) {
-      // Only track server windows coming forward. Focusing another kind of window keeps the
-      // last server as the one the banner toolbar controls; ServerView reports when it closes.
-      if let hotline = self.activeHotline, let state = self.activeServerState {
-        AppState.shared.serverWindowFocused(hotline: hotline, state: state)
+    ServerWindows(modelContainer: self.modelContainer)
+      .commands {
+        FileMenuCommands()
+        SidebarCommands()
+        WindowMenuCommands()
+        HelpMenuCommands()
+        ServerMenuCommands()
       }
-    }
-    .onChange(of: focusedAppWindow) {
-      AppState.shared.focusedWindow = self.focusedAppWindow
-    }
-    .commands {
-      CommandGroup(replacing: .newItem) {
-        Button("Connect to Server...", systemImage: "globe.americas.fill") {
-          self.openWindow(id: "server")
-        }
-        .keyboardShortcut(.init("K"), modifiers: .command)
-      }
-      CommandGroup(replacing: .sidebar) {
-        Button("Show Sidebar") {
-          withAnimation {
-            activeServerState?.columnVisibility = .all
-          }
-        }
-        .keyboardShortcut("S", modifiers: [.command, .option])
-      }
-      CommandGroup(before: .singleWindowList) {
-        Button("Toolbar") {
-          self.toggleBannerWindow()
-        }
-        .keyboardShortcut(.init("\\"), modifiers: [.shift, .command])
-      }
-      CommandGroup(after: .help) {
-        Divider()
-        Button("Request Feature...", systemImage: "sparkles.2") {
-          if let url = URL(string: "https://github.com/mierau/hotline/issues/new?labels=enhancement") {
-            self.openURL(url)
-          }
-        }
-        Button("Report Bug...", systemImage: "ladybug") {
-          if let url = URL(string: "https://github.com/mierau/hotline/issues/new?labels=bug") {
-            self.openURL(url)
-          }
-        }
-        Divider()
-        Button("View Latest Release...", systemImage: "app.gift") {
-          if let url = URL(string: "https://github.com/mierau/hotline/releases/latest") {
-            self.openURL(url)
-          }
-        }
-      }
-      CommandMenu("Server") {
-        Button("Connect", systemImage: "globe.americas.fill") {
-          guard let selection else {
-            return
-          }
-          self.connect(to: selection)
-        }
-        .disabled(selection == nil || selection?.server == nil)
-        .keyboardShortcut(.downArrow, modifiers: .command)
-        
-        Button("Disconnect", systemImage: "xmark") {
-          if let hotline = activeHotline {
-            Task {
-              await hotline.disconnect()
-            }
-          }
-        }
-        .disabled(activeHotline?.status == .disconnected)
-        
-        Divider()
-        
-        Button("Broadcast Message...", systemImage: "megaphone") {
-          activeServerState?.broadcastShown = true
-        }
-        .disabled(activeHotline?.access?.contains(.canBroadcast) != true)
-        .keyboardShortcut(.init("B"), modifiers: .command)
-        
-        Divider()
-        
-        Button("Chat", systemImage: "bubble.left") {
-          activeServerState?.selection = .chat
-        }
-        .disabled(activeHotline?.status != .loggedIn)
-        .keyboardShortcut(.init("1"), modifiers: .command)
-        
-        Button("Board", systemImage: "pin") {
-          activeServerState?.selection = .board
-        }
-        .disabled(activeHotline?.status != .loggedIn)
-        .keyboardShortcut(.init("2"), modifiers: .command)
-        
-        Button("News", systemImage: "newspaper") {
-          activeServerState?.selection = .news
-        }
-        .disabled(activeHotline?.status != .loggedIn || (activeHotline?.serverVersion ?? 0) < 151)
-        .keyboardShortcut(.init("3"), modifiers: .command)
-        
-        Button("Files", systemImage: "folder") {
-          activeServerState?.selection = .files
-        }
-        .disabled(activeHotline?.status != .loggedIn)
-        .keyboardShortcut(.init("4"), modifiers: .command)
-        
-        Divider()
-        
-        Button("Manage Accounts...", systemImage: "person.2") {
-          activeServerState?.accountsShown = true
-        }
-        .disabled(activeHotline?.status != .loggedIn || activeHotline?.access?.contains(.canOpenUsers) != true)
-      }
-    }
-    
+
     // MARK: Settings Window
     Window("Settings", id: "settings") {
       SettingsView()
@@ -501,36 +364,39 @@ struct Application: App {
       }
     }
   }
+}
 
-  func connect(to item: TrackerSelection) {
-    if let server = item.server {
-      self.openWindow(id: "server", value: server)
-    }
-  }
+// MARK: - Server Windows
 
-  func showBannerWindow() {
-    if hotlinePanel == nil {
-      hotlinePanel = HotlinePanel(HotlinePanelView())
+/// Windows for connecting to and using servers. This scene, rather than Application, follows
+/// which window is in front, so a window coming forward only updates this scene.
+struct ServerWindows: Scene {
+  let modelContainer: ModelContainer
+
+  @FocusedValue(\.activeHotlineModel) private var activeHotline: HotlineState?
+  @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
+  @FocusedValue(\.focusedAppWindow) private var focusedAppWindow: FocusedAppWindow?
+
+  var body: some Scene {
+    WindowGroup(id: "server", for: Server.self) { server in
+      ServerView(server: server)
+        .frame(minWidth: 430, minHeight: 300)
+    } defaultValue: {
+      Server(name: nil, description: nil, address: "")
     }
-    
-    if hotlinePanel?.isVisible == false {
-      hotlinePanel?.orderFront(nil)
-      Prefs.shared.showBannerToolbar = true
+//    .windowStyle(.hiddenTitleBar)
+    .defaultSize(width: 780, height: 640)
+    .defaultPosition(.center)
+    .modelContainer(self.modelContainer)
+    .onChange(of: self.activeServerState) {
+      // Only track server windows coming forward. Focusing another kind of window keeps the
+      // last server as the one the banner toolbar controls; ServerView reports when it closes.
+      if let hotline = self.activeHotline, let state = self.activeServerState {
+        AppState.shared.serverWindowFocused(hotline: hotline, state: state)
+      }
     }
-  }
-  
-  func toggleBannerWindow() {
-    if hotlinePanel == nil {
-      hotlinePanel = HotlinePanel(HotlinePanelView())
-    }
-    
-    if hotlinePanel?.isVisible == true {
-      hotlinePanel?.orderOut(nil)
-      Prefs.shared.showBannerToolbar = false
-    }
-    else {
-      hotlinePanel?.orderFront(nil)
-      Prefs.shared.showBannerToolbar = true
+    .onChange(of: self.focusedAppWindow) {
+      AppState.shared.focusedWindow = self.focusedAppWindow
     }
   }
 }

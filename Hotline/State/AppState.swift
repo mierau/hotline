@@ -63,6 +63,41 @@ final class AppState {
     self.serverWindows.removeAll { $0.state === state }
   }
 
+  #if os(macOS)
+  // MARK: - Banner Toolbar
+
+  /// The floating banner toolbar, made the first time it's shown.
+  @ObservationIgnored private var bannerPanel: HotlinePanel? = nil
+
+  /// Show the banner toolbar, and remember that it's shown.
+  @MainActor
+  func showBannerToolbar() {
+    let panel = self.bannerPanel ?? HotlinePanel(HotlinePanelView())
+    self.bannerPanel = panel
+
+    if !panel.isVisible {
+      panel.orderFront(nil)
+      Prefs.shared.showBannerToolbar = true
+    }
+  }
+
+  /// Show the banner toolbar, or hide it when it's showing, and remember which.
+  @MainActor
+  func toggleBannerToolbar() {
+    let panel = self.bannerPanel ?? HotlinePanel(HotlinePanelView())
+    self.bannerPanel = panel
+
+    if panel.isVisible {
+      panel.orderOut(nil)
+      Prefs.shared.showBannerToolbar = false
+    }
+    else {
+      panel.orderFront(nil)
+      Prefs.shared.showBannerToolbar = true
+    }
+  }
+  #endif
+
   var cloudKitReady: Bool = false
 
   /// Pending server to open from a hotline:// URL. Set by AppDelegate,
