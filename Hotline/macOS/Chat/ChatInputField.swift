@@ -4,8 +4,11 @@ import AppKit
 /// A chat input field that supports:
 /// - **Enter**: Send message
 /// - **Option+Enter**: Send as announcement
-/// - **Shift+Enter**: Insert newline
-/// - **Tab**: Complete the name being typed, then the next name that fits; **Shift+Tab** goes back
+/// - **Shift+Enter**: Insert newline, going on with a list or a quote
+/// - **Tab**: Complete the name being typed, then the next name that fits; **Shift+Tab** goes back.
+///   In a link or a code block, Tab does what it does in a post.
+///
+/// Markdown is styled as it's typed, as in a post's editor: marks faint, and bold bold.
 ///
 /// Auto-resizes vertically up to `maxLines` lines, then scrolls.
 /// Fills its entire frame; text is inset internally so the scroll bar
@@ -18,15 +21,19 @@ struct ChatInputField: NSViewRepresentable {
   var iconID: Int? = nil
   /// The names Tab completes, best first.
   var namesToComplete: () -> [String] = { [] }
+  /// What the Format menu works through, for Markdown in what you're typing.
+  var markdownEditor: MarkdownEditor
   var onSubmit: (_ announce: Bool) -> Void
 
+  /// How what's typed is laid out: in the chat's font, with lines as close as plain text's, so the
+  /// field's as tall as it was before it was styled.
+  static let layout = Markdown.Layout(font: .systemFont(ofSize: NSFont.systemFontSize), lineSpacing: 0, imagePreviews: 0)
+
+  /// A line's height, with nothing on it.
+  static let lineHeight: CGFloat = ceil(NSLayoutManager().defaultLineHeight(for: Self.layout.font))
+
   /// Single-line height matching what `recalculateHeight` computes for an empty field.
-  static let defaultHeight: CGFloat = {
-    let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-    let lm = NSLayoutManager()
-    let lineHeight = ceil(lm.defaultLineHeight(for: font))
-    return lineHeight + ChatInputTextView.verticalInset * 2
-  }()
+  static let defaultHeight: CGFloat = Self.lineHeight + ChatInputTextView.verticalInset * 2
 
   func makeCoordinator() -> Coordinator {
     Coordinator(self)
@@ -61,13 +68,14 @@ struct ChatInputField: NSViewRepresentable {
     textView.isAutomaticDashSubstitutionEnabled = false
     textView.isAutomaticTextReplacementEnabled = false
     textView.allowsUndo = true
-    textView.font = .systemFont(ofSize: NSFont.systemFontSize)
-    textView.textColor = .textColor
+    textView.isAutomaticLinkDetectionEnabled = false
+    textView.isAutomaticDataDetectionEnabled = false
+    textView.font = Self.layout.font
     textView.drawsBackground = false
     textView.updateInsets()
     textView.textContainer?.lineFragmentPadding = 0
 
-    textView.delegate = context.coordinator
+    context.coordinator.attach(textView)
     textView.submitHandler = { announce in
       context.coordinator.parent.onSubmit(announce)
     }
@@ -93,6 +101,7 @@ struct ChatInputField: NSViewRepresentable {
     context.coordinator.parent = self
     guard let textView = context.coordinator.textView else { return }
     textView.applyServerTheme(context.environment.serverTheme)
+    context.coordinator.use(Markdown.Colors(theme: context.environment.serverTheme), in: textView)
     // A generic one for an icon this copy of Hotline doesn't have.
     textView.icon = self.iconID.flatMap { HotlineState.getClassicIcon($0) ?? NSImage(named: "User") }
     // Never overwrite the text view's string while the IME is composing
@@ -111,16 +120,17 @@ struct ChatInputField: NSViewRepresentable {
     }
   }
 
-  class Coordinator: NSObject, NSTextViewDelegate {
+  class Coordinator: MarkdownTextCoordinator {
     var parent: ChatInputField
     weak var textView: ChatInputTextView?
     weak var scrollView: NSScrollView?
 
     init(_ parent: ChatInputField) {
       self.parent = parent
+      super.init(editor: parent.markdownEditor, layout: ChatInputField.layout)
     }
 
-    func textDidChange(_ notification: Notification) {
+    override func textDidChange(_ notification: Notification) {
       guard let textView = self.textView else { return }
       self.parent.text = textView.string
       self.recalculateHeight()
@@ -129,23 +139,21 @@ struct ChatInputField: NSViewRepresentable {
     func recalculateHeight() {
       guard let textView = self.textView else { return }
 
-      let font = textView.font ?? .systemFont(ofSize: NSFont.systemFontSize)
-      let tempLM = NSLayoutManager()
-      let lineHeight = ceil(tempLM.defaultLineHeight(for: font))
+      let lineHeight = ChatInputField.lineHeight
       let maxContentHeight = ceil(lineHeight * CGFloat(self.parent.maxLines))
 
+      // TextKit 2 first, as asking for the layout manager switches a text view to TextKit 1, which
+      // can't draw code blocks' backgrounds and quotes' bars.
       let contentHeight: CGFloat
-      if let layoutManager = textView.layoutManager,
-         let textContainer = textView.textContainer {
-        // TextKit 1
-        layoutManager.ensureLayout(for: textContainer)
-        let usedRect = layoutManager.usedRect(for: textContainer)
-        contentHeight = max(ceil(usedRect.height), lineHeight)
-      } else if let textLayoutManager = textView.textLayoutManager {
-        // TextKit 2
+      if let textLayoutManager = textView.textLayoutManager {
         textLayoutManager.ensureLayout(for: textLayoutManager.documentRange)
         let usageBounds = textLayoutManager.usageBoundsForTextContainer
         contentHeight = max(ceil(usageBounds.height), lineHeight)
+      } else if let layoutManager = textView.layoutManager,
+                let textContainer = textView.textContainer {
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        contentHeight = max(ceil(usedRect.height), lineHeight)
       } else {
         contentHeight = lineHeight
       }
@@ -172,7 +180,7 @@ struct ChatInputField: NSViewRepresentable {
 /// asymmetric internal padding so the text area is inset from the edges.
 /// Laid out like the messages above: your icon where they have their senders', and the text where
 /// theirs starts.
-class ChatInputTextView: NSTextView {
+class ChatInputTextView: MarkdownEditingTextView {
   var submitHandler: ((_ announce: Bool) -> Void)?
   var frameResizeHandler: (() -> Void)?
   /// The names Tab completes, best first.
@@ -340,22 +348,16 @@ class ChatInputTextView: NSTextView {
     guard let size = self.icon?.size else {
       return
     }
-    let font = self.font ?? .systemFont(ofSize: NSFont.systemFontSize)
-
-    // The first line, or with no text, where it would be.
-    var lineRect = NSRect(x: 0, y: 0, width: 0, height: ceil(font.ascender + abs(font.descender) + font.leading))
-    if let layoutManager = self.layoutManager {
-      // TextKit 1 path
-      if layoutManager.numberOfGlyphs > 0 {
-        lineRect = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
-      } else {
-        lineRect.size.height = layoutManager.defaultLineHeight(for: font)
+    // The first line, or with no text, where it would be. TextKit 2 first, as asking for the layout
+    // manager switches a text view to TextKit 1.
+    var lineRect = NSRect(x: 0, y: 0, width: 0, height: ChatInputField.lineHeight)
+    if let textLayoutManager = self.textLayoutManager {
+      if let fragment = textLayoutManager.textLayoutFragment(for: textLayoutManager.documentRange.location),
+         let line = fragment.textLineFragments.first {
+        lineRect = line.typographicBounds.offsetBy(dx: fragment.layoutFragmentFrame.minX, dy: fragment.layoutFragmentFrame.minY)
       }
-    } else if let textLayoutManager = self.textLayoutManager,
-              let fragment = textLayoutManager.textLayoutFragment(for: textLayoutManager.documentRange.location),
-              let line = fragment.textLineFragments.first {
-      // TextKit 2 path
-      lineRect = line.typographicBounds.offsetBy(dx: fragment.layoutFragmentFrame.minX, dy: fragment.layoutFragmentFrame.minY)
+    } else if let layoutManager = self.layoutManager, layoutManager.numberOfGlyphs > 0 {
+      lineRect = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
     }
 
     let midX = ChatTranscriptTextView.lineStart + ChatMessageRenderer.iconInset + ChatMessageRenderer.iconColumnWidth / 2
@@ -376,8 +378,8 @@ class ChatInputTextView: NSTextView {
     }
 
     if isReturn && isShift {
-      // Shift+Enter: insert newline
-      self.insertNewline(nil)
+      // Shift+Enter: insert newline, through the delegate, which goes on with a list or a quote.
+      self.doCommand(by: #selector(NSResponder.insertNewline(_:)))
       return
     }
 

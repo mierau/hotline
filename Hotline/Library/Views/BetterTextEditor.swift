@@ -17,8 +17,17 @@ struct BetterTextEditor: NSViewRepresentable {
   }
   
   func makeNSView(context: Context) -> NSScrollView {
+    // The system's, for its scroll view and text container, with a text view in it that the Format
+    // menu can work through, given an editor.
     let scrollview = NSTextView.scrollablePlainDocumentContentTextView()
-    let textview = scrollview.documentView as! NSTextView
+    let factory = scrollview.documentView as! NSTextView
+    let textview = MarkdownEditingTextView(frame: factory.frame, textContainer: factory.textContainer)
+    textview.autoresizingMask = factory.autoresizingMask
+    textview.isVerticallyResizable = factory.isVerticallyResizable
+    textview.isHorizontallyResizable = factory.isHorizontallyResizable
+    textview.minSize = factory.minSize
+    textview.maxSize = factory.maxSize
+    scrollview.documentView = textview
     
     textview.string = self.text
     textview.delegate = context.coordinator
@@ -92,6 +101,11 @@ struct BetterTextEditor: NSViewRepresentable {
   
   func betterEditorTextInset(_ size: NSSize) -> Self {
     self.customized { $0.textContainerInset = size }
+  }
+
+  /// What the Format menu works through, for Markdown in what's written.
+  func betterEditorMarkdown(_ editor: MarkdownEditor) -> Self {
+    self.customized { editor.follow($0) }
   }
   
   class Coordinator: NSObject, NSTextViewDelegate {

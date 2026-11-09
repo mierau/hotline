@@ -500,6 +500,8 @@ struct ComposeMessageView: View {
   @State private var text: String = ""
   @State private var sending: Bool = false
   @FocusState private var focusedField: ComposeField?
+  /// What the Format menu works through while you're writing.
+  @State private var markdownEditor = MarkdownEditor()
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -562,6 +564,7 @@ struct ComposeMessageView: View {
         .betterEditorFont(NSFont.systemFont(ofSize: 14.0))
         .betterEditorAutomaticSpellingCorrection(true)
         .betterEditorTextInset(.init(width: 16, height: 18))
+        .betterEditorMarkdown(self.markdownEditor)
         .lineSpacing(20)
         .background(Color(nsColor: .textBackgroundColor))
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -301,6 +301,7 @@ struct Application: App {
     ServerWindows(modelContainer: self.modelContainer)
       .commands {
         FileMenuCommands()
+        FormatMenuCommands()
         SidebarCommands()
         WindowMenuCommands()
         HelpMenuCommands()

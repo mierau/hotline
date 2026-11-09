@@ -31,7 +31,7 @@ struct NewsEditorView: View {
   /// As small as there's room for the title and the article in.
   private static let smallest = CGSize(width: 440, height: 420)
 
-  @State private var editor = PostEditorController()
+  @State private var editor = MarkdownEditor()
   @State private var posting = false
   @State private var failed = false
   /// How big it opens: as big as it was last made, or else as it's meant to be.

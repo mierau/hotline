@@ -19,7 +19,7 @@ struct MessageBoardEditorView: View {
   /// How near the most a post can be before it says how much more there's room for.
   private static let roomShown = 2_000
 
-  @State private var editor = PostEditorController()
+  @State private var editor = MarkdownEditor()
   @State private var posting: Bool = false
   @State private var failed: Bool = false
   /// How big it opens: as big as it was last made, or else as it's meant to be.

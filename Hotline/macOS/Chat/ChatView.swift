@@ -29,6 +29,8 @@ struct ChatView: View {
   @State private var inputHeight: CGFloat = ChatInputField.defaultHeight
   @State private var fileDetails: FileDetails?
   @State private var linkIndex = ChatLinkIndex()
+  /// What the Format menu works through while you're typing.
+  @State private var markdownEditor = MarkdownEditor()
 
   /// The private chat this is, while you're in it.
   private var privateChat: PrivateChat? {
@@ -270,6 +272,7 @@ struct ChatView: View {
       // Yours as the user list shows it, when the chat shows icons.
       iconID: Prefs.shared.showChatIcons ? self.model.ownIconID : nil,
       namesToComplete: { self.namesToComplete() },
+      markdownEditor: self.markdownEditor,
       onSubmit: { announce in
         let message = input.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if !message.isEmpty {

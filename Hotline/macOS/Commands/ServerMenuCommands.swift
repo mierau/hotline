@@ -11,7 +11,8 @@ struct ServerMenuCommands: Commands {
         self.activeServerState?.broadcastShown = true
       }
       .disabled(self.activeHotline?.access?.contains(.canBroadcast) != true)
-      .keyboardShortcut(.init("B"), modifiers: .command)
+      // ⌘B is Bold, in the Format menu.
+      .keyboardShortcut(.init("b"), modifiers: [.command, .shift])
 
       Divider()
 

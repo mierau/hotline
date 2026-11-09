@@ -771,23 +771,23 @@ enum Markdown {
   /// item, a heading, a line across, or a drawing.
   static let blockKey = NSAttributedString.Key("markdownBlock")
 
-  /// Styles all of the text, as it's written, in a server's theme's colors, or the system's, and
-  /// gives back where the code in it is.
+  /// Styles all of the text, as it's written, in a layout, the board's, or the chat input's, and a
+  /// server's theme's colors, or the system's, and gives back where the code in it is.
   @discardableResult
-  static func style(_ storage: NSTextStorage, colors: Colors = Colors()) -> CodeRanges {
+  static func style(_ storage: NSTextStorage, layout: Layout = .board, colors: Colors = Colors()) -> CodeRanges {
     let string = storage.string as NSString
     let all = NSRange(location: 0, length: string.length)
-    var layout = Layout.board
+    var layout = layout
     layout.colors = colors
     // Attributes only, as it's done while the text storage is still taking an edit.
-    storage.setAttributes(self.attributes, range: all)
+    storage.setAttributes(layout.attributes, range: all)
     var code = CodeRanges(blocks: self.codeBlocks(in: string))
     code.drawings = self.drawings(in: string, skipping: code.blocks.map(\.range))
     for block in code.blocks {
       self.styleBlock(block, in: storage, colors: colors)
     }
     for drawing in code.drawings {
-      self.styleDrawing(drawing, in: storage)
+      self.styleDrawing(drawing, in: storage, layout: layout)
     }
     code.spans = self.styleWords(in: storage, range: all, skipping: code.blocks.map(\.range) + code.drawings, layout: layout)
     return code
@@ -796,7 +796,7 @@ enum Markdown {
   /// Styles again what an edit changed: the lines it's in, and any code block or drawing among
   /// them, when where those are hasn't changed, and otherwise, all of it. Typing in a long post only
   /// styles the line it's on.
-  static func restyle(_ storage: NSTextStorage, edited: NSRange, changeInLength delta: Int, after previous: CodeRanges, colors: Colors = Colors()) -> CodeRanges {
+  static func restyle(_ storage: NSTextStorage, edited: NSRange, changeInLength delta: Int, after previous: CodeRanges, layout: Layout = .board, colors: Colors = Colors()) -> CodeRanges {
     let string = storage.string as NSString
     let blocks = self.codeBlocks(in: string)
     let drawings = self.drawings(in: string, skipping: blocks.map(\.range))
@@ -824,7 +824,7 @@ enum Markdown {
       return moved
     }
     guard unmoved == blocks.map({ Optional($0) }), previous.drawings.map(moved) == drawings.map({ Optional($0) }) else {
-      return self.style(storage, colors: colors)
+      return self.style(storage, layout: layout, colors: colors)
     }
 
     // The lines the edit's in, the one it ends in too, as when it breaks one in two, and all of any
@@ -836,15 +836,15 @@ enum Markdown {
     for drawing in drawings where NSIntersectionRange(drawing, region).length > 0 {
       region = NSUnionRange(region, drawing)
     }
-    storage.setAttributes(self.attributes, range: region)
+    var layout = layout
+    layout.colors = colors
+    storage.setAttributes(layout.attributes, range: region)
     for block in blocks where NSIntersectionRange(string.paragraphRange(for: block.range), region).length > 0 {
       self.styleBlock(block, in: storage, colors: colors)
     }
     for drawing in drawings where NSIntersectionRange(drawing, region).length > 0 {
-      self.styleDrawing(drawing, in: storage)
+      self.styleDrawing(drawing, in: storage, layout: layout)
     }
-    var layout = Layout.board
-    layout.colors = colors
     let spans = previous.spans.compactMap(moved).filter { NSIntersectionRange($0, region).length == 0 }
       + self.styleWords(in: storage, range: region, skipping: blocks.map(\.range) + drawings, layout: layout)
     return CodeRanges(blocks: blocks, spans: spans.sorted { $0.location < $1.location }, drawings: drawings)
