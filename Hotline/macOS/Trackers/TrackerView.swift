@@ -35,6 +35,8 @@ struct TrackerView: View {
   @State private var expandedTrackers: Set<Bookmark> = []
   @State private var trackerServers: [Bookmark: [BookmarkServer]] = [:]
   @State private var loadingTrackers: Set<Bookmark> = []
+  /// Trackers that couldn't be reached, or stopped answering, the last time they were asked.
+  @State private var unreachableTrackers: Set<Bookmark> = []
   @State private var fetchTasks: [Bookmark: Task<Void, Never>] = [:]
   @State private var searchText: String = ""
   @State private var isSearching = false
@@ -71,7 +73,6 @@ struct TrackerView: View {
 
   private func filteredServers(for bookmark: Bookmark) -> [BookmarkServer] {
     let servers = self.trackerServers[bookmark] ?? []
-    print("TrackerView.filteredServers: Looking up servers for \(bookmark.name), found \(servers.count) servers")
 
     guard !self.searchText.isEmpty else {
       return servers
@@ -159,6 +160,16 @@ struct TrackerView: View {
         .tag(TrackerSelection.bookmark(bookmark))
 
         if bookmark.type == .tracker && self.expandedTrackers.contains(bookmark) {
+          // Said in place of its servers, and not to select, with a way to ask it again.
+          if self.unreachableTrackers.contains(bookmark) && !self.loadingTrackers.contains(bookmark) {
+            TrackerUnreachableRow(bookmark: bookmark) {
+              self.reconnect(bookmark)
+            }
+            .moveDisabled(true)
+            .deleteDisabled(true)
+            .selectionDisabled()
+            .padding(.leading, 16 + 8 + 10)
+          }
           ForEach(self.filteredServers(for: bookmark), id: \.self) { trackedServer in
             TrackerBookmarkServerView(server: trackedServer)
               .moveDisabled(true)
@@ -575,14 +586,40 @@ struct TrackerView: View {
       self.expandedTrackers.remove(bookmark)
       self.trackerServers[bookmark] = nil
       self.loadingTrackers.remove(bookmark)
+      self.unreachableTrackers.remove(bookmark)
+    }
+  }
+
+  /// Asks a tracker that couldn't be reached for its servers again.
+  private func reconnect(_ bookmark: Bookmark) {
+    self.fetchTasks[bookmark]?.cancel()
+    self.fetchTasks[bookmark] = Task {
+      await self.fetchServers(for: bookmark)
     }
   }
 
   private func fetchServers(for bookmark: Bookmark) async {
     print("TrackerView.fetchServers: Starting fetch for bookmark: \(bookmark.name)")
     self.loadingTrackers.insert(bookmark)
-    let servers = await bookmark.fetchServers()
+    self.unreachableTrackers.remove(bookmark)
+    var servers: [BookmarkServer] = []
+    var unreachable = false
+    do {
+      servers = try await bookmark.fetchServers()
+    }
+    catch {
+      unreachable = !(error is CancellationError)
+    }
+    // Not one that was stopped, by closing the tracker, or asking it again, which leaves the tracker
+    // to what's next, rather than to what this one has, which is nothing.
+    guard !Task.isCancelled else {
+      print("TrackerView.fetchServers: Fetch for \(bookmark.name) was stopped")
+      return
+    }
     print("TrackerView.fetchServers: Got \(servers.count) servers from bookmark.fetchServers()")
+    if unreachable {
+      self.unreachableTrackers.insert(bookmark)
+    }
     await MainActor.run {
       print("TrackerView.fetchServers: Assigning \(servers.count) servers to trackerServers[\(bookmark.name)]")
       self.trackerServers[bookmark] = servers

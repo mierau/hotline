@@ -344,7 +344,9 @@ final class Bookmark: Hashable {
     }
   }
   
-  func fetchServers() async -> [BookmarkServer] {
+  /// The servers a tracker lists, as many as came before anything went wrong, or, when none did,
+  /// why not: it couldn't be reached, or stopped answering.
+  func fetchServers() async throws -> [BookmarkServer] {
     guard self.type == .tracker else {
       return []
     }
@@ -362,6 +364,9 @@ final class Bookmark: Hashable {
       }
     } catch {
       print("Failed to fetch servers from tracker: \(error)")
+      if fetchedBookmarks.isEmpty {
+        throw error
+      }
     }
 
     return fetchedBookmarks

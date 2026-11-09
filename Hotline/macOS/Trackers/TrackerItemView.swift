@@ -73,3 +73,33 @@ struct TrackerItemView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
+
+/// In place of a tracker's servers, when it couldn't be reached, or stopped answering, with a
+/// button to ask it again.
+struct TrackerUnreachableRow: View {
+  let bookmark: Bookmark
+  let reconnect: () -> Void
+
+  /// Where the tracker is, with its port, when it isn't the usual one.
+  private var address: String {
+    self.bookmark.port == HotlinePorts.DefaultTrackerPort ? self.bookmark.address : "\(self.bookmark.address):\(self.bookmark.port)"
+  }
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Text("Could not connect to tracker: \(self.address)")
+        .italic()
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.tail)
+      Spacer(minLength: 0)
+      Button(action: self.reconnect) {
+        Image(systemName: "arrow.clockwise")
+      }
+      .buttonStyle(.borderless)
+      .controlSize(.small)
+      .help("Reconnect")
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
