@@ -61,6 +61,17 @@ import UniformTypeIdentifiers
     return fileExtension
   }
 
+  /// A server bookmark someone's put up, a Hotline bookmark file, by its type, or, from somewhere
+  /// that doesn't keep types, its extension: one to connect to, or keep with your own.
+  var isServerBookmark: Bool {
+    !self.isFolder && (self.type == "HTbm" || (self.name as NSString).pathExtension.lowercased() == "hlbm")
+  }
+
+  /// What a server bookmark file's for, as a bookmark: its name, without its extension.
+  var serverBookmarkName: String {
+    (self.name as NSString).pathExtension.lowercased() == "hlbm" ? (self.name as NSString).deletingPathExtension : self.name
+  }
+
   /// An archive that can be previewed by what's in it.
   var archiveKind: ArchiveKind? {
     ArchiveKind(fileExtension: self.fileExtension)

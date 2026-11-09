@@ -42,6 +42,14 @@ struct FileGridItemView: View {
               .scaledToFit()
           }
         }
+        else if self.file.isServerBookmark {
+          // As servers are in the Servers window, smaller than a page, which has room around it,
+          // as a round globe doesn't.
+          Image("Server Large")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 36, height: 36)
+        }
         else {
           FileIconView(filename: self.file.name, fileType: self.file.type)
         }

@@ -5,6 +5,7 @@ import AppKit
 struct FilesView: View {
   @Environment(HotlineState.self) private var model: HotlineState
   @Environment(\.openWindow) private var openWindow
+  @Environment(\.modelContext) private var modelContext
   @Environment(\.controlActiveState) private var controlActiveState
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.serverTheme) private var theme
@@ -572,6 +573,26 @@ struct FilesView: View {
     let single = files.count == 1 ? files.first : nil
     // Into the one folder it's for, or from the toolbar, or between files, the one you're in.
     let uploadFolder: [String]? = single?.isFolder == true ? single?.path : (inToolbar || files.isEmpty) ? self.folderPath : nil
+
+    // A server bookmark someone's put up, to connect to, or keep with your own, read from the
+    // server out of sight, as reading it is all it takes.
+    if let single, single.isServerBookmark {
+      Button {
+        self.actions.connect(toServerIn: single)
+      } label: {
+        Label("Connect to Server", systemImage: "globe")
+      }
+      .disabled(!self.actions.canDownload([single]))
+
+      Button {
+        self.actions.addToBookmarks(single, context: self.modelContext)
+      } label: {
+        Label("Add to Bookmarks", systemImage: "bookmark")
+      }
+      .disabled(!self.actions.canDownload([single]))
+
+      Divider()
+    }
 
     Button {
       self.uploadDestination = uploadFolder ?? self.folderPath

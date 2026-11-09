@@ -6,6 +6,8 @@ struct FileItemView: View {
   @Environment(\.filePlaces) private var places
   @Environment(FileRename.self) private var rename: FileRename?
   @Environment(\.fileNamePlaces) private var namePlaces
+  @Environment(\.openWindow) private var openWindow
+  @Environment(\.modelContext) private var modelContext
   
   var file: FileInfo
   let depth: Int
@@ -25,6 +27,13 @@ struct FileItemView: View {
           Image(systemName: "questionmark.app.fill")
             .frame(width: 16, height: 16)
             .opacity(0.5)
+        }
+        else if file.isServerBookmark {
+          // As servers are in the Servers window.
+          Image("Server")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 16, height: 16)
         }
         else {
           FileIconView(filename: file.name, fileType: file.type)
@@ -49,7 +58,10 @@ struct FileItemView: View {
       }
 
       Spacer()
-      if !file.isUnavailable {
+      if file.isServerBookmark && !file.isUnavailable {
+        self.serverBookmarkButtons
+      }
+      else if !file.isUnavailable {
         Text(formattedFileSize(file.fileSize))
           .foregroundStyle(.secondary)
           .lineLimit(1)
@@ -84,6 +96,31 @@ struct FileItemView: View {
     }
   }
   
+  /// For a server bookmark someone's put up: keep it with your own, or connect to it, in place of
+  /// its size, which doesn't matter for one. A press on them is for them, not the row.
+  private var serverBookmarkButtons: some View {
+    let actions = FileActions(model: self.model, openWindow: self.openWindow)
+    return HStack(spacing: 8) {
+      Button("Connect") {
+        actions.connect(toServerIn: self.file)
+      }
+      .buttonStyle(FileRowCapsuleButtonStyle())
+      .help("Connect to Server")
+
+      Button {
+        actions.addToBookmarks(self.file, context: self.modelContext)
+      } label: {
+        Image(systemName: "bookmark.fill")
+      }
+      .buttonStyle(.borderless)
+      .foregroundStyle(.secondary)
+      .help("Add to Bookmarks")
+    }
+    .disabled(!actions.canDownload([self.file]))
+    .fileDragPassThrough()
+    .padding(.trailing, 6)
+  }
+
   static let byteFormatter = ByteCountFormatter()
   
   private func formattedFileSize(_ fileSize: UInt) -> String {
@@ -91,4 +128,43 @@ struct FileItemView: View {
     FileItemView.byteFormatter.countStyle = .file
     return FileItemView.byteFormatter.string(fromByteCount: Int64(fileSize))
   }
+}
+
+/// A small capsule of a button in a file's row, in the gray of what's beside it, and no taller than
+/// the row, as a bordered button at a size that has room for its words would be.
+private struct FileRowCapsuleButtonStyle: ButtonStyle {
+  @Environment(\.isEnabled) private var isEnabled
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: 11, weight: .medium))
+      .padding(.horizontal, 8)
+      .frame(height: 18)
+      .background(.fill.secondary.opacity(configuration.isPressed ? 2 : 1), in: .capsule)
+      .foregroundStyle(self.isEnabled ? .secondary : .tertiary)
+      .contentShape(.capsule)
+      // Taller than the row's words, into the room around them, without the row growing for it.
+      .padding(.vertical, -1)
+  }
+}
+
+#Preview("Server bookmark files") {
+  let bookmark = FileInfo(hotlineFile: HotlineFile(type: "HTbm", creator: "HTLC", fileSize: 460, fileName: "The Mobius Strip"))
+  let other = FileInfo(hotlineFile: HotlineFile(type: "TEXT", creator: "ttxt", fileSize: 1_000, fileName: "About This Area"))
+  let model = HotlineState()
+  model.access = [.canDownloadFiles]
+  return VStack(alignment: .leading, spacing: 12) {
+    List {
+      FileItemView(file: bookmark, depth: 0)
+      FileItemView(file: other, depth: 0)
+    }
+    .frame(height: 70)
+    HStack(spacing: 12) {
+      FileGridItemView(file: bookmark, isSelected: false, isDragTarget: false, places: FilePlaces(space: nil))
+      FileGridItemView(file: other, isSelected: false, isDragTarget: false, places: FilePlaces(space: nil))
+    }
+  }
+  .padding()
+  .frame(width: 360)
+  .environment(model)
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import SwiftData
 import UniformTypeIdentifiers
 
 @MainActor
@@ -17,6 +18,47 @@ struct FileActions {
 
   func downloadFile(_ file: FileInfo) {
     self.download([file])
+  }
+
+  // MARK: Server Bookmarks
+
+  /// Connects to the server a server bookmark file is for, as its own window does, with the login
+  /// in it, once it's read from the server.
+  func connect(toServerIn file: FileInfo) {
+    Task {
+      guard let server = await self.bookmark(in: file)?.server else {
+        return
+      }
+      self.openWindow(id: "server", value: server)
+    }
+  }
+
+  /// Keeps the server a server bookmark file is for with your bookmarks, first, as one dropped on
+  /// the Servers window is, once it's read from the server.
+  func addToBookmarks(_ file: FileInfo, context: ModelContext) {
+    Task {
+      guard let bookmark = await self.bookmark(in: file) else {
+        return
+      }
+      Bookmark.add(bookmark, context: context)
+    }
+  }
+
+  /// The bookmark in a server bookmark file, read from the server out of sight, as a preview's
+  /// read, rather than downloaded where it'd be shown, or nil, once why not has been said.
+  private func bookmark(in file: FileInfo) async -> Bookmark? {
+    do {
+      // Bigger than any bookmark file, which is less than 500 bytes.
+      let read = try await self.model.readFile(file.name, path: file.path, from: 0, length: 2000)
+      if let bookmark = Bookmark(fileData: read.data, name: file.serverBookmarkName) {
+        return bookmark
+      }
+      self.model.displayError(CocoaError(.fileReadCorruptFile), message: "“\(file.name)” isn’t a server bookmark Hotline can read.")
+    }
+    catch {
+      self.model.displayError(error, message: (error as? HotlineClientError)?.userMessage ?? "Couldn’t read “\(file.name)” from the server.")
+    }
+    return nil
   }
 
   // MARK: What You Can Do
