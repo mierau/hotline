@@ -45,23 +45,28 @@ extension HotlineState {
     self.presenceTask?.cancel()
     self.presenceTask = Task { @MainActor [weak self] in
       var rule = PresenceRule()
+      var wait = PresenceRule.checkEvery
       while !Task.isCancelled {
-        try? await Task.sleep(for: PresenceRule.checkEvery)
+        try? await Task.sleep(for: wait)
         guard !Task.isCancelled, let self, let client = self.client else {
           return
         }
 
         let sinceActivity = await client.timeSinceActivity
+        let isIdle = self.ownUser?.isIdle ?? false
         let saysHere = rule.saysHere(
           sinceActivity: sinceActivity,
           sinceInput: MacPresence.timeSinceInput,
           isLocked: MacPresence.isLocked,
-          isIdle: self.ownUser?.isIdle ?? false
+          isIdle: isIdle
         )
         if saysHere {
           print("HotlineState: Telling the server you're here, \(sinceActivity.formatted(.units(allowed: [.minutes, .seconds], width: .narrow))) since it last heard from you")
           try? await self.getUserList()
         }
+
+        // Sooner while the server has you as idle, for you to be back as soon as you are.
+        wait = isIdle ? PresenceRule.checkEveryWhileIdle : PresenceRule.checkEvery
       }
     }
   }
@@ -905,6 +910,11 @@ extension HotlineState {
 struct PresenceRule {
   /// How often to see whether to.
   static let checkEvery: Duration = .seconds(15)
+
+  /// How often while the server has you as idle, so you're back about as soon as you touch the
+  /// Mac. Seeing is only asking the Mac and the client, which is nothing much; nothing's sent to the
+  /// server until you're back.
+  static let checkEveryWhileIdle: Duration = .seconds(5)
 
   /// How long a server can go without hearing from you while you're at your Mac: well within the
   /// 5 minutes Mobius gives, even with checks put off a while in the background.
