@@ -40,6 +40,41 @@ public enum HotlineEvent: Sendable {
   /// A download's moved up in the server's line, which it's in while all the server's download
   /// slots are full: its reference number, and its place, 1 for next
   case downloadQueued(reference: UInt32, position: Int)
+  /// The server has a new banner to show, or, with its agreement, says where its banner is
+  case serverBanner(HotlineServerBanner)
+}
+
+/// Where a server's banner is, as the server says, in a Server Banner message (122), or with its
+/// agreement (109): at a web address, in the message itself, or to ask it for with Download Banner
+/// (212), as the client does at login.
+public enum HotlineServerBanner: Sendable, Equatable {
+  case url(URL)
+  case data(Data)
+  case download
+
+  /// The type that says it's at a web address: 1, or as a Server Banner message has it, 'URL '.
+  private static let urlTypes: Set<Int> = [1, Int("URL ".fourCharCode())]
+
+  /// What a message says about the banner, or nil if it says nothing, or gives a web address that
+  /// isn't one.
+  init?(from transaction: HotlineTransaction) {
+    if let field = transaction.getField(type: .serverBanner), !field.data.isEmpty {
+      self = .data(Data(field.data))
+      return
+    }
+    guard let type = transaction.getField(type: .serverBannerType)?.getInteger() else {
+      return nil
+    }
+    guard Self.urlTypes.contains(type) else {
+      self = .download
+      return
+    }
+    guard let address = transaction.getField(type: .serverBannerURL)?.getString()?.trimmingCharacters(in: .whitespacesAndNewlines),
+          let url = URL(string: address), url.scheme != nil, url.host() != nil else {
+      return nil
+    }
+    self = .url(url)
+  }
 }
 
 // MARK: - Errors
@@ -459,6 +494,10 @@ public actor HotlineClient {
         text = nil
       }
       eventContinuation.yield(.showAgreement(text))
+      // Where the banner is, if the agreement says.
+      if let banner = HotlineServerBanner(from: transaction) {
+        eventContinuation.yield(.serverBanner(banner))
+      }
 
     case .userAccess:
       if let accessValue = transaction.getField(type: .userAccess)?.getUInt64() {
@@ -499,6 +538,11 @@ public actor HotlineClient {
       if let chatID = transaction.getField(type: .chatID)?.getInteger() {
         let subject = transaction.getField(type: .chatSubject)?.getString() ?? ""
         eventContinuation.yield(.privateChatSubject(chatID: UInt32(truncatingIfNeeded: chatID), subject: subject))
+      }
+
+    case .serverBanner:
+      if let banner = HotlineServerBanner(from: transaction) {
+        eventContinuation.yield(.serverBanner(banner))
       }
 
     case .downloadInfo:

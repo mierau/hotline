@@ -487,49 +487,128 @@ extension HotlineState {
       }
 
       print("HotlineState: Banner download complete, data size: \(data.count) bytes")
-
-      // Keep it for next time. When it's the same banner as last time, this is the file that's
-      // already showing.
-      let cachedURL = await BannerCache.shared.store(data, forAddress: server.address, port: server.port)
-      if cachedURL != nil {
-        previewClient.cleanup()
-      }
-      let fileURL = cachedURL ?? downloadURL
-
-      guard !Task.isCancelled, self.client != nil else {
-        if cachedURL == nil {
-          previewClient.cleanup()
-        }
-        return
-      }
-      self.bannerDownloaded = true
-
-      // The same banner as last time is the one already showing, so nothing changes on screen.
-      guard fileURL.path(percentEncoded: false) != self.bannerFileURL?.path(percentEncoded: false) else {
-        return
-      }
-
-      guard let banner = await Self.loadBanner(at: fileURL) else {
-        print("HotlineState: Banner isn't an image that can be shown")
-        if cachedURL == nil {
-          previewClient.cleanup()
-        }
-        await self.forgetBanner(for: server)
-        return
-      }
-
-      guard !Task.isCancelled, self.client != nil else {
-        if cachedURL == nil {
-          previewClient.cleanup()
-        }
-        return
-      }
-
-      // In place of the cached banner, if one was showing. The toolbar fades between them.
-      self.showBanner(banner, temporary: cachedURL == nil)
+      await self.useBanner(data, at: downloadURL, discard: { previewClient.cleanup() }, for: server)
     }
 
     self.bannerDownloadTask = task
+  }
+
+  /// Shows a banner, kept for next time, in place of whatever's showing, which the toolbar fades
+  /// from, unless it's the same banner as last time, which is already showing. `fileURL` has it too,
+  /// for when it can't be kept, as one too big for the cache, and `discard` deletes that file, when
+  /// it isn't what's shown. One that isn't an image is forgotten, as the server's having no banner is.
+  @MainActor
+  private func useBanner(_ data: Data, at fileURL: URL, discard: @escaping () -> Void, for server: Server) async {
+    // Keep it for next time. When it's the same banner as last time, this is the file that's
+    // already showing.
+    let cachedURL = await BannerCache.shared.store(data, forAddress: server.address, port: server.port)
+    if cachedURL != nil {
+      discard()
+    }
+    let bannerURL = cachedURL ?? fileURL
+
+    guard !Task.isCancelled, self.client != nil else {
+      if cachedURL == nil {
+        discard()
+      }
+      return
+    }
+    self.bannerDownloaded = true
+
+    // The same banner as last time is the one already showing, so nothing changes on screen.
+    guard bannerURL.path(percentEncoded: false) != self.bannerFileURL?.path(percentEncoded: false) else {
+      return
+    }
+
+    guard let banner = await Self.loadBanner(at: bannerURL) else {
+      print("HotlineState: Banner isn't an image that can be shown")
+      if cachedURL == nil {
+        discard()
+      }
+      await self.forgetBanner(for: server)
+      return
+    }
+
+    guard !Task.isCancelled, self.client != nil else {
+      if cachedURL == nil {
+        discard()
+      }
+      return
+    }
+
+    // In place of the cached banner, if one was showing. The toolbar fades between them.
+    self.showBanner(banner, temporary: cachedURL == nil)
+  }
+
+  /// A banner the server says it has, while connected, or with its agreement: asked for again, as
+  /// at login, from the web address it gives, or as it sent it. One to ask for before you're logged
+  /// in is left to login, which asks for it anyway.
+  @MainActor
+  func handleServerBanner(_ banner: HotlineServerBanner) {
+    switch banner {
+    case .download:
+      guard self.status == .loggedIn else {
+        return
+      }
+      self.downloadBanner(force: true)
+    case .data(let data):
+      self.showServerBanner { data }
+    case .url(let url):
+      self.showServerBanner { try await Self.fetchBanner(from: url) }
+    }
+  }
+
+  /// Shows a banner that isn't downloaded from the server, in place of any that is, and of the one
+  /// at login, which it's newer than.
+  @MainActor
+  private func showServerBanner(_ load: @escaping @Sendable () async throws -> Data) {
+    self.bannerDownloadTask?.cancel()
+    self.bannerDownloadTask = Task { @MainActor [weak self] in
+      defer {
+        self?.bannerDownloadTask = nil
+      }
+      guard let self, let server = self.server else {
+        return
+      }
+      let data: Data
+      do {
+        data = try await load()
+      }
+      catch {
+        print("HotlineState: Banner couldn't be fetched: \(error)")
+        return
+      }
+      // In a file of its own too, for when it's too big to keep.
+      let fileURL = HotlineFilePreviewClient.downloadURL(for: "banner", fileType: nil)
+      do {
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: fileURL)
+      }
+      catch {
+        print("HotlineState: Banner couldn't be saved: \(error)")
+        return
+      }
+      guard !Task.isCancelled else {
+        HotlineFilePreviewClient.removeDownload(at: fileURL)
+        return
+      }
+      await self.useBanner(data, at: fileURL, discard: { HotlineFilePreviewClient.removeDownload(at: fileURL) }, for: server)
+    }
+  }
+
+  /// A banner at a web address, if it's an image no bigger than one's kept, from an https address,
+  /// as the app loads nothing insecurely.
+  nonisolated private static func fetchBanner(from url: URL) async throws -> Data {
+    var request = URLRequest(url: url)
+    request.timeoutInterval = 20
+    let (data, response) = try await URLSession.shared.data(for: request)
+    if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+      throw URLError(.badServerResponse)
+    }
+    guard !data.isEmpty, data.count <= 4 * 1024 * 1024 else {
+      throw URLError(.dataLengthExceedsMaximum)
+    }
+    return data
   }
 
   /// Shows the banner cached from an earlier visit to the server, if there is one.
@@ -770,6 +849,9 @@ extension HotlineState {
 
     case .downloadQueued(let reference, let position):
       self.handleDownloadQueued(reference: reference, position: position)
+
+    case .serverBanner(let banner):
+      self.handleServerBanner(banner)
     }
   }
 }
