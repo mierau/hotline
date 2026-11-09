@@ -310,6 +310,9 @@ final class FileRename {
   private(set) var given: [FileInfo.ID: String] = [:]
   /// What's done with a name given.
   @ObservationIgnored var give: (FileInfo, String) async -> Void = { _, _ in }
+  /// Gives the keys back to the files, once a name's given with Return, or left with Escape, to go
+  /// on in them, and not when it's given by clicking somewhere else, which has them now.
+  @ObservationIgnored var keysBack: () -> Void = {}
 
   /// Renaming it, once what was being renamed, if anything, is done with.
   func start(_ file: FileInfo) {
@@ -368,9 +371,11 @@ struct FileNameField: View {
       .focused(self.$focused)
       .onSubmit {
         self.rename.finish(self.file)
+        self.rename.keysBack()
       }
       .onExitCommand {
         self.rename.cancel(self.file)
+        self.rename.keysBack()
       }
       .onChange(of: self.focused) { _, focused in
         if focused {
@@ -387,7 +392,11 @@ struct FileNameField: View {
         }
       }
       .onAppear {
-        self.focused = true
+        // Once the key press that started it, Return, if it was one, is done with, as the list
+        // keeps the keys, while it's still going on.
+        DispatchQueue.main.async {
+          self.focused = true
+        }
       }
       .fileDragPassThrough()
   }

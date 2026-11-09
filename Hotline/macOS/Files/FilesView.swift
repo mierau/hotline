@@ -71,7 +71,8 @@ struct FilesView: View {
             isShowingSearchResults: isShowingSearchResults,
             loading: showFolderLoading,
             menu: { files in AnyView(self.fileMenu(for: files, inToolbar: false)) },
-            open: { files in self.open(files) }
+            open: { files in self.open(files) },
+            renameSelection: { self.renameSelection() }
           )
         }
         else {
@@ -210,6 +211,9 @@ struct FilesView: View {
         }
         self.rename.give = { file, name in
           await self.renamed(file, to: name)
+        }
+        self.rename.keysBack = {
+          self.isFileListFocused = true
         }
       }
       .onChange(of: self.serverState.fileNavigationPath) { _, _ in
@@ -477,12 +481,9 @@ struct FilesView: View {
         return .ignored
       }
       .onKeyPress(.downArrow, phases: .down) { press in
-        guard self.rename.file == nil, press.modifiers.contains(.command) else { return .ignored }
-        if let s = self.selectedFile, s.isFolder {
-          self.folderPath = s.path
-          return .handled
-        }
-        return .ignored
+        guard self.rename.file == nil, press.modifiers.contains(.command), !self.selection.isEmpty else { return .ignored }
+        self.open(self.selectedFiles)
+        return .handled
       }
       .onKeyPress(.upArrow, phases: .down) { press in
         guard self.rename.file == nil, press.modifiers.contains(.command) else { return .ignored }
@@ -494,10 +495,8 @@ struct FilesView: View {
         return .ignored
       }
       .onKeyPress(.return) {
-        guard self.rename.file == nil, !self.selection.isEmpty else {
-          return .ignored
-        }
-        self.open(self.selectedFiles)
+        guard self.rename.file == nil else { return .ignored }
+        self.renameSelection()
         return .handled
       }
       .overlay {
@@ -713,7 +712,18 @@ struct FilesView: View {
     }
   }
 
-  /// What's opened, with a double click or Return: a folder, on its own, by going into it, and
+  /// Return renames what's selected, as in the Finder, when it's one thing you can rename, and
+  /// otherwise only beeps, as nothing's done.
+  private func renameSelection() {
+    if self.selection.count == 1, let file = self.selection.first, self.actions.canRename(file) {
+      self.startRenaming(file)
+    }
+    else {
+      NSSound.beep()
+    }
+  }
+
+  /// What's opened, with a double click or ⌘↓: a folder, on its own, by going into it, and
   /// anything else, all of it, by downloading it.
   private func open(_ files: [FileInfo]) {
     if files.count == 1, let folder = files.first, folder.isFolder {

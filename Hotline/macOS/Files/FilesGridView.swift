@@ -209,6 +209,8 @@ struct FilesGridView: View {
   var menu: ([FileInfo]) -> AnyView
   /// Opens them, as a double click does.
   var open: ([FileInfo]) -> Void
+  /// Renames what's selected, as Return does, if it's one thing you can rename.
+  var renameSelection: () -> Void
 
   @State private var gridWidth: CGFloat = 0
   /// Opening a folder something's been dragged over a moment.
@@ -350,11 +352,10 @@ struct FilesGridView: View {
     // None of the keys while a name's being written, where they're for moving in it, typing a
     // space, and giving the name with Return.
     .onKeyPress(.return) {
-      let selected = self.selectedItems
-      guard !self.isRenaming, !selected.isEmpty else {
+      guard !self.isRenaming else {
         return .ignored
       }
-      self.open(selected)
+      self.renameSelection()
       return .handled
     }
     .onKeyPress(.space) {
