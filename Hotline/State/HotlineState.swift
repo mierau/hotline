@@ -519,6 +519,8 @@ class HotlineState: Equatable {
 
   @ObservationIgnored var client: HotlineClient?
   @ObservationIgnored var eventTask: Task<Void, Never>?
+  /// Keeps the server from saying you're idle while you're at your Mac. See `startPresence()`.
+  @ObservationIgnored var presenceTask: Task<Void, Never>?
   /// What people do before the user list is in: coming, going, and changing, held to go through
   /// after it. Nil once it's in. See `getUserList()`.
   @ObservationIgnored var heldUserEvents: [HotlineEvent]?

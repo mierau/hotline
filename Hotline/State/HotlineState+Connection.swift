@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreGraphics
 
 // MARK: - Connection & Event Loop
 
@@ -25,6 +26,43 @@ extension HotlineState {
     if self.activeConnectionCount == 0, let activity = self.appNapActivity {
       ProcessInfo.processInfo.endActivity(activity)
       self.appNapActivity = nil
+    }
+  }
+  #endif
+
+  // MARK: - Presence
+
+  #if os(macOS)
+  /// Keeps the server from saying you're idle while you're at your Mac, whether or not you're doing
+  /// anything in Hotline, as people take idle to mean you've stepped away.
+  ///
+  /// Servers say you're idle once they haven't heard from you for a while: 10 minutes on the
+  /// original server, 5 on Mobius, which doesn't count keep-alives. So while you're using your Mac
+  /// and Hotline hasn't said anything to the server lately, it asks for the user list, which every
+  /// server counts as you doing something there. Once you've stepped away it stops, and the server
+  /// says you're idle in its own time, as there's no way to say so yourself.
+  func startPresence() {
+    self.presenceTask?.cancel()
+    self.presenceTask = Task { @MainActor [weak self] in
+      var rule = PresenceRule()
+      while !Task.isCancelled {
+        try? await Task.sleep(for: PresenceRule.checkEvery)
+        guard !Task.isCancelled, let self, let client = self.client else {
+          return
+        }
+
+        let sinceActivity = await client.timeSinceActivity
+        let saysHere = rule.saysHere(
+          sinceActivity: sinceActivity,
+          sinceInput: MacPresence.timeSinceInput,
+          isLocked: MacPresence.isLocked,
+          isIdle: self.ownUser?.isIdle ?? false
+        )
+        if saysHere {
+          print("HotlineState: Telling the server you're here, \(sinceActivity.formatted(.units(allowed: [.minutes, .seconds], width: .narrow))) since it last heard from you")
+          try? await self.getUserList()
+        }
+      }
     }
   }
   #endif
@@ -209,6 +247,9 @@ extension HotlineState {
 
       print("HotlineState: Post-login: Starting keep-alive...")
       await client.startKeepAlive()
+      #if os(macOS)
+      self.startPresence()
+      #endif
 
       if self.eventTask == nil {
         print("HotlineState: Post-login: Starting event loop...")
@@ -335,6 +376,8 @@ extension HotlineState {
 
     // Clear client reference
     self.client = nil
+    self.presenceTask?.cancel()
+    self.presenceTask = nil
 
     print("HotlineState: Resetting state properties...")
 
@@ -855,3 +898,87 @@ extension HotlineState {
     }
   }
 }
+
+// MARK: - Presence
+
+/// When to tell a server you're here, so it doesn't say you're idle while you're at your Mac.
+struct PresenceRule {
+  /// How often to see whether to.
+  static let checkEvery: Duration = .seconds(15)
+
+  /// How long a server can go without hearing from you while you're at your Mac: well within the
+  /// 5 minutes Mobius gives, even with checks put off a while in the background.
+  static let usualInterval: Duration = .seconds(180)
+
+  /// The shortest it's made for a server that's quicker to say you're idle than that.
+  static let shortestInterval: Duration = .seconds(60)
+
+  /// How long a server can go without hearing from you, made shorter for one that says you're idle
+  /// sooner.
+  private(set) var interval = Self.usualInterval
+
+  /// Whether the server had you as idle the last time.
+  private var wasIdle = false
+
+  /// Whether it's said you're here because the server had you as idle, and the server hasn't said
+  /// otherwise since.
+  private var answeredIdle = false
+
+  /// Whether to tell the server you're here now.
+  ///
+  /// - Parameters:
+  ///   - sinceActivity: How long since the server last heard from you.
+  ///   - sinceInput: How long since the Mac was last used.
+  ///   - isLocked: Whether its screen is locked.
+  ///   - isIdle: Whether the server has you as idle.
+  mutating func saysHere(sinceActivity: Duration, sinceInput: Duration, isLocked: Bool, isIdle: Bool) -> Bool {
+    let wentIdle = isIdle && !self.wasIdle
+    self.wasIdle = isIdle
+    if !isIdle {
+      self.answeredIdle = false
+    }
+
+    // Not once you've stepped away, or haven't used the Mac since the server last heard from you.
+    guard !isLocked, sinceInput < sinceActivity else {
+      return false
+    }
+
+    // Idle there though you're here, as when you come back. Only once, as a server that doesn't
+    // count the user list as doing something would have it over and over. And not just after you
+    // did something, which the server may not have answered yet.
+    if isIdle && !self.answeredIdle && sinceActivity >= .seconds(30) {
+      self.answeredIdle = true
+      // Said sooner than expected, while you were here: a server quicker to say so than Mobius.
+      if wentIdle && sinceActivity < self.interval {
+        self.interval = max(Self.shortestInterval, sinceActivity - .seconds(60))
+      }
+      return true
+    }
+
+    return sinceActivity >= self.interval
+  }
+}
+
+#if os(macOS)
+/// Whether you're at your Mac, as far as the Mac knows.
+enum MacPresence {
+  /// How long since the Mac was last used, with a key, the mouse, the trackpad or the like, in any
+  /// app.
+  static var timeSinceInput: Duration {
+    // Any kind, as `kCGAnyInputEventType` is, which Swift doesn't have a name for.
+    let anyInput = CGEventType(rawValue: ~0)!
+    return .seconds(CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput))
+  }
+
+  /// Whether the screen's locked, or someone else is using the Mac, switched to as another user.
+  static var isLocked: Bool {
+    guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else {
+      return false
+    }
+    if session["CGSSessionScreenIsLocked"] as? Bool == true {
+      return true
+    }
+    return session[kCGSessionOnConsoleKey] as? Bool == false
+  }
+}
+#endif

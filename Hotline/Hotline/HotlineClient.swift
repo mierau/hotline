@@ -207,6 +207,19 @@ public actor HotlineClient {
   // Keep-alive timer
   private var keepAliveTask: Task<Void, Never>?
 
+  /// When it last sent or heard anything at all, for keeping a quiet connection alive.
+  private var lastTraffic: ContinuousClock.Instant = .now
+
+  /// When it last sent the server anything but a keep-alive. Servers go by that to say you're idle,
+  /// and Mobius doesn't count keep-alives.
+  private var lastActivity: ContinuousClock.Instant = .now
+
+  /// How long since the server last heard anything from you that it counts as doing something there,
+  /// which is how long you've seemed idle to it.
+  public var timeSinceActivity: Duration {
+    ContinuousClock.now - self.lastActivity
+  }
+
   // Transaction IDs
   private var nextTransactionID: UInt32 = 1
   private func generateTransactionID() -> UInt32 {
@@ -421,6 +434,7 @@ public actor HotlineClient {
 
   private func handleTransaction(_ transaction: HotlineTransaction) {
     print("HotlineClient: <= \(transaction.type) [\(transaction.id)]")
+    self.lastTraffic = .now
 
     // Check if this is a reply to a pending transaction
     if transaction.isReply == 1 || transaction.type == .reply {
@@ -565,13 +579,23 @@ public actor HotlineClient {
 
   // MARK: - Transaction Sending
 
+  /// Sends a message to the server. Anything but a keep-alive is you doing something there, as
+  /// servers count it.
+  private func send(_ transaction: HotlineTransaction) async throws {
+    try await self.socket.send(transaction, endian: .big)
+    self.lastTraffic = .now
+    if transaction.type != .connectionKeepAlive {
+      self.lastActivity = .now
+    }
+  }
+
   @discardableResult
   private func sendTransaction(_ transaction: HotlineTransaction, timeout: TimeInterval = 30.0) async throws -> HotlineTransaction {
     print("HotlineClient: => \(transaction.type) [\(transaction.id)]")
 
     let transactionID = transaction.id
 
-    try await self.socket.send(transaction, endian: .big)
+    try await self.send(transaction)
 
     do {
       return try await Task.withTimeout(seconds: timeout) {
@@ -617,20 +641,32 @@ public actor HotlineClient {
 
   // MARK: - Keep-Alive
 
+  /// How long a connection can go without anything either way before it's kept alive, as the
+  /// original client did. Whatever comes from the server keeps it alive as well as a keep-alive.
+  private static let keepAliveAfter: Duration = .seconds(180)
+
   public func startKeepAlive() {
+    self.keepAliveTask?.cancel()
     self.keepAliveTask = Task { [weak self] in
       while !Task.isCancelled {
-        try? await Task.sleep(nanoseconds: 180_000_000_000) // 3 minutes
-        await self?.sendKeepAlive()
+        try? await Task.sleep(for: .seconds(15))
+        await self?.keepAliveIfQuiet()
       }
     }
   }
-  
+
+  private func keepAliveIfQuiet() async {
+    guard ContinuousClock.now - self.lastTraffic >= Self.keepAliveAfter else {
+      return
+    }
+    await self.sendKeepAlive()
+  }
+
   private func sendKeepAlive() async {
     do {
       if let version = self.serverInfo?.version, version >= 185 {
         let transaction = HotlineTransaction(id: self.generateTransactionID(), type: .connectionKeepAlive)
-        try await self.socket.send(transaction, endian: .big)
+        try await self.send(transaction)
       } else {
         // Older servers: send getUserNameList as keep-alive
         let _ = try? await self.getUserList()
@@ -650,7 +686,7 @@ public actor HotlineClient {
   public func sendBroadcast(_ message: String, encoding: String.Encoding = .utf8, announce: Bool = false) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .userBroadcast)
     transaction.setFieldString(type: .data, val: message, encoding: encoding)
-    try await socket.send(transaction, endian: .big)
+    try await self.send(transaction)
   }
 
   /// Send a chat message to the server
@@ -667,7 +703,7 @@ public actor HotlineClient {
       transaction.setFieldUInt32(type: .chatID, val: chatID)
     }
 
-    try await socket.send(transaction, endian: .big)
+    try await self.send(transaction)
   }
 
   // MARK: - Private Chat
@@ -699,7 +735,7 @@ public actor HotlineClient {
     transaction.setFieldUInt16(type: .userID, val: userID)
     transaction.setFieldUInt32(type: .chatID, val: chatID)
 
-    try await socket.send(transaction, endian: .big)
+    try await self.send(transaction)
   }
 
   /// Join a private chat you were invited to
@@ -723,7 +759,7 @@ public actor HotlineClient {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .rejectChatInvite)
     transaction.setFieldUInt32(type: .chatID, val: chatID)
 
-    try await socket.send(transaction, endian: .big)
+    try await self.send(transaction)
   }
 
   /// Leave a private chat
@@ -733,7 +769,7 @@ public actor HotlineClient {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .leaveChat)
     transaction.setFieldUInt32(type: .chatID, val: chatID)
 
-    try await socket.send(transaction, endian: .big)
+    try await self.send(transaction)
   }
 
   /// Set a private chat's subject, for everyone in it
@@ -747,7 +783,7 @@ public actor HotlineClient {
     transaction.setFieldUInt32(type: .chatID, val: chatID)
     transaction.setFieldString(type: .chatSubject, val: subject, encoding: encoding)
 
-    try await socket.send(transaction, endian: .big)
+    try await self.send(transaction)
   }
 
   // MARK: - Users
@@ -779,7 +815,7 @@ public actor HotlineClient {
     transaction.setFieldUInt32(type: .options, val: 1)
     transaction.setFieldString(type: .data, val: message.convertingLineEndings(to: .cr), encoding: encoding)
 
-    try await socket.send(transaction, endian: .big)
+    try await self.send(transaction)
   }
   
   /// Get information text about a user
@@ -822,7 +858,7 @@ public actor HotlineClient {
       transaction.setFieldString(type: .automaticResponse, val: autoresponse)
     }
 
-    try await socket.send(transaction, endian: .big)
+    try await self.send(transaction)
   }
   
   /// Force a user to disconnect from the server
@@ -1448,7 +1484,7 @@ public actor HotlineClient {
     // With the line breaks Hotline has, as messages are sent.
     transaction.setFieldString(type: .data, val: text.convertingLineEndings(to: .cr), encoding: .macOSRoman)
 
-    try await self.socket.send(transaction, endian: .big)
+    try await self.send(transaction)
   }
 
   // MARK: - Administration
