@@ -1,4 +1,5 @@
 import Foundation
+import NetSocket
 import SwiftData
 
 enum BookmarkType: String, Codable {
@@ -107,16 +108,16 @@ final class Bookmark: Hashable {
     
     var fileDataArray: [UInt8] = [UInt8](fileData)
       
-    guard let headerValue = fileDataArray.consumeUInt32(),
+    guard let headerValue = fileDataArray.consume(UInt32.self),
           headerValue.fourCharCode() == "HTsc",
-          let versionNumber = fileDataArray.consumeUInt16(),
+          let versionNumber = fileDataArray.consume(UInt16.self),
           versionNumber == 1,
           fileDataArray.consume(128), // Skip 128 reserved bytes.
-          let loginLength = fileDataArray.consumeUInt16(),
+          let loginLength = fileDataArray.consume(UInt16.self),
           let loginData: Data = fileDataArray.consumeBytes(32),
-          let passwordLength = fileDataArray.consumeUInt16(),
+          let passwordLength = fileDataArray.consume(UInt16.self),
           let passwordData: Data = fileDataArray.consumeBytes(32),
-          let addressLength = fileDataArray.consumeUInt16(),
+          let addressLength = fileDataArray.consume(UInt16.self),
           let addressData: Data = fileDataArray.consumeBytes(256),
           let addressString = String(data: addressData[0..<Int(addressLength)], encoding: .ascii),
           let loginString = String(data: loginData[0..<Int(loginLength)], encoding: .ascii),
@@ -156,16 +157,16 @@ final class Bookmark: Hashable {
     
 //    var fileDataArray: [UInt8] = [UInt8](fileData)
 //      
-//    guard let headerValue = fileDataArray.consumeUInt32(),
+//    guard let headerValue = fileDataArray.consume(UInt32.self),
 //          headerValue.fourCharCode() == "HTsc",
-//          let versionNumber = fileDataArray.consumeUInt16(),
+//          let versionNumber = fileDataArray.consume(UInt16.self),
 //          versionNumber == 1,
 //          fileDataArray.consume(128), // Skip 128 reserved bytes.
-//          let loginLength = fileDataArray.consumeUInt16(),
+//          let loginLength = fileDataArray.consume(UInt16.self),
 //          let loginData: Data = fileDataArray.consumeBytes(32),
-//          let passwordLength = fileDataArray.consumeUInt16(),
+//          let passwordLength = fileDataArray.consume(UInt16.self),
 //          let passwordData: Data = fileDataArray.consumeBytes(32),
-//          let addressLength = fileDataArray.consumeUInt16(),
+//          let addressLength = fileDataArray.consume(UInt16.self),
 //          let addressData: Data = fileDataArray.consumeBytes(256),
 //          let addressString = String(data: addressData[0..<Int(addressLength)], encoding: .ascii),
 //          let loginString = String(data: loginData[0..<Int(loginLength)], encoding: .ascii),
@@ -193,25 +194,25 @@ final class Bookmark: Hashable {
     
     var fileData: Data = Data()
     
-    fileData.appendUInt32("HTsc".fourCharCode()) // magic
-    fileData.appendUInt16(0x0001) // version
+    fileData.append("HTsc".fourCharCode(), endian: .big) // magic
+    fileData.append(UInt16(0x0001), endian: .big) // version
     fileData.append(Data(repeating: 0x00, count: 128)) // reserved
     
-    fileData.appendUInt16(UInt16(loginData.count))
+    fileData.append(UInt16(loginData.count), endian: .big)
     fileData.append(loginData)
     if loginData.count < 32 {
       // Pad login data to 32 bytes
       fileData.append(Data(repeating: 0x00, count: 32 - loginData.count))
     }
     
-    fileData.appendUInt16(UInt16(passwordData.count))
+    fileData.append(UInt16(passwordData.count), endian: .big)
     fileData.append(passwordData)
     if passwordData.count < 32 {
       // Pad password data to 32 bytes
       fileData.append(Data(repeating: 0x00, count: 32 - passwordData.count))
     }
     
-    fileData.appendUInt16(UInt16(addressData.count))
+    fileData.append(UInt16(addressData.count), endian: .big)
     fileData.append(addressData)
     if passwordData.count < 256 {
       // Pad address data to 256 bytes

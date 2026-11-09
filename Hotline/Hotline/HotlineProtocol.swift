@@ -1,11 +1,6 @@
 import Foundation
 import NetSocket
 
-enum Endianness {
-  case big
-  case little
-}
-
 struct HotlinePorts {
   static let DefaultServerPort: Int = 5500
   static let DefaultTrackerPort: Int = 5498
@@ -263,15 +258,15 @@ public struct HotlineAccount: Identifiable {
     var fieldData = data
     
     guard fieldData.count > 0,
-          let fieldCount = fieldData.consumeUInt16(),
+          let fieldCount = fieldData.consume(UInt16.self),
           fieldCount > 0 else {
       return
     }
     
     for _ in 0..<fieldCount {
       if
-        let fieldID = fieldData.consumeUInt16(),
-        let fieldSize = fieldData.consumeUInt16(),
+        let fieldID = fieldData.consume(UInt16.self),
+        let fieldSize = fieldData.consume(UInt16.self),
         let fieldRemainingData: [UInt8] = fieldData.consumeBytes(Int(fieldSize)) {
         
         if let fieldType = HotlineTransactionFieldType(rawValue: fieldID) {
@@ -329,9 +324,9 @@ struct HotlineNewsList: Identifiable {
   var articles: [HotlineNewsArticle] = []
   
   init(from data: [UInt8]) {
-    self.id = data.readUInt32(at: 0)!
+    self.id = data.read(UInt32.self, at: 0)!
     
-    self.count = data.readUInt32(at: 4)!
+    self.count = data.read(UInt32.self, at: 4)!
     
     let (n, nl) = data.readPString(at: 8)
     self.name = n!
@@ -342,38 +337,38 @@ struct HotlineNewsList: Identifiable {
     var baseIndex = Int(8 + nl + dl)
     
     for _ in 0..<Int(self.count) {
-      let articleID = data.readUInt32(at: baseIndex)!
+      let articleID = data.read(UInt32.self, at: baseIndex)!
       baseIndex += 4
       
       let date = data.readDate(at: baseIndex)!
 //      let timestampData = data.readData(at: baseIndex, length: 8)!
       baseIndex += 8
       
-      let parentID = data.readUInt32(at: baseIndex)!
+      let parentID = data.read(UInt32.self, at: baseIndex)!
       baseIndex += 4
       
-      let flags = data.readUInt32(at: baseIndex)!
+      let flags = data.read(UInt32.self, at: baseIndex)!
       baseIndex += 4
       
-      let flavorCount = data.readUInt16(at: baseIndex)!
+      let flavorCount = data.read(UInt16.self, at: baseIndex)!
       baseIndex += 2
       
-      let titleLength = data.readUInt8(at: baseIndex)!
+      let titleLength = data.read(UInt8.self, at: baseIndex)!
       baseIndex += 1
       
       let title = data.readString(at: baseIndex, length: Int(titleLength))!
       baseIndex += Int(titleLength)
       
-      let posterLength = data.readUInt8(at: baseIndex)!
+      let posterLength = data.read(UInt8.self, at: baseIndex)!
       baseIndex += 1
       
       let poster = data.readString(at: baseIndex, length: Int(posterLength))!
       baseIndex += Int(posterLength)
       
       // Parse date info
-//      let yearData = timestampData.readUInt16(at: 0)!
-//      let millisecondData = timestampData.readUInt16(at: 2)!
-//      let secondsData = timestampData.readUInt32(at: 4)!
+//      let yearData = timestampData.read(UInt16.self, at: 0)!
+//      let millisecondData = timestampData.read(UInt16.self, at: 2)!
+//      let secondsData = timestampData.read(UInt32.self, at: 4)!
 //      let articleData = convertHotlineDate(year: yearData, seconds: secondsData, milliseconds: millisecondData)
       var newArticle = HotlineNewsArticle(id: articleID, parentID: parentID, flags: flags, title: title, username: poster, date: date)
       
@@ -389,13 +384,13 @@ struct HotlineNewsList: Identifiable {
       }
       
       for _ in 0..<Int(flavorCount) {
-        let flavorLength = data.readUInt8(at: baseIndex)!
+        let flavorLength = data.read(UInt8.self, at: baseIndex)!
         baseIndex += 1
         
         let flavorText = data.readString(at: baseIndex, length: Int(flavorLength))!
         baseIndex += Int(flavorLength)
         
-        let articleSize = data.readUInt16(at: baseIndex)!
+        let articleSize = data.read(UInt16.self, at: baseIndex)!
         baseIndex += 2
         
         newArticle.flavors.append((flavorText, articleSize))
@@ -434,21 +429,21 @@ public struct HotlineNewsCategory: Identifiable, Hashable, Sendable {
   }
   
   init(from data: [UInt8]) {
-    self.type = data.readUInt16(at: 0)!
+    self.type = data.read(UInt16.self, at: 0)!
     
     if self.type == 2 {
       // Read bundle properties
-      self.count = data.readUInt16(at: 2)!
+      self.count = data.read(UInt16.self, at: 2)!
       let (n, _) = data.readPString(at: 4)
       self.name = n!
     }
     else if self.type == 3 {
       // Read category properties
-      self.count = data.readUInt16(at: 2)!
-//      let guid = data.readUInt32(at: 4)!
+      self.count = data.read(UInt16.self, at: 2)!
+//      let guid = data.read(UInt32.self, at: 4)!
 //      print("CATEGORY GUID: \(guid)")
-//      let addSN = data.readUInt32(at: 20)!
-//      let removeSN = data.readUInt32(at: 24)!
+//      let addSN = data.read(UInt32.self, at: 20)!
+//      let removeSN = data.read(UInt32.self, at: 24)!
       let (n, _) = data.readPString(at: 28)
       self.name = n!
     }
@@ -503,23 +498,23 @@ public class HotlineFile: Identifiable, Hashable {
   }
   
   init(from data: [UInt8]) {
-    let typeRaw = data.readUInt32(at: 0)!
-    let creatorRaw = data.readUInt32(at: 4)!
+    let typeRaw = data.read(UInt32.self, at: 0)!
+    let creatorRaw = data.read(UInt32.self, at: 4)!
     
     self.type = typeRaw.fourCharCode()
     self.creator = creatorRaw.fourCharCode()
-    self.fileSize = data.readUInt32(at: 8)!
+    self.fileSize = data.read(UInt32.self, at: 8)!
     
     self.isFolder = (self.type == "fldr")
     if self.isFolder {
       self.files = []
     }
     
-//    data.readUInt32(at: 12)! // reserved
-//    let nameScript = data.readUInt16(at: 16)! // name script
+//    data.read(UInt32.self, at: 12)! // reserved
+//    let nameScript = data.read(UInt16.self, at: 16)! // name script
 //    print("NAME SCRIPT: \(nameScript)")
     
-    let nameLength = data.readUInt16(at: 18)!
+    let nameLength = data.read(UInt16.self, at: 18)!
     self.name = data.readString(at: 20, length: Int(nameLength))!
   }
 }
@@ -567,11 +562,11 @@ public struct HotlineUser: Identifiable, Hashable, Sendable {
   }
   
   init(from data: [UInt8]) {
-    self.id = data.readUInt16(at: 0)!
-    self.iconID = data.readUInt16(at: 2)!
-    self.status = data.readUInt16(at: 4)!
+    self.id = data.read(UInt16.self, at: 0)!
+    self.iconID = data.read(UInt16.self, at: 2)!
+    self.status = data.read(UInt16.self, at: 4)!
     
-    let userNameLength = Int(data.readUInt16(at: 6)!)
+    let userNameLength = Int(data.read(UInt16.self, at: 6)!)
     self.name = data.readString(at: 8, length: userNameLength)!
   }
   
@@ -581,14 +576,14 @@ public struct HotlineUser: Identifiable, Hashable, Sendable {
 
   func encoded() -> [UInt8] {
     var data: [UInt8] = []
-    data.appendUInt16(self.id)
-    data.appendUInt16(self.iconID)
-    data.appendUInt16(self.status)
+    data.append(self.id, endian: .big)
+    data.append(self.iconID, endian: .big)
+    data.append(self.status, endian: .big)
     
     let userNameData = name.data(using: .ascii, allowLossyConversion: true)!
     
-    data.appendUInt16(UInt16(userNameData.count))
-    data.appendData(userNameData)
+    data.append(UInt16(userNameData.count), endian: .big)
+    data.append(contentsOf: userNameData)
     
     return data
     
@@ -598,13 +593,13 @@ public struct HotlineUser: Identifiable, Hashable, Sendable {
   }
   
 //  func encode(to data: inout Data) {
-//    data.appendUInt16(self.id)
-//    data.appendUInt16(self.iconID)
-//    data.appendUInt16(self.status)
+//    data.append(self.id, endian: .big)
+//    data.append(self.iconID, endian: .big)
+//    data.append(self.status, endian: .big)
 //    
 //    let userNameData = name.data(using: .ascii, allowLossyConversion: true)!
 //    
-//    data.appendUInt16(UInt16(userNameData.count))
+//    data.append(UInt16(userNameData.count), endian: .big)
 //    data.append(userNameData)
 //  }
 }
@@ -625,15 +620,15 @@ struct HotlineTransactionField {
   }
   
   init(type: HotlineTransactionFieldType, val: UInt16) {
-    self.init(type: type, dataSize: UInt16(2), data: [UInt8](val))
+    self.init(type: type, dataSize: UInt16(2), data: [UInt8](val, endian: .big))
   }
   
   init(type: HotlineTransactionFieldType, val: UInt32) {
-    self.init(type: type, dataSize: UInt16(4), data: [UInt8](val))
+    self.init(type: type, dataSize: UInt16(4), data: [UInt8](val, endian: .big))
   }
   
   init(type: HotlineTransactionFieldType, val: UInt64) {
-    self.init(type: type, dataSize: UInt16(8), data: [UInt8](val))
+    self.init(type: type, dataSize: UInt16(8), data: [UInt8](val, endian: .big))
   }
   
   /// The most a field holds, as its size is two bytes.
@@ -674,36 +669,36 @@ struct HotlineTransactionField {
   init(type: HotlineTransactionFieldType, pathComponents: [String]) {
     var pathData: [UInt8] = []
     
-    pathData.appendUInt16(UInt16(pathComponents.count))
+    pathData.append(UInt16(pathComponents.count), endian: .big)
     for name in pathComponents {
-      pathData.appendUInt16(0)
+      pathData.append(UInt16(0), endian: .big)
       
       var nameData = name.data(using: .macOSRoman, allowLossyConversion: true)
       if nameData == nil {
         nameData = Data()
       }
       
-      pathData.appendUInt8(UInt8(nameData!.count))
-      pathData.appendData(nameData!)
+      pathData.append(UInt8(nameData!.count))
+      pathData.append(contentsOf: nameData!)
     }
     
     self.init(type: type, dataSize: UInt16(pathData.count), data: pathData)
   }
 
   func getUInt8() -> UInt8? {
-    return self.data.readUInt8(at: 0)
+    return self.data.read(UInt8.self, at: 0)
   }
   
   func getUInt16() -> UInt16? {
-    return self.data.readUInt16(at: 0)
+    return self.data.read(UInt16.self, at: 0)
   }
   
   func getUInt32() -> UInt32? {
-    return self.data.readUInt32(at: 0)
+    return self.data.read(UInt32.self, at: 0)
   }
   
   func getUInt64() -> UInt64? {
-    return self.data.readUInt64(at: 0)
+    return self.data.read(UInt64.self, at: 0)
   }
   
   func getInteger() -> Int? {
@@ -784,13 +779,13 @@ struct HotlineTransaction {
   
   init?(from data: [UInt8]) {
     guard
-      let flags = data.readUInt8(at: 0),
-      let isReply = data.readUInt8(at: 1),
-      let type = data.readUInt16(at: 2),
-      let id = data.readUInt32(at: 4),
-      let errorCode = data.readUInt32(at: 8),
-      let totalSize = data.readUInt32(at: 12),
-      let dataSize = data.readUInt32(at: 16) else {
+      let flags = data.read(UInt8.self, at: 0),
+      let isReply = data.read(UInt8.self, at: 1),
+      let type = data.read(UInt16.self, at: 2),
+      let id = data.read(UInt32.self, at: 4),
+      let errorCode = data.read(UInt32.self, at: 8),
+      let totalSize = data.read(UInt32.self, at: 12),
+      let dataSize = data.read(UInt32.self, at: 16) else {
       
       return nil
     }
@@ -802,15 +797,15 @@ struct HotlineTransaction {
     var fieldData = data
     
     guard fieldData.count > 0,
-          let fieldCount = fieldData.consumeUInt16(),
+          let fieldCount = fieldData.consume(UInt16.self),
           fieldCount > 0 else {
       return
     }
     
     for _ in 0..<fieldCount {
       if
-        let fieldID = fieldData.consumeUInt16(),
-        let fieldSize = fieldData.consumeUInt16(),
+        let fieldID = fieldData.consume(UInt16.self),
+        let fieldSize = fieldData.consume(UInt16.self),
         let fieldRemainingData: [UInt8] = fieldData.consumeBytes(Int(fieldSize)) {
         
         if let fieldType = HotlineTransactionFieldType(rawValue: fieldID) {
@@ -984,29 +979,29 @@ struct HotlineTransaction {
   
   func encoded() -> [UInt8] {
     var data: [UInt8] = []
-    data.appendUInt8(0)
-    data.appendUInt8(self.isReply)
-    data.appendUInt16(self.isReply == 1 ? HotlineTransactionType.reply.rawValue : self.type.rawValue)
-    data.appendUInt32(self.id)
-    data.appendUInt32(self.errorCode)
+    data.append(0)
+    data.append(self.isReply)
+    data.append(self.isReply == 1 ? HotlineTransactionType.reply.rawValue : self.type.rawValue, endian: .big)
+    data.append(self.id, endian: .big)
+    data.append(self.errorCode, endian: .big)
 
     if self.fields.count > 0 {
       var fieldData: [UInt8] = []
-      fieldData.appendUInt16(UInt16(self.fields.count))
+      fieldData.append(UInt16(self.fields.count), endian: .big)
       for f in self.fields {
-        fieldData.appendUInt16(f.type.rawValue)
-        fieldData.appendUInt16(f.dataSize)
-        fieldData.appendData(f.data)
+        fieldData.append(f.type.rawValue, endian: .big)
+        fieldData.append(f.dataSize, endian: .big)
+        fieldData.append(contentsOf: f.data)
       }
 
-      data.appendUInt32(UInt32(fieldData.count))
-      data.appendUInt32(UInt32(fieldData.count))
-      data.appendData(fieldData)
+      data.append(UInt32(fieldData.count), endian: .big)
+      data.append(UInt32(fieldData.count), endian: .big)
+      data.append(contentsOf: fieldData)
     }
     else {
-      data.appendUInt32(2)
-      data.appendUInt32(2)
-      data.appendUInt16(0)
+      data.append(UInt32(2), endian: .big)
+      data.append(UInt32(2), endian: .big)
+      data.append(UInt16(0), endian: .big)
     }
     return data
   }
@@ -1051,12 +1046,12 @@ extension HotlineTransaction: NetSocketDecodable {
     var fieldBytes = [UInt8](bodyData)
 
     // Decode fields
-    guard let fieldCount = fieldBytes.consumeUInt16(), fieldCount > 0 else { return }
+    guard let fieldCount = fieldBytes.consume(UInt16.self), fieldCount > 0 else { return }
 
     for _ in 0..<fieldCount {
       guard
-        let fieldID = fieldBytes.consumeUInt16(),
-        let fieldSize = fieldBytes.consumeUInt16()
+        let fieldID = fieldBytes.consume(UInt16.self),
+        let fieldSize = fieldBytes.consume(UInt16.self)
       else { break }
 
       guard let fieldData: [UInt8] = fieldBytes.consumeBytes(Int(fieldSize)) else {

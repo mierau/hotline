@@ -1,4 +1,5 @@
 import Foundation
+import NetSocket
 import Network
 import UniformTypeIdentifiers
 
@@ -62,10 +63,10 @@ struct HotlineFileHeader {
       return nil
     }
     
-    self.format = data.readUInt32(at: 0)!
-    self.version = data.readUInt16(at: 4)!
+    self.format = data.read(UInt32.self, at: 0)!
+    self.version = data.read(UInt16.self, at: 4)!
     // 16 bytes of reserved data sits here. Skip it.
-    self.forkCount = data.readUInt16(at: 4 + 2 + 16)!
+    self.forkCount = data.read(UInt16.self, at: 4 + 2 + 16)!
   }
   
   init?(file fileURL: URL) {
@@ -115,11 +116,11 @@ struct HotlineFileForkHeader {
       return nil
     }
     
-    self.forkType = data.readUInt32(at: 0)!
-    self.compressionType = data.readUInt32(at: 4)!
+    self.forkType = data.read(UInt32.self, at: 0)!
+    self.compressionType = data.read(UInt32.self, at: 4)!
     // 4 bytes of reserved data sits here. Skip it.
-    // self.reserved = data.readUInt32(at: 4 + 4)!
-    self.dataSize = data.readUInt32(at: 4 + 4 + 4)!
+    // self.reserved = data.read(UInt32.self, at: 4 + 4)!
+    self.dataSize = data.read(UInt32.self, at: 4 + 4 + 4)!
   }
   
   func data() -> Data {
@@ -200,13 +201,13 @@ struct HotlineFileInfoFork {
     }
     
     if
-      let platform = data.readUInt32(at: 0),
-      let type = data.readUInt32(at: 4),
-      let creator = data.readUInt32(at: 4 + 4),
-      let flags = data.readUInt32(at: 4 + 4 + 4),
-      let platformFlags = data.readUInt32(at: 4 + 4 + 4 + 4),
+      let platform = data.read(UInt32.self, at: 0),
+      let type = data.read(UInt32.self, at: 4),
+      let creator = data.read(UInt32.self, at: 4 + 4),
+      let flags = data.read(UInt32.self, at: 4 + 4 + 4),
+      let platformFlags = data.read(UInt32.self, at: 4 + 4 + 4 + 4),
       // 32 bytes of reserved data sits here. Skip it.
-      let nameScript = data.readUInt16(at: 4 + 4 + 4 + 4 + 4 + 32 + 8 + 8) {
+      let nameScript = data.read(UInt16.self, at: 4 + 4 + 4 + 4 + 4 + 32 + 8 + 8) {
       
       let createdDate = data.readDate(at: 4 + 4 + 4 + 4 + 4 + 32) ?? Date.now
       let modifiedDate = data.readDate(at: 4 + 4 + 4 + 4 + 4 + 32 + 8) ?? Date.now
@@ -226,7 +227,7 @@ struct HotlineFileInfoFork {
         var calculatedHeaderSize: Int = HotlineFileInfoFork.BaseDataSize + nl
         var commentRead: String? = nil
         if data.count >= HotlineFileInfoFork.BaseDataSize + nl + 2 {
-          let commentLength = data.readUInt16(at: HotlineFileInfoFork.BaseDataSize + nl)!
+          let commentLength = data.read(UInt16.self, at: HotlineFileInfoFork.BaseDataSize + nl)!
           var commentCorrupted = false
           
           // Some servers have incorrect data length for the INFO fork

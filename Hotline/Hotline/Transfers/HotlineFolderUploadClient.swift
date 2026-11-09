@@ -250,7 +250,7 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
         case .resumeFile:
           // Server wants to resume
           let resumeSizeData = try await socket.read(2)
-          let resumeSize = Int(resumeSizeData.readUInt16(at: 0)!)
+          let resumeSize = Int(resumeSizeData.read(UInt16.self, at: 0)!)
           let _ = try await socket.read(resumeSize)
           completedItemCount += 1
           stage = .uploadingFile
@@ -365,7 +365,7 @@ public class HotlineFolderUploadClient: @MainActor HotlineTransferClient {
 
   private func readAction(socket: NetSocket) async throws -> HotlineFolderAction {
     let actionData = try await socket.read(2)
-    guard let rawAction = actionData.readUInt16(at: 0),
+    guard let rawAction = actionData.read(UInt16.self, at: 0),
           let action = HotlineFolderAction(rawValue: rawAction) else {
       throw HotlineTransferClientError.failedToTransfer
     }

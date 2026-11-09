@@ -181,7 +181,7 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
 
       // Read item header
       let headerLenData = try await socket.read(2)
-      let headerLen = Int(headerLenData.readUInt16(at: 0)!)
+      let headerLen = Int(headerLenData.read(UInt16.self, at: 0)!)
       let headerData = try await socket.read(headerLen)
 
       self.updateProgress(2 + headerLen)
@@ -215,7 +215,7 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
 
         // Read file size
         let fileSizeData = try await socket.read(4)
-        let fileSize = fileSizeData.readUInt32(at: 0)!
+        let fileSize = fileSizeData.read(UInt32.self, at: 0)!
 
         self.updateProgress(4)
 
@@ -275,8 +275,8 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
   private func parseItemHeaderPath(_ headerData: Data) -> (type: UInt16, components: [String])? {
     // Need at least: type(2) + count(2)
     guard headerData.count >= 4,
-          let type = headerData.readUInt16(at: 0),
-          let count = headerData.readUInt16(at: 2) else { return nil }
+          let type = headerData.read(UInt16.self, at: 0),
+          let count = headerData.read(UInt16.self, at: 2) else { return nil }
 
     var ofs = 4
     var comps: [String] = []
@@ -284,7 +284,7 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
       guard headerData.count >= ofs + 3 else { return nil }
       // per Hotline path encoding: reserved(2) then nameLen(1) then name
       ofs += 2 // reserved == 0
-      let nameLen = Int(headerData.readUInt8(at: ofs)!)
+      let nameLen = Int(headerData.read(UInt8.self, at: ofs)!)
       ofs += 1
       guard headerData.count >= ofs + nameLen else { return nil }
       let nameData = headerData.subdata(in: ofs..<(ofs + nameLen))
