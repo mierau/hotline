@@ -831,7 +831,7 @@ struct ServerView: View {
         case .news:
           NewsView()
         case .board:
-          MessageBoardView()
+          MessageBoardView(serverState: self.state)
         case .files:
           FilesView(serverState: self.state)
         case .user(let userID):

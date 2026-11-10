@@ -5,8 +5,8 @@ struct MessageBoardView: View {
   @Environment(\.serverTheme) private var theme
   @Environment(\.openWindow) private var openWindow
   @Environment(HotlineState.self) private var model: HotlineState
-  
-  @State private var composerDisplayed: Bool = false
+
+  @Bindable var serverState: ServerState
   /// A linked file's info, from its link's menu.
   @State private var fileDetails: FileDetails?
   /// The post just gone to, from a link to it in chat or once you've posted it, outlined a moment.
@@ -32,7 +32,7 @@ struct MessageBoardView: View {
 //    .background(self.colorScheme == .light ? Color(nsColor: .tertiarySystemFill).ignoresSafeArea() : Color(nsColor: .controlBackgroundColor).ignoresSafeArea())
 //    .containerBackground(.hotlineRed, for: .window)
     .serverBackground(.page)
-    .sheet(isPresented: $composerDisplayed) {
+    .sheet(isPresented: self.$serverState.boardPostShown) {
       MessageBoardEditorView()
     }
     .sheet(item: self.$fileDetails) { details in
@@ -41,7 +41,7 @@ struct MessageBoardView: View {
     .toolbar {
       ToolbarItem(placement:.primaryAction) {
         Button {
-          self.composerDisplayed.toggle()
+          self.serverState.boardPostShown.toggle()
         } label: {
           Image(systemName: "pin")
         }
@@ -67,7 +67,7 @@ struct MessageBoardView: View {
     let quote = Markdown.quote(post.body, by: post.username)
     let draft = self.model.boardDraft.trimmingCharacters(in: .whitespacesAndNewlines)
     self.model.boardDraft = draft.isEmpty ? quote : draft + "\n\n" + quote
-    self.composerDisplayed = true
+    self.serverState.boardPostShown = true
   }
 
   /// Scrolls to a post a link in chat asked for, or you've just posted, by its reference, once the
@@ -230,6 +230,6 @@ struct MessageBoardView: View {
 }
 
 #Preview {
-  MessageBoardView()
+  MessageBoardView(serverState: ServerState(selection: .board))
     .environment(HotlineState())
 }

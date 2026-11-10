@@ -8,6 +8,8 @@ class ServerState: Equatable {
   var columnVisibility: NavigationSplitViewVisibility = .all
   var accountsShown: Bool = false
   var broadcastShown: Bool = false
+  /// A new post on the board being written, from the board's toolbar or the Server menu.
+  var boardPostShown: Bool = false
   /// Bookmarking the server, from the Server menu.
   var addBookmarkShown: Bool = false
   /// Your automatic response on the server, from the Server menu.

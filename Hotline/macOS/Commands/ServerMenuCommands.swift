@@ -43,6 +43,15 @@ struct ServerMenuCommands: Commands {
       .disabled(self.activeHotline?.status != .loggedIn || self.activeHotline?.access?.contains(.canSendMessages) != true)
       .keyboardShortcut(.init("n"), modifiers: .command)
 
+      // On the board, where it'll be once it's posted. ⌥⌘N, beside New Private Message's ⌘N, as
+      // ⇧⌘N is New Folder's, as the Finder has it.
+      Button("New Board Post...", systemImage: "pin") {
+        self.activeServerState?.selection = .board
+        self.activeServerState?.boardPostShown = true
+      }
+      .disabled(self.activeHotline?.status != .loggedIn || self.activeHotline?.access?.contains([.canReadMessageBoard, .canPostMessageBoard]) != true)
+      .keyboardShortcut(.init("n"), modifiers: [.command, .option])
+
       Divider()
 
       // Yours on this server, for this window, as Settings has them when it opens: private chat,
