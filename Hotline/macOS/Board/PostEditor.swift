@@ -251,8 +251,10 @@ struct ResizableSheet: NSViewRepresentable {
 
 // MARK: - Formatting
 
-/// The formatting posts can have, a click away, in glass over the bottom of the post. Their keys
-/// are the Format menu's.
+/// The formatting a post, or a message, can have, a click away: the styles, as the Format menu has
+/// them, then Link, with what's on where you're writing shown as on, as choosing it again takes it
+/// off. In a sheet's bottom bar, or in glass over the bottom of what's written. Their keys are the
+/// Format menu's.
 struct PostFormattingBar: View {
   /// How tall it is: its buttons, and the glass around them.
   static let height: CGFloat = PostFormatButton.height + 2 * Self.padding
@@ -276,12 +278,19 @@ struct PostFormattingBar: View {
   private var buttons: some View {
     HStack(spacing: 0) {
       ForEach(MarkdownStyle.allCases, id: \.self) { style in
-        PostFormatButton(style.title, systemImage: style.systemImage, shortcut: style.shortcut) {
+        PostFormatButton(style.title, systemImage: style.systemImage, shortcut: style.shortcut, isOn: self.editor.activeStyles.contains(style)) {
           self.editor.toggle(style)
         }
         .disabled(!self.editor.allows(style))
       }
-      PostFormatButton("Link", systemImage: "link", shortcut: MarkdownEditor.linkShortcut) {
+
+      // Between the styles and Link, as the Format menu has a line.
+      Rectangle()
+        .fill(.separator)
+        .frame(width: 1, height: 14)
+        .padding(.horizontal, 4)
+
+      PostFormatButton("Link", systemImage: "link", shortcut: MarkdownEditor.linkShortcut, isOn: self.editor.inLink) {
         self.editor.link()
       }
       .disabled(!self.editor.allowsLink)
@@ -301,23 +310,25 @@ private struct PostFormattingBackground: ViewModifier {
   }
 }
 
-/// A formatting button: its symbol, a light fill behind it while the pointer's over it, and its
-/// name and its key in the Format menu as its help.
+/// A formatting button: its symbol, in a capsule that's filled while what it's for is on, faintly
+/// while the pointer's over it, and that gives a little as it's pressed, and its name and its key in
+/// the Format menu as its help.
 struct PostFormatButton: View {
   static let height: CGFloat = 26
 
   let title: String
   let systemImage: String
   let shortcut: KeyboardShortcut
+  var isOn = false
   let action: () -> Void
 
-  @Environment(\.isEnabled) private var isEnabled
   @State private var hovered: Bool = false
 
-  init(_ title: String, systemImage: String, shortcut: KeyboardShortcut, action: @escaping () -> Void) {
+  init(_ title: String, systemImage: String, shortcut: KeyboardShortcut, isOn: Bool = false, action: @escaping () -> Void) {
     self.title = title
     self.systemImage = systemImage
     self.shortcut = shortcut
+    self.isOn = isOn
     self.action = action
   }
 
@@ -326,14 +337,12 @@ struct PostFormatButton: View {
       Image(systemName: self.systemImage)
         .font(.system(size: 13, weight: .medium))
         .frame(width: 32, height: Self.height)
-        // In the text's color, as any button that's on, and faint when it's off.
-        .foregroundStyle(self.isEnabled ? .primary : .tertiary)
-        .background(.fill.tertiary.opacity(self.hovered && self.isEnabled ? 1 : 0), in: .capsule)
         .contentShape(.capsule)
     }
-    .buttonStyle(.plain)
+    .buttonStyle(PostFormatButtonStyle(isOn: self.isOn, hovered: self.hovered))
     .help("\(self.title) (\(self.shortcutText))")
     .accessibilityLabel(self.title)
+    .accessibilityAddTraits(self.isOn ? .isSelected : [])
     .onHover { hovering in
       withAnimation(.easeOut(duration: 0.12)) {
         self.hovered = hovering
@@ -344,5 +353,29 @@ struct PostFormatButton: View {
   /// The key, as menus show it.
   private var shortcutText: String {
     (self.shortcut.modifiers.contains(.shift) ? "⇧" : "") + "⌘" + String(self.shortcut.key.character).uppercased()
+  }
+}
+
+/// How a formatting button looks: in the text's color, as any button that's on, and faint when it's
+/// off, in a capsule filled while what it's for is on, or pressed, and faintly while the pointer's
+/// over it, and a little smaller while it's pressed.
+private struct PostFormatButtonStyle: ButtonStyle {
+  let isOn: Bool
+  let hovered: Bool
+
+  @Environment(\.isEnabled) private var isEnabled
+
+  func makeBody(configuration: Configuration) -> some View {
+    let filled = self.isEnabled && (self.isOn || configuration.isPressed)
+    configuration.label
+      .foregroundStyle(self.isEnabled ? .primary : .tertiary)
+      .background {
+        Capsule()
+          .fill(filled ? AnyShapeStyle(.fill) : AnyShapeStyle(.fill.tertiary))
+          .opacity(filled || (self.hovered && self.isEnabled) ? 1 : 0)
+      }
+      .scaleEffect(configuration.isPressed ? 0.92 : 1)
+      .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+      .animation(.easeOut(duration: 0.12), value: self.isOn)
   }
 }

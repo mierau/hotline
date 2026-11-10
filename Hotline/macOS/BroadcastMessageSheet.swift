@@ -61,7 +61,8 @@ struct BroadcastMessageSheet: View {
         }
     }
     .padding(20)
-    .frame(width: 400)
+    // Wide enough for the formatting, Cancel and Broadcast, along the bottom.
+    .frame(width: 440)
     .toolbar {
       if self.sending {
         ToolbarItem {

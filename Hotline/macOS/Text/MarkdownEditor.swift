@@ -17,6 +17,11 @@ final class MarkdownEditor {
   /// Whether lines can be more than words where it's written, as its layout has it: lists, quotes,
   /// code blocks, and images, which show under their line. Not in a broadcast, which is centered.
   var allowsBlocks = true
+  /// The styles on what's selected, or where you're typing, which the formatting buttons show as on,
+  /// as choosing them takes them off. See `isOn(_:)`.
+  var activeStyles: Set<MarkdownStyle> = []
+  /// Whether what's selected is in a link, which Link takes off.
+  var inLink = false
 
   /// The key for a link, as Connect to Server has ⌘K.
   static let linkShortcut = KeyboardShortcut("k", modifiers: [.command, .shift])
@@ -98,22 +103,98 @@ final class MarkdownEditor {
     // to do anything.
     let range = Self.trimmingSpaces(textView.selectedRange(), in: text)
 
-    // Marked just outside what's selected: the marks come off.
-    if style.isMarked(around: range, in: text) {
-      let marked = NSRange(location: range.location - markLength, length: range.length + 2 * markLength)
-      self.replace(marked, with: text.substring(with: range), selecting: NSRange(location: marked.location, length: range.length))
-      return
-    }
-    // Marked at its own ends, as when the marks were selected too.
-    if range.length > 2 * markLength,
-       text.substring(with: NSRange(location: range.location, length: markLength)) == mark,
-       text.substring(with: NSRange(location: NSMaxRange(range) - markLength, length: markLength)) == mark {
-      let inside = text.substring(with: NSRange(location: range.location + markLength, length: range.length - 2 * markLength))
-      self.replace(range, with: inside, selecting: NSRange(location: range.location, length: (inside as NSString).length))
+    // On already: the marks come off, and what was selected stays selected, without them, if they
+    // were selected too.
+    if let (marked, inside) = self.marks(of: style, around: range) {
+      let selecting = range == marked
+        ? NSRange(location: marked.location, length: inside.length)
+        : NSRange(location: range.location - (inside.location - marked.location), length: range.length)
+      self.replace(marked, with: text.substring(with: inside), selecting: selecting)
       return
     }
     self.replace(range, with: mark + text.substring(with: range) + mark, selecting: NSRange(location: range.location + markLength, length: range.length))
   }
+
+  /// Whether a style's on what's selected, or where you're typing, which choosing it again takes off.
+  func isOn(_ style: MarkdownStyle) -> Bool {
+    guard let textView = self.textView else {
+      return false
+    }
+    return self.marks(of: style, around: Self.trimmingSpaces(textView.selectedRange(), in: textView.string as NSString)) != nil
+  }
+
+  /// A style's marks that taking it off what's selected takes away, with what's in them: right
+  /// around it, or at its ends, as when they're selected too, or around all of the words it's in
+  /// that are in the style, as it's shown, where you're typing in the middle of them. Code's marks
+  /// are its own, in code's font. Nil when it isn't on. Where you're typing, it's only on when
+  /// what you type there would be in it, and in the middle of the style's marks, only when they've
+  /// nothing in them yet, as when it's just been chosen, so in the middle of a bold's **, it isn't
+  /// an italic's * with nothing in it, and choosing Italic there doesn't take the bold's marks away.
+  private func marks(of style: MarkdownStyle, around range: NSRange) -> (marked: NSRange, inside: NSRange)? {
+    guard let storage = self.textView?.textStorage else {
+      return nil
+    }
+    let text = storage.string as NSString
+    let length = (style.mark as NSString).length
+    if range.length == 0 {
+      let character = (style.mark as NSString).character(at: 0)
+      let location = range.location
+      if location > 0, location < text.length, text.character(at: location - 1) == character, text.character(at: location) == character {
+        return style.isEmptyPair(at: location, in: text) ? (NSRange(location: location - length, length: 2 * length), range) : nil
+      }
+      guard Self.typedStyles(at: location, in: text).contains(style) else {
+        return nil
+      }
+    }
+    if style.isMarked(around: range, in: text) {
+      return (NSRange(location: range.location - length, length: range.length + 2 * length), range)
+    }
+    if style.isMarked(atEndsOf: range, in: text) {
+      return (range, NSRange(location: range.location + length, length: range.length - 2 * length))
+    }
+    // All of what's selected, or a character either side of where you're typing, or for code, whose
+    // marks are in its font, both, and the rest of the words around it, as they're shown.
+    func shown(_ index: Int) -> Bool {
+      index >= 0 && index < text.length && style.isShown(in: storage.attributes(at: index, effectiveRange: nil))
+    }
+    var start = range.location
+    var end = NSMaxRange(range)
+    let typingIn = style == .code ? shown(start - 1) && shown(start) : shown(start - 1) || shown(start)
+    guard range.length == 0 ? typingIn : (start..<end).allSatisfy(shown) else {
+      return nil
+    }
+    while shown(start - 1) {
+      start -= 1
+    }
+    while shown(end) {
+      end += 1
+    }
+    let run = NSRange(location: start, length: end - start)
+    if style == .code {
+      // With its marks: one ` either side, and not more, which `code` can be between too.
+      return style.isMarked(atEndsOf: run, in: text) && text.character(at: start + 1) != 0x60 && text.character(at: end - 2) != 0x60
+        ? (run, NSRange(location: start + 1, length: run.length - 2))
+        : nil
+    }
+    return style.isMarked(around: run, in: text) ? (NSRange(location: start - length, length: run.length + 2 * length), run) : nil
+  }
+
+  /// The styles what's typed where you're typing would be in, as it's shown: a letter put there,
+  /// with the line it's on styled as words, as it'd be if it were written there.
+  static func typedStyles(at location: Int, in text: NSString) -> Set<MarkdownStyle> {
+    let line = text.paragraphRange(for: NSRange(location: location, length: 0))
+    let typed = NSMutableString(string: text.substring(with: line))
+    let offset = location - line.location
+    typed.insert("x", at: offset)
+    let storage = NSMutableAttributedString(string: typed as String, attributes: Self.typingLayout.attributes)
+    Markdown.styleWords(in: storage, range: NSRange(location: 0, length: storage.length), skipping: [], layout: Self.typingLayout)
+    let attributes = storage.attributes(at: offset, effectiveRange: nil)
+    return Set(MarkdownStyle.allCases.filter { $0.isShown(in: attributes) })
+  }
+
+  /// Words alone, for what typing would style, without a heading's bold, which isn't a style that
+  /// comes off.
+  private static let typingLayout = Markdown.Layout(imagePreviews: 0, blocks: false)
 
   /// Puts a mark typed over what's selected around it instead, as Markdown editors do: * or _ for
   /// italic, * again for bold, _ again for underline, ~ for strikethrough, and ` for code. What's
@@ -528,6 +609,14 @@ class MarkdownTextCoordinator: NSObject, NSTextViewDelegate, NSTextStorageDelega
     if self.editor.codeContext != context {
       self.editor.codeContext = context
     }
+    let styles = context == .block || context == .drawing ? [] : Set(MarkdownStyle.allCases.filter(self.editor.isOn))
+    if self.editor.activeStyles != styles {
+      self.editor.activeStyles = styles
+    }
+    let inLink = context == nil && Markdown.link(around: textView.selectedRange(), in: textView.string as NSString) != nil
+    if self.editor.inLink != inLink {
+      self.editor.inLink = inLink
+    }
 
     // In code, what's for words is off: corrections, which capitalize too, replacements, and
     // predictions, and back on, as it was, out of it.
@@ -871,10 +960,77 @@ enum MarkdownStyle: CaseIterable {
     }
   }
 
+  /// Whether text with these attributes is shown in the style, as it's written: bold or italic in
+  /// its font, underlined, struck through, or in code's font, which a code block's is too.
+  func isShown(in attributes: [NSAttributedString.Key: Any]) -> Bool {
+    let font = attributes[.font] as? NSFont
+    switch self {
+    case .bold:
+      return font?.fontDescriptor.symbolicTraits.contains(.bold) == true
+    case .italic:
+      return font?.fontDescriptor.symbolicTraits.contains(.italic) == true
+    case .underline:
+      return attributes[.underlineStyle] != nil
+    case .strikethrough:
+      return attributes[.strikethroughStyle] != nil
+    case .code:
+      return font?.isFixedPitch == true
+    }
+  }
+
+  /// Whether a range starts and ends with the marks, as when they're selected too: all of the
+  /// mark's characters at each end, and as many as the style takes, with something between them, so
+  /// the end of a bold's ** selected isn't an italic's *.
+  func isMarked(atEndsOf range: NSRange, in text: NSString) -> Bool {
+    let character = (self.mark as NSString).character(at: 0)
+    let start = range.location
+    let end = NSMaxRange(range)
+    // Not more of them outside it.
+    if start > 0 && text.character(at: start - 1) == character || end < text.length && text.character(at: end) == character {
+      return false
+    }
+    var opening = 0
+    while start + opening < end, text.character(at: start + opening) == character {
+      opening += 1
+    }
+    var closing = 0
+    while end - closing - 1 >= start + opening, text.character(at: end - closing - 1) == character {
+      closing += 1
+    }
+    return start + opening < end - closing && self.takes(opening) && self.takes(closing)
+  }
+
+  /// Whether where you're typing is between the style's marks, with nothing in them yet, as when
+  /// it's been chosen with nothing selected, where they'd be its marks once something's typed: not
+  /// right after a word, or right before one, as a bold's ** at the end of its words is.
+  func isEmptyPair(at location: Int, in text: NSString) -> Bool {
+    let range = NSRange(location: location, length: 0)
+    guard self.isMarked(around: range, in: text) else {
+      return false
+    }
+    let character = (self.mark as NSString).character(at: 0)
+    var start = location
+    while start > 0, text.character(at: start - 1) == character {
+      start -= 1
+    }
+    var end = location
+    while end < text.length, text.character(at: end) == character {
+      end += 1
+    }
+    func isWordCharacter(_ index: Int) -> Bool {
+      index >= 0 && index < text.length && CharacterSet.alphanumerics.contains(UnicodeScalar(text.character(at: index)) ?? " ")
+    }
+    return !isWordCharacter(start - 1) && !isWordCharacter(end)
+  }
+
   /// Whether the marks are right outside a range: as many of the mark's character as the style
-  /// takes on both sides, so an italic's * isn't one of a bold's **, unless it's both, as ***.
+  /// takes on both sides, so an italic's * isn't one of a bold's **, unless it's both, as ***, and
+  /// not more of them inside it, as when a bold's ** is half selected.
   func isMarked(around range: NSRange, in text: NSString) -> Bool {
     let character = (self.mark as NSString).character(at: 0)
+    if range.length > 0, text.character(at: range.location) == character || text.character(at: NSMaxRange(range) - 1) == character {
+      return false
+    }
     func run(from index: Int, step: Int) -> Int {
       var count = 0
       var index = index
@@ -884,15 +1040,19 @@ enum MarkdownStyle: CaseIterable {
       }
       return count
     }
-    let before = run(from: range.location - 1, step: -1)
-    let after = run(from: NSMaxRange(range), step: 1)
+    return self.takes(run(from: range.location - 1, step: -1)) && self.takes(run(from: NSMaxRange(range), step: 1))
+  }
+
+  /// Whether a run of this many of the mark's character is the style's marks: one for italic, or
+  /// three, as bold too, and two or more for the rest, but code, which takes any.
+  private func takes(_ count: Int) -> Bool {
     switch self {
     case .italic:
-      return (before == 1 || before == 3) && (after == 1 || after == 3)
+      count == 1 || count == 3
     case .bold, .underline, .strikethrough:
-      return before >= 2 && after >= 2
+      count >= 2
     case .code:
-      return before >= 1 && after >= 1
+      count >= 1
     }
   }
 }

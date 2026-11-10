@@ -27,6 +27,20 @@ struct MarkdownEditorTests {
     return (editor, textView)
   }
 
+  /// An editor working through a text view styled as Markdown's shown where it's written, with
+  /// `text` in it, and where `|` is, where you're typing. The coordinator styling it is kept with it.
+  private func styledEditor(_ text: String) -> (MarkdownEditor, NSTextView, MarkdownTextCoordinator) {
+    let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+    textView.allowsUndo = true
+    let editor = MarkdownEditor()
+    let coordinator = MarkdownTextCoordinator(editor: editor)
+    coordinator.attach(textView)
+    let caret = text.range(of: "|")!
+    textView.string = text.replacingOccurrences(of: "|", with: "")
+    textView.setSelectedRange(NSRange(location: (String(text[..<caret.lowerBound]) as NSString).length, length: 0))
+    return (editor, textView, coordinator)
+  }
+
   private func selected(_ textView: NSTextView) -> String {
     (textView.string as NSString).substring(with: textView.selectedRange())
   }
@@ -42,6 +56,109 @@ struct MarkdownEditorTests {
     editor.toggle(.bold)
     #expect(textView.string == "say hi now")
     #expect(self.selected(textView) == "hi")
+  }
+
+  @Test func boldIsOnOnceItsPutOnAndUntilItsTakenOff() {
+    let (editor, textView, _) = self.styledEditor("say hi| now")
+    textView.setSelectedRange((textView.string as NSString).range(of: "hi"))
+    #expect(!editor.isOn(.bold))
+    editor.toggle(.bold)
+    #expect(editor.isOn(.bold))
+    #expect(editor.activeStyles == [.bold])
+    editor.toggle(.bold)
+    #expect(!editor.isOn(.bold))
+    #expect(textView.string == "say hi now")
+  }
+
+  @Test func boldComesOffFromTheMiddleOfItsWords() {
+    let (editor, textView, _) = self.styledEditor("say **hel|lo there** now")
+    #expect(editor.isOn(.bold))
+    #expect(!editor.isOn(.italic))
+    editor.toggle(.bold)
+    #expect(textView.string == "say hello there now")
+    #expect(textView.selectedRange() == NSRange(location: 7, length: 0))
+  }
+
+  @Test func italicComesOffBoldItalicAndLeavesItBold() {
+    let (editor, textView, _) = self.styledEditor("***bo|th***")
+    #expect(editor.activeStyles == [.bold, .italic])
+    editor.toggle(.italic)
+    #expect(textView.string == "**both**")
+  }
+
+  @Test func whatsAfterTheMarksIsNotOn() {
+    let (editor, _, _) = self.styledEditor("**hi**| there")
+    #expect(!editor.isOn(.bold))
+    #expect(editor.activeStyles.isEmpty)
+  }
+
+  @Test func codeComesOffFromInsideIt() {
+    let (editor, textView, _) = self.styledEditor("run `ls| -la` now")
+    #expect(editor.activeStyles == [.code])
+    editor.toggle(.code)
+    #expect(textView.string == "run ls -la now")
+    #expect(!self.styledEditor("run `ls -la`| now").0.isOn(.code))
+  }
+
+  @Test func betweenABoldsClosingMarksNothingsOn() {
+    let (editor, textView, _) = self.styledEditor("Where are we? Can we be **better*|*?")
+    #expect(editor.activeStyles.isEmpty)
+    // Italic here puts its marks in, and doesn't take the bold's away.
+    editor.toggle(.italic)
+    #expect(textView.string.hasPrefix("Where are we? Can we be **better*"))
+    #expect(textView.string.hasSuffix("*?"))
+  }
+
+  @Test func betweenABoldsOpeningMarksNothingsOn() {
+    #expect(self.styledEditor("*|*better** now").0.activeStyles.isEmpty)
+  }
+
+  @Test func marksWithNothingInThemYetAreOn() {
+    let (editor, textView, _) = self.styledEditor("say **|** now")
+    #expect(editor.activeStyles == [.bold])
+    editor.toggle(.bold)
+    #expect(textView.string == "say  now")
+    #expect(textView.selectedRange() == NSRange(location: 4, length: 0))
+    #expect(self.styledEditor("say ***|*** now").0.activeStyles == [.bold, .italic])
+    #expect(self.styledEditor("say ~~|~~ now").0.activeStyles == [.strikethrough])
+    #expect(self.styledEditor("say `|` now").0.activeStyles == [.code])
+  }
+
+  @Test func marksRightAfterAWordAreNotOn() {
+    // As they wouldn't be shown as marks once something's typed in them.
+    #expect(self.styledEditor("hello*|*").0.activeStyles.isEmpty)
+  }
+
+  @Test func betweenTwoCodeSpansIsNotCode() {
+    #expect(self.styledEditor("`a`|`b`").0.activeStyles.isEmpty)
+  }
+
+  @Test func aHeadingIsNotBold() {
+    #expect(self.styledEditor("# Hea|ding").0.activeStyles.isEmpty)
+  }
+
+  @Test func escapedMarksAreNotOn() {
+    #expect(self.styledEditor("\\*\\*no|t\\*\\*").0.activeStyles.isEmpty)
+  }
+
+  @Test func strikethroughsMarksInBoldLeaveItBold() {
+    #expect(self.styledEditor("**a ~~b~|~ c**").0.activeStyles == [.bold])
+  }
+
+  @Test func theEndOfABoldsMarksSelectedIsNotItalic() {
+    let (editor, textView, _) = self.styledEditor("**better**|")
+    textView.setSelectedRange(NSRange(location: 0, length: 9))
+    #expect(!editor.isOn(.italic))
+    textView.setSelectedRange(NSRange(location: 1, length: 8))
+    #expect(!editor.isOn(.italic))
+    // All of it, with its marks, is bold.
+    textView.setSelectedRange(NSRange(location: 0, length: 10))
+    #expect(editor.activeStyles == [.bold])
+  }
+
+  @Test func aLinkIsOnInsideIt() {
+    let (editor, _, _) = self.styledEditor("see [the ne|ws](https://example.com)")
+    #expect(editor.inLink)
   }
 
   // MARK: Images
