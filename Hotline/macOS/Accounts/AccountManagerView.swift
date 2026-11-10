@@ -14,6 +14,8 @@ struct AccountManagerView: View {
   @State private var deleteConfirm: Bool = false
   @State private var accountToEdit: HotlineAccount? = nil
   @State private var accountToDelete: HotlineAccount? = nil
+  /// For the selected account's buttons to be drawn as one piece of glass.
+  @Namespace private var glass
   
   private func newAccount() {
     self.creatorShown = true
@@ -33,50 +35,9 @@ struct AccountManagerView: View {
   
   var body: some View {
     VStack(spacing: 8) {
-      HStack(alignment: .firstTextBaseline) {
-        Text("Accounts")
-          .font(.headline)
-        
-        Spacer()
-        
-        HStack {
-          Button {
-            self.newAccount()
-          } label: {
-            Image(systemName: "plus")
-              .padding(4)
-          }
-          .buttonBorderShape(.circle)
-          .help("New Account")
-          
-          Button {
-            if let account = self.selection {
-              self.editAccount(account)
-            }
-          } label: {
-            Image(systemName: "pencil")
-              .padding(4)
-          }
-          .buttonBorderShape(.circle)
-          .disabled(self.selection == nil)
-          .help("Edit Account")
-          
-          Button {
-            if let account = self.selection {
-              self.deleteAccount(account)
-            }
-          } label: {
-            Image(systemName: "trash")
-              .padding(4)
-          }
-          .tint(.hotlineRed)
-          .buttonBorderShape(.circle)
-          .disabled(self.selection == nil)
-          .help("Delete Account")
-        }
-      }
-      .padding(.horizontal, 16)
-      .padding(.top, 24)
+      self.header
+        .padding(.horizontal, 16)
+        .padding(.top, 20)
       
       self.accountList
 //        .overlay {
@@ -121,6 +82,68 @@ struct AccountManagerView: View {
     }
   }
   
+  /// How many there are, once they've come.
+  private var summary: Text {
+    guard !self.loading else {
+      return Text("Loading accounts…")
+    }
+    return Text("^[\(self.accounts.count) account](inflect: true)")
+  }
+  
+  /// What the sheet's for, and how many there are, with what can be done to them across from it, as
+  /// a toolbar has it: the selected one's, edited or deleted, together in one piece, as they're both
+  /// for it, in the text's color, as a toolbar's symbols are, and last, at the edge, a new one, in
+  /// glass of its own in the accent, as a default button is.
+  private var header: some View {
+    HStack(alignment: .center, spacing: 12) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Accounts")
+          .font(.headline)
+        self.summary
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+      
+      Spacer(minLength: 0)
+      
+      AccountHeaderGlass(spacing: AccountHeaderButtonStyle.spacing) {
+        HStack(spacing: AccountHeaderButtonStyle.spacing) {
+          HStack(spacing: 0) {
+            Button {
+              if let account = self.selection {
+                self.editAccount(account)
+              }
+            } label: {
+              Image(systemName: "pencil")
+            }
+            .buttonStyle(AccountHeaderButtonStyle(joined: "selected", in: self.glass))
+            .help("Edit Account")
+            
+            Button {
+              if let account = self.selection {
+                self.deleteAccount(account)
+              }
+            } label: {
+              Image(systemName: "trash")
+            }
+            .buttonStyle(AccountHeaderButtonStyle(joined: "selected", in: self.glass))
+            .help("Delete Account")
+          }
+          .disabled(self.selection == nil)
+          .accountHeaderJoined()
+          
+          Button {
+            self.newAccount()
+          } label: {
+            Image(systemName: "plus")
+          }
+          .buttonStyle(AccountHeaderButtonStyle(prominent: true))
+          .help("New Account")
+        }
+      }
+    }
+  }
+  
   private var accountList: some View {
     List(self.accounts, id: \.self, selection: self.$selection) { account in
       HStack(spacing: 5) {
@@ -136,6 +159,8 @@ struct AccountManagerView: View {
           .lineLimit(1)
           .foregroundStyle(.secondary)
       }
+      // Its login in from the row's right edge, about as far as its icon is from its left.
+      .padding(.trailing, 4)
     }
     .contextMenu(forSelectionType: HotlineAccount.self) { items in
       Button {
@@ -220,4 +245,101 @@ struct AccountManagerView: View {
   }
 }
 
+// MARK: - Header Buttons
 
+/// A symbol's button in the accounts' header, as a toolbar's are from macOS 26: round Liquid Glass
+/// that gives as it's clicked, or joined with the buttons beside it that share its `joined` into one
+/// piece, in the text's color, and faint when it can't be clicked. Prominent, it's glass in the
+/// accent, or a server's theme's, with a white symbol, as a default button is. Before macOS 26, the
+/// symbol alone, on the accent, or on a gray its group puts behind it.
+private struct AccountHeaderButtonStyle: ButtonStyle {
+  /// How big each button is, across and down.
+  static let size: CGFloat = 32
+  /// The room between a button on its own and the buttons joined beside it.
+  static let spacing: CGFloat = 8
+
+  var prominent = false
+  var joined: String? = nil
+  var namespace: Namespace.ID? = nil
+
+  @Environment(\.isEnabled) private var isEnabled
+  @Environment(\.serverTheme) private var theme
+
+  init(prominent: Bool = false) {
+    self.prominent = prominent
+  }
+
+  init(joined: String, in namespace: Namespace.ID) {
+    self.joined = joined
+    self.namespace = namespace
+  }
+
+  /// The accent, as the server's theme has it, or the system's.
+  private var accent: Color {
+    self.theme?.accent.map { Color(nsColor: $0) } ?? .accentColor
+  }
+
+  @ViewBuilder
+  func makeBody(configuration: Configuration) -> some View {
+    // Plain when it can't be clicked, as glassProminent is.
+    let tinted = self.prominent && self.isEnabled
+    let label = configuration.label
+      .font(.system(size: 14, weight: tinted ? .semibold : .medium))
+      .foregroundStyle(tinted ? AnyShapeStyle(.white) : self.isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+      .frame(width: Self.size, height: Self.size)
+      .contentShape(.capsule)
+    if #available(macOS 26, *) {
+      // Giving as it's clicked only when it can be.
+      let glass = label.glassEffect(tinted ? .regular.tint(self.accent).interactive() : self.isEnabled ? .regular.interactive() : .regular, in: .capsule)
+      if let joined = self.joined, let namespace = self.namespace {
+        glass.glassEffectUnion(id: joined, namespace: namespace)
+      }
+      else {
+        glass
+      }
+    }
+    else {
+      label
+        .background {
+          if tinted {
+            Circle().fill(self.accent)
+          }
+          else if self.joined == nil {
+            Circle().fill(.quaternary)
+          }
+        }
+        .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+  }
+}
+
+/// The header's glass, drawn together, from macOS 26, as glass can't show the glass beside it.
+private struct AccountHeaderGlass<Content: View>: View {
+  let spacing: CGFloat
+  @ViewBuilder let content: Content
+
+  var body: some View {
+    if #available(macOS 26, *) {
+      GlassEffectContainer(spacing: self.spacing) {
+        self.content
+      }
+    }
+    else {
+      self.content
+    }
+  }
+}
+
+private extension View {
+  /// Buttons joined into one piece: their glass is from macOS 26, and before, a gray capsule behind
+  /// them all.
+  @ViewBuilder
+  func accountHeaderJoined() -> some View {
+    if #available(macOS 26, *) {
+      self
+    }
+    else {
+      self.background(.quaternary, in: .capsule)
+    }
+  }
+}
