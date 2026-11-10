@@ -19,6 +19,10 @@ struct PostEditor: NSViewRepresentable {
   var layout: Markdown.Layout = .board
   /// What's done once you're done writing, and you've gone on to something else.
   var onEndEditing: (() -> Void)? = nil
+  /// Told how tall what's written is, with the room above and below it, as that changes, for it to
+  /// be shown as tall as it is, as a broadcast's bubble is in chat. Without, it's as tall as it's
+  /// made.
+  var onFit: ((CGFloat) -> Void)? = nil
 
   func makeCoordinator() -> Coordinator {
     Coordinator(text: self.$text, controller: self.controller, layout: self.layout)
@@ -62,6 +66,12 @@ struct PostEditor: NSViewRepresentable {
     scrollView.scrollerStyle = .overlay
     scrollView.automaticallyAdjustsContentInsets = false
 
+    // As tall as it's written, as it's laid out again, as it's made wider or narrower.
+    context.coordinator.onFit = self.onFit
+    if self.onFit != nil {
+      context.coordinator.fitting(textView)
+    }
+
     // Ready to write in, once it's in the sheet, at the end of what's written.
     let startsHere = self.startsHere
     DispatchQueue.main.async {
@@ -77,8 +87,11 @@ struct PostEditor: NSViewRepresentable {
     let textView = scrollView.documentView as! NSTextView
     context.coordinator.text = self.$text
     context.coordinator.onEndEditing = self.onEndEditing
+    context.coordinator.onFit = self.onFit
     if textView.string != self.text {
       textView.string = self.text
+      // Changed from outside, as when it's thrown away, which isn't a change written in it.
+      context.coordinator.fit(textView)
     }
     textView.applyServerTheme(self.theme)
     context.coordinator.use(Markdown.Colors(theme: self.theme), in: textView)
@@ -88,10 +101,18 @@ struct PostEditor: NSViewRepresentable {
   final class Coordinator: MarkdownTextCoordinator {
     var text: Binding<String>
     var onEndEditing: (() -> Void)?
+    var onFit: ((CGFloat) -> Void)?
+    private var resizing: NSObjectProtocol?
 
     init(text: Binding<String>, controller: MarkdownEditor, layout: Markdown.Layout) {
       self.text = text
       super.init(editor: controller, layout: layout)
+    }
+
+    deinit {
+      if let resizing = self.resizing {
+        NotificationCenter.default.removeObserver(resizing)
+      }
     }
 
     override func textDidChange(_ notification: Notification) {
@@ -99,6 +120,36 @@ struct PostEditor: NSViewRepresentable {
         return
       }
       self.text.wrappedValue = textView.string
+      self.fit(textView)
+    }
+
+    /// Tells how tall what's written is whenever the text view's resized, as its lines wrap
+    /// differently once it's wider or narrower, and once it's first given its width.
+    @MainActor
+    func fitting(_ textView: NSTextView) {
+      textView.postsFrameChangedNotifications = true
+      self.resizing = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: textView, queue: .main) { [weak self, weak textView] _ in
+        MainActor.assumeIsolated {
+          guard let self, let textView else {
+            return
+          }
+          self.fit(textView)
+        }
+      }
+    }
+
+    /// Tells how tall what's written is, laid out as it is now, with the room above and below it,
+    /// once what's changing it is done, as it's told in the middle of a change or a layout.
+    @MainActor
+    func fit(_ textView: NSTextView) {
+      guard let onFit = self.onFit, let layout = textView.textLayoutManager else {
+        return
+      }
+      layout.ensureLayout(for: layout.documentRange)
+      let height = (layout.usageBoundsForTextContainer.height + textView.textContainerInset.height * 2).rounded(.up)
+      DispatchQueue.main.async {
+        onFit(height)
+      }
     }
 
     override func textDidEndEditing(_ notification: Notification) {

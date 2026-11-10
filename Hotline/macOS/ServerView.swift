@@ -270,10 +270,11 @@ struct ServerView: View {
               .environment(self.model)
               .presentationSizing(.fitted)
           }
+          // As tall as what's in it, as that changes, as the message's bubble grows with it, which
+          // fitted sizing doesn't do, as it fits what's in it once, as it opens.
           .sheet(isPresented: self.$state.broadcastShown) {
             BroadcastMessageSheet()
               .environment(self.model)
-              .presentationSizing(.fitted)
           }
           .sheet(isPresented: self.$state.accountsShown) {
             AccountManagerView()
