@@ -14,6 +14,9 @@ final class MarkdownEditor {
   }
   /// The kind of code what's selected is in, if it's in any.
   var codeContext: Markdown.CodeContext?
+  /// Whether lines can be more than words where it's written, as its layout has it: lists, quotes,
+  /// code blocks, and images, which show under their line. Not in a broadcast, which is centered.
+  var allowsBlocks = true
 
   /// The key for a link, as Connect to Server has ⌘K.
   static let linkShortcut = KeyboardShortcut("k", modifiers: [.command, .shift])
@@ -29,15 +32,20 @@ final class MarkdownEditor {
     }
   }
 
-  /// Whether what's selected can be made a link, or an image, which it can't in code.
+  /// Whether what's selected can be made a link, which it can't in code.
   var allowsLink: Bool {
     self.codeContext == nil
   }
 
-  /// Whether the lines selected can go in a list or a quote, which they can't in a code block, or a
-  /// drawing, where marks are what it's drawn with.
+  /// Whether what's selected can be made an image, as a link can, where lines can be more than words.
+  var allowsImage: Bool {
+    self.allowsBlocks && self.allowsLink
+  }
+
+  /// Whether the lines selected can go in a list or a quote, where lines can be more than words, but
+  /// not in a code block, or a drawing, where marks are what it's drawn with.
   var allowsLines: Bool {
-    self.codeContext != .block && self.codeContext != .drawing
+    self.allowsBlocks && self.codeContext != .block && self.codeContext != .drawing
   }
 
   // MARK: Formatting
@@ -76,8 +84,9 @@ final class MarkdownEditor {
     let text = textView.string as NSString
     let mark = style.mark
     let markLength = (mark as NSString).length
-    // Lines of their own, for code, go in a code block, with where to name its language next.
-    if style == .code, text.substring(with: textView.selectedRange()).contains(where: \.isNewline) {
+    // Lines of their own, for code, go in a code block, with where to name its language next, where
+    // there can be one.
+    if style == .code, self.allowsBlocks, text.substring(with: textView.selectedRange()).contains(where: \.isNewline) {
       let lines = text.lineRange(for: textView.selectedRange())
       var code = text.substring(with: lines)
       let ending = code.hasSuffix("\n") ? "\n" : ""
@@ -425,10 +434,16 @@ class MarkdownTextCoordinator: NSObject, NSTextViewDelegate, NSTextStorageDelega
     textView.textLayoutManager?.delegate = self.fragments
     textView.typingAttributes = self.layout.attributes
     self.editor.textView = textView
+    self.editor.allowsBlocks = self.layout.blocks
   }
 
   /// For what's written to go where it's kept.
   func textDidChange(_ notification: Notification) {
+  }
+
+  /// For what's written to go where it's kept once you're done with it, where it isn't kept until
+  /// then.
+  func textDidEndEditing(_ notification: Notification) {
   }
 
   func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString string: String?) -> Bool {
@@ -575,10 +590,12 @@ class MarkdownTextCoordinator: NSObject, NSTextViewDelegate, NSTextStorageDelega
     return true
   }
 
+  /// A new line goes on with the list, quote or code block it's in, where lines can be more than
+  /// words.
   private func insertNewline(in textView: NSTextView) -> Bool {
     let text = textView.string as NSString
     let selection = textView.selectedRange()
-    guard selection.length == 0 else {
+    guard selection.length == 0, self.layout.blocks else {
       return false
     }
 

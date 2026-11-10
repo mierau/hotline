@@ -125,7 +125,7 @@ enum ChatMessageRenderer {
     case .signOut:
       text = self.divider(message, options: options)
     case .server:
-      text = self.serverMessage(message)
+      text = self.serverMessage(message, options: options)
     case .agreement:
       text = NSMutableAttributedString()
     }
@@ -421,7 +421,10 @@ enum ChatMessageRenderer {
     return text
   }
 
-  private static func serverMessage(_ message: ChatMessage) -> NSMutableAttributedString {
+  /// A broadcast, centered, in a bubble, in Markdown, but words alone, as lists, quotes and code
+  /// blocks need their lines to start at the left, and without previews, and emphasized, as it's
+  /// from the server.
+  private static func serverMessage(_ message: ChatMessage, options: Options) -> NSMutableAttributedString {
     let paragraph = NSMutableParagraphStyle()
     // 24 above and below it, with what's around it.
     paragraph.paragraphSpacingBefore = 24 - self.groupedSpacing
@@ -441,14 +444,42 @@ enum ChatMessageRenderer {
       text.append(NSAttributedString(string: "  "))
     }
 
-    // One paragraph, so the indents apply to every line and the spacing doesn't repeat.
-    let displayText = message.text.replacingOccurrences(of: "\\n\\s*", with: "\u{2028}", options: .regularExpression)
-    text.append(NSAttributedString(string: displayText, attributes: [.font: self.semiboldFont, .foregroundColor: NSColor.textColor]))
+    // One paragraph, so the indents apply to every line and the spacing doesn't repeat, and each
+    // line from where it's centered, without the spaces it starts with.
+    let lines = message.text.replacingOccurrences(of: "[\\r\\n]\\s*", with: "\u{2028}", options: .regularExpression)
+    let layout = Markdown.Layout(
+      font: self.baseFont,
+      lineSpacing: 3,
+      imagePreviews: 0,
+      blocks: false,
+      colors: Markdown.Colors(secondary: options.secondaryColor, tertiary: options.tertiaryColor)
+    )
+    let shown = Markdown.shownText(lines, layout: layout)
+    self.emphasize(shown)
+    text.append(shown)
 
     let range = NSRange(location: 0, length: text.length)
     text.addAttribute(.paragraphStyle, value: paragraph, range: range)
     text.addAttribute(self.serverMessageKey, value: true, range: range)
     return text
+  }
+
+  /// Text in semibold, as a broadcast is, and what's bold in it heavier still, to stand out from the
+  /// rest, as a semibold font is bold already. Italic stays italic, and code in the code font.
+  private static func emphasize(_ text: NSMutableAttributedString) {
+    text.enumerateAttribute(.font, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+      guard let font = value as? NSFont else {
+        return
+      }
+      let traits = font.fontDescriptor.symbolicTraits
+      var emphasized = font.isFixedPitch
+        ? NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .semibold)
+        : NSFont.systemFont(ofSize: font.pointSize, weight: traits.contains(.bold) ? .heavy : .semibold)
+      if traits.contains(.italic) {
+        emphasized = Markdown.font(emphasized, adding: .italic)
+      }
+      text.addAttribute(.font, value: emphasized, range: range)
+    }
   }
 
   // MARK: Formatting

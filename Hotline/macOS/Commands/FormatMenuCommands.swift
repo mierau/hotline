@@ -31,7 +31,7 @@ struct FormatMenuCommands: Commands {
       Button("Image", systemImage: "photo") {
         self.editor?.image()
       }
-      .disabled(self.editor?.allowsLink != true)
+      .disabled(self.editor?.allowsImage != true)
 
       Divider()
 

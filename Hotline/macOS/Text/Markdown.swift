@@ -59,7 +59,8 @@ enum Markdown {
   // MARK: Layout
 
   /// How a place shows Markdown: its words' font, the room between its lines and where they start,
-  /// the room code blocks have, and how many images it previews.
+  /// the room code blocks have, how many images it previews, and whether its lines can be more than
+  /// words.
   struct Layout: Equatable {
     var font: NSFont = Markdown.font
     var lineSpacing: CGFloat = 4
@@ -72,6 +73,10 @@ enum Markdown {
     var codeBlockSpacing: CGFloat = 12
     /// At most how many links to images have a preview, under the line they're on.
     var imagePreviews = 10
+    /// Whether lines can be more than words: code blocks, drawings, headings, lines across, quotes,
+    /// and lists' items. Without, as in a broadcast, which is centered, every line is words, with
+    /// its marks shown as they're written.
+    var blocks = true
     /// The colors of what matters less and least, and code's backgrounds, as a server's theme has
     /// them, or the system's.
     var colors = Colors()
@@ -95,7 +100,7 @@ enum Markdown {
 
     /// What's shown is kept by this, as well as by what it shows.
     var key: String {
-      [self.font.pointSize, self.lineSpacing, self.indent, self.codePadding.width, self.codePadding.height, self.codeBlockSpacing, CGFloat(self.imagePreviews)]
+      [self.font.pointSize, self.lineSpacing, self.indent, self.codePadding.width, self.codePadding.height, self.codeBlockSpacing, CGFloat(self.imagePreviews), self.blocks ? 1 : 0]
         .map { "\($0)" }
         .joined(separator: ",") + self.colors.key
     }
@@ -781,8 +786,8 @@ enum Markdown {
     layout.colors = colors
     // Attributes only, as it's done while the text storage is still taking an edit.
     storage.setAttributes(layout.attributes, range: all)
-    var code = CodeRanges(blocks: self.codeBlocks(in: string))
-    code.drawings = self.drawings(in: string, skipping: code.blocks.map(\.range))
+    var code = CodeRanges()
+    (code.blocks, code.drawings) = self.blocksAndDrawings(in: string, layout: layout)
     for block in code.blocks {
       self.styleBlock(block, in: storage, colors: colors)
     }
@@ -798,8 +803,7 @@ enum Markdown {
   /// styles the line it's on.
   static func restyle(_ storage: NSTextStorage, edited: NSRange, changeInLength delta: Int, after previous: CodeRanges, layout: Layout = .board, colors: Colors = Colors()) -> CodeRanges {
     let string = storage.string as NSString
-    let blocks = self.codeBlocks(in: string)
-    let drawings = self.drawings(in: string, skipping: blocks.map(\.range))
+    let (blocks, drawings) = self.blocksAndDrawings(in: string, layout: layout)
     // What the edit replaced, where it was.
     let replaced = NSRange(location: edited.location, length: max(0, edited.length - delta))
     func moved(_ range: NSRange) -> NSRange? {
@@ -864,6 +868,16 @@ enum Markdown {
     /// whether it was written as an image, ![like this](where it is), which is shown as the image
     /// alone.
     var images: [(lineEnd: Int, url: URL, isImage: Bool)] = []
+  }
+
+  /// The code blocks in some text, and its drawings, where its lines can be more than words, as the
+  /// layout has it, or none.
+  static func blocksAndDrawings(in string: NSString, layout: Layout) -> (blocks: [CodeBlock], drawings: [NSRange]) {
+    guard layout.blocks else {
+      return ([], [])
+    }
+    let blocks = self.codeBlocks(in: string)
+    return (blocks, self.drawings(in: string, skipping: blocks.map(\.range)))
   }
 
   /// A code block, as it's written: its code in the code font, colored when it names a language,
@@ -1050,9 +1064,9 @@ enum Markdown {
     }
 
     // Lines across, headings, quotes, their words fainter, along a bar, and lists, their items'
-    // lines lined up after their marks.
+    // lines lined up after their marks, where lines can be more than words.
     var lineStart = start
-    while lineStart < end {
+    while layout.blocks, lineStart < end {
       let line = string.paragraphRange(for: NSRange(location: lineStart, length: 0))
       lineStart = NSMaxRange(line)
       guard !isTaken(line.location) else {

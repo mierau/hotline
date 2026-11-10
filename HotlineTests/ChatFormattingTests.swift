@@ -35,6 +35,27 @@ struct ChatFormattingTests {
     #expect(self.render("mars: just a plain message").string == "mars: just a plain message")
   }
 
+  // MARK: Broadcasts
+
+  private func broadcast(_ text: String) -> NSAttributedString {
+    ChatMessageRenderer.render(ChatMessage(text: text, type: .server, date: Date()))
+  }
+
+  @Test func broadcastsAreWordsInMarkdown() {
+    let text = self.broadcast("Back at **10**, see [the news](https://example.com)\r- and  \n  `files`")
+    // After the server's icon, and the space after it, on lines of one paragraph, without the
+    // spaces they start with, and a list's mark as it's written.
+    #expect(text.string == "\u{FFFC}  Back at 10, see the news\u{2028}- and  \u{2028}files")
+    let string = text.string as NSString
+    let font = { (words: String) in text.attribute(.font, at: string.range(of: words).location, effectiveRange: nil) as? NSFont }
+    let weight = { (font: NSFont?) in (font?.fontDescriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any])?[.weight] as? CGFloat ?? 0 }
+    // Bold, heavier than the rest, which is semibold.
+    #expect(weight(font("10")) > weight(font("Back")))
+    #expect(abs(weight(font("Back")) - NSFont.Weight.semibold.rawValue) < 0.01)
+    #expect(font("files")?.isFixedPitch == true)
+    #expect(text.attribute(.link, at: string.range(of: "the news").location, effectiveRange: nil) != nil)
+  }
+
   @Test func messagesAreMarkdown() {
     let text = self.render("mars: *italic*, **bold** and __underlined__")
     #expect(text.string == "mars: italic, bold and underlined")

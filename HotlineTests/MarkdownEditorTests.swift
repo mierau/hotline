@@ -132,4 +132,23 @@ struct MarkdownEditorTests {
     editor.toggle(.quote)
     #expect(textView.string == "> eggs\n> milk\nbread")
   }
+
+  // MARK: Words Alone
+
+  @Test func wordsAloneHaveNoListsQuotesOrImages() {
+    let (editor, _) = self.editor("say hi", selecting: "hi")
+    #expect(editor.allowsLines && editor.allowsImage)
+    editor.allowsBlocks = false
+    #expect(!editor.allowsLines)
+    #expect(!editor.allowsImage)
+    #expect(editor.allowsLink)
+    #expect(editor.allows(.bold))
+  }
+
+  @Test func codeOverLinesIsCodeOnThemWhereLinesAreWords() {
+    let (editor, textView) = self.editor("one\ntwo", selecting: "one\ntwo")
+    editor.allowsBlocks = false
+    editor.toggle(.code)
+    #expect(textView.string == "`one\ntwo`")
+  }
 }

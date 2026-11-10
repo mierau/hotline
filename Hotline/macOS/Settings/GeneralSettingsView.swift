@@ -22,13 +22,9 @@ struct GeneralSettingsView: View {
       // The reply shown whether it's on or not, to write ahead of time and turn on later.
       Section {
         Toggle("Automatically reply to private messages", isOn: $preferences.enableAutomaticMessage)
-        // Without a label, across the row, from the left, as what you write is, and not at the
-        // right, as a form puts what goes with a label.
-        DeferredTextField(title: "Reply", text: $preferences.automaticMessage, prompt: Text("Write a reply"))
-          .labelsHidden()
-          .lineLimit(2)
-          .multilineTextAlignment(.leading)
-          .frame(maxWidth: .infinity)
+        // In Markdown, as it's sent, across the row, from the left, as what you write is, and not
+        // at the right, as a form puts what goes with a label.
+        DeferredMarkdownField(text: $preferences.automaticMessage, prompt: "Write a reply")
       }
 
       Section("Downloads") {

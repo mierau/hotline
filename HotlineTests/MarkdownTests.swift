@@ -10,8 +10,8 @@ struct MarkdownTests {
   /// s strikethrough, c code's font, l link, k a code block's line, with its place, and the
   /// language it names, q a quote's line, h a heading, with its size, r a line across, F a link to a
   /// file, P an image's preview. ¶ is a paragraph break, ⏎ a line break, and ▢ an attachment.
-  private func look(_ input: String, previews: Int = 3) -> String {
-    let text = Markdown.shownText(input, layout: Markdown.Layout(imagePreviews: previews))
+  private func look(_ input: String, previews: Int = 3, blocks: Bool = true) -> String {
+    let text = Markdown.shownText(input, layout: Markdown.Layout(imagePreviews: previews, blocks: blocks))
     var out = ""
     text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attributes, range, _ in
       var tags = ""
@@ -56,6 +56,20 @@ struct MarkdownTests {
 
   @Test func strikethrough() {
     #expect(look("~gone~ and ~~gone~~") == "[s:gone] and [s:gone]")
+  }
+
+  // MARK: Words Alone
+
+  @Test func wordsAloneAreStillStyled() {
+    #expect(look("**bold**, `code` and [a link](https://example.com)", blocks: false) == "[b:bold], [c:code] and [l:a link]")
+  }
+
+  @Test func wordsAloneKeepTheirLineMarks() {
+    #expect(look("- one\n> two\n# three\n---", blocks: false) == "- one¶> two¶# three¶---")
+  }
+
+  @Test func wordsAloneHaveNoCodeBlocks() {
+    #expect(look("```\nlet a = 1\n```", blocks: false) == "```¶let a = 1¶```")
   }
 
   @Test func code() {

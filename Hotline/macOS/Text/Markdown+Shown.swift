@@ -41,8 +41,7 @@ extension Markdown {
     }
 
     let shown = Shown()
-    let blocks = self.codeBlocks(in: string)
-    let drawings = self.drawings(in: string, skipping: blocks.map(\.range))
+    let (blocks, drawings) = self.blocksAndDrawings(in: string, layout: layout)
     for block in blocks {
       self.showBlock(block, in: storage, layout: layout, shown: shown)
     }

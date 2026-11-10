@@ -17,9 +17,13 @@ struct PostEditor: NSViewRepresentable {
   var startsHere = true
   /// How far in from its edges the text is, as far as what's around it is in.
   var inset: NSSize = Self.inset
+  /// How it's laid out as it's written, as the board does, or with words alone, as a broadcast is.
+  var layout: Markdown.Layout = .board
+  /// What's done once you're done writing, and you've gone on to something else.
+  var onEndEditing: (() -> Void)? = nil
 
   func makeCoordinator() -> Coordinator {
-    Coordinator(text: self.$text, controller: self.controller)
+    Coordinator(text: self.$text, controller: self.controller, layout: self.layout)
   }
 
   func makeNSView(context: Context) -> NSScrollView {
@@ -48,9 +52,10 @@ struct PostEditor: NSViewRepresentable {
     textView.textContainerInset = self.inset
     // From the inset, as the card's top and the placeholder are.
     textView.textContainer?.lineFragmentPadding = 0
-    // For pictures dropped on it, as well as text.
+    // For pictures dropped on it, as well as text, where they can be drawings.
+    textView.takesPictures = self.layout.blocks
     textView.updateDragTypeRegistration()
-    textView.font = Markdown.font
+    textView.font = self.layout.font
     context.coordinator.attach(textView)
     textView.string = self.text
     textView.applyServerTheme(self.theme)
@@ -74,6 +79,7 @@ struct PostEditor: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     let textView = scrollView.documentView as! NSTextView
     context.coordinator.text = self.$text
+    context.coordinator.onEndEditing = self.onEndEditing
     if textView.string != self.text {
       textView.string = self.text
     }
@@ -84,10 +90,11 @@ struct PostEditor: NSViewRepresentable {
 
   final class Coordinator: MarkdownTextCoordinator {
     var text: Binding<String>
+    var onEndEditing: (() -> Void)?
 
-    init(text: Binding<String>, controller: MarkdownEditor) {
+    init(text: Binding<String>, controller: MarkdownEditor, layout: Markdown.Layout) {
       self.text = text
-      super.init(editor: controller)
+      super.init(editor: controller, layout: layout)
     }
 
     override func textDidChange(_ notification: Notification) {
@@ -95,6 +102,10 @@ struct PostEditor: NSViewRepresentable {
         return
       }
       self.text.wrappedValue = textView.string
+    }
+
+    override func textDidEndEditing(_ notification: Notification) {
+      self.onEndEditing?()
     }
   }
 }
@@ -104,26 +115,30 @@ struct PostEditor: NSViewRepresentable {
 final class PostTextView: MarkdownEditingTextView {
   // MARK: Pictures
 
+  /// Whether a picture goes in as a drawing, which needs lines of its own, and not where they're
+  /// words alone.
+  var takesPictures = true
+
   /// Picture files, and pictures, as well as text.
   private static let pictureTypes: [NSPasteboard.PasteboardType] = [.fileURL, .tiff, .png]
 
   override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
     let types = super.readablePasteboardTypes
-    return types + Self.pictureTypes.filter { !types.contains($0) }
+    return self.takesPictures ? types + Self.pictureTypes.filter { !types.contains($0) } : types
   }
 
   override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
     let types = super.acceptableDragTypes
-    return types + Self.pictureTypes.filter { !types.contains($0) }
+    return self.takesPictures ? types + Self.pictureTypes.filter { !types.contains($0) } : types
   }
 
   override func dragOperation(for dragInfo: NSDraggingInfo, type: NSPasteboard.PasteboardType) -> NSDragOperation {
-    PostPicture.hasPicture(dragInfo.draggingPasteboard) ? .copy : super.dragOperation(for: dragInfo, type: type)
+    self.takesPictures && PostPicture.hasPicture(dragInfo.draggingPasteboard) ? .copy : super.dragOperation(for: dragInfo, type: type)
   }
 
   // Where it's dropped, or what's selected, as for a paste.
   override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
-    guard PostPicture.hasPicture(pboard) else {
+    guard self.takesPictures, PostPicture.hasPicture(pboard) else {
       return super.readSelection(from: pboard, type: type)
     }
     guard let picture = PostPicture.picture(on: pboard) else {
