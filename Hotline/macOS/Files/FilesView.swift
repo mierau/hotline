@@ -51,6 +51,8 @@ struct FilesView: View {
   /// Where the list is in the window, which a drop on it is measured from.
   @State private var listFrame = CGRect.zero
   @FocusState private var isFileListFocused: Bool
+  /// Where the File menu's choices come, while the list has the keys.
+  @State private var listActions = FileListActions()
 
   private var folderPath: [String] {
     get { self.serverState.fileFolderPath }
@@ -88,6 +90,9 @@ struct FilesView: View {
         self.dropTarget.root = newPath
       }
       .focused($isFileListFocused)
+      // For the File menu, while the list has the keys, and not the search field, or a name being
+      // edited, which has them for the name, like ⌘⌫, which deletes what's typed.
+      .focusedValue(\.fileList, self.rename.file == nil ? self.fileListMenu : nil)
       .task {
         if !self.model.filesLoaded {
           let _ = try? await self.model.getFileList()
@@ -215,6 +220,15 @@ struct FilesView: View {
         }
         self.rename.keysBack = {
           self.isFileListFocused = true
+        }
+        // The File menu's, with what's selected, as the toolbar's menu has it.
+        self.listActions.perform = { command in
+          let files = self.selectedFiles
+          guard self.allows(command, on: files, inToolbar: true) else {
+            NSSound.beep()
+            return
+          }
+          self.perform(command, on: files, inToolbar: true)
         }
       }
       .onChange(of: self.serverState.fileNavigationPath) { _, _ in
@@ -571,8 +585,6 @@ struct FilesView: View {
   @ViewBuilder
   private func fileMenu(for files: [FileInfo], inToolbar: Bool) -> some View {
     let single = files.count == 1 ? files.first : nil
-    // Into the one folder it's for, or from the toolbar, or between files, the one you're in.
-    let uploadFolder: [String]? = single?.isFolder == true ? single?.path : (inToolbar || files.isEmpty) ? self.folderPath : nil
 
     // A server bookmark someone's put up, to connect to, or keep with your own, read from the
     // server out of sight, as reading it is all it takes.
@@ -594,20 +606,8 @@ struct FilesView: View {
       Divider()
     }
 
-    Button {
-      self.uploadDestination = uploadFolder ?? self.folderPath
-      self.uploadFileSelectorDisplayed = true
-    } label: {
-      Label("Upload...", systemImage: "arrow.up")
-    }
-    .disabled(uploadFolder == nil || self.model.access?.contains(.canUploadFiles) != true)
-
-    Button {
-      self.actions.download(files)
-    } label: {
-      Label("Download", systemImage: "arrow.down")
-    }
-    .disabled(!self.actions.canDownload(files))
+    self.menuButton(.upload, for: files, inToolbar: inToolbar)
+    self.menuButton(.download, for: files, inToolbar: inToolbar)
 
     Divider()
 
@@ -618,7 +618,78 @@ struct FilesView: View {
     }
     .disabled(files.isEmpty)
 
+    self.menuButton(.getInfo, for: files, inToolbar: inToolbar)
+    self.menuButton(.quickLook, for: files, inToolbar: inToolbar)
+    self.menuButton(.rename, for: files, inToolbar: inToolbar)
+    self.menuButton(.newFolder, for: files, inToolbar: inToolbar)
+
+    Divider()
+
+    self.menuButton(.delete, for: files, inToolbar: inToolbar)
+  }
+
+  /// One of the menu's, as the File menu has it too.
+  private func menuButton(_ command: FileListCommand, for files: [FileInfo], inToolbar: Bool) -> some View {
     Button {
+      self.perform(command, on: files, inToolbar: inToolbar)
+    } label: {
+      Label(command == .delete ? self.deleteTitle(for: files) : command.title, systemImage: command.systemImage)
+    }
+    .disabled(!self.allows(command, on: files, inToolbar: inToolbar))
+  }
+
+  /// What the File menu can do with what's selected, as the toolbar's menu can.
+  private var fileListMenu: FileListMenu {
+    let files = self.selectedFiles
+    let allowed = FileListCommand.allCases.filter { self.allows($0, on: files, inToolbar: true) }
+    return FileListMenu(allowed: Set(allowed), deleteTitle: self.deleteTitle(for: files), list: self.listActions)
+  }
+
+  /// Whether it can be done with these, from a menu on them, or the toolbar's, or the File menu,
+  /// which goes as the toolbar's does.
+  private func allows(_ command: FileListCommand, on files: [FileInfo], inToolbar: Bool) -> Bool {
+    let single = files.count == 1 ? files.first : nil
+    switch command {
+    case .newFolder:
+      // In the folder you're in, or one it's asked for on.
+      return (inToolbar || files.isEmpty || single?.isFolder == true) && self.model.access?.contains(.canCreateFolders) == true
+    case .upload:
+      return self.uploadFolder(for: files, inToolbar: inToolbar) != nil && self.model.access?.contains(.canUploadFiles) == true
+    case .download:
+      return self.actions.canDownload(files)
+    case .open:
+      return single?.isFolder == true || files.contains { self.actions.canDownload([$0]) }
+    case .quickLook:
+      return single?.isPreviewable == true
+    case .getInfo:
+      return single != nil
+    case .rename:
+      return single.map { self.actions.canRename($0) } ?? false
+    case .delete:
+      return self.actions.canDelete(files)
+    }
+  }
+
+  /// Does it with these, as `allows(_:on:inToolbar:)` has it.
+  private func perform(_ command: FileListCommand, on files: [FileInfo], inToolbar: Bool) {
+    let single = files.count == 1 ? files.first : nil
+    switch command {
+    case .newFolder:
+      // In the folder it's asked for on, or the one you're in.
+      self.newFolderParent = !inToolbar && single?.isFolder == true ? single?.path ?? self.folderPath : self.folderPath
+      self.newFolderShown = true
+    case .upload:
+      self.uploadDestination = self.uploadFolder(for: files, inToolbar: inToolbar) ?? self.folderPath
+      self.uploadFileSelectorDisplayed = true
+    case .download:
+      self.actions.download(files)
+    case .open:
+      self.open(files)
+    case .quickLook:
+      if let single {
+        self.actions.previewFile(single)
+      }
+    case .getInfo:
       if let single {
         Task {
           if let details = await self.actions.getFileInfo(single) {
@@ -626,47 +697,32 @@ struct FilesView: View {
           }
         }
       }
-    } label: {
-      Label("Get Info", systemImage: "info.circle")
-    }
-    .disabled(single == nil)
-
-    Button {
-      if let single {
-        self.actions.previewFile(single)
-      }
-    } label: {
-      Label("Quick Look", systemImage: "eye")
-    }
-    .disabled(single?.isPreviewable != true)
-
-    Button {
+    case .rename:
       if let single {
         self.startRenaming(single)
       }
-    } label: {
-      Label("Rename", systemImage: "pencil")
-    }
-    .disabled(single.map { !self.actions.canRename($0) } ?? true)
-
-    Button {
-      // In the folder it's asked for on, or the one you're in.
-      self.newFolderParent = !inToolbar && single?.isFolder == true ? single?.path ?? self.folderPath : self.folderPath
-      self.newFolderShown = true
-    } label: {
-      Label("New Folder", systemImage: "folder.badge.plus")
-    }
-    .disabled((!inToolbar && !files.isEmpty && single?.isFolder != true) || self.model.access?.contains(.canCreateFolders) != true)
-
-    Divider()
-
-    Button {
+    case .delete:
       self.deleting = files
       self.confirmDeleteShown = true
-    } label: {
-      Label(files.count > 1 ? "Delete \(files.count) Items..." : single?.isFolder == true ? "Delete Folder..." : "Delete File...", systemImage: "trash")
     }
-    .disabled(!self.actions.canDelete(files))
+  }
+
+  /// Where an upload goes: into the one folder it's for, or from the toolbar, or between files, the
+  /// one you're in.
+  private func uploadFolder(for files: [FileInfo], inToolbar: Bool) -> [String]? {
+    let single = files.count == 1 ? files.first : nil
+    return single?.isFolder == true ? single?.path : (inToolbar || files.isEmpty) ? self.folderPath : nil
+  }
+
+  /// What Delete says for these: a file, a folder, or how many.
+  private func deleteTitle(for files: [FileInfo]) -> String {
+    if files.count > 1 {
+      return "Delete \(files.count) Items..."
+    }
+    guard let file = files.first else {
+      return FileListCommand.delete.title
+    }
+    return file.isFolder ? "Delete Folder..." : "Delete File..."
   }
 
   /// What's dropped at a point in the window, over the list, goes into: a folder it's over, or the

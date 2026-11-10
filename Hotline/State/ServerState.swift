@@ -8,6 +8,8 @@ class ServerState: Equatable {
   var columnVisibility: NavigationSplitViewVisibility = .all
   var accountsShown: Bool = false
   var broadcastShown: Bool = false
+  /// Bookmarking the server, from the Server menu.
+  var addBookmarkShown: Bool = false
   var fileNavigationPath: [String]? = nil
   var fileFolderPath: [String] = []
   /// Someone to send a message to, from the user list or the chat.

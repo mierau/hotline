@@ -5,6 +5,7 @@ import SwiftUI
 struct ServerMenuCommands: Commands {
   @FocusedValue(\.activeHotlineModel) private var activeHotline: HotlineState?
   @FocusedValue(\.activeServerState) private var activeServerState: ServerState?
+  @FocusedValue(\.activeServerIsBookmarked) private var isBookmarked: Bool?
 
   var body: some Commands {
     // Which section the window shows, as Finder and Calendar have their ⌘1 to ⌘4 in View.
@@ -49,17 +50,11 @@ struct ServerMenuCommands: Commands {
 
       Divider()
 
-      // Last, as it ends the session. It asks first when that would lose something.
-      Button("Disconnect", systemImage: "xmark") {
-        if let hotline = self.activeHotline,
-           let state = self.activeServerState,
-           !state.askBeforeDisconnecting(.disconnect, from: hotline) {
-          Task {
-            await hotline.disconnect()
-          }
-        }
+      // Off once it's in your bookmarks.
+      Button("Add Bookmark...", systemImage: "bookmark") {
+        self.activeServerState?.addBookmarkShown = true
       }
-      .disabled(self.activeHotline?.status != .loggedIn)
+      .disabled(self.activeHotline?.status != .loggedIn || self.activeHotline?.server == nil || self.isBookmarked != false)
     }
   }
 }

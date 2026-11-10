@@ -116,6 +116,29 @@ struct SidebarRowButtonStyle: ButtonStyle {
 extension FocusedValues {
   @Entry var activeHotlineModel: HotlineState?
   @Entry var activeServerState: ServerState?
+  /// Whether the server in the window in front is in your bookmarks already.
+  @Entry var activeServerIsBookmarked: Bool?
+}
+
+/// Says whether a server's in your bookmarks, by its address and port, for the Server menu, for the
+/// window it's in.
+private struct ServerBookmarkedReporter: View {
+  let server: Server?
+  @Query private var bookmarks: [Bookmark]
+
+  var body: some View {
+    Color.clear
+      .focusedSceneValue(\.activeServerIsBookmarked, self.isBookmarked)
+  }
+
+  private var isBookmarked: Bool {
+    guard let server = self.server else {
+      return false
+    }
+    return self.bookmarks.contains {
+      $0.type == .server && $0.address.caseInsensitiveCompare(server.address) == .orderedSame && $0.port == server.port
+    }
+  }
 }
 
 struct ServerView: View {
@@ -234,6 +257,18 @@ struct ServerView: View {
               .environment(self.model)
               .frame(width: 400, height: 450)
               .presentationSizing(.fitted)
+          }
+          .sheet(isPresented: self.$state.addBookmarkShown) {
+            // Filled in with the server as you're connected to it, to change before it's kept.
+            if let server = self.model.server {
+              let title = self.model.serverTitle
+              ServerBookmarkSheet(
+                name: title.isEmpty ? server.name ?? server.address : title,
+                address: server.port == HotlinePorts.DefaultServerPort ? server.address : "\(server.address):\(server.port)",
+                login: server.login,
+                password: server.password
+              )
+            }
           }
       }
     }
@@ -374,6 +409,11 @@ struct ServerView: View {
     .focusedSceneValue(\.activeHotlineModel, model)
     .focusedSceneValue(\.activeServerState, state)
     .focusedSceneValue(\.focusedAppWindow, .server)
+    // Whether it's in your bookmarks already, for the Server menu's Add Bookmark, from a view of
+    // its own, so a change to the bookmarks doesn't go over this one again.
+    .background {
+      ServerBookmarkedReporter(server: self.model.server)
+    }
     .background {
       NSWindowAccessor { window in
         // This also runs with nil as views leave the window, like when connecting replaces the
