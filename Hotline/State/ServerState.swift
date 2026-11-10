@@ -16,6 +16,11 @@ class ServerState: Equatable {
   var automaticResponseShown: Bool = false
   var fileNavigationPath: [String]? = nil
   var fileFolderPath: [String] = []
+#if os(macOS)
+  /// New Folder or Upload, from the File menu while the Files list doesn't have the keys, waiting
+  /// for Files to be shown, to do it in the folder it shows.
+  var fileCommand: FileListCommand? = nil
+#endif
   /// A private message being written, from the Server menu, the user list or the chat.
   var composeMessage: PrivateMessageCompose? = nil
   /// Someone's info to show, from the user list or the chat.

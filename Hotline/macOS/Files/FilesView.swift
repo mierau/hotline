@@ -93,6 +93,17 @@ struct FilesView: View {
       // For the File menu, while the list has the keys, and not the search field, or a name being
       // edited, which has them for the name, like ⌘⌫, which deletes what's typed.
       .focusedValue(\.fileList, self.rename.file == nil ? self.fileListMenu : nil)
+      // New Folder or Upload, chosen in the File menu while the list didn't have the keys, in the
+      // folder shown, as from the toolbar, once the toolbar's there for New Folder's popover.
+      .onChange(of: self.serverState.fileCommand, initial: true) { _, command in
+        guard let command else {
+          return
+        }
+        self.serverState.fileCommand = nil
+        DispatchQueue.main.async {
+          self.perform(command, on: [], inToolbar: true)
+        }
+      }
       .task {
         if !self.model.filesLoaded {
           let _ = try? await self.model.getFileList()

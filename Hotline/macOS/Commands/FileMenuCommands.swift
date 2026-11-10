@@ -2,6 +2,7 @@ import SwiftUI
 
 /// The File menu: connecting to a server, and disconnecting from the one in front, and what can be
 /// done with what's selected in the Files list that has the keys, with the Finder's keys for it.
+/// New Folder and Upload can be done from anywhere in a server's window, in Files.
 struct FileMenuCommands: Commands {
   @Environment(\.openWindow) private var openWindow
   @FocusedValue(\.fileList) private var fileList: FileListMenu?
@@ -49,16 +50,41 @@ struct FileMenuCommands: Commands {
     }
   }
 
-  /// Off unless a Files list has the keys, and what's selected in it allows it. Its keys are only
-  /// its own while the list has them too, as a menu item that's off still takes its keys, and
-  /// beeps, so ⌘⌫ would stop deleting back to the start of a line in what you're writing, and ⌘I
-  /// would stop being Italic.
+  /// Off unless a Files list has the keys, and what's selected in it allows it, but for New Folder
+  /// and Upload, which go to Files from anywhere else in a server's window. Its keys are only its
+  /// own while it can be done, as a menu item that's off still takes its keys, and beeps, so ⌘⌫
+  /// would stop deleting back to the start of a line in what you're writing, and ⌘I would stop
+  /// being Italic.
   private func button(_ command: FileListCommand) -> some View {
-    Button(self.fileList?.title(of: command) ?? command.title, systemImage: command.systemImage) {
-      self.fileList?.perform(command)
+    let inFiles = self.fileList == nil && self.goesToFiles(command)
+    return Button(self.fileList?.title(of: command) ?? command.title, systemImage: command.systemImage) {
+      if let fileList = self.fileList {
+        fileList.perform(command)
+      }
+      else if inFiles, let state = self.activeServerState {
+        state.selection = .files
+        state.fileCommand = command
+      }
     }
-    .keyboardShortcut(self.fileList != nil ? command.shortcut : nil)
-    .disabled(self.fileList?.allows(command) != true)
+    .keyboardShortcut(self.fileList != nil || inFiles ? command.shortcut : nil)
+    .disabled(self.fileList?.allows(command) != true && !inFiles)
+  }
+
+  /// Whether it's done in Files, in the folder it shows, from wherever you are in a server's window,
+  /// as making a folder there, or uploading to it, doesn't need anything selected, and you're
+  /// allowed to.
+  private func goesToFiles(_ command: FileListCommand) -> Bool {
+    guard self.activeServerState != nil, let hotline = self.activeHotline, hotline.status == .loggedIn else {
+      return false
+    }
+    switch command {
+    case .newFolder:
+      return hotline.access?.contains(.canCreateFolders) == true
+    case .upload:
+      return hotline.access?.contains(.canUploadFiles) == true
+    default:
+      return false
+    }
   }
 }
 
