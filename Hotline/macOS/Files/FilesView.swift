@@ -800,12 +800,19 @@ struct FilesView: View {
     }
   }
 
-  /// What's opened, with a double click or ⌘↓: a folder, on its own, by going into it, and
-  /// anything else, all of it, by downloading it.
+  /// What's opened, with a double click, ⌘↓ or File ▸ Open: a folder, on its own, by going into
+  /// it, a server bookmark, on its own, by connecting to its server, and anything else, all of it,
+  /// by downloading it.
   private func open(_ files: [FileInfo]) {
-    if files.count == 1, let folder = files.first, folder.isFolder {
-      self.folderPath = folder.path
-      return
+    if files.count == 1, let file = files.first {
+      if file.isFolder {
+        self.folderPath = file.path
+        return
+      }
+      if file.isServerBookmark, self.actions.canDownload([file]) {
+        self.actions.connect(toServerIn: file)
+        return
+      }
     }
     self.actions.download(files.filter { self.actions.canDownload([$0]) })
   }
