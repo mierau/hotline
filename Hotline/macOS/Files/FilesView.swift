@@ -549,7 +549,8 @@ struct FilesView: View {
       }
       .environment(\.defaultMinListRowHeight, 28)
       .listStyle(.inset)
-      .serverThemedList(selected: self.selection, in: self.shownFiles)
+      // Every other row in a band, themed or not, which stays put as folders open and close.
+      .serverThemedList(selected: self.selection, in: self.shownFiles, striped: true)
       // A search's results, and a folder, as lists of their own, and not one changed into the
       // other, which the table under it can't always work out the rows' heights for, and which
       // starts the folder at its top.

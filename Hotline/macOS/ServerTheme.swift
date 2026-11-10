@@ -179,6 +179,8 @@ extension EnvironmentValues {
   /// The color of what matters less in a server-themed list's rows, in the theme, or on a selected
   /// row, the selection's.
   @Entry fileprivate var serverSecondaryColor: Color? = nil
+  /// The color of every other row's band, in a striped server-themed list, or nil in one that isn't.
+  @Entry fileprivate var serverListStripes: NSColor? = nil
 }
 
 /// A server-themed list's selection, all of it, and the color and corners its selected rows have in
@@ -303,8 +305,9 @@ extension View {
 
   /// A server-themed list, as above, with more than one row selected at once, all of `selected`, of
   /// `rows`, all of the list's, in the order they're shown, so that selected rows next to each other
-  /// are drawn as one.
-  func serverThemedList<Selection: Hashable>(selected: Set<Selection>, in rows: [Selection]) -> some View {
+  /// are drawn as one. Striped, it has every other row in a faint band, themed or not, as the
+  /// Finder's lists have, which stay where they are as rows come and go. See `ListStripes`.
+  func serverThemedList<Selection: Hashable>(selected: Set<Selection>, in rows: [Selection], striped: Bool = false) -> some View {
     var joined: [AnyHashable: SelectionJoins] = [:]
     for (index, row) in rows.enumerated() where selected.contains(row) {
       joined[AnyHashable(row)] = SelectionJoins(
@@ -312,7 +315,7 @@ extension View {
         below: index < rows.count - 1 && selected.contains(rows[index + 1])
       )
     }
-    return self.modifier(ServerThemedList(selection: Set(selected.map(AnyHashable.init)), joined: joined))
+    return self.modifier(ServerThemedList(selection: Set(selected.map(AnyHashable.init)), joined: joined, striped: striped))
   }
 
   /// A sidebar painted in the server's theme in place of its own background, with light text on a
@@ -436,17 +439,35 @@ private struct ServerThemedList: ViewModifier {
   @Environment(\.serverTheme) private var theme
   let selection: Set<AnyHashable>
   var joined: [AnyHashable: SelectionJoins] = [:]
+  var striped = false
+
+  /// The color of every other row's band, when it's striped: a touch of the theme's text color, or
+  /// the system's own, without one.
+  private var stripes: NSColor? {
+    guard self.striped else {
+      return nil
+    }
+    guard let theme = self.theme else {
+      return NSColor.alternatingContentBackgroundColors[1]
+    }
+    return theme.content.isDarkColor ? NSColor.white.withAlphaComponent(0.05) : NSColor.black.withAlphaComponent(0.04)
+  }
 
   func body(content: Content) -> some View {
     content
       .scrollContentBackground(self.theme == nil ? .automatic : .hidden)
-      .alternatingRowBackgrounds(self.theme == nil ? .enabled : .disabled)
+      // The system's own, without a theme, unless it's striped with bands of its own, which take
+      // their place.
+      .alternatingRowBackgrounds(self.theme == nil && !self.striped ? .enabled : .disabled)
+      .environment(\.serverListStripes, self.stripes)
       // What matters less in the rows, in the theme's hue, or as it is without one.
       .foregroundStyle(.primary, self.theme == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(ServerSecondaryStyle()))
       .environment(\.serverSecondaryColor, self.theme.map { Color(nsColor: $0.secondaryText) })
       // Where the system has its selection, inset as much, and as round, and in a window that isn't in
-      // front, in the system's gray, as the Finder's is.
-      .environment(\.serverListSelection, ServerListSelection(selected: self.selection, color: self.theme?.selection, cornerRadius: 6, joined: self.joined, unemphasized: .unemphasizedSelectedContentBackgroundColor))
+      // front, in the system's gray, as the Finder's is. Striped, it's the rows' own without a theme
+      // too, in the system's color, as the system's goes while rows slide in or out around it, and
+      // comes back after, and the rows' own stays with its row.
+      .environment(\.serverListSelection, ServerListSelection(selected: self.selection, color: self.theme?.selection ?? (self.striped ? .selectedContentBackgroundColor : nil), cornerRadius: 6, joined: self.joined, unemphasized: .unemphasizedSelectedContentBackgroundColor))
   }
 }
 
@@ -528,6 +549,7 @@ private struct ServerThemedRow: ViewModifier {
   @Environment(\.serverAdminColor) private var adminColor
   @Environment(\.serverSecondaryColor) private var secondaryColor
   @Environment(\.serverUnreadColor) private var unreadColor
+  @Environment(\.serverListStripes) private var stripes
   let item: AnyHashable
 
   func body(content: Content) -> some View {
@@ -547,6 +569,11 @@ private struct ServerThemedRow: ViewModifier {
       .listRowBackground(color.map { SelectionCapsule(color: $0, emphasized: emphasized, unemphasized: self.selection?.unemphasized, cornerRadius: self.selection?.cornerRadius ?? 8, joins: self.selection?.joined[self.item] ?? SelectionJoins()) })
       .listRowSeparator(.hidden)
       .background { TableHighlight(isShown: selectionColor == nil) }
+      .background {
+        if let stripes = self.stripes {
+          ListStripes(color: stripes)
+        }
+      }
   }
 }
 
@@ -663,6 +690,131 @@ private struct TableHighlight: NSViewRepresentable {
           }
           view = current.superview
         }
+      }
+    }
+  }
+}
+
+/// Every other row of a list in a faint band, as the system stripes its lists, but drawn behind all
+/// the rows, by the list's table, and not each by its row, as the system's are. The bands stay where
+/// they are as rows come and go, with the rows sliding over them to where they're going, as on lined
+/// paper, and not changing from one row to the next under them as they slide, or going while they
+/// do, as the system's do. As the highlight is, it's found from a row, up through the views it's in,
+/// and put in the table once, for all its rows, which all have one of these.
+private struct ListStripes: NSViewRepresentable {
+  let color: NSColor
+
+  func makeNSView(context: Context) -> Finder {
+    Finder()
+  }
+
+  func updateNSView(_ view: Finder, context: Context) {
+    view.color = self.color
+  }
+
+  final class Finder: NSView {
+    var color: NSColor? {
+      didSet {
+        if self.color != oldValue {
+          self.apply()
+        }
+      }
+    }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      self.apply()
+    }
+
+    // Clicks go to the row.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+      nil
+    }
+
+    /// Right away, as soon as the first row's in the window, before the table's drawn, so it's
+    /// drawn with them from the start. Unlike the highlight, the rows aren't changed by it, which
+    /// would have to wait.
+    private func apply() {
+      guard self.window != nil, let color = self.color else {
+        return
+      }
+      var view = self.superview
+      while let current = view {
+        if let table = current as? NSTableView {
+          Stripes.in(table).color = color
+          return
+        }
+        view = current.superview
+      }
+    }
+  }
+
+  /// The bands, in a table, as big as it is, which is at least as tall as where it's shown, and
+  /// under its rows, at the same places, from the first, which keeps on past the last, as the
+  /// system's do, every row as tall as the first.
+  final class Stripes: NSView {
+    /// How far in from the rows' sides the bands are, and how round, as the selection is.
+    private static let inset: CGFloat = 10
+    private static let cornerRadius: CGFloat = 6
+
+    var color: NSColor = .clear {
+      didSet {
+        if self.color != oldValue {
+          self.needsDisplay = true
+        }
+      }
+    }
+    /// Where the first row is, as last seen, for when there are none.
+    private var first = NSRect(x: 0, y: 0, width: 0, height: 28)
+
+    /// The table's, or one put in it, under its rows.
+    static func `in`(_ table: NSTableView) -> Stripes {
+      if let stripes = table.subviews.lazy.compactMap({ $0 as? Stripes }).first {
+        return stripes
+      }
+      let stripes = Stripes(frame: table.bounds)
+      stripes.autoresizingMask = [.width, .height]
+      table.addSubview(stripes, positioned: .below, relativeTo: nil)
+      return stripes
+    }
+
+    // As the table is, so its rows' places are its own.
+    override var isFlipped: Bool {
+      true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+      nil
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+      super.setFrameSize(newSize)
+      self.needsDisplay = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+      super.viewDidChangeEffectiveAppearance()
+      self.needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+      if let table = self.superview as? NSTableView, table.numberOfRows > 0 {
+        self.first = table.rect(ofRow: 0)
+      }
+      let height = self.first.height
+      guard height > 0 else {
+        return
+      }
+      self.color.setFill()
+      // The second row, and every other one after it, from the first drawn.
+      var row = max(0, Int(((dirtyRect.minY - self.first.minY) / height).rounded(.down)))
+      if row % 2 == 0 {
+        row += 1
+      }
+      while self.first.minY + CGFloat(row) * height < dirtyRect.maxY {
+        let band = NSRect(x: self.first.minX + Self.inset, y: self.first.minY + CGFloat(row) * height, width: self.first.width - 2 * Self.inset, height: height)
+        NSBezierPath(roundedRect: band, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius).fill()
+        row += 2
       }
     }
   }

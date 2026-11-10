@@ -12,9 +12,24 @@ struct FolderItemView: View {
   @State var loading = false
   /// Listing what's in it again, since it was last opened.
   @State private var listing: Task<Void, Never>? = nil
-  
+  /// Whether what's in it is shown: once it's open and listed, all at once, and not until then.
+  @State private var shown: Bool
+
   var file: FileInfo
   let depth: Int
+
+  /// How what's in it slides in and out, between the rows around it.
+  private static let sliding = Animation.easeInOut(duration: 0.25)
+  /// How the arrow turns, as it opens and closes, as the Finder's does.
+  private static let turning = Animation.easeInOut(duration: 0.2)
+
+  init(file: FileInfo, depth: Int) {
+    self.file = file
+    self.depth = depth
+    // Open already, as when it's shown again, what's in it as it was, once it's been listed. Not
+    // before, as when it's shown again while it's first being listed, so it slides in once it is.
+    self._shown = State(initialValue: file.expanded && file.loaded)
+  }
 
   /// How much is in it: as its own listing has it, once it's been listed, which is as up to date as
   /// what's shown in it, or else as the folder it's in has it.
@@ -32,10 +47,11 @@ struct FolderItemView: View {
           file.expanded.toggle()
         }
       } label: {
-        Text(Image(systemName: file.expanded ? "chevron.down" : "chevron.right"))
-          .fontWeight(.semibold)
-          .font(.system(size: 10))
+        Image(systemName: "chevron.right")
+          .font(.system(size: 10, weight: .semibold))
           .foregroundStyle(.serverDisclosure)
+          .rotationEffect(.degrees(file.expanded ? 90 : 0))
+          .animation(Self.turning, value: file.expanded)
       }
       .buttonStyle(.plain)
       .frame(width: 10)
@@ -111,7 +127,9 @@ struct FolderItemView: View {
       }
     }
     // Opened, what's in it, listed again, and shown once it's come, and not what was in it when it
-    // was last open until then, which would only go as the new listing came in, in its place.
+    // was last open until then, which would only go as the new listing came in, in its place. Each
+    // slides in, between the rows around it, and out again as it's closed, however it's closed, by
+    // its arrow or the keys.
     .onChange(of: file.expanded) {
       self.listing?.cancel()
       self.loading = file.expanded
@@ -120,22 +138,50 @@ struct FolderItemView: View {
           let _ = try? await model.getFileList(path: file.path)
           if !Task.isCancelled {
             self.loading = false
+            self.reveal()
           }
         }
+      }
+      else {
+        withAnimation(Self.sliding) {
+          self.shown = false
+        }
+      }
+    }
+    // Listed for the first time, after it was shown again, open, while it was being listed, by the
+    // row that was showing it then.
+    .onChange(of: file.loaded) {
+      if file.loaded, !self.loading {
+        self.reveal()
       }
     }
     // Inside the row's theming, which sets what the list draws for the row, from the outside.
     .fileDragSource(self.file)
     .serverThemedRow(for: self.file)
-    
-    if file.expanded && !self.loading {
-      ForEach(file.children!, id: \.self) { childFile in
+
+    if self.shown, let children = file.children {
+      ForEach(children, id: \.self) { childFile in
         if childFile.isFolder {
           FolderItemView(file: childFile, depth: self.depth + 1).tag(file.id)
         }
         else {
           FileItemView(file: childFile, depth: self.depth + 1).tag(file.id)
         }
+      }
+    }
+  }
+
+  /// What's in it, sliding in, once it's open and listed, on the next turn of the run loop, in an
+  /// update of its own. Not in the one the listing comes in, as what's in it, and how much, which
+  /// isn't animated, and which, the first time, with what's in it new, keeps the list from sliding
+  /// the rows in, showing them all at once instead.
+  private func reveal() {
+    DispatchQueue.main.async {
+      guard self.file.expanded, !self.shown else {
+        return
+      }
+      withAnimation(Self.sliding) {
+        self.shown = true
       }
     }
   }
