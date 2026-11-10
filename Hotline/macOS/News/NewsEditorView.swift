@@ -4,9 +4,8 @@ import SwiftUI
 /// going at the top, then its title, and what it says, in Markdown, styled as the news will show it,
 /// as you write it, with the marks kept but faint, and code blocks colored as chat colors them. The
 /// buttons on the card's bottom edge, and their keys, put the marks around what's selected, or take
-/// them away. A picture dropped in becomes a drawing of it, as on the board. What you write stays
-/// when the sheet's put away without posting it, for the next time, until you leave the server. An
-/// article is only as long as a Hotline field holds, and near that, it says how much more there's
+/// them away. A picture dropped in becomes a drawing of it, as on the board. Cancel throws away
+/// what's written, and asks first, once you've written something in the article. An article is only as long as a Hotline field holds, and near that, it says how much more there's
 /// room for.
 struct NewsEditorView: View {
   @Environment(\.dismiss) private var dismiss
@@ -42,6 +41,9 @@ struct NewsEditorView: View {
   /// How big it is, as it's shown, to keep once it's made bigger or smaller.
   @State private var shown = ShownSize()
   @FocusState private var titleFocused: Bool
+  /// What the article opened with, like a quote, which isn't something you've written.
+  @State private var openedWith = ""
+  @State private var confirmingDiscard = false
 
   private var place: NewsDraft.Place {
     NewsDraft.Place(path: self.path, parentID: self.parentID)
@@ -168,7 +170,12 @@ struct NewsEditorView: View {
 
       ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") {
-          self.dismiss()
+          if self.draft.wrappedValue.text.isWritten(besides: self.openedWith) {
+            self.confirmingDiscard = true
+          }
+          else {
+            self.discard()
+          }
         }
         // In the text's color, as without a theme, and not the theme's, which is Post's.
         .tint(.primary)
@@ -192,17 +199,25 @@ struct NewsEditorView: View {
         draft.text = written.isEmpty ? self.quote : written + "\n\n" + self.quote
         self.draft.wrappedValue = draft
       }
+      self.openedWith = self.draft.wrappedValue.text
       // A new article starts with its title, and a reply, which has one, with what it says.
       if self.draft.wrappedValue.title.isBlank {
         self.titleFocused = true
       }
     }
+    .discardConfirmation(self.isReply ? "Discard this reply?" : "Discard this article?", isPresented: self.$confirmingDiscard, discard: self.discard)
     .onDisappear {
       // Nothing written isn't kept, so a reply opens with the article's title again.
       if let draft = self.model.newsDrafts[self.place], draft.text.isBlank, draft.title == self.title || draft.title.isBlank {
         self.model.newsDrafts[self.place] = nil
       }
     }
+  }
+
+  /// Throws away what's written, and puts the sheet away.
+  private func discard() {
+    self.model.newsDrafts[self.place] = nil
+    self.dismiss()
   }
 
   /// Posts it, and once it's in the news, goes to it there. If it doesn't go through, it's still

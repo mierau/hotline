@@ -8,6 +8,17 @@ struct MessageBoardTests {
 
   // MARK: - Divider Splitting (String-Based)
 
+  @Test func cancelOnlyAsksAboutWhatsBeenWritten() {
+    #expect(!"".isWritten())
+    #expect(!"  \n\t ".isWritten())
+    #expect("hi".isWritten())
+    // Not a quote it opened with, alone, but with something written after it.
+    let quote = "> **Halcyon** wrote:\n> hello"
+    #expect(!quote.isWritten(besides: quote))
+    #expect(!(quote + "\n\n").isWritten(besides: quote))
+    #expect((quote + "\n\nme too").isWritten(besides: quote))
+  }
+
   @Test func dividerBetweenHeaderedPosts() {
     let text = "From Alice (Jan 1 12:00):\rPost one body\r_______________________________________________\rFrom Bob (Jan 2 12:00):\rPost two body"
     let posts = HotlineClient.parseMessageBoard(text).posts

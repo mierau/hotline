@@ -403,6 +403,7 @@ class HotlineState: Equatable {
   }
 
   // Chat
+  /// What you're writing to everyone on the server, while its sheet's open.
   var broadcastMessage: String = ""
   var chat: [ChatMessage] = []
   var chatInput: String = ""
@@ -442,13 +443,14 @@ class HotlineState: Equatable {
   /// A post for the board to show, by its `reference`, from a link to it in chat, or once you've
   /// posted it.
   var boardPostToReveal: String? = nil
-  /// What you're writing for the board and haven't posted, kept when the sheet's put away.
+  /// What you're writing for the board and haven't posted, while its sheet's open, and what a quote
+  /// in a new post opens it with.
   var boardDraft: String = ""
 
   // News
   var news: [NewsInfo] = []
   /// What you're writing for the news and haven't posted, for each topic, or article you're replying
-  /// to, kept when the sheet's put away.
+  /// to, while its sheet's open.
   var newsDrafts: [NewsDraft.Place: NewsDraft] = [:]
   /// What articles say, by where they are, once they've been read from the server.
   var newsArticleTexts: [String: String] = [:]

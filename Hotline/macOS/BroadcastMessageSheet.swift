@@ -2,13 +2,14 @@ import SwiftUI
 
 /// A message for everyone on the server, in Markdown, styled as it's written, but words alone, as a
 /// broadcast is shown centered: bold, italic, code and links, without lists, quotes or code blocks.
-/// What's written stays written, if it's closed without being sent, for next time.
+/// Cancel throws away what's written, and asks first, once something has been.
 struct BroadcastMessageSheet: View {
   @Environment(HotlineState.self) private var model: HotlineState
   @Environment(\.dismiss) private var dismiss
 
   @State private var editor = MarkdownEditor()
   @State private var sending: Bool = false
+  @State private var confirmingDiscard = false
 
   /// How round the message's box is.
   private static let cornerRadius: CGFloat = 6
@@ -63,6 +64,7 @@ struct BroadcastMessageSheet: View {
     .padding(20)
     // Wide enough for the formatting, Cancel and Broadcast, along the bottom.
     .frame(width: 440)
+    .discardConfirmation("Discard this message?", isPresented: self.$confirmingDiscard, discard: self.discard)
     .toolbar {
       if self.sending {
         ToolbarItem {
@@ -80,7 +82,12 @@ struct BroadcastMessageSheet: View {
 
       ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") {
-          self.dismiss()
+          if self.model.broadcastMessage.isWritten() {
+            self.confirmingDiscard = true
+          }
+          else {
+            self.discard()
+          }
         }
       }
 
@@ -96,8 +103,14 @@ struct BroadcastMessageSheet: View {
     }
   }
 
-  /// Sends it, and once it's gone, it's no longer kept for next time. If it doesn't go out, the
-  /// sheet stays open, with it, to try again.
+  /// Throws away what's written, and puts the sheet away.
+  private func discard() {
+    self.model.broadcastMessage = ""
+    self.dismiss()
+  }
+
+  /// Sends it, and once it's gone, puts the sheet away. If it doesn't go out, the sheet stays open,
+  /// with it, to try again.
   private func send(_ message: String) {
     Task {
       self.sending = true

@@ -6,9 +6,8 @@ import SwiftUI
 /// lists, and so does what you write, as you write it, with the marks kept but faint, and code
 /// blocks colored as chat colors them. The buttons at the bottom on the left, and their keys, put
 /// the marks around what's selected, or take them away, as they do for a private message. A picture
-/// dropped in becomes a drawing of it, in characters, as ASCII art. What you
-/// write stays when the sheet's put away without posting it, for the next time, until you leave the
-/// server. A post is only as long as a Hotline field holds, and near that, it says how much more
+/// dropped in becomes a drawing of it, in characters, as ASCII art. Cancel throws away what's
+/// written, and asks first, once you've written something. A post is only as long as a Hotline field holds, and near that, it says how much more
 /// there's room for.
 struct MessageBoardEditorView: View {
   @Environment(\.dismiss) private var dismiss
@@ -23,6 +22,9 @@ struct MessageBoardEditorView: View {
   @State private var editor = MarkdownEditor()
   @State private var posting: Bool = false
   @State private var failed: Bool = false
+  /// What it opened with, like a quote, which isn't something you've written.
+  @State private var openedWith = ""
+  @State private var confirmingDiscard = false
   /// How big it opens: as big as it was last made, or else as it's meant to be.
   @State private var opening: CGSize = {
     let saved = NSSizeFromString(Prefs.shared.boardPostSize)
@@ -92,6 +94,10 @@ struct MessageBoardEditorView: View {
     })
     // As big as it's meant to be, as above.
     .presentationSizing(.fitted)
+    .onAppear {
+      self.openedWith = self.model.boardDraft
+    }
+    .discardConfirmation("Discard this post?", isPresented: self.$confirmingDiscard, discard: self.discard)
     .toolbar {
       if self.posting {
         ToolbarItem {
@@ -109,7 +115,12 @@ struct MessageBoardEditorView: View {
 
       ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") {
-          self.dismiss()
+          if self.model.boardDraft.isWritten(besides: self.openedWith) {
+            self.confirmingDiscard = true
+          }
+          else {
+            self.discard()
+          }
         }
         // In the text's color, as without a theme, and not the theme's, which is Post's.
         .tint(.primary)
@@ -132,6 +143,12 @@ struct MessageBoardEditorView: View {
   /// window has it, or else the board.
   private var placeholder: String {
     self.model.serverTitle.isBlank ? "Write a post for the board…" : "Write a post for \(self.model.serverTitle)…"
+  }
+
+  /// Throws away what's written, and puts the sheet away.
+  private func discard() {
+    self.model.boardDraft = ""
+    self.dismiss()
   }
 
   /// Posts it, and once it's on the board, goes to it there. If it doesn't go through, it's still

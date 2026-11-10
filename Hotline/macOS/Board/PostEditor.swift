@@ -379,3 +379,27 @@ private struct PostFormatButtonStyle: ButtonStyle {
       .animation(.easeOut(duration: 0.12), value: self.isOn)
   }
 }
+
+// MARK: - Discarding
+
+extension String {
+  /// Whether something's been written, besides what it opened with, like a quote, and more than
+  /// spaces and line breaks, which Cancel asks about before throwing it away.
+  func isWritten(besides opening: String = "") -> Bool {
+    !self.isBlank && self.trimmingCharacters(in: .whitespacesAndNewlines) != opening.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
+extension View {
+  /// Asks before what's written in a sheet is thrown away, as its Cancel does: Discard it, or keep
+  /// editing it.
+  func discardConfirmation(_ title: String, isPresented: Binding<Bool>, discard: @escaping () -> Void) -> some View {
+    self.alert(title, isPresented: isPresented) {
+      Button("Discard", role: .destructive, action: discard)
+      Button("Keep Editing", role: .cancel) {
+      }
+    } message: {
+      Text("What you've written will be lost.")
+    }
+  }
+}

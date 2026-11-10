@@ -648,6 +648,7 @@ struct ComposeMessageView: View {
   @State private var recipientEdited = false
   @State private var sending = false
   @State private var failed = false
+  @State private var confirmingDiscard = false
   /// How big it opens: as big as it was last made, or else as it's meant to be.
   @State private var opening: CGSize = {
     let saved = NSSizeFromString(Prefs.shared.privateMessageSize)
@@ -835,9 +836,15 @@ struct ComposeMessageView: View {
           .padding(.leading, -10)
       }
 
+      // Asking first, once something's been written, as it's thrown away.
       ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") {
-          self.dismiss()
+          if self.text.isWritten() {
+            self.confirmingDiscard = true
+          }
+          else {
+            self.dismiss()
+          }
         }
         // In the text's color, as without a theme, and not the theme's, which is Post's.
         .tint(.primary)
@@ -856,6 +863,9 @@ struct ComposeMessageView: View {
     }
     .onChange(of: self.recipientName) {
       self.recipientEdited = true
+    }
+    .discardConfirmation("Discard this message?", isPresented: self.$confirmingDiscard) {
+      self.dismiss()
     }
     .onAppear {
       // Without anyone to send it to yet, it starts with who it's to.
