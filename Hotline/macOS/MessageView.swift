@@ -829,7 +829,7 @@ struct ComposeMessageView: View {
       // one place a sheet's bottom bar has on that side, which is for a destructive button but
       // takes anything, and off while who it's to is being typed, which has none.
       ToolbarItem(placement: .destructiveAction) {
-        PostFormattingBar(editor: self.editor, inToolbar: true)
+        PostFormattingBar(editor: self.editor)
           .disabled(self.recipientFocused)
       }
 

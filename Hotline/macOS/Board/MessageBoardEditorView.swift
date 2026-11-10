@@ -109,7 +109,7 @@ struct MessageBoardEditorView: View {
       // The formatting, at the bottom on the left, across from Cancel and Post, as the private
       // message sheet has it. See there.
       ToolbarItem(placement: .destructiveAction) {
-        PostFormattingBar(editor: self.editor, inToolbar: true)
+        PostFormattingBar(editor: self.editor)
       }
 
       ToolbarItem(placement: .cancellationAction) {

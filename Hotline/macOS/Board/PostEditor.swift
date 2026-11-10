@@ -11,8 +11,6 @@ struct PostEditor: NSViewRepresentable {
 
   @Binding var text: String
   let controller: MarkdownEditor
-  /// Room past the last line, to scroll it up past what's over the bottom of the editor.
-  var bottomInset: CGFloat = 0
   /// Whether you start writing here, once it's shown, or somewhere else, as in a title.
   var startsHere = true
   /// How far in from its edges the text is, as far as what's around it is in.
@@ -63,7 +61,6 @@ struct PostEditor: NSViewRepresentable {
     scrollView.drawsBackground = false
     scrollView.scrollerStyle = .overlay
     scrollView.automaticallyAdjustsContentInsets = false
-    scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: self.bottomInset, right: 0)
 
     // Ready to write in, once it's in the sheet, at the end of what's written.
     let startsHere = self.startsHere
@@ -253,33 +250,16 @@ struct ResizableSheet: NSViewRepresentable {
 
 /// The formatting a post, or a message, can have, a click away: the styles, as the Format menu has
 /// them, then Link, with what's on where you're writing shown as on, as choosing it again takes it
-/// off. In a sheet's bottom bar, or in glass over the bottom of what's written. Their keys are the
-/// Format menu's.
+/// off. In a sheet's bottom bar, on the left, across from its buttons. Their keys are the Format
+/// menu's.
 struct PostFormattingBar: View {
-  /// How tall it is: its buttons, and the glass around them.
-  static let height: CGFloat = PostFormatButton.height + 2 * Self.padding
-  private static let padding: CGFloat = 3
   /// How far it's moved along a sheet's bottom bar from where the bar puts it: back toward the
   /// sheet's edge, as its first button's wider than its symbol, but not all the way.
-  private static let toolbarLeading: CGFloat = -6
+  private static let leading: CGFloat = -6
 
   let editor: MarkdownEditor
-  /// Whether it's in a sheet's bottom bar, without glass of its own around its buttons.
-  var inToolbar = false
 
   var body: some View {
-    if self.inToolbar {
-      self.buttons
-        .padding(.leading, Self.toolbarLeading)
-    }
-    else {
-      self.buttons
-        .padding(Self.padding)
-        .modifier(PostFormattingBackground())
-    }
-  }
-
-  private var buttons: some View {
     HStack(spacing: 0) {
       ForEach(MarkdownStyle.allCases, id: \.self) { style in
         PostFormatButton(style.title, systemImage: style.systemImage, shortcut: style.shortcut, isOn: self.editor.activeStyles.contains(style)) {
@@ -299,18 +279,7 @@ struct PostFormattingBar: View {
       }
       .disabled(!self.editor.allowsLink)
     }
-  }
-}
-
-/// Glass, from macOS 26, or before it, a fill.
-private struct PostFormattingBackground: ViewModifier {
-  func body(content: Content) -> some View {
-    if #available(macOS 26, *) {
-      content.glassEffect(.regular, in: .capsule)
-    }
-    else {
-      content.background(.fill.quaternary, in: .capsule)
-    }
+    .padding(.leading, Self.leading)
   }
 }
 

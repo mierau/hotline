@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// Writing a news article, or a reply to one, in a card like the ones on the board, with where it's
-/// going at the top, then its title, and what it says, in Markdown, styled as the news will show it,
-/// as you write it, with the marks kept but faint, and code blocks colored as chat colors them. The
-/// buttons on the card's bottom edge, and their keys, put the marks around what's selected, or take
-/// them away. A picture dropped in becomes a drawing of it, as on the board. Cancel throws away
-/// what's written, and asks first, once you've written something in the article. An article is only as long as a Hotline field holds, and near that, it says how much more there's
-/// room for.
+/// Writing a news article, or a reply to one, across all of the sheet, as a post for the board is
+/// written, with where it's going in a header at the top, then its title, and what it says, in
+/// Markdown, styled as the news will show it, as you write it, with the marks kept but faint, and
+/// code blocks colored as chat colors them. The buttons at the bottom on the left, and their keys,
+/// put the marks around what's selected, or take them away, and are off while the title's being
+/// written. A picture dropped in becomes a drawing of it, as on the board. Cancel throws away
+/// what's written, and asks first, once you've written something in the article. An article is
+/// only as long as a Hotline field holds, and near that, it says how much more there's room for.
 struct NewsEditorView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(HotlineState.self) private var model: HotlineState
@@ -23,8 +24,9 @@ struct NewsEditorView: View {
   /// reply to.
   var quote: String = ""
 
-  /// How round the card's corners are.
-  private static let cornerRadius: CGFloat = 12
+  /// How far in from the sheet's sides the title and article are, as far as a post for the board is,
+  /// and how far the article is from the line over it.
+  private static let inset = NSSize(width: 24, height: 16)
   /// How near the most an article can be before it says how much more there's room for.
   private static let roomShown = 2_000
   /// As small as there's room for the title and the article in.
@@ -64,93 +66,76 @@ struct NewsEditorView: View {
     let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
     let room = Markdown.maximumLength - text.utf8.count
 
-    VStack(alignment: .leading, spacing: 16) {
-      // The article, as it'll be in the news, which is all there is to say what it's for.
-      VStack(spacing: 0) {
-        HStack(spacing: 8) {
-          if self.isReply {
-            Image(systemName: "arrowshape.turn.up.left")
-              .foregroundStyle(.secondary)
-              .frame(width: 16, height: 16)
-          }
-          else {
-            Image("News Category")
-              .resizable()
-              .scaledToFit()
-              .frame(width: 16, height: 16)
-          }
-          Text(self.editorTitle)
-            .fontWeight(.semibold)
-            .lineLimit(1)
-            .truncationMode(.middle)
-          Spacer()
-          // If it didn't go through, that it didn't, or near the most there's room for, how much
-          // more there is, or how much less it has to be.
-          if self.failed {
-            Label("not posted", systemImage: "exclamationmark.circle.fill")
-              .foregroundStyle(.red)
-              .help("It didn't go through. Try posting it again.")
-              .transition(.opacity)
-          }
-          else if room < Self.roomShown {
-            Text(room >= 0 ? "\(room.formatted()) left" : "\((-room).formatted()) too long")
-              .monospacedDigit()
-              .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
-              .help("An article can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
-          }
+    // The article, as it'll be in the news, which is all there is to say what it's for: where it's
+    // going, in a header as tall as the board's, then its title, and what it says, under it, to the
+    // bottom bar, with its formatting.
+    VStack(spacing: 0) {
+      HStack(spacing: 8) {
+        if self.isReply {
+          Image(systemName: "arrowshape.turn.up.left.fill")
+            .foregroundStyle(.secondary)
+            .frame(width: 16, height: 16)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, PostEditor.inset.width)
-
-        VStack(spacing: 0) {
-          // Its title, as the news shows it over the article, and Return goes on to the article.
-          TextField("Title", text: self.draft.title, axis: .vertical)
-            .textFieldStyle(.plain)
-            .font(.system(size: 17, weight: .semibold))
-            .lineLimit(1...3)
-            .focused(self.$titleFocused)
-            .onSubmit {
-              self.titleFocused = false
-              if let textView = self.editor.textView {
-                textView.window?.makeFirstResponder(textView)
-              }
-            }
-            .padding(.horizontal, PostEditor.inset.width)
-            .padding(.top, PostEditor.inset.height)
-            .padding(.bottom, 10)
-          Divider()
-            .padding(.horizontal, PostEditor.inset.width)
-          // With room at the bottom to scroll the last lines up past the formatting.
-          PostEditor(text: self.draft.text, controller: self.editor, bottomInset: PostFormattingBar.height / 2 + 6, startsHere: !title.isEmpty)
-            .overlay(alignment: .topLeading) {
-              if draft.text.isEmpty {
-                Text(self.isReply ? "Write your reply…" : "Write an article for \(self.editorTitle)…")
-                  .foregroundStyle(.tertiary)
-                  .padding(.horizontal, PostEditor.inset.width)
-                  .padding(.vertical, PostEditor.inset.height)
-                  .allowsHitTesting(false)
-              }
-            }
+        else {
+          Image("News Category")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 16, height: 16)
         }
-        .serverBackground(.post)
-        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: Self.cornerRadius - 1, bottomTrailingRadius: Self.cornerRadius - 1))
-        // A point of the header's color around it, as a line.
-        .padding([.horizontal, .bottom], 1)
+        Text(self.editorTitle)
+          .fontWeight(.semibold)
+          .lineLimit(1)
+          .truncationMode(.middle)
+        Spacer()
+        // If it didn't go through, that it didn't, or near the most there's room for, how much
+        // more there is, or how much less it has to be.
+        if self.failed {
+          Label("not posted", systemImage: "exclamationmark.circle.fill")
+            .foregroundStyle(.red)
+            .help("It didn't go through. Try posting it again.")
+            .transition(.opacity)
+        }
+        else if room < Self.roomShown {
+          Text(room >= 0 ? "\(room.formatted()) left" : "\((-room).formatted()) too long")
+            .monospacedDigit()
+            .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+            .help("An article can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
+        }
       }
-      // The header's color, at the top, and around the rest.
+      .padding(.vertical, 16)
+      .padding(.horizontal, Self.inset.width)
       .serverBackground(.postHeader)
-      .clipShape(.rect(cornerRadius: Self.cornerRadius))
-      // The formatting, floating over the card's bottom edge in the middle, half on it, and off
-      // while the title's being written, which has none.
-      .overlay(alignment: .bottom) {
-        PostFormattingBar(editor: self.editor)
-          .disabled(self.titleFocused)
-          .alignmentGuide(.bottom) { $0[VerticalAlignment.center] }
-      }
-      // Room for the half that's past it.
-      .padding(.bottom, PostFormattingBar.height / 2)
+
+      // Its title, as the news shows it over the article, and Return goes on to the article.
+      TextField("Title", text: self.draft.title, axis: .vertical)
+        .textFieldStyle(.plain)
+        .font(.system(size: 17, weight: .semibold))
+        .lineLimit(1...3)
+        .focused(self.$titleFocused)
+        .onSubmit {
+          self.titleFocused = false
+          if let textView = self.editor.textView {
+            textView.window?.makeFirstResponder(textView)
+          }
+        }
+        .padding(.horizontal, Self.inset.width)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
+      Divider()
+        .serverThemedDivider()
+        .padding(.horizontal, Self.inset.width)
+      PostEditor(text: self.draft.text, controller: self.editor, startsHere: !title.isEmpty, inset: Self.inset)
+        .overlay(alignment: .topLeading) {
+          if draft.text.isEmpty {
+            Text(self.isReply ? "Write your reply…" : "Write an article for \(self.editorTitle)…")
+              .foregroundStyle(.tertiary)
+              .padding(.horizontal, Self.inset.width)
+              .padding(.vertical, Self.inset.height)
+              .allowsHitTesting(false)
+          }
+        }
     }
-    .padding(20)
+    .serverBackground(.post)
     .frame(minWidth: Self.smallest.width, idealWidth: self.opening.width, maxWidth: .infinity, minHeight: Self.smallest.height, idealHeight: self.opening.height, maxHeight: .infinity)
     .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
       self.shown.size = size
@@ -166,6 +151,13 @@ struct NewsEditorView: View {
           ProgressView()
             .controlSize(.small)
         }
+      }
+
+      // The formatting, at the bottom on the left, across from Cancel and Post, as the private
+      // message sheet has it, and off while the title's being written, which has none. See there.
+      ToolbarItem(placement: .destructiveAction) {
+        PostFormattingBar(editor: self.editor)
+          .disabled(self.titleFocused)
       }
 
       ToolbarItem(placement: .cancellationAction) {
