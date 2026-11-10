@@ -630,8 +630,6 @@ struct ComposeMessageView: View {
     self.quoting != nil
   }
 
-  /// How near the most a message can be before it says how much more there's room for.
-  private static let roomShown = 2_000
   /// As small as there's room for who it's to and what it says in.
   private static let smallest = CGSize(width: 420, height: 320)
   /// How big who it's to is written, a little bigger than what it says.
@@ -764,7 +762,7 @@ struct ComposeMessageView: View {
             .transition(.opacity)
         }
         Spacer()
-        self.status(room: room)
+        self.status
       }
       .padding(.vertical, 18)
       .padding(.horizontal, Self.inset.width)
@@ -835,7 +833,7 @@ struct ComposeMessageView: View {
 
       // Asking first, once something's been written, as it's thrown away.
       ToolbarItem(placement: .cancellationAction) {
-        Button("Cancel") {
+        PostCancelButton(room: room, what: "A message") {
           if self.text.isWritten() {
             self.confirmingDiscard = true
           }
@@ -843,8 +841,6 @@ struct ComposeMessageView: View {
             self.dismiss()
           }
         }
-        // In the text's color, as without a theme, and not the theme's, which is Post's.
-        .tint(.primary)
       }
 
       ToolbarItem(placement: .confirmationAction) {
@@ -883,21 +879,14 @@ struct ComposeMessageView: View {
     return !name.isEmpty && !self.recipientFocused ? "Not Online" : nil
   }
 
-  /// What's at the right of who it's to: that it didn't go through, or near the most there's room
-  /// for, how much more there is, or how much less it has to be.
+  /// What's at the right of who it's to: that it didn't go through, if it didn't.
   @ViewBuilder
-  private func status(room: Int) -> some View {
+  private var status: some View {
     if self.failed {
       Label("not sent", systemImage: "exclamationmark.circle.fill")
         .foregroundStyle(.red)
         .help("It didn't go through. Try sending it again.")
         .transition(.opacity)
-    }
-    else if room < Self.roomShown {
-      Text(room >= 0 ? "\(room.formatted()) left" : "\((-room).formatted()) too long")
-        .monospacedDigit()
-        .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
-        .help("A message can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
     }
   }
 

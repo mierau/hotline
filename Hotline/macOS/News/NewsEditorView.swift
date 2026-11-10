@@ -8,7 +8,7 @@ import SwiftUI
 /// while the title's being written. A picture dropped in becomes a drawing of it, as on the board.
 /// Cancel throws away what's written, and asks first, once you've written something in the
 /// article. An article is only as long as a Hotline field holds, and near that, it says how much
-/// more there's room for.
+/// more there's room for, beside Cancel.
 struct NewsEditorView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(HotlineState.self) private var model: HotlineState
@@ -28,8 +28,6 @@ struct NewsEditorView: View {
   /// How far in from the sheet's sides the title and article are, as far as a post for the board is,
   /// and how far the article is from the line over it.
   private static let inset = NSSize(width: 24, height: 16)
-  /// How near the most an article can be before it says how much more there's room for.
-  private static let roomShown = 2_000
   /// As small as there's room for the title and the article in.
   private static let smallest = CGSize(width: 440, height: 420)
 
@@ -88,22 +86,15 @@ struct NewsEditorView: View {
           .lineLimit(1)
           .truncationMode(.middle)
         Spacer()
-        // If it didn't go through, that it didn't, or near the most there's room for, how much
-        // more there is, or how much less it has to be.
+        // If it didn't go through, that it didn't.
         if self.failed {
           Label("not posted", systemImage: "exclamationmark.circle.fill")
             .foregroundStyle(.red)
             .help("It didn't go through. Try posting it again.")
             .transition(.opacity)
         }
-        else if room < Self.roomShown {
-          Text(room >= 0 ? "\(room.formatted()) left" : "\((-room).formatted()) too long")
-            .monospacedDigit()
-            .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
-            .help("An article can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
-        }
         // A reply's from you, across from who it's to, with your icon and name, as the board's post
-        // sheet has them, a little apart from how much room is left.
+        // sheet has them, a little apart from that.
         if self.isReply {
           HStack(spacing: 8) {
             UserIconView(iconID: self.model.ownIconID)
@@ -173,7 +164,7 @@ struct NewsEditorView: View {
       }
 
       ToolbarItem(placement: .cancellationAction) {
-        Button("Cancel") {
+        PostCancelButton(room: room, what: "An article") {
           if self.draft.wrappedValue.text.isWritten(besides: self.openedWith) {
             self.confirmingDiscard = true
           }
@@ -181,8 +172,6 @@ struct NewsEditorView: View {
             self.discard()
           }
         }
-        // In the text's color, as without a theme, and not the theme's, which is Post's.
-        .tint(.primary)
       }
 
       ToolbarItem(placement: .confirmationAction) {

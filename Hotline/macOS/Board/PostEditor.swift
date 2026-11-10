@@ -283,6 +283,53 @@ struct PostFormattingBar: View {
   }
 }
 
+// MARK: - Room
+
+/// How much more there's room for in what's written, as a number alone, once it's near the most a
+/// Hotline field holds, and nothing before that, which goes below nothing, in red, once it's too
+/// long, as what it's sent with is off then.
+struct PostRoomLeft: View {
+  /// How near the most it can be before it says how much more there's room for.
+  private static let shown = 100
+
+  /// How much more there's room for: the most there can be, less what's written, and less than
+  /// nothing once it's too long.
+  let room: Int
+  /// What's written, as its help calls it: "A post", "An article", "A message".
+  let what: String
+
+  var body: some View {
+    if self.room < Self.shown {
+      Text(self.room.formatted())
+        .monospacedDigit()
+        .foregroundStyle(self.room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+        // All of it, as the bar would cut it short otherwise, and widen Cancel.
+        .fixedSize()
+        .help("\(self.what) can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
+    }
+  }
+}
+
+/// Cancel, in a sheet's bottom bar, with how much more there's room for beside it, as the bar has
+/// one place on that side, which takes one item, and the text's color, as without a theme, and not
+/// the theme's, which is the confirming button's.
+struct PostCancelButton: View {
+  let room: Int
+  /// What's written, as the room's help calls it.
+  let what: String
+  let action: () -> Void
+
+  var body: some View {
+    HStack(spacing: 12) {
+      PostRoomLeft(room: self.room, what: self.what)
+      Button("Cancel", action: self.action)
+        // Escape, as it'd be on its own there.
+        .keyboardShortcut(.cancelAction)
+        .tint(.primary)
+    }
+  }
+}
+
 /// A formatting button: its symbol, in a capsule that's filled while what it's for is on, faintly
 /// while the pointer's over it, and that gives a little as it's pressed, and its name and its key in
 /// the Format menu as its help.

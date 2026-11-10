@@ -7,8 +7,8 @@ import SwiftUI
 /// blocks colored as chat colors them. The buttons at the bottom on the left, and their keys, put
 /// the marks around what's selected, or take them away, as they do for a private message. A picture
 /// dropped in becomes a drawing of it, in characters, as ASCII art. Cancel throws away what's
-/// written, and asks first, once you've written something. A post is only as long as a Hotline field holds, and near that, it says how much more
-/// there's room for.
+/// written, and asks first, once you've written something. A post is only as long as a Hotline
+/// field holds, and near that, it says how much more there's room for, beside Cancel.
 struct MessageBoardEditorView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(HotlineState.self) private var model: HotlineState
@@ -16,8 +16,6 @@ struct MessageBoardEditorView: View {
   /// How far in from the sheet's edges the post is, as far as a post on the board is in from its
   /// card's.
   private static let inset = NSSize(width: 24, height: 24)
-  /// How near the most a post can be before it says how much more there's room for.
-  private static let roomShown = 2_000
 
   @State private var editor = MarkdownEditor()
   @State private var posting: Bool = false
@@ -50,19 +48,12 @@ struct MessageBoardEditorView: View {
           .fontWeight(.semibold)
           .lineLimit(1)
         Spacer()
-        // When it is, or if it didn't go through, that it didn't, or near the most there's room for,
-        // how much more there is, or how much less it has to be.
+        // When it is, or if it didn't go through, that it didn't.
         if self.failed {
           Label("not posted", systemImage: "exclamationmark.circle.fill")
             .foregroundStyle(.red)
             .help("It didn't go through. Try posting it again.")
             .transition(.opacity)
-        }
-        else if room < Self.roomShown {
-          Text(room >= 0 ? "\(room.formatted()) left" : "\((-room).formatted()) too long")
-            .monospacedDigit()
-            .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
-            .help("A post can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
         }
         else {
           Text("now")
@@ -113,7 +104,7 @@ struct MessageBoardEditorView: View {
       }
 
       ToolbarItem(placement: .cancellationAction) {
-        Button("Cancel") {
+        PostCancelButton(room: room, what: "A post") {
           if self.model.boardDraft.isWritten(besides: self.openedWith) {
             self.confirmingDiscard = true
           }
@@ -121,8 +112,6 @@ struct MessageBoardEditorView: View {
             self.discard()
           }
         }
-        // In the text's color, as without a theme, and not the theme's, which is Post's.
-        .tint(.primary)
       }
 
       ToolbarItem(placement: .confirmationAction) {
