@@ -104,6 +104,8 @@ struct ChatInputField: NSViewRepresentable {
     context.coordinator.use(Markdown.Colors(theme: context.environment.serverTheme), in: textView)
     // A generic one for an icon this copy of Hotline doesn't have.
     textView.icon = self.iconID.flatMap { HotlineState.getClassicIcon($0) ?? NSImage(named: "User") }
+    // Dimmed while the window isn't in front, as the sidebar's icons are.
+    textView.dimsIcon = context.environment.controlActiveState == .inactive
     // Never overwrite the text view's string while the IME is composing
     // (has marked text). Doing so clears the uncommitted composition,
     // causing input to vanish — especially when text wraps to a new line.
@@ -203,6 +205,13 @@ class ChatInputTextView: MarkdownEditingTextView {
       self.updateInsets()
       // Another icon can be another width.
       self.updateIconPosition()
+    }
+  }
+
+  /// Whether your icon's dimmed, as the sidebar's icons are while the window isn't in front.
+  var dimsIcon = false {
+    didSet {
+      self.iconView.alphaValue = self.dimsIcon ? 0.5 : 1
     }
   }
 
