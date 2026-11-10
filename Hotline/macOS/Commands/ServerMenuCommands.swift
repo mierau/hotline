@@ -43,22 +43,16 @@ struct ServerMenuCommands: Commands {
       .disabled(self.activeHotline?.status != .loggedIn || self.activeHotline?.access?.contains(.canSendMessages) != true)
       .keyboardShortcut(.init("n"), modifiers: .command)
 
-      Button("Broadcast Message...", systemImage: "megaphone") {
-        self.activeServerState?.broadcastShown = true
-      }
-      .disabled(self.activeHotline?.access?.contains(.canBroadcast) != true)
-      // ⌘B is Bold, in the Format menu.
-      .keyboardShortcut(.init("b"), modifiers: [.command, .shift])
-
-      Button("Manage Accounts...", systemImage: "person.2") {
-        self.activeServerState?.accountsShown = true
-      }
-      .disabled(self.activeHotline?.status != .loggedIn || self.activeHotline?.access?.contains(.canOpenUsers) != true)
-
       Divider()
 
-      // Yours on this server, for this window, as Settings has them when it opens: private messages,
-      // then private chat.
+      // Yours on this server, for this window, as Settings has them when it opens: private chat,
+      // then private messages, with what's sent back to them.
+      Toggle("Refuse Private Chat Invites", isOn: Binding(
+        get: { self.activeHotline?.refusePrivateChat == true },
+        set: { self.activeHotline?.setOptions(refusePrivateChat: $0) }
+      ))
+      .disabled(self.activeHotline == nil)
+
       Toggle("Refuse Private Messages", isOn: Binding(
         get: { self.activeHotline?.refusePrivateMessages == true },
         set: { self.activeHotline?.setOptions(refusePrivateMessages: $0) }
@@ -74,11 +68,17 @@ struct ServerMenuCommands: Commands {
 
       Divider()
 
-      Toggle("Refuse Private Chat Invites", isOn: Binding(
-        get: { self.activeHotline?.refusePrivateChat == true },
-        set: { self.activeHotline?.setOptions(refusePrivateChat: $0) }
-      ))
-      .disabled(self.activeHotline == nil)
+      Button("Broadcast Message...", systemImage: "megaphone") {
+        self.activeServerState?.broadcastShown = true
+      }
+      .disabled(self.activeHotline?.access?.contains(.canBroadcast) != true)
+      // ⌘B is Bold, in the Format menu.
+      .keyboardShortcut(.init("b"), modifiers: [.command, .shift])
+
+      Button("Manage Accounts...", systemImage: "person.2") {
+        self.activeServerState?.accountsShown = true
+      }
+      .disabled(self.activeHotline?.status != .loggedIn || self.activeHotline?.access?.contains(.canOpenUsers) != true)
 
       Divider()
 

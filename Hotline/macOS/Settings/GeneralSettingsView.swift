@@ -13,10 +13,11 @@ struct GeneralSettingsView: View {
         }
       }
 
-      // Over this and the automatic reply, which go together.
+      // Over this and the automatic reply, which go together, in the Server menu's order: private
+      // chat, then private messages, next to what's sent back to them.
       Section("Private Messages") {
-        Toggle("Refuse private messages", isOn: $preferences.refusePrivateMessages)
         Toggle("Refuse private chat invites", isOn: $preferences.refusePrivateChat)
+        Toggle("Refuse private messages", isOn: $preferences.refusePrivateMessages)
       }
 
       // The reply shown whether it's on or not, to write ahead of time and turn on later.
