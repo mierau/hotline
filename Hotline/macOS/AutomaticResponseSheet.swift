@@ -82,7 +82,6 @@ struct AutomaticResponseSheet: View {
       // sheet has it. See there.
       ToolbarItem(placement: .destructiveAction) {
         PostFormattingBar(editor: self.editor, inToolbar: true)
-          .padding(.leading, -10)
       }
 
       ToolbarItem(placement: .cancellationAction) {

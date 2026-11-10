@@ -831,9 +831,6 @@ struct ComposeMessageView: View {
       ToolbarItem(placement: .destructiveAction) {
         PostFormattingBar(editor: self.editor, inToolbar: true)
           .disabled(self.recipientFocused)
-          // The first button's symbol at the bar's edge, as the To row's words are, and not where
-          // its button starts, which is wider than it.
-          .padding(.leading, -10)
       }
 
       // Asking first, once something's been written, as it's thrown away.

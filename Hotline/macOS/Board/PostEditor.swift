@@ -259,6 +259,9 @@ struct PostFormattingBar: View {
   /// How tall it is: its buttons, and the glass around them.
   static let height: CGFloat = PostFormatButton.height + 2 * Self.padding
   private static let padding: CGFloat = 3
+  /// How far it's moved along a sheet's bottom bar from where the bar puts it: back toward the
+  /// sheet's edge, as its first button's wider than its symbol, but not all the way.
+  private static let toolbarLeading: CGFloat = -6
 
   let editor: MarkdownEditor
   /// Whether it's in a sheet's bottom bar, without glass of its own around its buttons.
@@ -267,6 +270,7 @@ struct PostFormattingBar: View {
   var body: some View {
     if self.inToolbar {
       self.buttons
+        .padding(.leading, Self.toolbarLeading)
     }
     else {
       self.buttons
