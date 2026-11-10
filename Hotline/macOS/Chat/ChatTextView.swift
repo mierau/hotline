@@ -683,11 +683,11 @@ struct ChatTextView: NSViewRepresentable {
       // Icon attachment
       if let image = NSImage(named: "Server Message") {
         let attachment = NSTextAttachment()
-        attachment.image = NSImage(size: NSSize(width: 20, height: 20), flipped: true) { rect in
+        attachment.image = NSImage(size: NSSize(width: 28, height: 20), flipped: true) { rect in
           image.draw(in: rect)
           return true
         }
-        attachment.bounds = CGRect(x: 0, y: -4, width: 20, height: 20)
+        attachment.bounds = CGRect(x: 0, y: -4, width: 28, height: 20)
         result.append(NSAttributedString(attachment: attachment))
         result.append(NSAttributedString(string: "  "))
       }

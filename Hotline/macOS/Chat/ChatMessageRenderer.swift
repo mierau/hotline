@@ -439,7 +439,7 @@ enum ChatMessageRenderer {
     if let image = NSImage(named: "Server Message") {
       let attachment = NSTextAttachment()
       attachment.image = image
-      attachment.bounds = CGRect(x: 0, y: -4, width: 20, height: 20)
+      attachment.bounds = CGRect(x: 0, y: -4, width: 28, height: 20)
       text.append(NSAttributedString(attachment: attachment))
       text.append(NSAttributedString(string: "  "))
     }

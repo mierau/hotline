@@ -9,7 +9,7 @@ struct ServerMessageView: View {
         .symbolRenderingMode(.multicolor)
         .resizable()
         .scaledToFit()
-        .frame(width: 20, height: 20)
+        .frame(width: 28, height: 20)
       Text(message)
         .fontWeight(.semibold)
         .lineSpacing(4)
