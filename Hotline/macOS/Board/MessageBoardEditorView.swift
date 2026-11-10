@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Writing a post for the board, in a card like the ones there, with your name and icon at the top
-/// as everyone's are, so it's your post as it'll be. The board shows Markdown's bold, italic,
-/// underline, strikethrough, code, code blocks, links, headings, quotes and lists, and so does what
-/// you write, as you write it, with the marks kept but faint, and code blocks colored as chat
-/// colors them. The
-/// buttons on the post's bottom edge, and their keys, put the marks around what's selected, or take
-/// them away. A picture dropped in becomes a drawing of it, in characters, as ASCII art. What you
+/// Writing a post for the board, across all of the sheet, as a post is across the board, with your
+/// name and icon at the top as everyone's are, so it's your post as it'll be. The board shows
+/// Markdown's bold, italic, underline, strikethrough, code, code blocks, links, headings, quotes and
+/// lists, and so does what you write, as you write it, with the marks kept but faint, and code
+/// blocks colored as chat colors them. The buttons at the bottom on the left, and their keys, put
+/// the marks around what's selected, or take them away, as they do for a private message. A picture
+/// dropped in becomes a drawing of it, in characters, as ASCII art. What you
 /// write stays when the sheet's put away without posting it, for the next time, until you leave the
 /// server. A post is only as long as a Hotline field holds, and near that, it says how much more
 /// there's room for.
@@ -14,8 +14,9 @@ struct MessageBoardEditorView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(HotlineState.self) private var model: HotlineState
 
-  /// How round the post's corners are.
-  private static let cornerRadius: CGFloat = 12
+  /// How far in from the sheet's edges the post is, as far as a post on the board is in from its
+  /// card's.
+  private static let inset = NSSize(width: 24, height: 24)
   /// How near the most a post can be before it says how much more there's room for.
   private static let roomShown = 2_000
 
@@ -38,65 +39,50 @@ struct MessageBoardEditorView: View {
     let post = MessageBoardPost.cleaned(self.model.boardDraft)
     let room = Markdown.maximumLength - post.utf8.count
 
-    VStack(alignment: .leading, spacing: 16) {
-      // The post, as it'll be on the board, which is all there is to say what it's for.
-      VStack(spacing: 0) {
-        HStack(spacing: 8) {
-          UserIconView(iconID: self.model.ownIconID)
-          Text(self.model.ownUser?.name ?? Prefs.shared.username)
-            .fontWeight(.semibold)
-            .lineLimit(1)
-          Spacer()
-          // When it is, or if it didn't go through, that it didn't, or near the most there's room for,
-          // how much more there is, or how much less it has to be.
-          if self.failed {
-            Label("not posted", systemImage: "exclamationmark.circle.fill")
-              .foregroundStyle(.red)
-              .help("It didn't go through. Try posting it again.")
-              .transition(.opacity)
-          }
-          else if room < Self.roomShown {
-            Text(room >= 0 ? "\(room.formatted()) left" : "\((-room).formatted()) too long")
-              .monospacedDigit()
-              .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
-              .help("A post can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
-          }
-          else {
-            Text("now")
-              .foregroundStyle(.secondary)
+    // The post, as it'll be on the board, which is all there is to say what it's for: its header,
+    // as tall as the board's, and what it says, under it, to the bottom bar, with its formatting.
+    VStack(spacing: 0) {
+      HStack(spacing: 8) {
+        UserIconView(iconID: self.model.ownIconID)
+        Text(self.model.ownUser?.name ?? Prefs.shared.username)
+          .fontWeight(.semibold)
+          .lineLimit(1)
+        Spacer()
+        // When it is, or if it didn't go through, that it didn't, or near the most there's room for,
+        // how much more there is, or how much less it has to be.
+        if self.failed {
+          Label("not posted", systemImage: "exclamationmark.circle.fill")
+            .foregroundStyle(.red)
+            .help("It didn't go through. Try posting it again.")
+            .transition(.opacity)
+        }
+        else if room < Self.roomShown {
+          Text(room >= 0 ? "\(room.formatted()) left" : "\((-room).formatted()) too long")
+            .monospacedDigit()
+            .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+            .help("A post can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
+        }
+        else {
+          Text("now")
+            .foregroundStyle(.secondary)
+        }
+      }
+      .padding(.vertical, 16)
+      .padding(.horizontal, Self.inset.width)
+      .serverBackground(.postHeader)
+
+      PostEditor(text: $model.boardDraft, controller: self.editor, inset: Self.inset)
+        .overlay(alignment: .topLeading) {
+          if self.model.boardDraft.isEmpty {
+            Text(self.placeholder)
+              .foregroundStyle(.tertiary)
+              .padding(.horizontal, Self.inset.width)
+              .padding(.vertical, Self.inset.height)
+              .allowsHitTesting(false)
           }
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, PostEditor.inset.width)
-
-        // With room at the bottom to scroll the last lines up past the formatting.
-        PostEditor(text: $model.boardDraft, controller: self.editor, bottomInset: PostFormattingBar.height / 2 + 6)
-          .overlay(alignment: .topLeading) {
-            if self.model.boardDraft.isEmpty {
-              Text(self.placeholder)
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, PostEditor.inset.width)
-                .padding(.vertical, PostEditor.inset.height)
-                .allowsHitTesting(false)
-            }
-          }
-          .serverBackground(.post)
-          .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: Self.cornerRadius - 1, bottomTrailingRadius: Self.cornerRadius - 1))
-          // A point of the header's color around it, as a line.
-          .padding([.horizontal, .bottom], 1)
-      }
-      // The header's color, at the top, and around the rest.
-      .serverBackground(.postHeader)
-      .clipShape(.rect(cornerRadius: Self.cornerRadius))
-      // The formatting, floating over the post's bottom edge in the middle, half on it.
-      .overlay(alignment: .bottom) {
-        PostFormattingBar(editor: self.editor)
-          .alignmentGuide(.bottom) { $0[VerticalAlignment.center] }
-      }
-      // Room for the half that's past it.
-      .padding(.bottom, PostFormattingBar.height / 2)
     }
-    .padding(20)
+    .serverBackground(.post)
     .frame(minWidth: Self.smallest.width, idealWidth: self.opening.width, maxWidth: .infinity, minHeight: Self.smallest.height, idealHeight: self.opening.height, maxHeight: .infinity)
     .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
       self.shown.size = size
@@ -112,6 +98,13 @@ struct MessageBoardEditorView: View {
           ProgressView()
             .controlSize(.small)
         }
+      }
+
+      // The formatting, at the bottom on the left, across from Cancel and Post, as the private
+      // message sheet has it. See there.
+      ToolbarItem(placement: .destructiveAction) {
+        PostFormattingBar(editor: self.editor, inToolbar: true)
+          .padding(.leading, -10)
       }
 
       ToolbarItem(placement: .cancellationAction) {
