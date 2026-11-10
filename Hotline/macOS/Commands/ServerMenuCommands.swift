@@ -50,6 +50,31 @@ struct ServerMenuCommands: Commands {
 
       Divider()
 
+      // Yours on this server, for this window, as Settings has them when it opens: private messages,
+      // then private chat.
+      Toggle("Refuse Private Messages", isOn: Binding(
+        get: { self.activeHotline?.refusePrivateMessages == true },
+        set: { self.activeHotline?.setOptions(refusePrivateMessages: $0) }
+      ))
+      .disabled(self.activeHotline == nil)
+
+      // Checked while it's on. Choosing it shows the reply, to change, or turn on or off.
+      Toggle("Auto-Reply...", isOn: Binding(
+        get: { self.activeHotline?.automaticResponseOn == true },
+        set: { _ in self.activeServerState?.automaticResponseShown = true }
+      ))
+      .disabled(self.activeHotline == nil)
+
+      Divider()
+
+      Toggle("Refuse Private Chat Invites", isOn: Binding(
+        get: { self.activeHotline?.refusePrivateChat == true },
+        set: { self.activeHotline?.setOptions(refusePrivateChat: $0) }
+      ))
+      .disabled(self.activeHotline == nil)
+
+      Divider()
+
       // Off once it's in your bookmarks.
       Button("Add Bookmark...", systemImage: "bookmark") {
         self.activeServerState?.addBookmarkShown = true

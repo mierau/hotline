@@ -78,18 +78,8 @@ extension HotlineState {
       throw HotlineClientError.notConnected
     }
 
-    var options: HotlineUserOptions = []
-    if Prefs.shared.refusePrivateMessages {
-      options.update(with: .refusePrivateMessages)
-    }
-    if Prefs.shared.refusePrivateChat {
-      options.update(with: .refusePrivateChat)
-    }
-    if Prefs.shared.enableAutomaticMessage {
-      options.update(with: .automaticResponse)
-    }
-
-    let autoresponse = Prefs.shared.enableAutomaticMessage ? Prefs.shared.automaticMessage : nil
+    let options = self.userOptions
+    let autoresponse = self.automaticResponseOn ? self.automaticResponse : nil
 
     // Old servers (<150) don't support the agreed transaction.
     if self.serverVersion >= 150 {
@@ -120,31 +110,56 @@ extension HotlineState {
     }
   }
 
+  /// Sends your name and icon from Settings, and your options on this server.
   @MainActor
-  /// Send current user preferences from Prefs to the server
   func sendUserPreferences() async throws {
-    var options: HotlineUserOptions = []
-
-    if Prefs.shared.refusePrivateMessages {
-      options.update(with: .refusePrivateMessages)
-    }
-
-    if Prefs.shared.refusePrivateChat {
-      options.update(with: .refusePrivateChat)
-    }
-
-    if Prefs.shared.enableAutomaticMessage {
-      options.update(with: .automaticResponse)
-    }
-
     print("HotlineState.sendUserPreferences(): Updating user info with server")
 
     try await self.sendUserInfo(
       username: Prefs.shared.username,
       iconID: Prefs.shared.userIconID,
-      options: options,
-      autoresponse: Prefs.shared.automaticMessage
+      options: self.userOptions,
+      autoresponse: self.automaticResponse
     )
+  }
+
+  /// Your options on this server, as the server's told them.
+  private var userOptions: HotlineUserOptions {
+    var options: HotlineUserOptions = []
+    if self.refusePrivateMessages {
+      options.update(with: .refusePrivateMessages)
+    }
+    if self.refusePrivateChat {
+      options.update(with: .refusePrivateChat)
+    }
+    if self.automaticResponseOn {
+      options.update(with: .automaticResponse)
+    }
+    return options
+  }
+
+  /// Changes your options on this server, from the Server menu, or from Settings, which changes them
+  /// in every window, and tells the server, if you're connected. What isn't given stays as it is.
+  @MainActor
+  func setOptions(refusePrivateMessages: Bool? = nil, refusePrivateChat: Bool? = nil, automaticResponseOn: Bool? = nil, automaticResponse: String? = nil) {
+    if let refusePrivateMessages {
+      self.refusePrivateMessages = refusePrivateMessages
+    }
+    if let refusePrivateChat {
+      self.refusePrivateChat = refusePrivateChat
+    }
+    if let automaticResponseOn {
+      self.automaticResponseOn = automaticResponseOn
+    }
+    if let automaticResponse {
+      self.automaticResponse = automaticResponse
+    }
+    guard self.status == .loggedIn else {
+      return
+    }
+    Task {
+      try? await self.sendUserPreferences()
+    }
   }
 
   func sendUserInfo(username: String, iconID: Int, options: HotlineUserOptions = [], autoresponse: String? = nil) async throws {

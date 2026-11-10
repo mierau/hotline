@@ -227,17 +227,18 @@ struct ServerView: View {
           .onChange(of: Prefs.shared.username) {
             Task { try? await self.model.sendUserPreferences() }
           }
-          .onChange(of: Prefs.shared.refusePrivateMessages) {
-            Task { try? await self.model.sendUserPreferences() }
+          // Changed in Settings, changed here too, over what the Server menu set for this window.
+          .onChange(of: Prefs.shared.refusePrivateMessages) { _, refuse in
+            self.model.setOptions(refusePrivateMessages: refuse)
           }
-          .onChange(of: Prefs.shared.refusePrivateChat) {
-            Task { try? await self.model.sendUserPreferences() }
+          .onChange(of: Prefs.shared.refusePrivateChat) { _, refuse in
+            self.model.setOptions(refusePrivateChat: refuse)
           }
-          .onChange(of: Prefs.shared.enableAutomaticMessage) {
-            Task { try? await self.model.sendUserPreferences() }
+          .onChange(of: Prefs.shared.enableAutomaticMessage) { _, on in
+            self.model.setOptions(automaticResponseOn: on)
           }
-          .onChange(of: Prefs.shared.automaticMessage) {
-            Task { try? await self.model.sendUserPreferences() }
+          .onChange(of: Prefs.shared.automaticMessage) { _, response in
+            self.model.setOptions(automaticResponse: response)
           }
           .sheet(isPresented: Binding(
             get: { self.model.agreementText != nil },
@@ -256,6 +257,11 @@ struct ServerView: View {
             AccountManagerView()
               .environment(self.model)
               .frame(width: 400, height: 450)
+              .presentationSizing(.fitted)
+          }
+          .sheet(isPresented: self.$state.automaticResponseShown) {
+            AutomaticResponseSheet()
+              .environment(self.model)
               .presentationSizing(.fitted)
           }
           .sheet(isPresented: self.$state.addBookmarkShown) {

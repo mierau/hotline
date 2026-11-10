@@ -372,6 +372,15 @@ class HotlineState: Equatable {
   var serverTitle: String = ""
   var username: String = "unnamed"
   var iconID: Int = 414
+
+  // Your options on this server: as Settings has them when the window opens, and as the Server menu
+  // changes them for this window alone, until it's closed. Changing one in Settings changes it in
+  // every window. See `setOptions(…)`.
+  var refusePrivateMessages: Bool = Prefs.shared.refusePrivateMessages
+  var refusePrivateChat: Bool = Prefs.shared.refusePrivateChat
+  /// Whether whoever sends you a private message is sent `automaticResponse` back.
+  var automaticResponseOn: Bool = Prefs.shared.enableAutomaticMessage
+  var automaticResponse: String = Prefs.shared.automaticMessage
   var access: HotlineUserAccessOptions?
   var agreed: Bool = false
   var agreementText: String? = nil

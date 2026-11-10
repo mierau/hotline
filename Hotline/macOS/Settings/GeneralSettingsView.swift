@@ -5,22 +5,30 @@ struct GeneralSettingsView: View {
     @Bindable var preferences = Prefs.shared
 
     Form {
-      Toggle("Refuse private messages", isOn: $preferences.refusePrivateMessages)
-      Toggle("Refuse private chat invites", isOn: $preferences.refusePrivateChat)
-      Toggle("Automatic Response", isOn: $preferences.enableAutomaticMessage)
-      if preferences.enableAutomaticMessage {
-        DeferredTextField(title: "", text: $preferences.automaticMessage, prompt: Text("Write a response message"))
-          .lineLimit(2)
-          .multilineTextAlignment(.leading)
-          .frame(maxWidth: .infinity)
-      }
-
       Section {
         Toggle("Show recent servers", isOn: $preferences.showRecentServers)
         // Themes are only on macOS 27 and later.
         if #available(macOS 27, *) {
           Toggle("Use server themed colors", isOn: $preferences.useServerThemedColors)
         }
+      }
+
+      // Over this and the automatic reply, which go together.
+      Section("Private Messages") {
+        Toggle("Refuse private messages", isOn: $preferences.refusePrivateMessages)
+        Toggle("Refuse private chat invites", isOn: $preferences.refusePrivateChat)
+      }
+
+      // The reply shown whether it's on or not, to write ahead of time and turn on later.
+      Section {
+        Toggle("Automatically reply to private messages", isOn: $preferences.enableAutomaticMessage)
+        // Without a label, across the row, from the left, as what you write is, and not at the
+        // right, as a form puts what goes with a label.
+        DeferredTextField(title: "Reply", text: $preferences.automaticMessage, prompt: Text("Write a reply"))
+          .labelsHidden()
+          .lineLimit(2)
+          .multilineTextAlignment(.leading)
+          .frame(maxWidth: .infinity)
       }
 
       Section("Downloads") {
@@ -70,4 +78,9 @@ struct GeneralSettingsView: View {
     .formStyle(.grouped)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
   }
+}
+
+#Preview {
+  GeneralSettingsView()
+    .frame(width: 570, height: 500)
 }

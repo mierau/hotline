@@ -65,6 +65,7 @@
 		DA432D4E30A15FFF000179F6 /* NetSocket in Frameworks */ = {isa = PBXBuildFile; productRef = DA432D4D30A15FFF000179F6 /* NetSocket */; };
 		DA432DE730A24154000179F6 /* MarkdownEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432DE630A24154000179F6 /* MarkdownEditor.swift */; platformFilters = (macos, ); };
 		DA432DE930A24175000179F6 /* FormatMenuCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432DE830A24175000179F6 /* FormatMenuCommands.swift */; platformFilters = (macos, ); };
+		DA432DF930A2A194000179F6 /* AutomaticResponseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432DF830A2A194000179F6 /* AutomaticResponseSheet.swift */; platformFilters = (macos, ); };
 		DA4B8F3A2EA6FB3C00CBFD53 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */; platformFilter = ios; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
@@ -251,6 +252,7 @@
 		DA432D4A30A14F5C000179F6 /* WindowMenuCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowMenuCommands.swift; sourceTree = "<group>"; };
 		DA432DE630A24154000179F6 /* MarkdownEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownEditor.swift; sourceTree = "<group>"; };
 		DA432DE830A24175000179F6 /* FormatMenuCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatMenuCommands.swift; sourceTree = "<group>"; };
+		DA432DF830A2A194000179F6 /* AutomaticResponseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomaticResponseSheet.swift; sourceTree = "<group>"; };
 		DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -742,6 +744,7 @@
 				DAC0E4222EC78E1100E999DB /* UserClientInfoSheet.swift */,
 				DA5268B42EB6840A00DCB941 /* TransfersView.swift */,
 				DABAFBEB2EC5996B0015E889 /* BroadcastMessageSheet.swift */,
+				DA432DF830A2A194000179F6 /* AutomaticResponseSheet.swift */,
 				DA501BE52EBE9520001714F8 /* Trackers */,
 				DA5268A82EB081AF00DCB941 /* Chat */,
 				DA5268A62EB0762300DCB941 /* Board */,
@@ -1019,6 +1022,7 @@
 				DAC87F072C5010E80060FADF /* HotlineExtensions.swift in Sources */,
 				DAE734FD2B2E65E9000C56F6 /* MessageBoardView.swift in Sources */,
 				DAA15B1D2F50C9E000FAC1B2 /* HotlineState+Chat.swift in Sources */,
+				DA432DF930A2A194000179F6 /* AutomaticResponseSheet.swift in Sources */,
 				DA6980832BFFD06C003E434B /* BookmarkDocument.swift in Sources */,
 				DA501BF22EBEF415001714F8 /* BonjourServerRow.swift in Sources */,
 				DAA15B192F50C9AE00FAC1B2 /* HotlineState+News.swift in Sources */,

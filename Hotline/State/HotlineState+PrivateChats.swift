@@ -181,7 +181,7 @@ extension HotlineState {
   func handleChatInvitation(chatID: UInt32, userID: UInt16, name: String, subject: String = "") {
     // Turned down for you if you'd rather not be asked. Servers from 1.5.1 on do it themselves, and
     // older ones leave it to the client with an automatic response on, too.
-    if Prefs.shared.refusePrivateChat || (self.serverVersion < 151 && Prefs.shared.enableAutomaticMessage) {
+    if self.refusePrivateChat || (self.serverVersion < 151 && self.automaticResponseOn) {
       Task {
         try? await self.client?.rejectChatInvite(chatID)
       }
