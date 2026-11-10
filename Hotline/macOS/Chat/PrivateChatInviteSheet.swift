@@ -49,13 +49,9 @@ struct PrivateChatInviteSheet: View {
     let people = self.people
 
     VStack(alignment: .leading, spacing: 16) {
-      // What it's for, at the top, with the icon private chats have in the sidebar.
-      HStack(alignment: .top, spacing: 12) {
-        Image("Section Private Chat")
-          .resizable()
-          .scaledToFit()
-          .frame(width: 32, height: 32)
-
+      // What it's for, at the top, with the icon private chats have in the sidebar across from it,
+      // as the Broadcast Message sheet has the server's.
+      HStack(alignment: .center, spacing: 12) {
         VStack(alignment: .leading, spacing: 2) {
           Text(self.title)
             .font(.title3)
@@ -64,6 +60,14 @@ struct PrivateChatInviteSheet: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
+
+        Spacer(minLength: 0)
+
+        Image("Section Private Chat")
+          .resizable()
+          .scaledToFit()
+          .frame(width: 32, height: 32)
+          .accessibilityHidden(true)
       }
 
       VStack(spacing: 10) {
