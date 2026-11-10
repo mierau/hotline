@@ -1,13 +1,14 @@
 import SwiftUI
 
 /// Writing a news article, or a reply to one, across all of the sheet, as a post for the board is
-/// written, with where it's going in a header at the top, then its title, and what it says, in
-/// Markdown, styled as the news will show it, as you write it, with the marks kept but faint, and
-/// code blocks colored as chat colors them. The buttons at the bottom on the left, and their keys,
-/// put the marks around what's selected, or take them away, and are off while the title's being
-/// written. A picture dropped in becomes a drawing of it, as on the board. Cancel throws away
-/// what's written, and asks first, once you've written something in the article. An article is
-/// only as long as a Hotline field holds, and near that, it says how much more there's room for.
+/// written, with where it's going in a header at the top, and for a reply, who it's from, then its
+/// title, and what it says, in Markdown, styled as the news will show it, as you write it, with the
+/// marks kept but faint, and code blocks colored as chat colors them. The buttons at the bottom on
+/// the left, and their keys, put the marks around what's selected, or take them away, and are off
+/// while the title's being written. A picture dropped in becomes a drawing of it, as on the board.
+/// Cancel throws away what's written, and asks first, once you've written something in the
+/// article. An article is only as long as a Hotline field holds, and near that, it says how much
+/// more there's room for.
 struct NewsEditorView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(HotlineState.self) private var model: HotlineState
@@ -73,7 +74,7 @@ struct NewsEditorView: View {
       HStack(spacing: 8) {
         if self.isReply {
           Image(systemName: "arrowshape.turn.up.left.fill")
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.tertiary)
             .frame(width: 16, height: 16)
         }
         else {
@@ -100,6 +101,17 @@ struct NewsEditorView: View {
             .monospacedDigit()
             .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
             .help("An article can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
+        }
+        // A reply's from you, across from who it's to, with your icon and name, as the board's post
+        // sheet has them, a little apart from how much room is left.
+        if self.isReply {
+          HStack(spacing: 8) {
+            UserIconView(iconID: self.model.ownIconID)
+            Text(self.model.ownUser?.name ?? Prefs.shared.username)
+              .fontWeight(.semibold)
+              .lineLimit(1)
+          }
+          .padding(.leading, 4)
         }
       }
       .padding(.vertical, 16)
