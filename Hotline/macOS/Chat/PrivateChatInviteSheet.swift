@@ -237,16 +237,8 @@ private struct PrivateChatPersonRow: View {
   var body: some View {
     Button(action: self.toggle) {
       HStack(spacing: 8) {
-        if let iconImage = HotlineState.getClassicIcon(Int(self.user.iconID)) {
-          Image(nsImage: iconImage)
-            .frame(width: 16, height: 16)
-            .padding(.horizontal, 2)
-        }
-        else {
-          Image("User")
-            .frame(width: 16, height: 16)
-            .padding(.horizontal, 2)
-        }
+        UserIconView(iconID: Int(self.user.iconID))
+          .padding(.horizontal, 2)
 
         Text(self.user.name)
           .lineLimit(1)

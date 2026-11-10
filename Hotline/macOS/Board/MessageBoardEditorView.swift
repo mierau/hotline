@@ -42,10 +42,7 @@ struct MessageBoardEditorView: View {
       // The post, as it'll be on the board, which is all there is to say what it's for.
       VStack(spacing: 0) {
         HStack(spacing: 8) {
-          if let icon = HotlineState.getClassicIcon(self.model.ownIconID) {
-            Image(nsImage: icon)
-              .frame(width: 16, height: 16)
-          }
+          UserIconView(iconID: self.model.ownIconID)
           Text(self.model.ownUser?.name ?? Prefs.shared.username)
             .fontWeight(.semibold)
             .lineLimit(1)

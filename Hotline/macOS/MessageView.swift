@@ -11,14 +11,10 @@ private struct SoftScrollEdgeEffect: ViewModifier {
   }
 }
 
-private enum ComposeField {
-  case body
-}
-
 private struct ComposeContext: Identifiable {
   let id = UUID()
-  let initialText: String
-  let isReply: Bool
+  /// The message it's a reply to, as the reply quotes it, or nil for a new message.
+  let quoting: String?
 }
 
 struct MessageView: View {
@@ -35,6 +31,8 @@ struct MessageView: View {
   /// A linked file's info, from its link's menu.
   @State private var fileDetails: FileDetails?
   @FocusState private var focusedMessageID: UUID?
+  /// A message to scroll to and select, like the one a reply's quote is of.
+  @State private var revealedMessageID: UUID?
 
   var userID: UInt16
   /// Given a private chat they invited you to, once you've joined it, to go to it.
@@ -80,8 +78,7 @@ struct MessageView: View {
       return .handled
     }
     .onKeyPress(.return) {
-      if let id = self.focusedMessageID,
-         let msg = self.displayMessages.first(where: { $0.id == id }) {
+      if let msg = self.focusedMessage, msg.canBeRepliedTo, self.cantSendReason == nil {
         self.replyTo(msg)
         return .handled
       }
@@ -119,15 +116,14 @@ struct MessageView: View {
 
       ToolbarItemGroup {
           Button {
-            if let id = self.focusedMessageID,
-               let msg = self.displayMessages.first(where: { $0.id == id }) {
+            if let msg = self.focusedMessage {
               self.replyTo(msg)
             }
           } label: {
             Image(systemName: "arrowshape.turn.up.left")
           }
-          .help("Reply to selected message")
-          .disabled(self.focusedMessageID == nil || self.model.access?.contains(.canSendMessages) != true || self.userRefusesMessages)
+          .help(self.replyHelp)
+          .disabled(self.focusedMessage?.canBeRepliedTo != true || self.cantSendReason != nil)
 
           Button {
             if let id = self.focusedMessageID {
@@ -173,16 +169,16 @@ struct MessageView: View {
 
       ToolbarItem {
         Button {
-          self.composeContext = ComposeContext(initialText: "", isReply: false)
+          self.composeContext = ComposeContext(quoting: nil)
         } label: {
           Image(systemName: "square.and.pencil")
         }
-        .help("Compose message to \(self.username ?? "user")")
-        .disabled(self.model.access?.contains(.canSendMessages) != true || self.userRefusesMessages)
+        .help(self.cantSendReason ?? "Compose message to \(self.username ?? "user")")
+        .disabled(self.cantSendReason != nil)
       }
     }
     .sheet(item: self.$composeContext) { context in
-      ComposeMessageView(userID: self.userID, username: self.username, initialText: context.initialText, isReply: context.isReply)
+      ComposeMessageView(userID: self.userID, username: self.username, quoting: context.quoting)
     }
     .sheet(item: self.$userInfo) { info in
       UserClientInfoSheet(info: info)
@@ -241,6 +237,44 @@ struct MessageView: View {
     self.model.users.first(where: { $0.id == self.userID })?.refusesPrivateMessages ?? false
   }
 
+  /// Why nothing can be sent to them, as Reply and Compose say while they're off, or nil when it
+  /// can.
+  private var cantSendReason: String? {
+    if self.model.access?.contains(.canSendMessages) != true {
+      return "Your account on this server can't send private messages"
+    }
+    if self.userRefusesMessages {
+      return "\(self.username ?? "They") doesn't accept private messages"
+    }
+    if !self.model.users.contains(where: { $0.id == self.userID }) {
+      return "\(self.username ?? "They") isn't on the server"
+    }
+    return nil
+  }
+
+  /// The message that's selected, if one is.
+  private var focusedMessage: InstantMessage? {
+    self.focusedMessageID.flatMap { id in self.displayMessages.first(where: { $0.id == id }) }
+  }
+
+  /// What Reply says it does, or why it's off.
+  private var replyHelp: String {
+    if let reason = self.cantSendReason {
+      return reason
+    }
+    guard let msg = self.focusedMessage else {
+      return "Select a message to reply to"
+    }
+    switch msg.type {
+    case .message:
+      return "Reply to selected message"
+    case .automaticResponse:
+      return "An automatic reply can't be replied to"
+    case .refusal:
+      return "This is from the server, and can't be replied to"
+    }
+  }
+
   private func getUserInfo() {
     Task {
       if let info = try? await self.model.getClientInfoText(id: self.userID) {
@@ -255,26 +289,26 @@ struct MessageView: View {
     }
   }
 
+  /// Writes a reply, which quotes what it's a reply to, as the protocol has replies do, for the
+  /// server to pass on with it, and other clients show with it, as this one does.
   private func replyTo(_ msg: InstantMessage) {
-    let maxLength = 80
-    var body = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    // Skip past existing "Re: " line to avoid "Re: Re: ..."
-    if body.hasPrefix("Re: "), let newlineIndex = body.firstIndex(of: "\n") {
-      body = String(body[body.index(after: newlineIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    guard msg.canBeRepliedTo else {
+      return
     }
-
-    var excerpt = body.prefix(while: { $0 != "." && $0 != "!" && $0 != "?" && $0 != "\n" })
-    if excerpt.isEmpty {
-      excerpt = body.prefix(maxLength)
-    }
-    if excerpt.count > maxLength {
-      excerpt = excerpt.prefix(maxLength)
-    }
-    let ellipsis = excerpt.count < body.count ? "..." : ""
-    self.composeContext = ComposeContext(initialText: "Re: \(excerpt)\(ellipsis)\n\n", isReply: true)
+    self.composeContext = ComposeContext(quoting: InstantMessage.quote(of: self.messageBodyText(msg)))
   }
 
+  /// The message a reply's quote is of, if it's among these: the latest one before it with what it
+  /// quotes.
+  private func original(quotedBy msg: InstantMessage) -> InstantMessage? {
+    guard let quoting = msg.quoting else {
+      return nil
+    }
+    return self.messages.last { $0.id != msg.id && $0.date <= msg.date && $0.isQuoted(by: quoting) }
+  }
+
+  /// A reply from before replies quoted what they're replies to, which started with a line of it,
+  /// as its line and the rest.
   private func splitReplyPrefix(_ text: String) -> (String, String)? {
     guard text.hasPrefix("Re: ") else { return nil }
     guard let newlineIndex = text.firstIndex(of: "\n") else { return nil }
@@ -312,6 +346,23 @@ struct MessageView: View {
   }
 
   private var messageList: some View {
+    ScrollViewReader { proxy in
+      self.messageScrollView
+        // To a message asked for, like the one a reply's quote is of, selected, and so open.
+        .onChange(of: self.revealedMessageID) { _, id in
+          guard let id else {
+            return
+          }
+          withAnimation(.easeInOut(duration: 0.25)) {
+            proxy.scrollTo(id, anchor: .center)
+          }
+          self.focusedMessageID = id
+          self.revealedMessageID = nil
+        }
+    }
+  }
+
+  private var messageScrollView: some View {
     ScrollView(.vertical) {
       HStack {
         Spacer(minLength: 0)
@@ -348,10 +399,7 @@ struct MessageView: View {
   private func messageCardHeader(_ msg: InstantMessage, collapsed: Bool) -> some View {
     VStack(alignment: .leading, spacing: 4) {
       HStack(spacing: 8) {
-        if let iconImage = HotlineState.getClassicIcon(Int(msg.senderIconID)) {
-          Image(nsImage: iconImage)
-            .frame(width: 16, height: 16)
-        }
+        UserIconView(iconID: Int(msg.senderIconID))
 
         Text(msg.senderName)
           .fontWeight(msg.isRead ? .regular : .semibold)
@@ -359,6 +407,16 @@ struct MessageView: View {
           .lineLimit(1)
           .truncationMode(.tail)
           .textSelection(.disabled)
+
+        if let kind = self.kindLabel(msg) {
+          Text(kind)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(.fill.secondary, in: .capsule)
+            .textSelection(.disabled)
+        }
 
         if collapsed {
           Text(self.collapsedSnippet(msg))
@@ -397,11 +455,19 @@ struct MessageView: View {
     )
   }
 
+  /// What a message says, without its Markdown's marks, as it reads, for a line of it, like a
+  /// collapsed message's. From its first part, as that's all a line shows.
+  private static func plain(_ text: String) -> String {
+    let start = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
+    let shown = Markdown.shownText(start, layout: Markdown.Layout(imagePreviews: 0))
+    return Markdown.plainText(shown).trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   private func collapsedSnippet(_ msg: InstantMessage) -> String {
     if let (reLine, _) = self.splitReplyPrefix(msg.text) {
-      return reLine
+      return Self.plain(reLine)
     }
-    let body = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let body = Self.plain(msg.text)
     let sentence = body.prefix(while: { $0 != "." && $0 != "!" && $0 != "?" && $0 != "\n" })
     let excerpt = sentence.isEmpty ? body.prefix(80) : sentence.prefix(80)
     let ellipsis = excerpt.count < body.count ? "..." : ""
@@ -416,9 +482,55 @@ struct MessageView: View {
   }
 
   private func messageCardBody(_ msg: InstantMessage) -> some View {
-    MarkdownText(text: self.messageBodyText(msg), fileLinkMenu: { url in
-      FileLinkMenu(model: self.model, openWindow: self.openWindow, showInfo: { self.fileDetails = $0 }).menu(for: url)
-    })
+    VStack(alignment: .leading, spacing: 12) {
+      if let quoting = msg.quoting {
+        self.quoteView(quoting, of: self.original(quotedBy: msg))
+      }
+      MarkdownText(text: self.messageBodyText(msg), fileLinkMenu: { url in
+        FileLinkMenu(model: self.model, openWindow: self.openWindow, showInfo: { self.fileDetails = $0 }).menu(for: url)
+      })
+    }
+  }
+
+  /// What a reply quotes, faint, with a bar beside it, as a quote is on the board, which is of the
+  /// other one's message, as a conversation's only the two of you. When the message it's of is
+  /// here, a click goes to it, as the pointer says over it.
+  private func quoteView(_ quoting: String, of original: InstantMessage?) -> some View {
+    Button {
+      if let original {
+        self.revealedMessageID = original.id
+      }
+    } label: {
+      HStack(alignment: .top, spacing: 10) {
+        Capsule()
+          .fill(.tertiary)
+          .frame(width: 3)
+        Text(Self.plain(quoting))
+          .foregroundStyle(.secondary)
+          .lineLimit(3)
+          .truncationMode(.tail)
+          .multilineTextAlignment(.leading)
+        Spacer(minLength: 0)
+      }
+      .fixedSize(horizontal: false, vertical: true)
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .disabled(original == nil)
+    .pointerStyle(original == nil ? nil : .link)
+    .help(original == nil ? "" : "Show the message this is a reply to")
+  }
+
+  /// What a message is, when it's not one they wrote, for its header.
+  private func kindLabel(_ msg: InstantMessage) -> String? {
+    switch msg.type {
+    case .message:
+      nil
+    case .automaticResponse:
+      "Auto-Reply"
+    case .refusal:
+      "Not Delivered"
+    }
   }
 
   @ViewBuilder
@@ -456,6 +568,9 @@ struct MessageView: View {
       return .handled
     }
     .onKeyPress(.return) {
+      guard msg.canBeRepliedTo, self.cantSendReason == nil else {
+        return .ignored
+      }
       self.replyTo(msg)
       return .handled
     }
@@ -488,102 +603,375 @@ struct MessageView: View {
 
 // MARK: - Compose Message View
 
+/// Writing a private message, across all of the sheet, with who it's to at the top, which can
+/// be changed, by the name of anyone on the server, which it suggests as it's typed, and what it
+/// says, in Markdown, styled as it's written, with the marks kept but faint, as on the board, and the
+/// Format menu's marks, and the formatting buttons', at the bottom on the left, across from Cancel
+/// and Send. ⌘↩ sends it, as Return's for new lines.
 struct ComposeMessageView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(HotlineState.self) private var model: HotlineState
 
-  let userID: UInt16
+  /// Who it's to, to start with, or nobody yet, to type a name.
+  let userID: UInt16?
   let username: String?
-  var initialText: String = ""
-  var isReply: Bool = false
+  /// The message it's a reply to, as it quotes it, which goes with it, for a reply.
+  let quoting: String?
 
-  @State private var text: String = ""
-  @State private var sending: Bool = false
-  @FocusState private var focusedField: ComposeField?
-  /// What the Format menu works through while you're writing.
-  @State private var markdownEditor = MarkdownEditor()
+  init(userID: UInt16? = nil, username: String? = nil, quoting: String? = nil) {
+    self.userID = userID
+    self.username = username
+    self.quoting = quoting
+    // Their name from the start, and not set once it's shown, which would be as if it was typed.
+    self._recipientName = State(initialValue: username ?? "")
+  }
+
+  private var isReply: Bool {
+    self.quoting != nil
+  }
+
+  /// How near the most a message can be before it says how much more there's room for.
+  private static let roomShown = 2_000
+  /// As small as there's room for who it's to and what it says in.
+  private static let smallest = CGSize(width: 420, height: 320)
+  /// How big who it's to is written, a little bigger than what it says.
+  private static let recipientFontSize: CGFloat = 15
+  /// How far in from the sheet's edges who it's to and what it says are, as far as the bottom bar's
+  /// buttons are.
+  private static let inset = NSSize(width: 20, height: 16)
+
+  @State private var editor = MarkdownEditor()
+  @State private var text = ""
+  @State private var recipientName: String
+  /// Whether the name's been typed, or changed, here, as names are only suggested once it has, and
+  /// not for one it starts with, as the field can have the keys for a moment as the sheet opens.
+  @State private var recipientEdited = false
+  @State private var sending = false
+  @State private var failed = false
+  /// How big it opens: as big as it was last made, or else as it's meant to be.
+  @State private var opening: CGSize = {
+    let saved = NSSizeFromString(Prefs.shared.privateMessageSize)
+    return saved.width >= Self.smallest.width && saved.height >= Self.smallest.height ? saved : CGSize(width: 520, height: 420)
+  }()
+  /// How big it is, as it's shown, to keep once it's made bigger or smaller.
+  @State private var shown = ShownSize()
+  @FocusState private var recipientFocused: Bool
+
+  /// Who it's to, by the name typed: the one it started to, while it's still their name, or else
+  /// whoever on the server has that name, and nobody, for a name nobody here has.
+  private var recipient: User? {
+    let name = self.recipientName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty else {
+      return nil
+    }
+    let named = self.model.users.filter { $0.name == name }
+    let matching = named.isEmpty ? self.model.users.filter { $0.name.caseInsensitiveCompare(name) == .orderedSame } : named
+    if let userID = self.userID, let started = matching.first(where: { $0.id == userID }) {
+      return started
+    }
+    return matching.first(where: { $0.id != self.model.ownUserID }) ?? matching.first
+  }
+
+  /// The names it suggests for who it's to, once it's being typed: everyone else here, with what's
+  /// typed in their name, those it starts first. Someone whose name it is already stays among them,
+  /// so the list doesn't empty, and close, as the name's finished, which SwiftUI's suggestions don't
+  /// take well as they open, and only while the name has the keys, as it's for that.
+  private var suggestions: [User] {
+    guard self.recipientFocused && self.recipientEdited else {
+      return []
+    }
+    let typed = self.recipientName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let others = self.model.users.filter { $0.id != self.model.ownUserID }
+    guard !typed.isEmpty else {
+      return others
+    }
+    let containing = others.filter { $0.name.localizedCaseInsensitiveContains(typed) }
+    let starting = containing.filter { $0.name.lowercased().hasPrefix(typed.lowercased()) }
+    return starting + containing.filter { !$0.name.lowercased().hasPrefix(typed.lowercased()) }
+  }
 
   var body: some View {
+    let message = MessageBoardPost.cleaned(self.text)
+    let room = Markdown.maximumLength - message.utf8.count
+    let recipient = self.recipient
+
+    // Across all of the sheet: who it's to, along the top, and what it says, under it, to the
+    // bottom bar, with its formatting.
     VStack(alignment: .leading, spacing: 0) {
-      HStack(alignment: .center, spacing: 0) {
-        Button {
-          self.dismiss()
-        } label: {
-          Image(systemName: "xmark")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 14, height: 14)
-            .opacity(0.5)
+      // Lined up on their words' baseline: what it says it is, their icon, their name, and what's
+      // said of them.
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Text(self.isReply ? "Reply to:" : "To:")
+          .font(.system(size: Self.recipientFontSize))
+          .foregroundStyle(.secondary)
+        if let recipient {
+          // With its bottom a little under the words' baseline, as their descenders are.
+          UserIconView(iconID: Int(recipient.iconID))
+            .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
         }
-        .buttonStyle(.plain)
-        .frame(width: 16, height: 16)
-
-        Spacer()
-
-        Text(self.isReply ? "Reply to \(self.username ?? "User")" : "Message to \(self.username ?? "User")")
-          .fontWeight(.semibold)
-          .lineLimit(1)
-          .truncationMode(.middle)
-
-        Spacer()
-
-        if self.sending {
-          ProgressView()
-            .controlSize(.small)
-            .frame(width: 22, height: 22)
+        // A reply's to whoever sent what it's a reply to, which can't be changed, as a reply that
+        // went to someone else would quote what they've never seen. A new message is to whoever's
+        // typed.
+        if self.isReply {
+          Text(self.recipientName)
+            .font(.system(size: Self.recipientFontSize, weight: .semibold))
+            .lineLimit(1)
         }
         else {
-          Button {
-            self.sending = true
-            Task {
-              try? await self.model.sendInstantMessage(self.text, userID: self.userID)
-              Task { @MainActor in
-                self.sending = false
-                self.dismiss()
-              }
+          // As wide as the name, for what's said of them to go beside it: a copy of it, out of sight,
+          // sets how wide, as a text field's own width doesn't follow its text, with room for the
+          // insertion point after it.
+          Text(self.recipientName.isEmpty ? "Name" : self.recipientName)
+            .font(.system(size: Self.recipientFontSize, weight: .semibold))
+            .padding(.trailing, 4)
+            .fixedSize()
+            .hidden()
+            .overlay(alignment: .leading) {
+              TextField("Name", text: self.$recipientName)
+                .textFieldStyle(.plain)
+                .font(.system(size: Self.recipientFontSize, weight: .semibold))
+                .focused(self.$recipientFocused)
+                // AppKit puts a text field's words a point higher as they're edited than as they're
+                // shown, as editing hands them to another view, so it's a point lower then, for
+                // them to stay where they are, on the line with "To:".
+                .offset(y: self.recipientFocused ? 1 : 0)
+                .textInputSuggestions(self.suggestions) { user in
+                  Label {
+                    Text(user.name)
+                  } icon: {
+                    if let icon = HotlineState.getClassicIcon(Int(user.iconID)) {
+                      Image(nsImage: icon)
+                    }
+                  }
+                  .textInputCompletion(user.name)
+                }
+                // Return goes on to what it says.
+                .onSubmit {
+                  if let textView = self.editor.textView {
+                    textView.window?.makeFirstResponder(textView)
+                  }
+                }
             }
-          } label: {
-            Image(systemName: "paperplane.circle.fill")
-              .resizable()
-              .renderingMode(.template)
-              .scaledToFit()
-              .foregroundColor(self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : .accentColor)
-          }
-          .buttonStyle(.plain)
-          .frame(width: 26, height: 26)
-          .help("Send Message")
-          .disabled(self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        if let note = self.recipientNote(recipient) {
+          Text(note)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(.fill.secondary, in: .capsule)
+            .transition(.opacity)
+        }
+        Spacer()
+        self.status(room: room)
+      }
+      .padding(.vertical, 18)
+      .padding(.horizontal, Self.inset.width)
+      // Anywhere along it, to type who it's to, as the name's field is only as wide as the name, for
+      // a new message.
+      .contentShape(.rect)
+      .onTapGesture {
+        if !self.isReply {
+          self.recipientFocused = true
         }
       }
-      .frame(maxWidth: .infinity)
-      .padding()
 
       Divider()
 
-      BetterTextEditor(text: self.$text)
-        .betterEditorFont(NSFont.systemFont(ofSize: 14.0))
-        .betterEditorAutomaticSpellingCorrection(true)
-        .betterEditorTextInset(.init(width: 16, height: 18))
-        .betterEditorMarkdown(self.markdownEditor)
-        .lineSpacing(20)
-        .background(Color(nsColor: .textBackgroundColor))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .focused(self.$focusedField, equals: .body)
+      // What it's a reply to, as it quotes it, faint, over what's written.
+      if let quoting = self.quoting {
+        HStack(alignment: .top, spacing: 10) {
+          Capsule()
+            .fill(.tertiary)
+            .frame(width: 3)
+          Text(Self.plain(quoting))
+            .foregroundStyle(.secondary)
+            .lineLimit(3)
+            .truncationMode(.tail)
+          Spacer(minLength: 0)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, Self.inset.width)
+        .padding(.top, Self.inset.height)
+      }
+
+      PostEditor(text: self.$text, controller: self.editor, startsHere: self.userID != nil, inset: Self.inset)
+        .overlay(alignment: .topLeading) {
+          if self.text.isEmpty {
+            Text(self.placeholder(recipient: recipient))
+              .foregroundStyle(.tertiary)
+              .padding(.horizontal, Self.inset.width)
+              .padding(.vertical, Self.inset.height)
+              .allowsHitTesting(false)
+          }
+        }
     }
-    .frame(minWidth: 300, idealWidth: 450, maxWidth: .infinity, minHeight: 200, idealHeight: 350, maxHeight: .infinity)
-    .background(Color(nsColor: .textBackgroundColor))
-    .presentationCompactAdaptation(.sheet)
+    .serverBackground(.post)
+    .frame(minWidth: Self.smallest.width, idealWidth: self.opening.width, maxWidth: .infinity, minHeight: Self.smallest.height, idealHeight: self.opening.height, maxHeight: .infinity)
+    .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+      self.shown.size = size
+    }
+    .background(ResizableSheet(smallest: Self.smallest, opening: self.opening, shown: self.shown) { size in
+      Prefs.shared.privateMessageSize = NSStringFromSize(size)
+    })
+    // As big as it's meant to be, as above.
+    .presentationSizing(.fitted)
+    .toolbar {
+      if self.sending {
+        ToolbarItem {
+          ProgressView()
+            .controlSize(.small)
+        }
+      }
+
+      // The formatting, at the bottom on the left, across from Cancel and Send, as one item, in the
+      // one place a sheet's bottom bar has on that side, which is for a destructive button but
+      // takes anything, and off while who it's to is being typed, which has none.
+      ToolbarItem(placement: .destructiveAction) {
+        PostFormattingBar(editor: self.editor, inToolbar: true)
+          .disabled(self.recipientFocused)
+          // The first button's symbol at the bar's edge, as the To row's words are, and not where
+          // its button starts, which is wider than it.
+          .padding(.leading, -10)
+      }
+
+      ToolbarItem(placement: .cancellationAction) {
+        Button("Cancel") {
+          self.dismiss()
+        }
+        // In the text's color, as without a theme, and not the theme's, which is Post's.
+        .tint(.primary)
+      }
+
+      ToolbarItem(placement: .confirmationAction) {
+        Button("Send") {
+          self.send()
+        }
+        .buttonStyle(.borderedProminent)
+        // Return is for new lines.
+        .keyboardShortcut(.return, modifiers: .command)
+        .disabled(message.isEmpty || recipient == nil || recipient?.refusesPrivateMessages == true || room < 0 || self.sending)
+        .help("Send Message (⌘↩)")
+      }
+    }
+    .onChange(of: self.recipientName) {
+      self.recipientEdited = true
+    }
     .onAppear {
-      self.text = self.initialText
-      self.focusedField = .body
+      // Without anyone to send it to yet, it starts with who it's to.
+      if self.userID == nil {
+        self.recipientFocused = true
+      }
     }
-    .onDisappear {
+  }
+
+  /// What's said of who it's to, beside their name, when it can't go to them: that nobody here
+  /// has that name, as when they've left, once it's not being typed, or that they don't take
+  /// private messages.
+  private func recipientNote(_ recipient: User?) -> String? {
+    if let recipient {
+      return recipient.refusesPrivateMessages ? "Refuses Messages" : nil
+    }
+    let name = self.recipientName.trimmingCharacters(in: .whitespacesAndNewlines)
+    return !name.isEmpty && !self.recipientFocused ? "Not Online" : nil
+  }
+
+  /// What's at the right of who it's to: that it didn't go through, or near the most there's room
+  /// for, how much more there is, or how much less it has to be.
+  @ViewBuilder
+  private func status(room: Int) -> some View {
+    if self.failed {
+      Label("not sent", systemImage: "exclamationmark.circle.fill")
+        .foregroundStyle(.red)
+        .help("It didn't go through. Try sending it again.")
+        .transition(.opacity)
+    }
+    else if room < Self.roomShown {
+      Text(room >= 0 ? "\(room.formatted()) left" : "\((-room).formatted()) too long")
+        .monospacedDigit()
+        .foregroundStyle(room >= 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+        .help("A message can be up to \(Markdown.maximumLength.formatted()) characters long, and fewer with emoji or accented letters, which take more room.")
+    }
+  }
+
+  /// What a quote says, without its Markdown's marks, for a few lines of it.
+  private static func plain(_ text: String) -> String {
+    let start = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
+    return Markdown.plainText(Markdown.shownText(start, layout: Markdown.Layout(imagePreviews: 0))).trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  /// What the message says before anything's written in it, with who it's for.
+  private func placeholder(recipient: User?) -> String {
+    if self.isReply {
+      return "Write your reply…"
+    }
+    return recipient.map { "Write a message to \($0.name)…" } ?? "Write a message…"
+  }
+
+  /// Sends it, and once it's gone, puts the sheet away. If it doesn't go through, it's still here to
+  /// try again.
+  private func send() {
+    let message = MessageBoardPost.cleaned(self.text)
+    guard let recipient = self.recipient, !message.isEmpty else {
+      return
+    }
+
+    self.sending = true
+    withAnimation(.easeOut(duration: 0.15)) {
+      self.failed = false
+    }
+    Task {
+      do {
+        try await self.model.sendInstantMessage(message, userID: recipient.id, quoting: self.quoting)
+      }
+      catch {
+        self.sending = false
+        withAnimation(.easeOut(duration: 0.15)) {
+          self.failed = true
+        }
+        return
+      }
+      self.sending = false
       self.dismiss()
     }
   }
 }
 
-#Preview {
-  MessageView(userID: 1)
+#Preview("Conversation") {
+  let model = HotlineState()
+  model.users = [User(id: 1, name: "Halcyon", iconID: 4217, status: [])]
+  model.privateMessages[1] = [
+    InstantMessage(direction: .incoming, senderName: "Halcyon", senderIconID: 4217, text: "Have you seen the **new** `hotline://` links? They're in *Files* now.\n\n> Quoted from the board\n\n- one\n- two", type: .message, date: .now.addingTimeInterval(-600)),
+    InstantMessage(direction: .outgoing, senderName: "macro", senderIconID: 130, text: "Yes! ~~Old~~ new and _shiny_.\n\n```\nlet x = 1\n```", type: .message, date: .now.addingTimeInterval(-300), isRead: false, quoting: "Have you seen the **new** `hotline://` links? They're in *Files* now.\n\n> Quoted from the board\n\n- one\n- two"),
+    InstantMessage(direction: .incoming, senderName: "Halcyon", senderIconID: 4217, text: "Out to lunch, back at 2.", type: .automaticResponse, date: .now),
+  ]
+  return MessageView(userID: 1)
+    .environment(model)
+    .frame(width: 520, height: 600)
+}
+
+#Preview("Reply, in a sheet") {
+  let model = HotlineState()
+  model.users = [User(id: 1, name: "Halcyon", iconID: 4217, status: [])]
+  return Color.gray.opacity(0.2)
+    .frame(width: 700, height: 560)
+    .sheet(isPresented: .constant(true)) {
+      ComposeMessageView(userID: 1, username: "Halcyon", quoting: "Have you seen the **new** `hotline://` links? They're in *Files* now.")
+        .environment(model)
+    }
+}
+
+#Preview("To someone who's left") {
+  ComposeMessageView(userID: 9, username: "Away Person")
     .environment(HotlineState())
+}
+
+#Preview("New private message") {
+  let model = HotlineState()
+  model.users = [
+    User(id: 1, name: "Halcyon", iconID: 4217, status: []),
+    User(id: 2, name: "PowerMac G3", iconID: 31337, status: []),
+  ]
+  return ComposeMessageView(userID: 2, username: "PowerMac G3", quoting: "Have you seen the **new** `hotline://` links? They're in *Files* now.")
+    .environment(model)
 }

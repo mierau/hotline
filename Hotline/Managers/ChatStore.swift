@@ -47,6 +47,11 @@ actor ChatStore {
     var senderIsAdmin: Bool?
     /// Where a line about something elsewhere goes, like one saying someone posted to the board.
     var link: String?
+    /// The message a private message is a reply to, as it quotes it.
+    var quoting: String?
+    /// What kind of private message it is, when it's not one someone wrote, like an automatic
+    /// response. See `InstantMessageType`.
+    var kind: String?
 
     struct ImageMetadata: Codable {
       let url: String

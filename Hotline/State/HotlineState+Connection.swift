@@ -850,8 +850,8 @@ extension HotlineState {
     case .serverMessage(let message):
       self.handleServerMessage(message)
 
-    case .privateMessage(let userID, let message):
-      self.handlePrivateMessage(userID: userID, message: message)
+    case .privateMessage(let userID, let message, let quoting, let kind):
+      self.handlePrivateMessage(userID: userID, message: message, quoting: quoting, kind: kind)
 
     case .newsPost(let message):
       self.handleNewsPost(message)

@@ -35,8 +35,10 @@ extension HotlineState {
     try await client.sendChat(text, announce: announce)
   }
 
+  /// Sends someone a private message, and, for a reply, the message of theirs it's a reply to, as
+  /// it quotes it, which the server passes on with it.
   @MainActor
-  func sendInstantMessage(_ text: String, userID: UInt16) async throws {
+  func sendInstantMessage(_ text: String, userID: UInt16, quoting: String? = nil) async throws {
     guard let client = self.client else {
       throw HotlineClientError.notConnected
     }
@@ -54,7 +56,8 @@ extension HotlineState {
       type: .message,
       date: Date(),
       isRead: false,
-      senderIsAdmin: selfUser?.isAdmin ?? false
+      senderIsAdmin: selfUser?.isAdmin ?? false,
+      quoting: quoting
     )
 
     if self.privateMessages[userID] == nil {
@@ -65,7 +68,7 @@ extension HotlineState {
 
     self.recordPrivateMessage(message, userID: userID, peerName: user?.name)
 
-    try await client.sendInstantMessage(text, to: userID)
+    try await client.sendInstantMessage(text, to: userID, quoting: quoting)
 
 //    if Prefs.shared.playPrivateMessageSound {
 //      SoundEffects.play(.chatMessage)
@@ -253,10 +256,11 @@ extension HotlineState {
             receiverName: entry.metadata?.receiverName ?? "",
             receiverIconID: entry.metadata?.receiverIconID ?? 0,
             text: entry.body,
-            type: .message,
+            type: entry.metadata?.kind.flatMap(InstantMessageType.init(rawValue:)) ?? .message,
             date: entry.date,
             isRead: entry.isRead,
-            senderIsAdmin: entry.metadata?.senderIsAdmin ?? false
+            senderIsAdmin: entry.metadata?.senderIsAdmin ?? false,
+            quoting: entry.metadata?.quoting
           )
         }
 
@@ -395,7 +399,7 @@ extension HotlineState {
       username: message.senderName,
       type: entryType,
       date: message.date,
-      metadata: ChatStore.EntryMetadata(iconID: message.senderIconID, receiverName: message.receiverName, receiverIconID: message.receiverIconID, senderIsAdmin: message.senderIsAdmin ? true : nil),
+      metadata: ChatStore.EntryMetadata(iconID: message.senderIconID, receiverName: message.receiverName, receiverIconID: message.receiverIconID, senderIsAdmin: message.senderIsAdmin ? true : nil, quoting: message.quoting, kind: message.type == .message ? nil : message.type.rawValue),
       isRead: message.isRead
     )
     let serverName = self.serverName ?? self.server?.name

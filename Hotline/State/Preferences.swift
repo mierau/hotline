@@ -133,6 +133,7 @@ enum PrefsKeys: String {
   case filesViewMode = "files view mode"
   case boardPostSize = "board post size"
   case newsArticleSize = "news article size"
+  case privateMessageSize = "private message size"
   case watchWords = "watch words"
   case recentServers = "recent servers"
   case showRecentServers = "show recent servers"
@@ -208,6 +209,7 @@ class Prefs {
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
     self.boardPostSize = UserDefaults.standard.string(forKey: PrefsKeys.boardPostSize.rawValue) ?? ""
     self.newsArticleSize = UserDefaults.standard.string(forKey: PrefsKeys.newsArticleSize.rawValue) ?? ""
+    self.privateMessageSize = UserDefaults.standard.string(forKey: PrefsKeys.privateMessageSize.rawValue) ?? ""
     self.showRecentServers = UserDefaults.standard.bool(forKey: PrefsKeys.showRecentServers.rawValue)
 
     self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: PrefsKeys.hasCompletedOnboarding.rawValue)
@@ -360,6 +362,11 @@ class Prefs {
   /// How big the new article sheet was last made, as for the board's.
   var newsArticleSize: String {
     didSet { UserDefaults.standard.set(self.newsArticleSize, forKey: PrefsKeys.newsArticleSize.rawValue) }
+  }
+
+  /// How big the private message sheet was last made, as for the board's.
+  var privateMessageSize: String {
+    didSet { UserDefaults.standard.set(self.privateMessageSize, forKey: PrefsKeys.privateMessageSize.rawValue) }
   }
 
   var watchWords: [HighlightWord] {

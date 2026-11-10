@@ -15,6 +15,8 @@ struct PostEditor: NSViewRepresentable {
   var bottomInset: CGFloat = 0
   /// Whether you start writing here, once it's shown, or somewhere else, as in a title.
   var startsHere = true
+  /// How far in from its edges the text is, as far as what's around it is in.
+  var inset: NSSize = Self.inset
 
   func makeCoordinator() -> Coordinator {
     Coordinator(text: self.$text, controller: self.controller)
@@ -46,7 +48,7 @@ struct PostEditor: NSViewRepresentable {
     textView.isAutomaticDataDetectionEnabled = false
     // Spelling corrected or not as the system's set to, but not in code.
     textView.isContinuousSpellCheckingEnabled = true
-    textView.textContainerInset = Self.inset
+    textView.textContainerInset = self.inset
     // From the inset, as the card's top and the placeholder are.
     textView.textContainer?.lineFragmentPadding = 0
     // For pictures dropped on it, as well as text.
@@ -280,8 +282,21 @@ struct PostFormattingBar: View {
   private static let padding: CGFloat = 3
 
   let editor: MarkdownEditor
+  /// Whether it's in a sheet's bottom bar, without glass of its own around its buttons.
+  var inToolbar = false
 
   var body: some View {
+    if self.inToolbar {
+      self.buttons
+    }
+    else {
+      self.buttons
+        .padding(Self.padding)
+        .modifier(PostFormattingBackground())
+    }
+  }
+
+  private var buttons: some View {
     HStack(spacing: 0) {
       ForEach(MarkdownStyle.allCases, id: \.self) { style in
         PostFormatButton(style.title, systemImage: style.systemImage, shortcut: style.shortcut) {
@@ -294,8 +309,6 @@ struct PostFormattingBar: View {
       }
       .disabled(!self.editor.allowsLink)
     }
-    .padding(Self.padding)
-    .modifier(PostFormattingBackground())
   }
 }
 

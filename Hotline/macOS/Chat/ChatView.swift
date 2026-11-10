@@ -386,7 +386,7 @@ struct ChatView: View {
       })
     }
     menu.addItem(ChatMenuItem("Send Message...", systemImage: "square.and.pencil", isEnabled: self.model.access?.contains(.canSendMessages) == true && !user.refusesPrivateMessages) {
-      self.serverState.composeMessageUser = user
+      self.serverState.composeMessage = PrivateMessageCompose(userID: user.id, username: user.name)
     })
     // Asking them into a private chat, as the user list does: a new one, with them chosen, or one
     // you're in, right away.

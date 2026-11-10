@@ -36,6 +36,28 @@ struct ServerMenuItem: Identifiable, Hashable {
   }
 }
 
+/// Someone's icon, as Hotline's are, beside their name: in a slot as wide as most icons are, 16
+/// points, with one that's wider, as some are, centered on it, out past its edges, and under what's
+/// beside it, as the chat's icon column has them, so it doesn't push what's beside it along. The
+/// generic one, for an icon this copy of Hotline doesn't have.
+struct UserIconView: View {
+  let iconID: Int
+
+  var body: some View {
+    Color.clear
+      .frame(width: 16, height: 16)
+      .overlay {
+        if let icon = HotlineState.getClassicIcon(self.iconID) ?? NSImage(named: "User") {
+          Image(nsImage: icon)
+            .fixedSize()
+        }
+      }
+      .accessibilityHidden(true)
+      // Under what's beside it, where it's wider than its slot.
+      .zIndex(-1)
+  }
+}
+
 struct ListItemView: View {
   @Environment(\.controlActiveState) private var controlActiveState
   
@@ -569,19 +591,9 @@ struct ServerView: View {
         // Fainter while they're idle, but not the dot, since unread messages from them matter
         // whether they're there or not.
         HStack(spacing: 5) {
-          if let iconImage = HotlineState.getClassicIcon(Int(user.iconID)) {
-            Image(nsImage: iconImage)
-              .frame(width: 16, height: 16)
-              .padding(.leading, 2)
-              .padding(.trailing, 2)
-          }
-          else {
-            Image("User")
-              .frame(width: 16, height: 16)
-              .padding(.leading, 2)
-              .padding(.trailing, 2)
-          }
-          
+          UserIconView(iconID: Int(user.iconID))
+            .padding(.horizontal, 2)
+
           Text(user.name)
             // Bolder with messages or an invitation from them you haven't seen, as the dot beside
             // it shows.
@@ -600,6 +612,14 @@ struct ServerView: View {
             .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2))
         }
       }
+      // A double click writes them a message, as Send Message does, when one can be sent to them,
+      // and not to you. The click before it selects them, as one does, on its own.
+      .contentShape(.rect)
+      .simultaneousGesture(TapGesture(count: 2).onEnded {
+        if user.id != self.model.ownUserID && self.model.access?.contains(.canSendMessages) == true && !user.refusesPrivateMessages {
+          self.state.composeMessage = PrivateMessageCompose(userID: user.id, username: user.name)
+        }
+      })
       .opacity(controlActiveState == .inactive ? 0.5 : 1.0)
       .tag(ServerNavigationType.user(userID: user.id))
       .serverThemedRow(for: ServerNavigationType.user(userID: user.id))
@@ -623,7 +643,7 @@ struct ServerView: View {
     }
 
     Button("Send Message...", systemImage: "square.and.pencil") {
-      self.state.composeMessageUser = user
+      self.state.composeMessage = PrivateMessageCompose(userID: user.id, username: user.name)
     }
     .disabled(self.model.access?.contains(.canSendMessages) != true || user.refusesPrivateMessages)
 
@@ -751,18 +771,8 @@ struct ServerView: View {
   /// as the chat they're in is what's chosen.
   private func privateChatMemberRow(_ user: User) -> some View {
     HStack(spacing: 5) {
-      if let iconImage = HotlineState.getClassicIcon(Int(user.iconID)) {
-        Image(nsImage: iconImage)
-          .frame(width: 16, height: 16)
-          .padding(.leading, 2)
-          .padding(.trailing, 2)
-      }
-      else {
-        Image("User")
-          .frame(width: 16, height: 16)
-          .padding(.leading, 2)
-          .padding(.trailing, 2)
-      }
+      UserIconView(iconID: Int(user.iconID))
+        .padding(.horizontal, 2)
 
       Text(user.name)
         .lineLimit(1)
@@ -837,8 +847,8 @@ struct ServerView: View {
     }
     .serverTheme(self.themeColors, window: self.state.window)
     .navigationTitle(self.model.serverTitle)
-    .sheet(item: self.$state.composeMessageUser) { user in
-      ComposeMessageView(userID: user.id, username: user.name)
+    .sheet(item: self.$state.composeMessage) { compose in
+      ComposeMessageView(userID: compose.userID, username: compose.username)
         .environment(self.model)
     }
     .sheet(item: self.$state.userInfo) { info in

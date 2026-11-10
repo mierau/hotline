@@ -8,6 +8,35 @@ import NetSocket
 ///
 /// These are unsolicited messages sent by the server (not replies to requests).
 /// Subscribe to the `events` stream to receive them.
+/// What a private message is, as the server says with it: one someone wrote, or one the server
+/// sent for them, as a reply to one of yours.
+public enum HotlinePrivateMessageKind: Sendable, Equatable {
+  /// Written by them.
+  case message
+  /// Their automatic response, sent back for a message of yours.
+  case automaticResponse
+  /// That they don't take private messages, sent back for a message of yours.
+  case refusedMessage
+  /// That they don't take private chat.
+  case refusedChat
+
+  /// From the options sent with it, which are one of Send Instant Message's: 1 for a message,
+  /// 2 and 3 for refusing messages and chat, and 4 for an automatic response. Mobius sends its
+  /// automatic responses as 1, as messages, so they can't be told apart there.
+  public init(options: Int?) {
+    switch options {
+    case 2:
+      self = .refusedMessage
+    case 3:
+      self = .refusedChat
+    case 4:
+      self = .automaticResponse
+    default:
+      self = .message
+    }
+  }
+}
+
 public enum HotlineEvent: Sendable {
   /// Server sent a chat message
   case chatMessage(String)
@@ -17,8 +46,9 @@ public enum HotlineEvent: Sendable {
   case userDisconnected(UInt16)
   /// Server sent a broadcast message
   case serverMessage(String)
-  /// Received a private message from a user
-  case privateMessage(userID: UInt16, message: String)
+  /// Received a private message from a user, with the message of yours it's a reply to, when
+  /// they quoted one, and whether they wrote it or the server sent it for them
+  case privateMessage(userID: UInt16, message: String, quoting: String?, kind: HotlinePrivateMessageKind)
   /// Server sent a news post notification
   case newsPost(String)
   /// Server sent agreement (nil text means no agreement required)
@@ -493,7 +523,10 @@ public actor HotlineClient {
     case .serverMessage:
       if let message = transaction.getField(type: .data)?.getString() {
         if let userID = transaction.getField(type: .userID)?.getUInt16() {
-          eventContinuation.yield(.privateMessage(userID: userID, message: message))
+          // The message of yours it's a reply to, when they quoted it, as clients from 1.5 on do.
+          let quoting = transaction.getField(type: .quotingMessage)?.getString().flatMap { $0.isEmpty ? nil : $0 }
+          let kind = HotlinePrivateMessageKind(options: transaction.getField(type: .options)?.getInteger())
+          eventContinuation.yield(.privateMessage(userID: userID, message: message, quoting: quoting, kind: kind))
         } else {
           eventContinuation.yield(.serverMessage(message))
         }
@@ -808,12 +841,17 @@ public actor HotlineClient {
   /// - Parameters:
   ///   - message: Text to send
   ///   - userID: Target user ID
+  ///   - quoting: The message of theirs it's a reply to, if it is one
   ///   - encoding: Text encoding (default: UTF-8)
-  public func sendInstantMessage(_ message: String, to userID: UInt16, encoding: String.Encoding = .utf8) async throws {
+  public func sendInstantMessage(_ message: String, to userID: UInt16, quoting: String? = nil, encoding: String.Encoding = .utf8) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .sendInstantMessage)
     transaction.setFieldUInt16(type: .userID, val: userID)
     transaction.setFieldUInt32(type: .options, val: 1)
     transaction.setFieldString(type: .data, val: message.convertingLineEndings(to: .cr), encoding: encoding)
+    // The message of theirs it's a reply to, which the server passes on with it.
+    if let quoting, !quoting.isEmpty {
+      transaction.setFieldString(type: .quotingMessage, val: quoting.convertingLineEndings(to: .cr), encoding: encoding)
+    }
 
     try await self.send(transaction)
   }

@@ -14,8 +14,8 @@ class ServerState: Equatable {
   var automaticResponseShown: Bool = false
   var fileNavigationPath: [String]? = nil
   var fileFolderPath: [String] = []
-  /// Someone to send a message to, from the user list or the chat.
-  var composeMessageUser: User? = nil
+  /// A private message being written, from the Server menu, the user list or the chat.
+  var composeMessage: PrivateMessageCompose? = nil
   /// Someone's info to show, from the user list or the chat.
   var userInfo: HotlineUserClientInfo? = nil
   /// Someone to disconnect from the server, once that's confirmed.
@@ -67,6 +67,13 @@ struct DisconnectConfirmation {
   let action: Action
   /// What would be lost, as a sentence for the alert.
   let losses: String
+}
+
+/// A private message to write: to someone chosen, or to whoever's name is typed.
+struct PrivateMessageCompose: Identifiable {
+  let id = UUID()
+  var userID: UInt16? = nil
+  var username: String? = nil
 }
 
 enum ServerNavigationType: Identifiable, Hashable, Equatable {

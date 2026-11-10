@@ -36,6 +36,13 @@ struct ServerMenuCommands: Commands {
     }
 
     CommandMenu("Server") {
+      // To anyone here, by name, as it's typed. ⌘N, as a new message is in Mail and Messages.
+      Button("New Private Message...", systemImage: "square.and.pencil") {
+        self.activeServerState?.composeMessage = PrivateMessageCompose()
+      }
+      .disabled(self.activeHotline?.status != .loggedIn || self.activeHotline?.access?.contains(.canSendMessages) != true)
+      .keyboardShortcut(.init("n"), modifiers: .command)
+
       Button("Broadcast Message...", systemImage: "megaphone") {
         self.activeServerState?.broadcastShown = true
       }

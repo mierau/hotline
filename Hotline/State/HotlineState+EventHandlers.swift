@@ -107,7 +107,9 @@ extension HotlineState {
     self.recordChatMessage(chatMessage)
   }
 
-  func handlePrivateMessage(userID: UInt16, message: String) {
+  /// A private message from someone: one they wrote, maybe a reply to one of yours, as it quotes
+  /// it, or one the server sent for them, like their automatic response.
+  func handlePrivateMessage(userID: UInt16, message: String, quoting: String? = nil, kind: HotlinePrivateMessageKind = .message) {
     if let existingUserIndex = self.users.firstIndex(where: { $0.id == UInt(userID) }) {
       let user = self.users[existingUserIndex]
       print("HotlineState: received private message from \(user.name): \(message)")
@@ -127,10 +129,11 @@ extension HotlineState {
         receiverName: self.username,
         receiverIconID: UInt(self.iconID),
         text: message,
-        type: .message,
+        type: Self.messageType(of: kind),
         date: Date(),
         isRead: false,
-        senderIsAdmin: user.isAdmin
+        senderIsAdmin: user.isAdmin,
+        quoting: quoting
       )
 
       if self.privateMessages[userID] == nil {
@@ -145,7 +148,8 @@ extension HotlineState {
       #if os(macOS)
       if Prefs.shared.showPrivateMessageNotifications && !NSApplication.shared.isActive {
         let content = UNMutableNotificationContent()
-        content.title = user.name
+        // Said when it's not from them, as their automatic response isn't.
+        content.title = kind == .automaticResponse ? "\(user.name) (Auto-Reply)" : user.name
         content.body = String(message.prefix(200))
         content.sound = .default
         content.userInfo = ["userID": userID]
@@ -154,6 +158,18 @@ extension HotlineState {
         UNUserNotificationCenter.current().add(request)
       }
       #endif
+    }
+  }
+
+  /// What kind of message it's kept as, from what the server said it is.
+  static func messageType(of kind: HotlinePrivateMessageKind) -> InstantMessageType {
+    switch kind {
+    case .message:
+      .message
+    case .automaticResponse:
+      .automaticResponse
+    case .refusedMessage, .refusedChat:
+      .refusal
     }
   }
 
