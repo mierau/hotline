@@ -35,9 +35,6 @@ struct PostEditor: NSViewRepresentable {
     textView.maxSize = factory.maxSize
     scrollView.documentView = textView
 
-    textView.isInCode = { [weak coordinator = context.coordinator] in
-      coordinator?.editor.codeContext != nil
-    }
     textView.isRichText = false
     textView.allowsUndo = true
     textView.drawsBackground = false
@@ -102,44 +99,9 @@ struct PostEditor: NSViewRepresentable {
   }
 }
 
-/// The post's text view, which pastes rich text, like what's copied from a web page or a note, as
-/// Markdown, so what was bold or a link still is, but as it is in code, and as plain text with
-/// Paste and Match Style. A picture dropped or pasted in goes in as a drawing of it.
+/// The post's text view, where a picture dropped or pasted in goes in as a drawing of it. Rich text
+/// pasted goes in as Markdown, as it does wherever Markdown's written. See `MarkdownEditingTextView`.
 final class PostTextView: MarkdownEditingTextView {
-  /// Whether where you're writing is in code.
-  var isInCode: () -> Bool = { false }
-
-  override func paste(_ sender: Any?) {
-    if !self.pasteMarkdown(from: .general) {
-      super.paste(sender)
-    }
-  }
-
-  /// Pastes rich text from a pasteboard as Markdown, unless it's going in code, with a code block
-  /// it starts or ends with on lines of its own, as code blocks have to be. False for anything
-  /// else, to paste as it is.
-  func pasteMarkdown(from pasteboard: NSPasteboard) -> Bool {
-    let rich = pasteboard.types?.contains(where: { [.rtf, .rtfd, .html].contains($0) }) ?? false
-    guard rich, !self.isInCode(),
-          let pasted = pasteboard.readObjects(forClasses: [NSAttributedString.self])?.first as? NSAttributedString,
-          var markdown = Markdown.markdown(from: pasted) else {
-      return false
-    }
-    let text = self.string as NSString
-    let range = self.selectedRange()
-    func isLineBreak(_ index: Int) -> Bool {
-      text.character(at: index) == 0x0A || text.character(at: index) == 0x0D
-    }
-    if markdown.hasPrefix("```"), range.location > 0, !isLineBreak(range.location - 1) {
-      markdown = "\n" + markdown
-    }
-    if markdown.hasSuffix("```"), NSMaxRange(range) < text.length, !isLineBreak(NSMaxRange(range)) {
-      markdown += "\n"
-    }
-    self.insertText(markdown, replacementRange: range)
-    return true
-  }
-
   // MARK: Pictures
 
   /// Picture files, and pictures, as well as text.

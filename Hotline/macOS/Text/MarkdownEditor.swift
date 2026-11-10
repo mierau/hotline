@@ -40,65 +40,6 @@ final class MarkdownEditor {
     self.codeContext != .block && self.codeContext != .drawing
   }
 
-  // MARK: Plain Text
-
-  /// Where the code is in a text view that isn't styled as it's written, as the post's editor is,
-  /// as of its text the last time it was looked for.
-  @ObservationIgnored private var followedText: String?
-  @ObservationIgnored private var followedCode = Markdown.CodeRanges()
-  @ObservationIgnored nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
-
-  /// Works through a text view that isn't styled as it's written, as a private message's isn't,
-  /// finding where its code is for itself, as what's selected changes, and keeping up with its
-  /// edits, as a styled one's coordinator tells it of them, for links waiting for their pages'
-  /// titles.
-  func follow(_ textView: NSTextView) {
-    guard textView !== self.textView || self.observers.isEmpty, let storage = textView.textStorage else {
-      return
-    }
-    self.observers.forEach(NotificationCenter.default.removeObserver)
-    self.textView = textView
-    self.followedText = nil
-    self.observers = [
-      // Typing, pasting, and setting the text all move what's selected too. Both as they happen,
-      // on the main thread, as text views change, while the edit's range is still there to read.
-      NotificationCenter.default.addObserver(forName: NSTextView.didChangeSelectionNotification, object: textView, queue: nil) { [weak self] _ in
-        MainActor.assumeIsolated {
-          self?.followedSelectionChanged()
-        }
-      },
-      // Sending, which empties it, too.
-      NotificationCenter.default.addObserver(forName: NSTextStorage.didProcessEditingNotification, object: storage, queue: nil) { [weak self] _ in
-        MainActor.assumeIsolated {
-          guard let self, let storage = self.textView?.textStorage, storage.editedMask.contains(.editedCharacters) else {
-            return
-          }
-          self.textChanged(in: storage.editedRange, changeInLength: storage.changeInLength)
-        }
-      },
-    ]
-    self.followedSelectionChanged()
-  }
-
-  private func followedSelectionChanged() {
-    guard let textView = self.textView else {
-      return
-    }
-    let text = textView.string
-    if text != self.followedText {
-      self.followedText = text
-      self.followedCode = Markdown.style(NSTextStorage(string: text))
-    }
-    let context = self.followedCode.context(of: textView.selectedRange())
-    if self.codeContext != context {
-      self.codeContext = context
-    }
-  }
-
-  deinit {
-    self.observers.forEach(NotificationCenter.default.removeObserver)
-  }
-
   // MARK: Formatting
 
   /// What a page's title is, or nil if it doesn't come in time.
@@ -771,8 +712,10 @@ final class MarkdownEditorFocus {
   }
 }
 
-/// A text view the Format menu works through, while it has the keys, with its editor, which tells
-/// the menu as it takes them and gives them up.
+/// A text view Markdown's written in: the Format menu works through it, while it has the keys, with
+/// its editor, which tells the menu as it takes them and gives them up, and rich text pasted in,
+/// like what's copied from a web page or a note, goes in as Markdown, so what was bold or a link
+/// still is, but as it is in code, and as plain text with Paste and Match Style.
 class MarkdownEditingTextView: NSTextView {
   weak var markdownEditor: MarkdownEditor? {
     didSet {
@@ -794,6 +737,39 @@ class MarkdownEditingTextView: NSTextView {
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     MarkdownEditorFocus.shared.changed()
+  }
+
+  // MARK: Pasting
+
+  override func paste(_ sender: Any?) {
+    if !self.pasteMarkdown(from: .general) {
+      super.paste(sender)
+    }
+  }
+
+  /// Pastes rich text from a pasteboard as Markdown, unless it's going in code, with a code block
+  /// it starts or ends with on lines of its own, as code blocks have to be. False for anything
+  /// else, to paste as it is.
+  func pasteMarkdown(from pasteboard: NSPasteboard) -> Bool {
+    let rich = pasteboard.types?.contains(where: { [.rtf, .rtfd, .html].contains($0) }) ?? false
+    guard rich, self.markdownEditor?.codeContext == nil,
+          let pasted = pasteboard.readObjects(forClasses: [NSAttributedString.self])?.first as? NSAttributedString,
+          var markdown = Markdown.markdown(from: pasted) else {
+      return false
+    }
+    let text = self.string as NSString
+    let range = self.selectedRange()
+    func isLineBreak(_ index: Int) -> Bool {
+      text.character(at: index) == 0x0A || text.character(at: index) == 0x0D
+    }
+    if markdown.hasPrefix("```"), range.location > 0, !isLineBreak(range.location - 1) {
+      markdown = "\n" + markdown
+    }
+    if markdown.hasSuffix("```"), NSMaxRange(range) < text.length, !isLineBreak(NSMaxRange(range)) {
+      markdown += "\n"
+    }
+    self.insertText(markdown, replacementRange: range)
+    return true
   }
 }
 
