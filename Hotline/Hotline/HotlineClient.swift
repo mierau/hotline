@@ -125,9 +125,13 @@ public enum HotlineClientError: Error {
   case loginFailed(String?)
   /// More than a transaction's field can hold
   case tooLong
-  
+  /// A port no server can be on, from a link, a bookmark, or a typed address
+  case invalidPort(Int)
+
   var userMessage: String {
     switch self {
+    case .invalidPort(let port):
+      "Port \(port) isn't one a server can be on"
     case .connectionFailed:
       "Failed to connect to server"
     case .serverError(let code, let message):
@@ -874,7 +878,7 @@ public actor HotlineClient {
 
     let reply = try await self.sendTransaction(transaction)
     let subject = reply.getField(type: .chatSubject)?.getString() ?? ""
-    let users = reply.getFieldList(type: .userNameWithInfo).map { $0.getUser() }
+    let users = reply.getFieldList(type: .userNameWithInfo).compactMap { $0.getUser() }
     return (subject, users)
   }
 
@@ -921,12 +925,8 @@ public actor HotlineClient {
     let transaction = HotlineTransaction(id: self.generateTransactionID(), type: .getUserNameList)
     let reply = try await sendTransaction(transaction)
 
-    var users: [HotlineUser] = []
-    for field in reply.getFieldList(type: .userNameWithInfo) {
-      users.append(field.getUser())
-    }
-
-    return users
+    // Without any that are cut short.
+    return reply.getFieldList(type: .userNameWithInfo).compactMap { $0.getUser() }
   }
 
   /// Send a private instant message to a user
@@ -1040,18 +1040,16 @@ public actor HotlineClient {
   public func getFileList(path: [String] = []) async throws -> [HotlineFile] {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .getFileNameList)
     if !path.isEmpty {
-      transaction.setFieldPath(type: .filePath, val: path)
+      try transaction.setFieldPath(type: .filePath, val: path)
     }
 
     let reply = try await self.sendTransaction(transaction)
 
-    var files: [HotlineFile] = []
-    for field in reply.getFieldList(type: .fileNameWithInfo) {
-      let file = field.getFile()
+    // Without any that are cut short.
+    let files = reply.getFieldList(type: .fileNameWithInfo).compactMap { $0.getFile() }
+    for file in files {
       file.path = path + [file.name]
-      files.append(file)
     }
-
     return files
   }
   
@@ -1064,7 +1062,7 @@ public actor HotlineClient {
   public func getFileInfo(name: String, path: [String]) async throws -> FileDetails? {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .getFileInfo)
     transaction.setFieldString(type: .fileName, val: name)
-    transaction.setFieldPath(type: .filePath, val: path)
+    try transaction.setFieldPath(type: .filePath, val: path)
 
     let reply = try await sendTransaction(transaction)
 
@@ -1104,7 +1102,7 @@ public actor HotlineClient {
   public func setFileInfo(name: String, path: [String], newName: String? = nil, comment: String? = nil, encoding: String.Encoding = .utf8) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .setFileInfo)
     transaction.setFieldString(type: .fileName, val: name)
-    transaction.setFieldPath(type: .filePath, val: path)
+    try transaction.setFieldPath(type: .filePath, val: path)
     
     if let newName {
       transaction.setFieldString(type: .fileNewName, val: newName)
@@ -1126,7 +1124,7 @@ public actor HotlineClient {
   public func deleteFile(name: String, path: [String]) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .deleteFile)
     transaction.setFieldString(type: .fileName, val: name)
-    transaction.setFieldPath(type: .filePath, val: path)
+    try transaction.setFieldPath(type: .filePath, val: path)
 
     try await self.sendTransaction(transaction)
   }
@@ -1140,7 +1138,7 @@ public actor HotlineClient {
   public func newFolder(name: String, path: [String]) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .newFolder)
     transaction.setFieldString(type: .fileName, val: name)
-    transaction.setFieldPath(type: .filePath, val: path)
+    try transaction.setFieldPath(type: .filePath, val: path)
     try await self.sendTransaction(transaction)
   }
 
@@ -1153,8 +1151,8 @@ public actor HotlineClient {
   public func moveFile(name: String, path: [String], to newPath: [String]) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .moveFile)
     transaction.setFieldString(type: .fileName, val: name)
-    transaction.setFieldPath(type: .filePath, val: path)
-    transaction.setFieldPath(type: .fileNewPath, val: newPath)
+    try transaction.setFieldPath(type: .filePath, val: path)
+    try transaction.setFieldPath(type: .fileNewPath, val: newPath)
     try await self.sendTransaction(transaction)
   }
 
@@ -1167,19 +1165,19 @@ public actor HotlineClient {
   public func getNewsCategories(path: [String] = []) async throws -> [HotlineNewsCategory] {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .getNewsCategoryNameList)
     if !path.isEmpty {
-      transaction.setFieldPath(type: .newsPath, val: path)
+      try transaction.setFieldPath(type: .newsPath, val: path)
     }
 
     let reply = try await self.sendTransaction(transaction)
 
-    var categories: [HotlineNewsCategory] = []
-    for field in reply.getFieldList(type: .newsCategoryListData15) {
-      var category = field.getNewsCategory()
+    // Without any that are cut short.
+    return reply.getFieldList(type: .newsCategoryListData15).compactMap { field in
+      guard var category = field.getNewsCategory() else {
+        return nil
+      }
       category.path = path + [category.name]
-      categories.append(category)
+      return category
     }
-
-    return categories
   }
 
   /// Get news articles in a category
@@ -1189,16 +1187,15 @@ public actor HotlineClient {
   public func getNewsArticles(path: [String] = []) async throws -> [HotlineNewsArticle] {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .getNewsArticleNameList)
     if !path.isEmpty {
-      transaction.setFieldPath(type: .newsPath, val: path)
+      try transaction.setFieldPath(type: .newsPath, val: path)
     }
 
     let reply = try await self.sendTransaction(transaction)
 
-    guard let articleData = reply.getField(type: .newsArticleListData) else {
+    guard let newsList = reply.getField(type: .newsArticleListData)?.getNewsList() else {
       return []
     }
 
-    let newsList = articleData.getNewsList()
     return newsList.articles.map { article in
       var a = article
       a.path = path
@@ -1215,7 +1212,7 @@ public actor HotlineClient {
   /// - Returns: Article content as string
   public func getNewsArticle(id: UInt32, path: [String], flavor: String = "text/plain") async throws -> String? {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .getNewsArticleData)
-    transaction.setFieldPath(type: .newsPath, val: path)
+    try transaction.setFieldPath(type: .newsPath, val: path)
     transaction.setFieldUInt32(type: .newsArticleID, val: id)
     transaction.setFieldString(type: .newsArticleDataFlavor, val: flavor, encoding: .ascii)
 
@@ -1241,7 +1238,7 @@ public actor HotlineClient {
     }
 
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .postNewsArticle)
-    transaction.setFieldPath(type: .newsPath, val: path)
+    try transaction.setFieldPath(type: .newsPath, val: path)
     transaction.setFieldUInt32(type: .newsArticleID, val: parentID)
     transaction.setFieldString(type: .newsArticleTitle, val: title)
     transaction.setFieldString(type: .newsArticleDataFlavor, val: "text/plain")
@@ -1260,7 +1257,7 @@ public actor HotlineClient {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .newNewsFolder)
     transaction.setFieldString(type: .fileName, val: name)
     if !path.isEmpty {
-      transaction.setFieldPath(type: .newsPath, val: path)
+      try transaction.setFieldPath(type: .newsPath, val: path)
     }
 
     try await self.sendTransaction(transaction)
@@ -1275,7 +1272,7 @@ public actor HotlineClient {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .newNewsCategory)
     transaction.setFieldString(type: .newsCategoryName, val: name)
     if !path.isEmpty {
-      transaction.setFieldPath(type: .newsPath, val: path)
+      try transaction.setFieldPath(type: .newsPath, val: path)
     }
 
     try await self.sendTransaction(transaction)
@@ -1286,7 +1283,7 @@ public actor HotlineClient {
   /// - Parameter path: Full path to the folder or category to delete
   public func deleteNewsItem(path: [String]) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .deleteNewsItem)
-    transaction.setFieldPath(type: .newsPath, val: path)
+    try transaction.setFieldPath(type: .newsPath, val: path)
 
     try await self.sendTransaction(transaction)
   }
@@ -1299,7 +1296,7 @@ public actor HotlineClient {
   ///   - recursive: Whether to delete child articles (replies)
   public func deleteNewsArticle(id: UInt32, path: [String], recursive: Bool = true) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .deleteNewsArticle)
-    transaction.setFieldPath(type: .newsPath, val: path)
+    try transaction.setFieldPath(type: .newsPath, val: path)
     transaction.setFieldUInt32(type: .newsArticleID, val: id)
     transaction.setFieldUInt32(type: .newsArticleRecursiveDelete, val: recursive ? 1 : 0)
 
@@ -1892,13 +1889,12 @@ public actor HotlineClient {
   ///
   /// - Returns: Tuple of (referenceNumber, transferSize) for the banner download
   /// - Throws: HotlineClientError if not connected or server doesn't support banners
-  public func downloadBanner() async throws -> (referenceNumber: UInt32, transferSize: Int)? {
+  public func downloadBanner() async throws -> (referenceNumber: UInt32, transferSize: UInt32)? {
     let transaction = HotlineTransaction(id: self.generateTransactionID(), type: .downloadBanner)
     let reply = try await self.sendTransaction(transaction)
 
     guard
-      let transferSizeField = reply.getField(type: .transferSize),
-      let transferSize = transferSizeField.getInteger(),
+      let transferSize = reply.transferSize,
       let transferReferenceField = reply.getField(type: .referenceNumber),
       let referenceNumber = transferReferenceField.getUInt32()
     else {
@@ -1919,10 +1915,10 @@ public actor HotlineClient {
   ///   - dataOffset: Where in the data fork to start, as when resuming a download, so the transfer
   ///     sends only what's after it
   /// - Returns: Tuple of (referenceNumber, transferSize, fileSize, waitingCount) for the download
-  public func downloadFile(name: String, path: [String], preview: Bool = false, dataOffset: Int = 0) async throws -> (referenceNumber: UInt32, transferSize: Int, fileSize: Int, waitingCount: Int)? {
+  public func downloadFile(name: String, path: [String], preview: Bool = false, dataOffset: Int = 0) async throws -> (referenceNumber: UInt32, transferSize: UInt32, fileSize: Int, waitingCount: Int)? {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .downloadFile)
     transaction.setFieldString(type: .fileName, val: name)
-    transaction.setFieldPath(type: .filePath, val: path)
+    try transaction.setFieldPath(type: .filePath, val: path)
 
     if preview {
       transaction.setFieldUInt32(type: .fileTransferOptions, val: 2)
@@ -1949,15 +1945,14 @@ public actor HotlineClient {
     let reply = try await self.sendTransaction(transaction)
 
     guard
-      let transferSizeField = reply.getField(type: .transferSize),
-      let transferSize = transferSizeField.getInteger(),
+      let transferSize = reply.transferSize,
       let transferReferenceField = reply.getField(type: .referenceNumber),
       let referenceNumber = transferReferenceField.getUInt32()
     else {
       return nil
     }
 
-    let fileSize = reply.getField(type: .fileSize)?.getInteger() ?? transferSize
+    let fileSize = reply.getField(type: .fileSize)?.getInteger() ?? Int(transferSize)
     let waitingCount = reply.getField(type: .waitingCount)?.getInteger() ?? 0
 
     return (referenceNumber, transferSize, fileSize, waitingCount)
@@ -1969,16 +1964,15 @@ public actor HotlineClient {
   ///   - name: Folder name to download
   ///   - path: Directory path containing the folder
   /// - Returns: Tuple of (referenceNumber, transferSize, itemCount, waitingCount) for the download
-  public func downloadFolder(name: String, path: [String]) async throws -> (referenceNumber: UInt32, transferSize: Int, itemCount: Int, waitingCount: Int)? {
+  public func downloadFolder(name: String, path: [String]) async throws -> (referenceNumber: UInt32, transferSize: UInt32, itemCount: Int, waitingCount: Int)? {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .downloadFolder)
     transaction.setFieldString(type: .fileName, val: name)
-    transaction.setFieldPath(type: .filePath, val: path)
+    try transaction.setFieldPath(type: .filePath, val: path)
 
     let reply = try await self.sendTransaction(transaction)
 
     guard
-      let transferSizeField = reply.getField(type: .transferSize),
-      let transferSize = transferSizeField.getInteger(),
+      let transferSize = reply.transferSize,
       let transferReferenceField = reply.getField(type: .referenceNumber),
       let referenceNumber = transferReferenceField.getUInt32()
     else {
@@ -1999,7 +1993,7 @@ public actor HotlineClient {
   public func uploadFile(name: String, path: [String]) async throws -> UInt32? {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .uploadFile)
     transaction.setFieldString(type: .fileName, val: name)
-    transaction.setFieldPath(type: .filePath, val: path)
+    try transaction.setFieldPath(type: .filePath, val: path)
 
     let reply = try await self.sendTransaction(transaction)
 
@@ -2024,7 +2018,7 @@ public actor HotlineClient {
 
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .uploadFolder)
     transaction.setFieldString(type: .fileName, val: name)
-    transaction.setFieldPath(type: .filePath, val: path)
+    try transaction.setFieldPath(type: .filePath, val: path)
     transaction.setFieldUInt32(type: .transferSize, val: totalSize)
     transaction.setFieldUInt16(type: .folderItemCount, val: UInt16(truncatingIfNeeded: fileCount))
 

@@ -12,7 +12,8 @@ public struct HotlineFolderItemProgress: Sendable {
 @MainActor
 public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
   private let serverAddress: String
-  private let serverPort: UInt16
+  /// The server's port, or its TLS port for a transfer over TLS. The transfer goes to the one after.
+  private let serverPort: Int
   /// TLS for the transfer, as the connection it's for has it.
   private let tls: TLSPolicy
   private let referenceNumber: UInt32
@@ -33,7 +34,7 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
 
   public init(
     address: String,
-    port: UInt16,
+    port: Int,
     tls: TLSPolicy = .disabled,
     reference: UInt32,
     size: UInt32,
@@ -116,7 +117,7 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
     // Connect to transfer server
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1,
+      port: HotlinePorts.transferPort(after: self.serverPort),
       tls: self.tls
     )
     self.socket = socket

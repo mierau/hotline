@@ -27,9 +27,11 @@ class BonjourState {
       self.name.isEmpty ? self.serviceName : self.name
     }
     
+    /// It as a server to connect to, once it's been found, on a port a server can be on.
     var server: Server? {
       guard let address = self.address,
-            let port = self.port else {
+            let port = self.port,
+            HotlinePorts.valid.contains(Int(port)) else {
         return nil
       }
       return Server(name: self.displayName, description: nil, address: address, port: Int(port))

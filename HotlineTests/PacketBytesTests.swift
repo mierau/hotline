@@ -53,8 +53,8 @@ struct PacketBytesTests {
     #expect(wide.getInteger() == 0x0102030405060708)
   }
 
-  @Test func pathField() {
-    let field = HotlineTransactionField(type: .filePath, pathComponents: ["ab", "c"])
+  @Test func pathField() throws {
+    let field = try #require(HotlineTransactionField(type: .filePath, pathComponents: ["ab", "c"]))
 
     #expect(field.dataSize == 11)
     #expect(field.data == [
@@ -109,8 +109,8 @@ struct PacketBytesTests {
     #expect(HotlineTransaction(from: [0x00, 0x00, 0x00]) == nil)
   }
 
-  @Test func userRoundTrip() {
-    let user = HotlineUser(from: HotlineUser(id: 9, iconID: 128, status: 3, name: "Ann").encoded())
+  @Test func userRoundTrip() throws {
+    let user = try #require(HotlineUser(from: HotlineUser(id: 9, iconID: 128, status: 3, name: "Ann").encoded()))
 
     #expect(user.id == 9)
     #expect(user.iconID == 128)
@@ -163,6 +163,103 @@ struct PacketBytesTests {
     for (text, length) in [long.readLongPString(at: 0), Data(long).readLongPString(at: 0)] {
       #expect(text == "Hi")
       #expect(length == 2)
+    }
+  }
+
+  // MARK: - What a Server Sends That Can't Be
+
+  @Test func listingsCutShortAreNothing() {
+    let user = HotlineUser(id: 9, iconID: 128, status: 3, name: "Ann").encoded()
+    for length in 0..<user.count {
+      #expect(HotlineUser(from: Array(user.prefix(length))) == nil)
+    }
+
+    // "TEXT", "ttxt", 5 bytes, then reserved, the name's script, and "ab".
+    let file: [UInt8] = [0x54, 0x45, 0x58, 0x54, 0x74, 0x74, 0x78, 0x74, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0x00, 0x02, 0x61, 0x62]
+    #expect(HotlineFile(from: file)?.name == "ab")
+    for length in 0..<file.count {
+      #expect(HotlineFile(from: Array(file.prefix(length))) == nil)
+    }
+
+    // A bundle of 7, "Nw".
+    let bundle: [UInt8] = [0x00, 0x02, 0x00, 0x07, 0x02, 0x4E, 0x77]
+    #expect(HotlineNewsCategory(from: bundle)?.name == "Nw")
+    for length in 0..<bundle.count {
+      #expect(HotlineNewsCategory(from: Array(bundle.prefix(length))) == nil)
+    }
+  }
+
+  @Test func newsCutShortKeepsTheArticlesBeforeIt() throws {
+    // Category 1, of 2 articles, "Nw", with no description.
+    var data: [UInt8] = [0, 0, 0, 1, 0, 0, 0, 2, 0x02, 0x4E, 0x77, 0x00]
+    // Article 7, its date, parent, flags, 1 flavor, "Hi" by "A", in text/plain, of 5 bytes.
+    let article: [UInt8] = [0, 0, 0, 7] + [0x07, 0xD0, 0, 0, 0, 0, 0, 0] + [0, 0, 0, 0] + [0, 0, 0, 0] + [0, 1]
+      + [0x02, 0x48, 0x69] + [0x01, 0x41] + [0x0A] + Array("text/plain".utf8) + [0x00, 0x05]
+    data += article + article.prefix(10)
+
+    let list = try #require(HotlineNewsList(from: data))
+    #expect(list.articles.count == 1)
+    #expect(list.articles.first?.title == "Hi")
+    #expect(list.articles.first?.flavors.first?.1 == 5)
+    #expect(HotlineNewsList(from: Array(data.prefix(9))) == nil)
+  }
+
+  @Test func numbersTooBigAreNothing() {
+    #expect(HotlineTransactionField(type: .chatID, val: UInt64.max).getInteger() == nil)
+
+    var reply = HotlineTransaction(id: 1, type: .downloadFile)
+    reply.setFieldUInt64(type: .transferSize, val: UInt64(UInt32.max) + 1)
+    #expect(reply.transferSize == nil)
+    var fits = HotlineTransaction(id: 1, type: .downloadFile)
+    fits.setFieldUInt64(type: .transferSize, val: 1024)
+    #expect(fits.transferSize == 1024)
+  }
+
+  @Test func pathsTooLongToSayAreRefused() throws {
+    var transaction = HotlineTransaction(id: 1, type: .getFileNameList)
+    try transaction.setFieldPath(type: .filePath, val: [String(repeating: "a", count: 255)])
+    // Rather than cut short, which could make it another folder's.
+    #expect(throws: HotlineClientError.self) {
+      try transaction.setFieldPath(type: .filePath, val: [String(repeating: "a", count: 256)])
+    }
+    #expect(throws: HotlineClientError.self) {
+      try transaction.setFieldPath(type: .filePath, val: Array(repeating: String(repeating: "a", count: 255), count: 300))
+    }
+  }
+
+  @Test func portsServersCanBeOn() throws {
+    #expect(HotlinePorts.connectionPort(5500) == 5500)
+    #expect(HotlinePorts.connectionPort(65534) == 65534)
+    #expect(try HotlinePorts.transferPort(after: 65534) == 65535)
+    for port in [0, -1, 65535, 70000] {
+      #expect(HotlinePorts.connectionPort(port) == nil)
+      #expect(throws: HotlineTransferClientError.self) {
+        try HotlinePorts.transferPort(after: port)
+      }
+    }
+
+    // Links, and Bonjour, to ports no server can be on, aren't servers.
+    for link in ["hotline://example.com:70000", "hotline://example.com:65535", "hotlines://example.com:65535"] {
+      if let url = URL(string: link) {
+        #expect(Server(url: url) == nil, "\(link)")
+      }
+    }
+    #expect(Server(url: try #require(URL(string: "hotline://example.com:5501")))?.port == 5501)
+    #expect(BonjourState.BonjourServer(serviceName: "s", name: "s", address: "10.0.0.1", port: 65535, txtRecords: [:]).server == nil)
+  }
+
+  @MainActor @Test func connectingOnAPortNoServerCanBeOnFails() async {
+    // Nowhere, so a mistake waits rather than reaching anything.
+    let login = HotlineLogin(login: "", password: "", username: "test", iconID: 1)
+    let hotline = HotlineState()
+    await #expect(throws: HotlineClientError.self) {
+      _ = try await hotline.connect(to: Server(name: nil, description: nil, address: "192.0.2.1", port: 70000), login: login, withoutEncryption: false, trust: ServerTrust(fileURL: nil))
+    }
+    // Nor, where TLS has to be used, on a TLS port no server can be on, without it.
+    var secure = Server(name: nil, description: nil, address: "192.0.2.1", port: 5500, tlsPort: 65535)
+    secure.tlsRequired = true
+    await #expect(throws: ServerTrust.Problem.self) {
+      _ = try await hotline.connect(to: secure, login: login, withoutEncryption: false, trust: ServerTrust(fileURL: nil))
     }
   }
 }

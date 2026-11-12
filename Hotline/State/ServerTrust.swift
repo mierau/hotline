@@ -390,7 +390,7 @@ final class ServerTrust: Observable, @unchecked Sendable {
       guard !Task.isCancelled else {
         break
       }
-      guard let tlsPort = UInt16(exactly: port), tlsPort < .max else {
+      guard let tlsPort = HotlinePorts.connectionPort(port) else {
         continue
       }
       // Each check after one the server took waits its turn, as connecting does.

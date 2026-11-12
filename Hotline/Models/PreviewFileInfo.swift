@@ -11,11 +11,11 @@ struct PreviewFileInfo: Identifiable, Codable {
   var name: String
 
   /// Where its transfer goes, as `HotlineState.transferEndpoint(for:)` has it.
-  var transferEndpoint: (port: UInt16, tls: TLSPolicy) {
-    guard let tlsPort = self.tlsPort, let port = UInt16(exactly: tlsPort) else {
-      return (UInt16(self.port), .disabled)
+  var transferEndpoint: (port: Int, tls: TLSPolicy) {
+    guard let tlsPort = self.tlsPort else {
+      return (self.port, .disabled)
     }
-    return (port, ServerTrust.shared.policy(address: self.address, port: self.port, tlsPort: tlsPort))
+    return (tlsPort, ServerTrust.shared.policy(address: self.address, port: self.port, tlsPort: tlsPort))
   }
 
   var type: String? = nil

@@ -68,10 +68,13 @@ class HotlineTrackerClient {
   }
   
   private func doFetch(address: String, port: Int, continuation: AsyncThrowingStream<HotlineServer, Error>.Continuation) async throws {
-    // Connect to tracker (plaintext, no TLS)
+    // Connect to tracker (plaintext, no TLS), on a port there is, as a bookmark could say any.
+    guard let trackerPort = UInt16(exactly: port), trackerPort > 0 else {
+      throw HotlineClientError.invalidPort(port)
+    }
     let socket = try await NetSocket.connect(
       host: address,
-      port: UInt16(port)
+      port: trackerPort
     )
     defer { Task { await socket.close() } }
     
@@ -130,12 +133,13 @@ class HotlineTrackerClient {
           batchEntriesParsed += 1
           totalEntriesParsed += 1
           
-          // Filter out separator entries (servers with names like "-------")
+          // Filter out separator entries (servers with names like "-------"), and servers on a port
+          // no server can be on.
           let isSeparator = server.name.map {
             (try? trackerSeparatorRegex.prefixMatch(in: $0)) != nil
           } ?? false
-          
-          if !isSeparator {
+
+          if !isSeparator && HotlinePorts.valid.contains(Int(server.port)) {
             // Convert wire format to domain model
             continuation.yield(server)
             batchServersYielded += 1

@@ -7,6 +7,24 @@ struct HotlinePorts {
   /// The port servers usually take TLS connections on, as Mobius does unless it's set otherwise,
   /// with their file transfers on the one after.
   static let DefaultTLSPort: Int = 5600
+
+  /// The ports a server can be on, or take TLS connections on: not 0, and not the last there is,
+  /// 65535, which leaves none after it for its file transfers.
+  static let valid: ClosedRange<Int> = 1...65534
+
+  /// A server's port, or its TLS port, to connect to, if it's one a server can be on.
+  static func connectionPort(_ port: Int) -> UInt16? {
+    self.valid.contains(port) ? UInt16(port) : nil
+  }
+
+  /// The port a server's file transfers are on: the one after its port, or after its TLS port for
+  /// transfers over TLS, which has to be one a server can be on.
+  static func transferPort(after port: Int) throws -> UInt16 {
+    guard self.valid.contains(port) else {
+      throw HotlineTransferClientError.failedToConnect
+    }
+    return UInt16(port + 1)
+  }
 }
 
 public enum HotlineUserDisconnectOptions: UInt16 {
@@ -215,10 +233,9 @@ struct HotlineServer: Identifiable, Hashable, NetSocketDecodable {
     self.port = try await socket.read(UInt16.self, endian: endian)
     self.users = try await socket.read(UInt16.self, endian: endian)
 
-    // Its TLS port, if it has one. Not one that's its own port, or the last one, which leaves no
-    // room for its file transfers.
+    // Its TLS port, if it has one a server can be on, and not its own port.
     let tlsPort = try await socket.read(UInt16.self, endian: endian)
-    self.tlsPort = (tlsPort == 0 || tlsPort == self.port || tlsPort == .max) ? nil : tlsPort
+    self.tlsPort = HotlinePorts.valid.contains(Int(tlsPort)) && tlsPort != self.port ? tlsPort : nil
 
     // Read pascal strings (auto-detects encoding)
     self.name = try await socket.readPascalString()
@@ -283,7 +300,7 @@ public struct HotlineAccount: Identifiable {
           let field = HotlineTransactionField(type: fieldType, dataSize: fieldSize, data: fieldRemainingData)
           
           if fieldType == .userName {
-            self.name = field.getString()!
+            self.name = field.getString() ?? ""
           }
           
           if fieldType == .userLogin {
@@ -332,87 +349,57 @@ struct HotlineNewsList: Identifiable {
   
   var articles: [HotlineNewsArticle] = []
   
-  init(from data: [UInt8]) {
-    self.id = data.read(UInt32.self, at: 0)!
-    
-    self.count = data.read(UInt32.self, at: 4)!
-    
-    let (n, nl) = data.readPString(at: 8)
-    self.name = n!
-    
-    let (d, dl) = data.readPString(at: 8 + nl)
-    self.description = d!
-    
-    var baseIndex = Int(8 + nl + dl)
-    
-    for _ in 0..<Int(self.count) {
-      let articleID = data.read(UInt32.self, at: baseIndex)!
-      baseIndex += 4
-      
-      let date = data.readDate(at: baseIndex)!
-//      let timestampData = data.readData(at: baseIndex, length: 8)!
-      baseIndex += 8
-      
-      let parentID = data.read(UInt32.self, at: baseIndex)!
-      baseIndex += 4
-      
-      let flags = data.read(UInt32.self, at: baseIndex)!
-      baseIndex += 4
-      
-      let flavorCount = data.read(UInt16.self, at: baseIndex)!
-      baseIndex += 2
-      
-      let titleLength = data.read(UInt8.self, at: baseIndex)!
-      baseIndex += 1
-      
-      let title = data.readString(at: baseIndex, length: Int(titleLength))!
-      baseIndex += Int(titleLength)
-      
-      let posterLength = data.read(UInt8.self, at: baseIndex)!
-      baseIndex += 1
-      
-      let poster = data.readString(at: baseIndex, length: Int(posterLength))!
-      baseIndex += Int(posterLength)
-      
-      // Parse date info
-//      let yearData = timestampData.read(UInt16.self, at: 0)!
-//      let millisecondData = timestampData.read(UInt16.self, at: 2)!
-//      let secondsData = timestampData.read(UInt32.self, at: 4)!
-//      let articleData = convertHotlineDate(year: yearData, seconds: secondsData, milliseconds: millisecondData)
-      var newArticle = HotlineNewsArticle(id: articleID, parentID: parentID, flags: flags, title: title, username: poster, date: date)
-      
-      print("ARTICLE ID: \(articleID)")
-      print("PARENT ID: \(parentID)")
-      print("FLAGS: \(flags)")
-      print("FLAVOR COUNT: \(flavorCount)")
-      print("TITLE: \(title)")
-      print("POSTER: \(poster)")
-      
-      if flavorCount > 1 {
-        print("MORE THAN ONE FLAVOR!!")
-      }
-      
-      for _ in 0..<Int(flavorCount) {
-        let flavorLength = data.read(UInt8.self, at: baseIndex)!
-        baseIndex += 1
-        
-        let flavorText = data.readString(at: baseIndex, length: Int(flavorLength))!
-        baseIndex += Int(flavorLength)
-        
-        let articleSize = data.read(UInt16.self, at: baseIndex)!
-        baseIndex += 2
-        
-        newArticle.flavors.append((flavorText, articleSize))
-        
-//        let articleString = data.readString(at: baseIndex + i + 4 + 8 + 4 + 4 + 2 + 1 + Int(titleLength) + 1 + Int(posterLength) + 1 + Int(flavorLength) + 2, length: Int(articleSize))!
-        
-        print("FLAVOR: \(flavorText)")
-        print("ARTICLE SIZE: \(articleSize)")
-//        print("ARTICLE: \(articleString)")
-      }
-      
-      self.articles.append(newArticle)
+  /// A category's articles as the server sends them, or nil if it's cut short before them. One that's
+  /// cut short ends them, after the ones before it.
+  init?(from data: [UInt8]) {
+    let (name, nameLength) = data.readPString(at: 8)
+    let (description, descriptionLength) = data.readPString(at: 8 + nameLength)
+    guard let id = data.read(UInt32.self, at: 0),
+          let count = data.read(UInt32.self, at: 4),
+          let name,
+          let description else {
+      return nil
     }
+    self.id = id
+    self.count = count
+    self.name = name
+    self.description = description
+
+    var offset = 8 + nameLength + descriptionLength
+    for _ in 0..<count {
+      guard let article = Self.article(in: data, at: &offset) else {
+        break
+      }
+      self.articles.append(article)
+    }
+  }
+
+  /// The article at `offset`, which it moves past it, or nil if it's cut short.
+  private static func article(in data: [UInt8], at offset: inout Int) -> HotlineNewsArticle? {
+    guard let id = data.read(UInt32.self, at: offset),
+          let parentID = data.read(UInt32.self, at: offset + 12),
+          let flags = data.read(UInt32.self, at: offset + 16),
+          let flavorCount = data.read(UInt16.self, at: offset + 20),
+          let titleLength = data.read(UInt8.self, at: offset + 22).map(Int.init),
+          let title = data.readString(at: offset + 23, length: titleLength),
+          let posterLength = data.read(UInt8.self, at: offset + 23 + titleLength).map(Int.init),
+          let poster = data.readString(at: offset + 24 + titleLength, length: posterLength) else {
+      return nil
+    }
+    // Without a date, for one that isn't one.
+    var article = HotlineNewsArticle(id: id, parentID: parentID, flags: flags, title: title, username: poster, date: data.readDate(at: offset + 4))
+    var position = offset + 24 + titleLength + posterLength
+    for _ in 0..<flavorCount {
+      guard let flavorLength = data.read(UInt8.self, at: position).map(Int.init),
+            let flavor = data.readString(at: position + 1, length: flavorLength),
+            let size = data.read(UInt16.self, at: position + 1 + flavorLength) else {
+        return nil
+      }
+      article.flavors.append((flavor, size))
+      position += 3 + flavorLength
+    }
+    offset = position
+    return article
   }
 }
 
@@ -437,24 +424,22 @@ public struct HotlineNewsCategory: Identifiable, Hashable, Sendable {
     self.name = name
   }
   
-  init(from data: [UInt8]) {
-    self.type = data.read(UInt16.self, at: 0)!
-    
-    if self.type == 2 {
-      // Read bundle properties
-      self.count = data.read(UInt16.self, at: 2)!
-      let (n, _) = data.readPString(at: 4)
-      self.name = n!
+  /// A bundle or category as the server sends it, or nil if it's cut short.
+  init?(from data: [UInt8]) {
+    guard let type = data.read(UInt16.self, at: 0) else {
+      return nil
     }
-    else if self.type == 3 {
-      // Read category properties
-      self.count = data.read(UInt16.self, at: 2)!
-//      let guid = data.read(UInt32.self, at: 4)!
-//      print("CATEGORY GUID: \(guid)")
-//      let addSN = data.read(UInt32.self, at: 20)!
-//      let removeSN = data.read(UInt32.self, at: 24)!
-      let (n, _) = data.readPString(at: 28)
-      self.name = n!
+    self.type = type
+
+    // A bundle's name is after its count, and a category's after its count, GUID, and serial
+    // numbers.
+    if type == 2 || type == 3 {
+      guard let count = data.read(UInt16.self, at: 2),
+            let name = data.readPString(at: type == 2 ? 4 : 28).0 else {
+        return nil
+      }
+      self.count = count
+      self.name = name
     }
     else {
       self.count = 0
@@ -506,25 +491,25 @@ public class HotlineFile: Identifiable, Hashable {
     }
   }
   
-  init(from data: [UInt8]) {
-    let typeRaw = data.read(UInt32.self, at: 0)!
-    let creatorRaw = data.read(UInt32.self, at: 4)!
-    
+  /// A file or folder as the server lists it, or nil if it's cut short. Its reserved four bytes and
+  /// its name's script are between its size and its name.
+  init?(from data: [UInt8]) {
+    guard let typeRaw = data.read(UInt32.self, at: 0),
+          let creatorRaw = data.read(UInt32.self, at: 4),
+          let fileSize = data.read(UInt32.self, at: 8),
+          let nameLength = data.read(UInt16.self, at: 18),
+          let name = data.readString(at: 20, length: Int(nameLength)) else {
+      return nil
+    }
     self.type = typeRaw.fourCharCode()
     self.creator = creatorRaw.fourCharCode()
-    self.fileSize = data.read(UInt32.self, at: 8)!
-    
+    self.fileSize = fileSize
+    self.name = name
+
     self.isFolder = (self.type == "fldr")
     if self.isFolder {
       self.files = []
     }
-    
-//    data.read(UInt32.self, at: 12)! // reserved
-//    let nameScript = data.read(UInt16.self, at: 16)! // name script
-//    print("NAME SCRIPT: \(nameScript)")
-    
-    let nameLength = data.read(UInt16.self, at: 18)!
-    self.name = data.readString(at: 20, length: Int(nameLength))!
   }
 }
 
@@ -570,13 +555,19 @@ public struct HotlineUser: Identifiable, Hashable, Sendable {
     self.name = name
   }
   
-  init(from data: [UInt8]) {
-    self.id = data.read(UInt16.self, at: 0)!
-    self.iconID = data.read(UInt16.self, at: 2)!
-    self.status = data.read(UInt16.self, at: 4)!
-    
-    let userNameLength = Int(data.read(UInt16.self, at: 6)!)
-    self.name = data.readString(at: 8, length: userNameLength)!
+  /// A user as the server lists them, or nil if it's cut short.
+  init?(from data: [UInt8]) {
+    guard let id = data.read(UInt16.self, at: 0),
+          let iconID = data.read(UInt16.self, at: 2),
+          let status = data.read(UInt16.self, at: 4),
+          let nameLength = data.read(UInt16.self, at: 6),
+          let name = data.readString(at: 8, length: Int(nameLength)) else {
+      return nil
+    }
+    self.id = id
+    self.iconID = iconID
+    self.status = status
+    self.name = name
   }
   
   public func hash(into hasher: inout Hasher) {
@@ -663,35 +654,42 @@ struct HotlineTransactionField {
     self.init(type: type, string: string, encoding: .ascii, encrypt: encrypt)
   }
   
-  init(type: HotlineTransactionFieldType, path: String) {
+  init?(type: HotlineTransactionFieldType, path: String) {
     var components: [String] = []
-    
+
     for component in path.components(separatedBy: "/") {
       if !component.isEmpty {
         components.append(component)
       }
     }
-    
+
     self.init(type: type, pathComponents: components)
   }
-  
-  init(type: HotlineTransactionFieldType, pathComponents: [String]) {
+
+  /// A path, or nil for one the protocol can't say: one with a name of more than 255 bytes, or too
+  /// much for a field. Cutting it short would make it a different path.
+  init?(type: HotlineTransactionFieldType, pathComponents: [String]) {
     var pathData: [UInt8] = []
-    
-    pathData.append(UInt16(pathComponents.count), endian: .big)
+
+    guard let count = UInt16(exactly: pathComponents.count) else {
+      return nil
+    }
+    pathData.append(count, endian: .big)
     for name in pathComponents {
       pathData.append(UInt16(0), endian: .big)
-      
-      var nameData = name.data(using: .macOSRoman, allowLossyConversion: true)
-      if nameData == nil {
-        nameData = Data()
+
+      let nameData = name.data(using: .macOSRoman, allowLossyConversion: true) ?? Data()
+      guard let nameLength = UInt8(exactly: nameData.count) else {
+        return nil
       }
-      
-      pathData.append(UInt8(nameData!.count))
-      pathData.append(contentsOf: nameData!)
+      pathData.append(nameLength)
+      pathData.append(contentsOf: nameData)
     }
-    
-    self.init(type: type, dataSize: UInt16(pathData.count), data: pathData)
+
+    guard let dataSize = UInt16(exactly: pathData.count) else {
+      return nil
+    }
+    self.init(type: type, dataSize: dataSize, data: pathData)
   }
 
   func getUInt8() -> UInt8? {
@@ -725,8 +723,9 @@ struct HotlineTransactionField {
         return Int(val)
       }
     case 8:
+      // Not one too big for an Int, as a server can send, for something that's never that big.
       if let val = self.getUInt64() {
-        return Int(val)
+        return Int(exactly: val)
       }
     default:
       break
@@ -747,19 +746,19 @@ struct HotlineTransactionField {
     return self.data.readString(at: 0, length: self.data.count)
   }
   
-  func getUser() -> HotlineUser {
+  func getUser() -> HotlineUser? {
     return HotlineUser(from: self.data)
   }
-  
-  func getFile() -> HotlineFile {
+
+  func getFile() -> HotlineFile? {
     return HotlineFile(from: self.data)
   }
-  
-  func getNewsCategory() -> HotlineNewsCategory {
+
+  func getNewsCategory() -> HotlineNewsCategory? {
     return HotlineNewsCategory(from: self.data)
   }
-  
-  func getNewsList() -> HotlineNewsList {
+
+  func getNewsList() -> HotlineNewsList? {
     return HotlineNewsList(from: self.data)
   }
   
@@ -861,8 +860,12 @@ struct HotlineTransaction {
     self.fields.append(HotlineTransactionField(type: type, string: val, encoding: encoding, encrypt: false))
   }
   
-  mutating func setFieldPath(type: HotlineTransactionFieldType, val: [String]) {
-    self.fields.append(HotlineTransactionField(type: type, pathComponents: val))
+  /// Adds a path, or throws `tooLong` for one the protocol can't say, rather than a different one.
+  mutating func setFieldPath(type: HotlineTransactionFieldType, val: [String]) throws {
+    guard let field = HotlineTransactionField(type: type, pathComponents: val) else {
+      throw HotlineClientError.tooLong
+    }
+    self.fields.append(field)
   }
 
   mutating func setFieldData(type: HotlineTransactionFieldType, val: Data) {
@@ -984,6 +987,12 @@ struct HotlineTransaction {
     return self.fields.filter { p in
       p.type == type
     }
+  }
+
+  /// A transfer's size, four bytes, as its forks' sizes are, or nil for none, or for one too big to
+  /// be a transfer's.
+  var transferSize: UInt32? {
+    self.getField(type: .transferSize)?.getInteger().flatMap { UInt32(exactly: $0) }
   }
   
   func encoded() -> [UInt8] {

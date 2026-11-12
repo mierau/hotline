@@ -251,12 +251,16 @@ extension HotlineState {
   /// - Parameter trust: What's known of servers that take TLS, which tests can keep apart.
   @MainActor
   func connect(to server: Server, login: HotlineLogin, withoutEncryption: Bool, trust: ServerTrust = .shared) async throws -> HotlineClient {
+    // On a port a server can be on, as a link, a bookmark, or a typed address could say any.
+    guard let plainPort = HotlinePorts.connectionPort(server.port) else {
+      throw HotlineClientError.invalidPort(server.port)
+    }
     let willLogIn: @Sendable () async -> Void = { @MainActor [weak self] in
       self?.status = .loggingIn
     }
     let plain: () async throws -> HotlineClient = {
       try await Self.attempt(server, trust: trust) {
-        try await HotlineClient.connect(host: server.address, port: UInt16(server.port), login: login, willLogIn: willLogIn)
+        try await HotlineClient.connect(host: server.address, port: plainPort, login: login, willLogIn: willLogIn)
       }
     }
 
@@ -270,9 +274,15 @@ extension HotlineState {
     let guessing = known == nil
       && server.port == HotlinePorts.DefaultServerPort
       && !trust.hasNoSecurePort(address: server.address, port: server.port)
-    guard !withoutEncryption,
-          let tlsPort = known ?? (guessing ? HotlinePorts.DefaultTLSPort : nil),
-          let port = UInt16(exactly: tlsPort), port < .max else {
+    guard !withoutEncryption, let tlsPort = known ?? (guessing ? HotlinePorts.DefaultTLSPort : nil) else {
+      return try await plain()
+    }
+    // A TLS port no server can be on, as a link or a bookmark could say, is no reason to log in
+    // without TLS where it has to be used.
+    guard let port = HotlinePorts.connectionPort(tlsPort) else {
+      if required {
+        throw ServerTrust.Problem.unavailable(port: tlsPort)
+      }
       return try await plain()
     }
 
@@ -360,11 +370,11 @@ extension HotlineState {
 
   /// Where a transfer goes, as the connection it's for does: over TLS on the port after the TLS
   /// port, while it's encrypted, or the port after the server's.
-  func transferEndpoint(for server: Server) -> (port: UInt16, tls: TLSPolicy) {
-    guard let secure = self.secureConnection, let port = UInt16(exactly: secure.port) else {
-      return (UInt16(server.port), .disabled)
+  func transferEndpoint(for server: Server) -> (port: Int, tls: TLSPolicy) {
+    guard let secure = self.secureConnection else {
+      return (server.port, .disabled)
     }
-    return (port, ServerTrust.shared.policy(address: server.address, port: server.port, tlsPort: secure.port))
+    return (secure.port, ServerTrust.shared.policy(address: server.address, port: server.port, tlsPort: secure.port))
   }
 
   /// Complete the login process after agreement (or immediately if no agreement needed).
@@ -654,7 +664,7 @@ extension HotlineState {
 
       // An error reply means the server has no banner. Anything else, like a timeout, might be
       // temporary, so keep showing the cached banner.
-      let transfer: (referenceNumber: UInt32, transferSize: Int)?
+      let transfer: (referenceNumber: UInt32, transferSize: UInt32)?
       do {
         transfer = try await client.downloadBanner()
       }
@@ -681,7 +691,7 @@ extension HotlineState {
         port: endpoint.port,
         tls: endpoint.tls,
         reference: transfer.referenceNumber,
-        size: UInt32(transfer.transferSize)
+        size: transfer.transferSize
       )
 
       let downloadURL: URL

@@ -226,7 +226,7 @@ extension HotlineState {
       }
 
       // Request download from server
-      let result: (referenceNumber: UInt32, transferSize: Int, fileSize: Int, waitingCount: Int)?
+      let result: (referenceNumber: UInt32, transferSize: UInt32, fileSize: Int, waitingCount: Int)?
       do {
         result = try await client.downloadFile(name: fileName, path: fullPath)
       }
@@ -276,7 +276,7 @@ extension HotlineState {
         port: endpoint.port,
         tls: endpoint.tls,
         reference: referenceNumber,
-        size: UInt32(result.transferSize)
+        size: result.transferSize
       )
 
       // Create and store the download task
@@ -396,7 +396,7 @@ extension HotlineState {
       }
 
       // Request folder download from server, saying why it won't, as for a file.
-      let result: (referenceNumber: UInt32, transferSize: Int, itemCount: Int, waitingCount: Int)?
+      let result: (referenceNumber: UInt32, transferSize: UInt32, itemCount: Int, waitingCount: Int)?
       do {
         result = try await client.downloadFolder(name: folderName, path: fullPath)
       }
@@ -448,7 +448,7 @@ extension HotlineState {
         port: endpoint.port,
         tls: endpoint.tls,
         reference: referenceNumber,
-        size: UInt32(result.transferSize),
+        size: result.transferSize,
         itemCount: result.itemCount
       )
 
@@ -1099,7 +1099,7 @@ extension HotlineState {
         address: address,
         port: server.port,
         tlsPort: self.secureConnection?.port,
-        size: result.transferSize,
+        size: Int(result.transferSize),
         name: fileName
       )
 
@@ -1133,7 +1133,7 @@ extension HotlineState {
       port: endpoint.port,
       tls: endpoint.tls,
       reference: transfer.referenceNumber,
-      size: UInt32(clamping: transfer.transferSize)
+      size: transfer.transferSize
     )
     return try await reader.read(upTo: length)
   }
@@ -1161,7 +1161,7 @@ extension HotlineState {
       port: endpoint.port,
       tls: endpoint.tls,
       reference: transfer.referenceNumber,
-      size: transfer.transferSize,
+      size: Int(transfer.transferSize),
       fromStart: offset == 0
     )
   }
@@ -1191,7 +1191,7 @@ extension HotlineState {
       port: endpoint.port,
       tls: endpoint.tls,
       reference: transfer.referenceNumber,
-      size: UInt32(clamping: transfer.transferSize)
+      size: transfer.transferSize
     )
     return try await reader.readResourceFork(upTo: limit)
   }

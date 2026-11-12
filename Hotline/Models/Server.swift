@@ -78,7 +78,11 @@ struct Server: Codable {
     guard let host = url.host(percentEncoded: false) else {
       return nil
     }
-    
+    // To a port a server can be on, as a link could say any.
+    if let port = url.port, !HotlinePorts.valid.contains(port) {
+      return nil
+    }
+
     self.name = nil
     self.description = nil
     self.users = 0
