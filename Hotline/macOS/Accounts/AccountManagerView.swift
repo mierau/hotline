@@ -14,8 +14,6 @@ struct AccountManagerView: View {
   @State private var deleteConfirm: Bool = false
   @State private var accountToEdit: HotlineAccount? = nil
   @State private var accountToDelete: HotlineAccount? = nil
-  /// For the selected account's buttons to be drawn as one piece of glass.
-  @Namespace private var glass
   
   private func newAccount() {
     self.creatorShown = true
@@ -116,7 +114,7 @@ struct AccountManagerView: View {
             } label: {
               Image(systemName: "pencil")
             }
-            .buttonStyle(AccountHeaderButtonStyle(joined: "selected", in: self.glass))
+            .buttonStyle(AccountHeaderButtonStyle(joined: true))
             .help("Edit Account")
             
             Button {
@@ -126,7 +124,7 @@ struct AccountManagerView: View {
             } label: {
               Image(systemName: "trash")
             }
-            .buttonStyle(AccountHeaderButtonStyle(joined: "selected", in: self.glass))
+            .buttonStyle(AccountHeaderButtonStyle(joined: true))
             .help("Delete Account")
           }
           .disabled(self.selection == nil)
@@ -248,10 +246,15 @@ struct AccountManagerView: View {
 // MARK: - Header Buttons
 
 /// A symbol's button in the accounts' header, as a toolbar's are from macOS 26: round Liquid Glass
-/// that gives as it's clicked, or joined with the buttons beside it that share its `joined` into one
-/// piece, in the text's color, and faint when it can't be clicked. Prominent, it's glass in the
-/// accent, or a server's theme's, with a white symbol, as a default button is. Before macOS 26, the
-/// symbol alone, on the accent, or on a gray its group puts behind it.
+/// that gives as it's clicked, in the text's color, and faint when it can't be clicked. Prominent,
+/// it's glass in the accent, or a server's theme's, with a white symbol, as a default button is.
+/// Joined with the buttons beside it, it's the symbol alone, on the one piece of glass, or before
+/// macOS 26 the gray, that `accountHeaderJoined()` puts behind them all. Before macOS 26, a button
+/// on its own is the symbol on the accent, or on a gray circle.
+///
+/// Joined buttons don't each have glass of their own, joined with `glassEffectUnion`, as each one's
+/// glass that gives as it's clicked then takes clicks across the whole piece, and the last one's
+/// gets them all.
 private struct AccountHeaderButtonStyle: ButtonStyle {
   /// How big each button is, across and down.
   static let size: CGFloat = 32
@@ -259,8 +262,7 @@ private struct AccountHeaderButtonStyle: ButtonStyle {
   static let spacing: CGFloat = 8
 
   var prominent = false
-  var joined: String? = nil
-  var namespace: Namespace.ID? = nil
+  var joined = false
 
   @Environment(\.isEnabled) private var isEnabled
   @Environment(\.serverTheme) private var theme
@@ -269,9 +271,8 @@ private struct AccountHeaderButtonStyle: ButtonStyle {
     self.prominent = prominent
   }
 
-  init(joined: String, in namespace: Namespace.ID) {
+  init(joined: Bool) {
     self.joined = joined
-    self.namespace = namespace
   }
 
   /// The accent, as the server's theme has it, or the system's.
@@ -288,15 +289,14 @@ private struct AccountHeaderButtonStyle: ButtonStyle {
       .foregroundStyle(tinted ? AnyShapeStyle(.white) : self.isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
       .frame(width: Self.size, height: Self.size)
       .contentShape(.capsule)
-    if #available(macOS 26, *) {
+    if self.joined {
+      // On its group's glass, or gray, so it shows it's clicked itself.
+      label
+        .opacity(configuration.isPressed ? 0.5 : 1)
+    }
+    else if #available(macOS 26, *) {
       // Giving as it's clicked only when it can be.
-      let glass = label.glassEffect(tinted ? .regular.tint(self.accent).interactive() : self.isEnabled ? .regular.interactive() : .regular, in: .capsule)
-      if let joined = self.joined, let namespace = self.namespace {
-        glass.glassEffectUnion(id: joined, namespace: namespace)
-      }
-      else {
-        glass
-      }
+      label.glassEffect(tinted ? .regular.tint(self.accent).interactive() : self.isEnabled ? .regular.interactive() : .regular, in: .capsule)
     }
     else {
       label
@@ -304,7 +304,7 @@ private struct AccountHeaderButtonStyle: ButtonStyle {
           if tinted {
             Circle().fill(self.accent)
           }
-          else if self.joined == nil {
+          else {
             Circle().fill(.quaternary)
           }
         }
@@ -331,12 +331,12 @@ private struct AccountHeaderGlass<Content: View>: View {
 }
 
 private extension View {
-  /// Buttons joined into one piece: their glass is from macOS 26, and before, a gray capsule behind
-  /// them all.
+  /// Buttons joined into one piece: one capsule of glass behind them all, from macOS 26, and
+  /// before, a gray one.
   @ViewBuilder
   func accountHeaderJoined() -> some View {
     if #available(macOS 26, *) {
-      self
+      self.glassEffect(.regular, in: .capsule)
     }
     else {
       self.background(.quaternary, in: .capsule)
