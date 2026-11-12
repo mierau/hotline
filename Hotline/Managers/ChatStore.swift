@@ -733,7 +733,7 @@ actor ChatStore {
       WHERE serverId = ?1 AND peerName IS NULL AND date < ?2 AND type NOT IN ('signOut', 'agreement')
         AND (instr(searchText, ?3) > 0
           OR (?4 = 1 AND (instr(body, '.') > 0 OR instr(body, '@') > 0))
-          OR (?4 = 2 AND instr(lower(body), 'hotline://') > 0))
+          OR (?4 = 2 AND (instr(lower(body), 'hotline://') > 0 OR instr(lower(body), 'hotlines://') > 0)))
       ORDER BY date DESC LIMIT ?5
       """)
 

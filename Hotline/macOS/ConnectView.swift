@@ -12,6 +12,9 @@ struct ConnectView: View {
   @Binding var address: String
   @Binding var login: String
   @Binding var password: String
+  /// The TLS port the server's to be connected to securely on, as a hotlines:// link asks, which
+  /// the address doesn't show, or nil.
+  var tlsPort: Int? = nil
 
   /// Whether it's connecting, with what it's doing in `status`.
   var isConnecting: Bool = false
@@ -157,18 +160,18 @@ struct ConnectView: View {
       name: known?.name ?? typed.host,
       address: typed.port == HotlinePorts.DefaultServerPort ? typed.host : "\(typed.host):\(typed.port)",
       login: typed.login ?? self.login,
-      password: typed.login != nil ? typed.password ?? "" : self.password
+      password: typed.login != nil ? typed.password ?? "" : self.password,
+      // Secure, if it's to be connected to securely, or it's been connected to over TLS.
+      tlsPort: self.tlsPort ?? typed.tlsPort ?? ServerTrust.shared.record(address: typed.host, port: typed.port)?.tlsPort
     )
   }
 
   private var addressField: some View {
     HStack(spacing: 10) {
-      // The globe the Servers window shows for servers.
-      Image("Server")
-        .resizable()
-        .scaledToFit()
+      // The globe the Servers window shows for servers, with the lock for one that's typed or
+      // chosen that's connected to securely.
+      ServerIcon(isSecure: self.tlsPort != nil || self.isSecure(self.address))
         .frame(width: 16, height: 16)
-        .accessibilityHidden(true)
       // While it's connecting, the address as plain text, right where it's typed, so it can't be
       // changed but isn't dimmed the way a disabled field would be.
       if self.isConnecting {
@@ -391,6 +394,25 @@ struct ConnectView: View {
     }
   }
 
+  /// Whether a server, as its address is typed, is connected to securely: it's bookmarked to be, a
+  /// tracker lists it with a TLS port, or it's been connected to securely before.
+  private func isSecure(_ address: String) -> Bool {
+    let typed = Server.parseServerAddress(address)
+    guard !typed.host.isEmpty else {
+      return false
+    }
+    // Asked for, as a hotlines:// address does.
+    if typed.tlsPort != nil {
+      return true
+    }
+    let known = self.suggestions.servers.first {
+      $0.port == typed.port && $0.address.caseInsensitiveCompare(typed.host) == .orderedSame
+    }
+    return known?.isSecure == true
+      || ServerTrust.shared.record(address: typed.host, port: typed.port) != nil
+      || ServerTrust.shared.listedTLSPort(address: typed.host, port: typed.port) != nil
+  }
+
   /// A server's address as it's typed, with its port only if it isn't Hotline's usual one.
   private static func addressText(_ address: String, port: Int) -> String {
     port == HotlinePorts.DefaultServerPort ? address : "\(address):\(port)"
@@ -432,7 +454,7 @@ struct ConnectView: View {
   private var quickServersGrid: some View {
     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: self.quickServerColumns), alignment: .leading, spacing: 4) {
       ForEach(Array(self.quickServers.enumerated()), id: \.element.id) { index, server in
-        QuickServerButton(name: server.name, address: server.address, lastConnected: server.lastConnected) {
+        QuickServerButton(name: server.name, address: server.address, lastConnected: server.lastConnected, isSecure: self.isSecure(server.address)) {
           self.connect(to: server.address, login: server.login, password: server.password)
         }
         .contextMenu {
@@ -558,6 +580,8 @@ private struct QuickServerButton: View {
   let name: String
   let address: String
   let lastConnected: Date?
+  /// Whether it's connected to securely, which its globe's lock says.
+  var isSecure: Bool = false
   let action: () -> Void
   @State private var hovered = false
 
@@ -565,11 +589,8 @@ private struct QuickServerButton: View {
     Button(action: self.action) {
       HStack(spacing: 6) {
         // The globe the address field has, and where it has it.
-        Image("Server")
-          .resizable()
-          .scaledToFit()
+        ServerIcon(isSecure: self.isSecure)
           .frame(width: 16, height: 16)
-          .accessibilityHidden(true)
         // The name, with all the room there is, close up to the time.
         HStack(spacing: 4) {
           Text(self.name)
@@ -687,10 +708,12 @@ private struct BookmarksMenu: NSViewRepresentable {
         menu.removeItem(at: 1)
       }
       let open = self.parent.open
-      for bookmark in self.parent.bookmarks {
+      // With the lock for the ones that are secure, which every globe's as wide as, if any are.
+      let secure = self.parent.bookmarks.map(\.isSecure)
+      for (bookmark, isSecure) in zip(self.parent.bookmarks, secure) {
         let item = ChatMenuItem(bookmark.name) { open(bookmark) }
         item.subtitle = bookmark.displayAddress
-        item.image = NSImage(named: "Server")
+        item.image = ServerIcon.menuImage(isSecure: isSecure, matchingSecure: secure.contains(true))
         if #available(macOS 27, *) {
           item.preferredImageVisibility = .visible
         }
@@ -964,8 +987,9 @@ private struct SuggestionRow: View {
   var body: some View {
     let secondary = self.isSelected ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.secondary)
     HStack(spacing: 8) {
-      Image("Server")
-        .accessibilityHidden(true)
+      // With the lock for one that's connected to over TLS.
+      ServerIcon(isSecure: self.server.isSecure)
+        .frame(width: 16, height: 16)
       VStack(alignment: .leading, spacing: 1) {
         Text(self.server.name)
           .font(.system(size: 13))

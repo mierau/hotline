@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 import AppKit
+import SecurityInterface
 
 struct ServerMenuItem: Identifiable, Hashable {
   let id: UUID
@@ -179,6 +180,8 @@ struct ServerView: View {
   @State private var connectPassword: String = ""
   @State private var connectionDisplayed: Bool = false
   @State private var connectTask: Task<Void, Never>? = nil
+  /// Whether how the connection's encrypted shows, from the lock on the server's globe.
+  @State private var encryptionShown: Bool = false
   /// Whether the pointer's over the Chat row, which shows a button for a private chat.
   @State private var chatRowHovered: Bool = false
   /// The private chats with who's in them folded away, and the one the pointer's over, which shows
@@ -295,7 +298,9 @@ struct ServerView: View {
                 name: title.isEmpty ? server.name ?? server.address : title,
                 address: server.port == HotlinePorts.DefaultServerPort ? server.address : "\(server.address):\(server.port)",
                 login: server.login,
-                password: server.password
+                password: server.password,
+                // Encrypted as it's connected, if it is.
+                tlsPort: self.model.secureConnection?.port
               )
             }
           }
@@ -394,6 +399,22 @@ struct ServerView: View {
         Text(message)
       }
     }
+    // A server that has to be connected to securely, which couldn't be now, or had another
+    // certificate, which is up to you, rather than connecting without, or trusting it, unasked.
+    .modifier(EncryptionProblemAlerts(
+      problem: self.$model.encryptionProblem,
+      serverName: self.server.name ?? self.server.address,
+      connectAnyway: { stopRequiring in
+        if stopRequiring {
+          self.stopRequiringSecureConnection()
+        }
+        self.connectToServer(withoutEncryption: true)
+      },
+      trust: { certificate, port in
+        ServerTrust.shared.trust(certificate, address: self.server.address, port: self.server.port, tlsPort: port)
+        self.connectToServer()
+      }
+    ))
     .alert("Disconnected", isPresented: Binding(
       get: { self.model.disconnectMessage != nil },
       set: { if !$0 { self.model.disconnectMessage = nil } }
@@ -471,6 +492,7 @@ struct ServerView: View {
       address: self.$connectAddress,
       login: self.$connectLogin,
       password: self.$connectPassword,
+      tlsPort: self.server.tlsRequired ? self.server.tlsPort ?? HotlinePorts.DefaultTLSPort : nil,
       isConnecting: self.model.status.isLoggingIn,
       status: self.connectionStatusToLabel(status: self.model.status),
       cancel: { self.cancelConnecting() }
@@ -478,8 +500,8 @@ struct ServerView: View {
       self.connectToServer()
     }
     .focusSection()
-    .onChange(of: self.connectAddress) {
-      self.updateServerFromForm()
+    .onChange(of: self.connectAddress) { previous, _ in
+      self.updateServerFromForm(previousAddress: previous)
     }
     .onChange(of: self.connectLogin) {
       self.updateServerFromForm()
@@ -932,8 +954,28 @@ struct ServerView: View {
 
   /// The server to connect to, from the form: its address, and a login and password typed with
   /// it, as in user:password@host, or else the ones in their own fields.
-  private func updateServerFromForm() {
+  ///
+  /// A secure connection asked for by a hotlines:// link stays asked for while the address is the
+  /// same server's, which the address shows without the hotlines://.
+  ///
+  /// - Parameter previousAddress: The address as it was before it changed, if it did.
+  private func updateServerFromForm(previousAddress: String? = nil) {
     let typed = Server.parseServerAddress(self.connectAddress)
+    // Another server than the one it was, so what was known of that one's TLS isn't this one's.
+    if typed.host != self.server.address || typed.port != self.server.port {
+      self.server.tlsPort = nil
+      self.server.tlsRequired = false
+    }
+    // A secure connection, when it's asked for, as a hotlines:// address typed out does, and not
+    // once the hotlines:// is taken off it.
+    if let tlsPort = typed.tlsPort {
+      self.server.tlsRequired = true
+      self.server.tlsPort = tlsPort
+    }
+    else if let previousAddress, Server.parseServerAddress(previousAddress).tlsPort != nil {
+      self.server.tlsRequired = false
+      self.server.tlsPort = nil
+    }
     self.server.address = typed.host
     self.server.port = typed.port
     if let login = typed.login {
@@ -956,12 +998,30 @@ struct ServerView: View {
     return colors
   }
 
+  /// The server's globe, with the lock on it while the connection is encrypted, which shows how in
+  /// a click.
+  @ViewBuilder
   private var serverIcon: some View {
-    Image("Server Large")
-      .resizable()
-      .scaledToFit()
+    let icon = ServerIcon(name: "Server Large", isSecure: self.model.secureConnection != nil)
       .frame(width: 28)
       .opacity(self.controlActiveState == .inactive ? 0.4 : 1.0)
+
+    if let connection = self.model.secureConnection {
+      Button {
+        self.encryptionShown.toggle()
+      } label: {
+        icon
+      }
+      .buttonStyle(.plain)
+      .help("Secure Connection")
+      .popover(isPresented: self.$encryptionShown, arrowEdge: .bottom) {
+        EncryptedConnectionPopover(connection: connection, address: self.server.address)
+      }
+    }
+    else {
+      icon
+        .accessibilityHidden(true)
+    }
   }
 
   /// Nothing to see, but enough of something for the window to keep its toolbar.
@@ -998,16 +1058,22 @@ struct ServerView: View {
   }
 
   private func syncFieldsFromServer() {
+    // Without the hotlines:// of one to connect to securely, which its globe shows instead.
     self.connectAddress = self.server.displayAddress
     self.connectLogin = self.server.login
     self.connectPassword = self.server.password
   }
 
-  @MainActor func connectToServer() {
+  /// - Parameter withoutEncryption: Whether to connect without TLS this once, as you can choose to
+  ///   when a server that's taken it before doesn't now.
+  @MainActor func connectToServer(withoutEncryption: Bool = false) {
     guard !self.server.address.isEmpty else {
       return
     }
-    
+
+    // As its bookmark has it, if it's bookmarked, however it was typed or chosen.
+    self.applyBookmarkedEncryption()
+
     // Set status here so it's immediate (not waiting to enter task).
     self.model.status = .connecting
 
@@ -1016,14 +1082,45 @@ struct ServerView: View {
         try await self.model.login(
           server: server,
           username: Prefs.shared.username,
-          iconID: Prefs.shared.userIconID
+          iconID: Prefs.shared.userIconID,
+          withoutEncryption: withoutEncryption
         )
       } catch {
         print("ServerView: Login failed: \(error)")
       }
     }
   }
-  
+
+  /// Whether to connect to the server over TLS, and on which port, as its bookmark has it, for a
+  /// server that's bookmarked: over TLS, if the bookmark's set to be, and otherwise as it would be
+  /// if it weren't bookmarked.
+  private func applyBookmarkedEncryption() {
+    let bookmarks = (try? self.modelContext.fetch(FetchDescriptor<Bookmark>())) ?? []
+    guard let bookmark = bookmarks.first(where: {
+      $0.type == .server && $0.port == self.server.port && $0.address.caseInsensitiveCompare(self.server.address) == .orderedSame
+    }) else {
+      return
+    }
+    // Securely, if its bookmark's set to be, whatever was typed, and as typed otherwise.
+    if let tlsPort = bookmark.tlsPort {
+      self.server.tlsRequired = true
+      self.server.tlsPort = tlsPort
+    }
+  }
+
+  /// Stops requiring the server to be connected to securely, as you can choose to for one whose
+  /// secure connection's gone: forgets it was connected to securely, and turns its bookmark's secure
+  /// connection off, if it has one. A tracker that lists it with a TLS port still has it tried first.
+  private func stopRequiringSecureConnection() {
+    ServerTrust.shared.forget(address: self.server.address, port: self.server.port)
+    let bookmarks = (try? self.modelContext.fetch(FetchDescriptor<Bookmark>())) ?? []
+    for bookmark in bookmarks where bookmark.type == .server && bookmark.port == self.server.port && bookmark.address.caseInsensitiveCompare(self.server.address) == .orderedSame {
+      bookmark.tlsPort = nil
+    }
+    self.server.tlsRequired = false
+    self.server.tlsPort = nil
+  }
+
   private func cancelConnecting() {
     self.connectTask?.cancel()
     self.connectTask = nil
@@ -1048,7 +1145,7 @@ struct ServerView: View {
     case .disconnected:
       return "Disconnected"
     case .connecting:
-      return "Connecting to \(n)…"
+      return self.model.connectingSecurely ? "Connecting securely to \(n)…" : "Connecting to \(n)…"
     case .loggingIn:
       return "Logging in to \(n)…"
     case .connected:
@@ -1334,4 +1431,153 @@ struct ServerTransferRow: View {
   .listStyle(.sidebar)
   .frame(width: 240, height: 140)
   .environment(HotlineState())
+}
+
+/// How the connection to a server is encrypted, from the lock on its globe: with which version of
+/// TLS, who the server's certificate is for, and how far that's checked, with the certificate itself
+/// a click away.
+private struct EncryptedConnectionPopover: View {
+  let connection: ServerTrust.Connection
+  /// The server's address, as it was connected to.
+  let address: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      VStack(alignment: .leading, spacing: 4) {
+        Label("Secure Connection", systemImage: "lock.fill")
+          .font(.headline)
+        Text("Your connection to the server is encrypted.")
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+        GridRow(alignment: .firstTextBaseline) {
+          Text("Protocol")
+            .foregroundStyle(.secondary)
+          Text(self.connection.version ?? "TLS")
+        }
+        GridRow(alignment: .firstTextBaseline) {
+          Text("Certificate")
+            .foregroundStyle(.secondary)
+          Text(self.connection.certificate.name.isEmpty ? "No name" : self.connection.certificate.name)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+        }
+        GridRow(alignment: .firstTextBaseline) {
+          Text("Identity")
+            .foregroundStyle(.secondary)
+          // Checked as a browser would, for the address, or else only that it's the certificate
+          // the server had the first time. See `ServerTrust`.
+          Text(self.connection.certificate.isVerified ? "Verified for \(self.address)" : "Trusted since you first connected")
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      .font(.callout)
+
+      Button("Show Certificate") {
+        self.showCertificate()
+      }
+    }
+    .padding(16)
+    .frame(width: 300, alignment: .leading)
+  }
+
+  private func showCertificate() {
+    self.connection.certificate.show()
+  }
+}
+
+extension ServerTrust.Certificate {
+  /// Shows the certificate in the system's certificate panel, until it's closed.
+  func show() {
+    guard let certificate = SecCertificateCreateWithData(nil, self.data as CFData) else {
+      return
+    }
+    _ = SFCertificatePanel.shared().runModal(forCertificates: [certificate], showGroup: false)
+  }
+}
+
+/// The alerts for a server that has to be connected to securely, when it couldn't be, which ask
+/// you what to do rather than connecting without, or trusting a new certificate, unasked:
+///
+/// - It didn't answer securely: connect without, this once, or always, with the checkbox, for a
+///   server whose secure connection's gone for good, or cancel.
+/// - Its certificate isn't the one it had: trust the new one, look at it first, or cancel.
+struct EncryptionProblemAlerts: ViewModifier {
+  @Binding var problem: ServerTrust.Problem?
+  /// The server, as the alerts name it.
+  let serverName: String
+  /// Connects without a secure connection, and whether to from now on.
+  let connectAnyway: (_ always: Bool) -> Void
+  /// Trusts the new certificate, on the TLS port, and connects.
+  let trust: (_ certificate: ServerTrust.Certificate, _ port: Int) -> Void
+
+  @State private var stopRequiring = false
+
+  private var unavailablePort: Int? {
+    if case .unavailable(let port) = self.problem {
+      return port
+    }
+    return nil
+  }
+
+  private var changedCertificate: (certificate: ServerTrust.Certificate, port: Int)? {
+    if case .certificateChanged(let certificate, let port) = self.problem {
+      return (certificate, port)
+    }
+    return nil
+  }
+
+  func body(content: Content) -> some View {
+    content
+      // Each from a view of its own, so the checkbox is only on the one it's for.
+      .background {
+        Color.clear
+          .alert("Couldn't connect securely to “\(self.serverName)”", isPresented: Binding(
+            get: { self.unavailablePort != nil },
+            set: { if !$0 { self.problem = nil } }
+          ), presenting: self.unavailablePort) { _ in
+            Button("Connect Insecurely") {
+              self.connectAnyway(self.stopRequiring)
+              self.stopRequiring = false
+            }
+            // What Return does, rather than connecting without a secure connection. The checkbox is
+            // for connecting, so it's let go.
+            Button("Cancel", role: .cancel) {
+              self.stopRequiring = false
+            }
+            .keyboardShortcut(.defaultAction)
+          } message: { _ in
+            Text("The server didn't respond on its secure port. If you connect insecurely, others on the network may be able to see your password and messages.")
+          }
+          .dialogSuppressionToggle(Text("Don't ask again"), isSuppressed: self.$stopRequiring)
+      }
+      .background {
+        Color.clear
+          .alert("Hotline can't verify the identity of “\(self.serverName)”", isPresented: Binding(
+            get: { self.changedCertificate != nil },
+            set: { if !$0 { self.problem = nil } }
+          ), presenting: self.changedCertificate) { changed in
+            Button("Trust New Certificate") {
+              self.trust(changed.certificate, changed.port)
+            }
+            // Shows it, and then asks again.
+            Button("Show Certificate") {
+              let problem = ServerTrust.Problem.certificateChanged(changed.certificate, port: changed.port)
+              DispatchQueue.main.async {
+                changed.certificate.show()
+                self.problem = problem
+              }
+            }
+            // What Return does, rather than trusting it.
+            Button("Cancel", role: .cancel) {}
+              .keyboardShortcut(.defaultAction)
+          } message: { _ in
+            Text("The server's certificate has changed since you last connected. Someone may be pretending to be this server.")
+          }
+          .dialogSeverity(.critical)
+      }
+  }
 }

@@ -438,7 +438,7 @@ final class MarkdownEditor {
   static func address(_ text: String) -> URL? {
     let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty, !text.contains(where: \.isWhitespace),
-          let url = URL(string: text), ["http", "https", "hotline"].contains(url.scheme?.lowercased() ?? ""), url.host() != nil else {
+          let url = URL(string: text), ["http", "https", "hotline", "hotlines"].contains(url.scheme?.lowercased() ?? ""), url.host() != nil else {
       return nil
     }
     return url
@@ -451,7 +451,7 @@ final class MarkdownEditor {
     let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty, !text.contains(where: \.isWhitespace),
           let link = text.detectedLinks().first, link.range == text.startIndex..<text.endIndex,
-          ["http", "https", "hotline"].contains(link.url.scheme?.lowercased() ?? "") else {
+          ["http", "https", "hotline", "hotlines"].contains(link.url.scheme?.lowercased() ?? "") else {
       return nil
     }
     return link.url

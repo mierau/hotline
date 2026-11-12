@@ -857,7 +857,7 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
     if Markdown.fileName(ofHotlineLink: url) != nil {
       return url.absoluteString.removingPercentEncoding ?? url.absoluteString
     }
-    if url.scheme?.lowercased() == "hotline" {
+    if Server.isLink(url) {
       return self.describeHotlineLink.map { $0(url) } ?? "Open in Hotline"
     }
     return Self.openLinkText(for: url, shownAs: text)

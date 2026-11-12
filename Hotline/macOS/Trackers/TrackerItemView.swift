@@ -80,9 +80,8 @@ struct TrackerItemView: View {
           .opacity(0.75)
           .padding(.leading, 3)
           .padding(.trailing, 2)
-        Image("Server")
-          .resizable()
-          .scaledToFit()
+        // With the lock when it's set to be encrypted, or it's been connected to over TLS.
+        ServerIcon(isSecure: bookmark.isSecure)
           .frame(width: 16, height: 16, alignment: .center)
         Text(bookmark.name).lineLimit(1).truncationMode(.tail)
         Spacer(minLength: 0)

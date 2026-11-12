@@ -4,6 +4,9 @@ import NetSocket
 struct HotlinePorts {
   static let DefaultServerPort: Int = 5500
   static let DefaultTrackerPort: Int = 5498
+  /// The port servers usually take TLS connections on, as Mobius does unless it's set otherwise,
+  /// with their file transfers on the one after.
+  static let DefaultTLSPort: Int = 5600
 }
 
 public enum HotlineUserDisconnectOptions: UInt16 {
@@ -185,6 +188,10 @@ struct HotlineServer: Identifiable, Hashable, NetSocketDecodable {
   let address: String
   let port: UInt16
   let users: UInt16
+  /// The port it takes TLS connections on, with its file transfers on the one after, if it has
+  /// one. Servers that do, like Mobius, say so in the two bytes after the user count, which were
+  /// always zero before, and trackers pass them on as they are.
+  let tlsPort: UInt16?
   let name: String?
   let description: String?
 
@@ -208,8 +215,10 @@ struct HotlineServer: Identifiable, Hashable, NetSocketDecodable {
     self.port = try await socket.read(UInt16.self, endian: endian)
     self.users = try await socket.read(UInt16.self, endian: endian)
 
-    // Skip 2 unused bytes
-    _ = try await socket.read(2)
+    // Its TLS port, if it has one. Not one that's its own port, or the last one, which leaves no
+    // room for its file transfers.
+    let tlsPort = try await socket.read(UInt16.self, endian: endian)
+    self.tlsPort = (tlsPort == 0 || tlsPort == self.port || tlsPort == .max) ? nil : tlsPort
 
     // Read pascal strings (auto-detects encoding)
     self.name = try await socket.readPascalString()

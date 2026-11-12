@@ -12,17 +12,20 @@ struct BookmarkServer: Hashable, Identifiable {
   let name: String?
   let address: String
   let port: Int
+  /// The port it takes TLS connections on, as the tracker lists it, if it does.
+  let tlsPort: Int?
   let description: String?
   let users: Int
   
   var server: Server {
-    Server(name: self.name, description: self.description, address: self.address, port: self.port, users: self.users)
+    Server(name: self.name, description: self.description, address: self.address, port: self.port, tlsPort: self.tlsPort, users: self.users)
   }
   
   init(server: Server) {
     self.name = server.name
     self.address = server.address
     self.port = server.port
+    self.tlsPort = server.tlsPort
     self.description = server.description
     self.users = server.users
   }
@@ -53,6 +56,10 @@ final class Bookmark: Hashable {
   @Attribute(.allowsCloudEncryption)
   var password: String?
 
+  /// The port its server takes TLS connections on, for a server bookmark that's set to be connected
+  /// to over TLS, or nil.
+  var tlsPort: Int? = nil
+
   @Transient
   var displayAddress: String {
     switch self.type {
@@ -81,8 +88,17 @@ final class Bookmark: Hashable {
       return nil
 
     case .server:
-      return Server(name: self.name, description: nil, address: self.address, port: self.port, login: self.login, password: self.password)
+      var server = Server(name: self.name, description: nil, address: self.address, port: self.port, tlsPort: self.tlsPort, login: self.login, password: self.password)
+      server.tlsRequired = self.tlsPort != nil
+      return server
     }
+  }
+
+  /// Whether its server is connected to over TLS: it's set to be, or it's been connected to over
+  /// TLS before, which it is from then on.
+  @Transient
+  var isSecure: Bool {
+    self.tlsPort != nil || ServerTrust.shared.record(address: self.address, port: self.port) != nil
   }
   
   static let DefaultBookmarks: [Bookmark] = [
@@ -91,11 +107,12 @@ final class Bookmark: Hashable {
     Bookmark(type: .tracker, name: "Featured Servers", address: "hltracker.com", port: HotlinePorts.DefaultTrackerPort)
   ]
   
-  init(type: BookmarkType, name: String, address: String, port: Int, login: String? = nil, password: String? = nil) {
+  init(type: BookmarkType, name: String, address: String, port: Int, tlsPort: Int? = nil, login: String? = nil, password: String? = nil) {
     self.type = type
     self.name = name
     self.address = address
     self.port = port
+    self.tlsPort = tlsPort
 
     self.login = login
     self.password = password
@@ -112,16 +129,17 @@ final class Bookmark: Hashable {
           headerValue.fourCharCode() == "HTsc",
           let versionNumber = fileDataArray.consume(UInt16.self),
           versionNumber == 1,
-          fileDataArray.consume(128), // Skip 128 reserved bytes.
+          let reserved: Data = fileDataArray.consumeBytes(128),
           let loginLength = fileDataArray.consume(UInt16.self),
           let loginData: Data = fileDataArray.consumeBytes(32),
           let passwordLength = fileDataArray.consume(UInt16.self),
           let passwordData: Data = fileDataArray.consumeBytes(32),
           let addressLength = fileDataArray.consume(UInt16.self),
           let addressData: Data = fileDataArray.consumeBytes(256),
-          let addressString = String(data: addressData[0..<Int(addressLength)], encoding: .ascii),
-          let loginString = String(data: loginData[0..<Int(loginLength)], encoding: .ascii),
-          let passwordString = String(data: passwordData[0..<Int(passwordLength)], encoding: .ascii) else {
+          // No longer than their fields, whatever a file says.
+          let addressString = String(data: addressData.prefix(Int(addressLength)), encoding: .ascii),
+          let loginString = String(data: loginData.prefix(Int(loginLength)), encoding: .ascii),
+          let passwordString = String(data: passwordData.prefix(Int(passwordLength)), encoding: .ascii) else {
       return nil
     }
       
@@ -138,6 +156,22 @@ final class Bookmark: Hashable {
     self.port = addressPort
     self.login = loginString.isEmpty ? nil : loginString
     self.password = passwordString.isEmpty ? nil : passwordString
+    self.tlsPort = Self.tlsPort(inReserved: reserved)
+  }
+
+  /// The four characters that start a TLS port in a bookmark file's reserved bytes: 'TLS '.
+  private static let tlsPortTag: [UInt8] = [0x54, 0x4C, 0x53, 0x20]
+
+  /// The TLS port a bookmark file keeps, for one set to connect securely, in the 128 reserved bytes
+  /// after its version, which Hotline's own client, and others, pass over: 'TLS ', then the port.
+  /// Nil for any other file, whose reserved bytes are all zero.
+  static func tlsPort(inReserved reserved: Data) -> Int? {
+    let bytes = [UInt8](reserved)
+    guard bytes.count >= 6, Array(bytes[0..<4]) == Self.tlsPortTag else {
+      return nil
+    }
+    let port = Int(bytes[4]) << 8 | Int(bytes[5])
+    return (1..<Int(UInt16.max)).contains(port) ? port : nil
   }
   
   convenience init?(fileURL bookmarkFileURL: URL) {
@@ -184,19 +218,28 @@ final class Bookmark: Hashable {
 //    self.password = passwordString.isEmpty ? nil : passwordString
   }
   
+  /// The bookmark as a Hotline bookmark file, as Hotline's own client writes them, so it can read
+  /// them too: its address, login and password, each no longer than its field, and, for one that's
+  /// set to connect securely, its TLS port in the reserved bytes. See `tlsPort(inReserved:)`.
   func bookmarkFileData() -> Data? {
-    guard let addressData = self.displayAddress.data(using: .ascii) else {
+    guard let fullAddressData = self.displayAddress.data(using: .ascii) else {
       return nil
     }
     
-    let loginData: Data = self.login?.data(using: .ascii) ?? Data()
-    let passwordData: Data = self.password?.data(using: .ascii) ?? Data()
+    let addressData = fullAddressData.prefix(256)
+    let loginData: Data = (self.login?.data(using: .ascii) ?? Data()).prefix(32)
+    let passwordData: Data = (self.password?.data(using: .ascii) ?? Data()).prefix(32)
     
     var fileData: Data = Data()
     
     fileData.append("HTsc".fourCharCode(), endian: .big) // magic
     fileData.append(UInt16(0x0001), endian: .big) // version
-    fileData.append(Data(repeating: 0x00, count: 128)) // reserved
+
+    var reserved = Data(repeating: 0x00, count: 128)
+    if let tlsPort = self.tlsPort, let port = UInt16(exactly: tlsPort) {
+      reserved.replaceSubrange(0..<6, with: Self.tlsPortTag + [UInt8(port >> 8), UInt8(port & 0xFF)])
+    }
+    fileData.append(reserved)
     
     fileData.append(UInt16(loginData.count), endian: .big)
     fileData.append(loginData)
@@ -214,7 +257,7 @@ final class Bookmark: Hashable {
     
     fileData.append(UInt16(addressData.count), endian: .big)
     fileData.append(addressData)
-    if passwordData.count < 256 {
+    if addressData.count < 256 {
       // Pad address data to 256 bytes
       fileData.append(Data(repeating: 0x00, count: 256 - addressData.count))
     }
@@ -357,8 +400,10 @@ final class Bookmark: Hashable {
     do {
       for try await fetchedServer in client.fetchServers(address: self.address, port: self.port) {
         print("FETCHED SERVER", fetchedServer)
+        // So it's tried over TLS however it's connected to, not only from this list.
+        ServerTrust.shared.noteListed(address: fetchedServer.address, port: Int(fetchedServer.port), tlsPort: fetchedServer.tlsPort.map(Int.init))
         if let serverName = fetchedServer.name {
-          let server = Server(name: serverName, description: fetchedServer.description, address: fetchedServer.address, port: Int(fetchedServer.port), users: Int(fetchedServer.users))
+          let server = Server(name: serverName, description: fetchedServer.description, address: fetchedServer.address, port: Int(fetchedServer.port), tlsPort: fetchedServer.tlsPort.map(Int.init), users: Int(fetchedServer.users))
           fetchedBookmarks.append(BookmarkServer(server: server))
         }
       }

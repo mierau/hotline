@@ -27,6 +27,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>hotline</string>
+				<string>hotlines</string>
 			</array>
 		</dict>
 		<dict>

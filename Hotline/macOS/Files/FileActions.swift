@@ -134,6 +134,7 @@ struct FileActions {
         id: UInt32.random(in: 1...UInt32.max),
         address: server.address,
         port: server.port,
+        tlsPort: model.secureConnection?.port,
         size: Int(file.fileSize),
         name: file.name,
         type: file.type,
@@ -262,10 +263,17 @@ struct FileActions {
       return nil
     }
 
+    // A hotlines:// link, on the TLS port, while it's connected securely.
     var components = URLComponents()
-    components.scheme = "hotline"
     components.host = server.address
-    components.port = server.port == HotlinePorts.DefaultServerPort ? nil : server.port
+    if let secure = self.model.secureConnection {
+      components.scheme = Server.secureLinkScheme
+      components.port = secure.port == HotlinePorts.DefaultTLSPort ? nil : secure.port
+    }
+    else {
+      components.scheme = "hotline"
+      components.port = server.port == HotlinePorts.DefaultServerPort ? nil : server.port
+    }
     var pathComponentAllowed = CharacterSet.urlPathAllowed
     pathComponentAllowed.remove(charactersIn: "/")
     let path = file.path.map {

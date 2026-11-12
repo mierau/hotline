@@ -11,8 +11,11 @@ class BonjourState {
   private var browser: NWBrowser?
   private var resolutionTasks: [UUID: Task<Void, Never>] = [:]
   
+  /// A server found on the local network. Equal, and hashed, by everything about it, as Hashable
+  /// has to be. Its name, which there's one of in the list however many network interfaces it's
+  /// found on, says which it is, as it's found again, wherever it is now.
   struct BonjourServer: Identifiable, Hashable {
-    let id = UUID()
+    var id: String { self.serviceName }
     let serviceName: String
     let name: String
     let address: String?
@@ -30,14 +33,6 @@ class BonjourState {
         return nil
       }
       return Server(name: self.displayName, description: nil, address: address, port: Int(port))
-    }
-    
-    static func == (lhs: BonjourServer, rhs: BonjourServer) -> Bool {
-      lhs.address == rhs.address && lhs.port == rhs.port
-    }
-    
-    func hash(into hasher: inout Hasher) {
-      hasher.combine(self.id)
     }
   }
   

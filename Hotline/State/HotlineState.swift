@@ -523,6 +523,14 @@ class HotlineState: Equatable {
   var errorDisplayed: Bool = false
   var errorMessage: String? = nil
 
+  // Encryption
+  /// The connection's TLS, while it's encrypted, which its file transfers have too.
+  var secureConnection: ServerTrust.Connection? = nil
+  /// Why it couldn't connect over TLS, when that's for you to decide what to do about.
+  var encryptionProblem: ServerTrust.Problem? = nil
+  /// Whether it's connecting over TLS, rather than without, so it can say so as it does.
+  var connectingSecurely: Bool = false
+
   // Disconnect Message (server-initiated)
   var disconnectMessage: String? = nil
 

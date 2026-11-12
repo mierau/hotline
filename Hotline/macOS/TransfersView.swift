@@ -267,6 +267,17 @@ struct TransfersView: View {
 
 // MARK: - Transfer Row
 
+/// A label with its icon close by its words, as a transfer's figures have theirs, rather than as
+/// far off as a label's icon column leaves it.
+private struct CloseIconLabelStyle: LabelStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 3) {
+      configuration.icon
+      configuration.title
+    }
+  }
+}
+
 struct TransferRow: View {
   @Environment(\.appState) private var appState
   
@@ -292,6 +303,16 @@ struct TransferRow: View {
           
           if !self.transfer.done {
             self.statsView
+
+            // Over a secure connection, the lock, at the end, after the stats, while it's waiting
+            // or going.
+            if self.transfer.isSecure {
+              Image(systemName: "lock.fill")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .help("Over a secure connection")
+                .accessibilityLabel("Secure")
+            }
           }
         }
         
@@ -302,9 +323,10 @@ struct TransferRow: View {
             .foregroundStyle(.secondary)
         }
         else if self.transfer.failed {
+          // In red, as something went wrong.
           Text("Failed")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.red)
         }
         else if self.transfer.completed {
           Text(self.transfer.isUpload ? "Uploaded" : "Downloaded")
@@ -338,13 +360,41 @@ struct TransferRow: View {
         }
       }
       .animation(.snappy(duration: 0.35), value: self.transfer.queuePosition)
+
+      self.outcomeView
     }
   }
   
   // MARK: -
+
+  /// How it went, at the end of the row, where its figures were while it was going: the check once
+  /// it's done, or a red mark if it failed. What's under its name says so too. One that's cancelled
+  /// comes off the list as it is.
+  @ViewBuilder
+  private var outcomeView: some View {
+    if self.transfer.failed {
+      Image(systemName: "exclamationmark.circle.fill")
+        .resizable()
+        .symbolRenderingMode(.palette)
+        .foregroundStyle(.white, .red)
+        .scaledToFit()
+        .frame(width: 18, height: 18)
+        .accessibilityHidden(true)
+    }
+    else if self.transfer.completed {
+      Image(systemName: "checkmark.circle.fill")
+        .resizable()
+        .symbolRenderingMode(.palette)
+        .foregroundStyle(.white, .fileComplete)
+        .scaledToFit()
+        .frame(width: 18, height: 18)
+        .accessibilityHidden(true)
+    }
+  }
   
   private var statsView: some View {
-    HStack(spacing: 8) {
+    // Each figure with its icon close by, and further from the next.
+    HStack(spacing: 10) {
       // Progress percentage
       //      Text("\(Int(self.transfer.progress * 100))%")
       
@@ -358,34 +408,28 @@ struct TransferRow: View {
         Label(timeRemaining, systemImage: "clock")
       }
       
-      // File size
-      Label(self.transfer.displaySize, systemImage: "document")
+      // File size, with the icon that says it's the size when there's a speed or time beside it,
+      // and on its own without.
+      if self.transfer.displaySpeed != nil || self.transfer.displayTimeRemaining != nil {
+        Label(self.transfer.displaySize, systemImage: "document")
+      }
+      else {
+        Text(self.transfer.displaySize)
+      }
     }
+    .labelStyle(CloseIconLabelStyle())
     .font(.subheadline)
     .foregroundStyle(.secondary)
     .monospacedDigit()
   }
   
+  /// A folder, with the file in it that's going while it's going. How it went is at the end of the
+  /// row, in `outcomeView`.
   private var folderIconView: some View {
     FolderIconView()
       .frame(width: 32, height: 32)
       .overlay(alignment: .bottomTrailing) {
-        if self.transfer.cancelled || self.transfer.failed {
-          Image(systemName: "exclamationmark.triangle.fill")
-            .resizable()
-            .symbolRenderingMode(.multicolor)
-            .scaledToFit()
-            .frame(width: 16, height: 16)
-        }
-        else if self.transfer.completed {
-          Image(systemName: "checkmark.circle.fill")
-            .resizable()
-            .symbolRenderingMode(.palette)
-            .foregroundStyle(.white, .fileComplete)
-            .scaledToFit()
-            .frame(width: 16, height: 16)
-        }
-        else {
+        if !self.transfer.done {
           FileIconView(filename: self.transfer.title, fileType: nil)
             .frame(width: 16, height: 16)
         }
@@ -395,23 +439,6 @@ struct TransferRow: View {
   private var fileIconView: some View {
     FileIconView(filename: self.transfer.title, fileType: nil)
       .frame(width: 32, height: 32)
-      .overlay(alignment: .bottomTrailing) {
-        if self.transfer.cancelled || self.transfer.failed {
-          Image(systemName: "exclamationmark.triangle.fill")
-            .resizable()
-            .symbolRenderingMode(.multicolor)
-            .scaledToFit()
-            .frame(width: 16, height: 16)
-        }
-        else if self.transfer.completed {
-          Image(systemName: "checkmark.circle.fill")
-            .resizable()
-            .symbolRenderingMode(.palette)
-            .foregroundStyle(.white, .fileComplete)
-            .scaledToFit()
-            .frame(width: 16, height: 16)
-        }
-      }
   }
 }
 

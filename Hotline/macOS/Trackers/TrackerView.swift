@@ -191,7 +191,9 @@ struct TrackerView: View {
         .tag(TrackerSelection.bonjourGroup)
       
       if AppState.shared.bonjourState.isExpanded {
-        ForEach(AppState.shared.bonjourState.discoveredServers, id: \.self) { record in
+        // By name, so a server found again, on another interface or at a new address, is the
+        // same row.
+        ForEach(AppState.shared.bonjourState.discoveredServers) { record in
           BonjourServerRow(server: record)
             .tag(TrackerSelection.bonjourServer(record))
             .padding(.leading, 16 + 8 + 10)
@@ -404,8 +406,10 @@ struct TrackerView: View {
   func bookmarkServerContextMenu(_ server: BookmarkServer) -> some View {
     Button {
       NSPasteboard.general.clearContents()
-      let displayAddress = (server.port == HotlinePorts.DefaultServerPort) ? server.address : "\(server.address):\(server.port)"
-      NSPasteboard.general.setString("hotline://\(displayAddress)", forType: .string)
+      // A hotlines:// link, for one that's connected to securely, or that the tracker lists with a
+      // TLS port.
+      let tlsPort = ServerTrust.shared.record(address: server.address, port: server.port)?.tlsPort ?? server.tlsPort
+      NSPasteboard.general.setString(Server.link(address: server.address, port: server.port, tlsPort: tlsPort), forType: .string)
     } label: {
       Label("Copy Link", systemImage: "link")
     }
@@ -421,7 +425,8 @@ struct TrackerView: View {
     Divider()
     
     Button {
-      let newBookmark = Bookmark(type: .server, name: server.name ?? server.address, address: server.address, port: server.port, login: nil, password: nil)
+      // Encrypted, if the tracker lists it with a TLS port.
+      let newBookmark = Bookmark(type: .server, name: server.name ?? server.address, address: server.address, port: server.port, tlsPort: server.tlsPort, login: nil, password: nil)
       Bookmark.add(newBookmark, context: modelContext)
     } label: {
       Label("Bookmark", systemImage: "bookmark")
@@ -433,7 +438,8 @@ struct TrackerView: View {
     Button {
       let linkString: String = switch bookmark.type {
       case .tracker: "hotlinetracker://\(bookmark.displayAddress)"
-      case .server: "hotline://\(bookmark.displayAddress)"
+      // A hotlines:// link, for one that's connected to securely.
+      case .server: Server.link(address: bookmark.address, port: bookmark.port, tlsPort: bookmark.tlsPort ?? ServerTrust.shared.record(address: bookmark.address, port: bookmark.port)?.tlsPort)
       }
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(linkString, forType: .string)

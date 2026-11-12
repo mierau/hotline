@@ -13,6 +13,8 @@ public struct HotlineFolderItemProgress: Sendable {
 public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
   private let serverAddress: String
   private let serverPort: UInt16
+  /// TLS for the transfer, as the connection it's for has it.
+  private let tls: TLSPolicy
   private let referenceNumber: UInt32
 
   private let transferTotal: Int // Total byte size of all files in folder.
@@ -32,12 +34,14 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
   public init(
     address: String,
     port: UInt16,
+    tls: TLSPolicy = .disabled,
     reference: UInt32,
     size: UInt32,
     itemCount: Int
   ) {
     self.serverAddress = address
     self.serverPort = port
+    self.tls = tls
     self.referenceNumber = reference
     self.transferTotal = Int(size)
     self.folderItemCount = itemCount
@@ -112,7 +116,8 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
     // Connect to transfer server
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: self.tls
     )
     self.socket = socket
     defer { Task { await socket.close() } }

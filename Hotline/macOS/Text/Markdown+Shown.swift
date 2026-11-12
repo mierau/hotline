@@ -220,7 +220,7 @@ extension Markdown {
   /// hotline://server/files/Folder/File.zip, or nil if it isn't a link to one. A link that ends in
   /// a slash is to a folder.
   static func fileName(ofHotlineLink url: URL) -> String? {
-    guard url.scheme?.lowercased() == "hotline" else {
+    guard Server.isLink(url) else {
       return nil
     }
     let path = url.pathComponents.filter { $0 != "/" }
@@ -246,7 +246,7 @@ extension Markdown {
       var attributes = text.attributes(at: link.range.location, effectiveRange: nil)
       attributes[self.fileLinkKey] = link.url
       let shown = (text.string as NSString).substring(with: link.range)
-      let isBareLink = shown.lowercased().hasPrefix("hotline://")
+      let isBareLink = shown.lowercased().hasPrefix("hotline://") || shown.lowercased().hasPrefix("hotlines://")
       let file = NSMutableAttributedString(string: isBareLink ? link.name : shown, attributes: attributes)
 
       let attachment = NSTextAttachment()

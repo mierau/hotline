@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import NetSocket
 
 // MARK: - Files & Transfers
 
@@ -239,8 +240,7 @@ extension HotlineState {
 
       guard let result,
             let server = self.server,
-            let address = server.address as String?,
-            let port = server.port as Int?
+            let address = server.address as String?
       else {
         fail(HotlineClientError.invalidResponse)
         return
@@ -263,6 +263,8 @@ extension HotlineState {
       // In the server's line, if all its slots are full, until it starts.
       transfer.queuePosition = result.waitingCount > 0 ? result.waitingCount : nil
       transfer.isUpload = false
+      // Over TLS, as its connection is.
+      transfer.isSecure = self.secureConnection != nil
       transfer.downloadCallback = callback
       transfer.progressCallback = progressCallback
       if queued == nil {
@@ -270,9 +272,11 @@ extension HotlineState {
       }
 
       // Create download client
+      let endpoint = self.transferEndpoint(for: server)
       let downloadClient = HotlineFileDownloadClient(
         address: address,
-        port: UInt16(port),
+        port: endpoint.port,
+        tls: endpoint.tls,
         reference: referenceNumber,
         size: UInt32(result.transferSize)
       )
@@ -406,8 +410,7 @@ extension HotlineState {
 
       guard let result,
             let server = self.server,
-            let address = server.address as String?,
-            let port = server.port as Int?
+            let address = server.address as String?
       else {
         fail(HotlineClientError.invalidResponse)
         return
@@ -432,6 +435,8 @@ extension HotlineState {
       transfer.isFolder = true
       transfer.folderName = folderName
       transfer.isUpload = false
+      // Over TLS, as its connection is.
+      transfer.isSecure = self.secureConnection != nil
       transfer.downloadCallback = callback
       transfer.progressCallback = progressCallback
       if queued == nil {
@@ -439,9 +444,11 @@ extension HotlineState {
       }
 
       // Create download client
+      let endpoint = self.transferEndpoint(for: server)
       let downloadClient = HotlineFolderDownloadClient(
         address: address,
-        port: UInt16(port),
+        port: endpoint.port,
+        tls: endpoint.tls,
         reference: referenceNumber,
         size: UInt32(result.transferSize),
         itemCount: result.itemCount
@@ -607,8 +614,7 @@ extension HotlineState {
       }
       guard let referenceNumber = reference,
             let server = self.server,
-            let address = server.address as String?,
-            let port = server.port as Int?
+            let address = server.address as String?
       else {
         print("HotlineState: Failed to get upload reference from server")
         fail(HotlineClientError.invalidResponse)
@@ -621,10 +627,12 @@ extension HotlineState {
       print("HotlineState: Got folder upload reference: \(referenceNumber)")
 
       // Create upload client
+      let endpoint = self.transferEndpoint(for: server)
       guard let uploadClient = HotlineFolderUploadClient(
         folderURL: folderURL,
         address: address,
-        port: UInt16(port),
+        port: endpoint.port,
+        tls: endpoint.tls,
         reference: referenceNumber
       ) else {
         print("HotlineState: Failed to create folder upload client")
@@ -646,6 +654,8 @@ extension HotlineState {
       transfer.waiting = false
       transfer.isFolder = true
       transfer.isUpload = true
+      // Over TLS, as its connection is.
+      transfer.isSecure = self.secureConnection != nil
       transfer.uploadCallback = callback
       transfer.progressCallback = progressCallback
       if queued == nil {
@@ -788,8 +798,7 @@ extension HotlineState {
       // Request upload from server
       guard let referenceNumber,
             let server = self.server,
-            let address = server.address as String?,
-            let port = server.port as Int?
+            let address = server.address as String?
       else {
         print("HotlineState: Failed to get upload reference from server")
         fail(HotlineClientError.invalidResponse)
@@ -802,10 +811,12 @@ extension HotlineState {
       print("HotlineState: Got upload reference: \(referenceNumber)")
 
       // Create upload client
+      let endpoint = self.transferEndpoint(for: server)
       guard let uploadClient = HotlineFileUploadClient(
         fileURL: fileURL,
         address: address,
-        port: UInt16(port),
+        port: endpoint.port,
+        tls: endpoint.tls,
         reference: referenceNumber
       ) else {
         print("HotlineState: Failed to create upload client")
@@ -826,6 +837,8 @@ extension HotlineState {
       transfer.size = UInt(payloadSize)
       transfer.waiting = false
       transfer.isUpload = true
+      // Over TLS, as its connection is.
+      transfer.isSecure = self.secureConnection != nil
       transfer.uploadCallback = callback
       if queued == nil {
         AppState.shared.addTransfer(transfer)
@@ -912,6 +925,8 @@ extension HotlineState {
         serverName: self.serverName ?? self.serverTitle
       )
       transfer.isUpload = true
+      // Over TLS, as its connection is.
+      transfer.isSecure = self.secureConnection != nil
       transfer.isFolder = isFolder.boolValue
       transfer.waiting = true
       AppState.shared.addTransfer(transfer)
@@ -1075,8 +1090,7 @@ extension HotlineState {
     Task { @MainActor in
       guard let result = try? await client.downloadFile(name: fileName, path: fullPath, preview: true),
             let server = self.server,
-            let address = server.address as String?,
-            let port = server.port as Int?
+            let address = server.address as String?
       else {
         callback?(nil)
         return
@@ -1085,7 +1099,8 @@ extension HotlineState {
       let info = PreviewFileInfo(
         id: result.referenceNumber,
         address: address,
-        port: port,
+        port: server.port,
+        tlsPort: self.secureConnection?.port,
         size: result.transferSize,
         name: fileName
       )
@@ -1113,10 +1128,12 @@ extension HotlineState {
       throw HotlineClientError.invalidResponse
     }
     print("HotlineState: Transfer \(transfer.referenceNumber) for \(fileName), transfer size \(transfer.transferSize), file size \(transfer.fileSize), waiting \(transfer.waitingCount)")
+    let endpoint = self.transferEndpoint(for: server)
     let reader = HotlineFilePreviewClient(
       fileName: fileName,
       address: server.address,
-      port: UInt16(server.port),
+      port: endpoint.port,
+      tls: endpoint.tls,
       reference: transfer.referenceNumber,
       size: UInt32(clamping: transfer.transferSize)
     )
@@ -1140,9 +1157,11 @@ extension HotlineState {
       throw HotlineClientError.invalidResponse
     }
     print("HotlineState: Transfer \(transfer.referenceNumber) for \(fileName) from \(offset), transfer size \(transfer.transferSize), waiting \(transfer.waitingCount)")
+    let endpoint = self.transferEndpoint(for: server)
     return HotlineFileStream(
       address: server.address,
-      port: UInt16(server.port),
+      port: endpoint.port,
+      tls: endpoint.tls,
       reference: transfer.referenceNumber,
       size: transfer.transferSize,
       fromStart: offset == 0
@@ -1167,10 +1186,12 @@ extension HotlineState {
       throw HotlineClientError.invalidResponse
     }
     print("HotlineState: Transfer \(transfer.referenceNumber) for \(fileName), transfer size \(transfer.transferSize), file size \(transfer.fileSize), waiting \(transfer.waitingCount)")
+    let endpoint = self.transferEndpoint(for: server)
     let reader = HotlineFilePreviewClient(
       fileName: fileName,
       address: server.address,
-      port: UInt16(server.port),
+      port: endpoint.port,
+      tls: endpoint.tls,
       reference: transfer.referenceNumber,
       size: UInt32(clamping: transfer.transferSize)
     )

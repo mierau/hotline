@@ -109,6 +109,7 @@ struct RegularExpressions {
     Anchor.startOfLine
     ChoiceOf {
       "hotline"
+      "hotlines"
       "http"
       "https"
     }
@@ -196,6 +197,7 @@ struct RegularExpressions {
   private static let schemeLink = Regex {
     ChoiceOf {
       "hotline://"
+      "hotlines://"
       "http://"
       "https://"
     }

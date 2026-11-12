@@ -93,7 +93,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
-      guard url.scheme?.lowercased() == "hotline" else { continue }
+      guard Server.isLink(url) else { continue }
       if let server = Server(url: url) {
         AppState.shared.pendingServerOpen = server
       }

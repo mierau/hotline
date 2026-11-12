@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import AVFoundation
+import NetSocket
 
 enum FilePreviewType: Equatable {
   case unknown
@@ -127,10 +128,12 @@ final class FilePreviewState {
         }
 
         self.usedTransfer = true
+        let endpoint = self.info.transferEndpoint
         let client = HotlineFilePreviewClient(
           fileName: self.info.name,
           address: self.info.address,
-          port: UInt16(self.info.port),
+          port: endpoint.port,
+          tls: endpoint.tls,
           reference: self.info.id,
           size: UInt32(self.info.size),
           fileType: self.info.type,
@@ -273,7 +276,7 @@ final class FilePreviewState {
     let info = self.info
     // The transfer the preview was opened with, from the start, and then new ones, from wherever
     // the player wants.
-    var first: (any FilePreviewTransfer)? = self.usedTransfer ? nil : HotlineFileStream(address: info.address, port: UInt16(info.port), reference: info.id, size: info.size, fromStart: true)
+    var first: (any FilePreviewTransfer)? = self.usedTransfer ? nil : HotlineFileStream(address: info.address, port: info.transferEndpoint.port, tls: info.transferEndpoint.tls, reference: info.id, size: info.size, fromStart: true)
     self.usedTransfer = true
     let stream = FilePreviewStream(fileURL: HotlineFilePreviewClient.downloadURL(for: info.name, fileType: info.type), contentType: type) { offset in
       if offset == 0, let transfer = first {

@@ -6,6 +6,8 @@ import NetSocket
 public class HotlineFilePreviewClient {
   private let serverAddress: String
   private let serverPort: UInt16
+  /// TLS for the transfer, as the connection it's for has it.
+  private let tls: TLSPolicy
   private let referenceNumber: UInt32
   private let fileName: String
   private let transferSize: UInt32
@@ -20,6 +22,7 @@ public class HotlineFilePreviewClient {
     fileName: String,
     address: String,
     port: UInt16,
+    tls: TLSPolicy = .disabled,
     reference: UInt32,
     size: UInt32,
     fileType: String? = nil,
@@ -28,6 +31,7 @@ public class HotlineFilePreviewClient {
     self.fileName = fileName
     self.serverAddress = address
     self.serverPort = port
+    self.tls = tls
     self.referenceNumber = reference
     self.transferSize = size
     self.fileType = fileType
@@ -70,7 +74,8 @@ public class HotlineFilePreviewClient {
     print("HotlineFilePreviewClient[\(self.referenceNumber)]: Reading up to \(length) bytes of the data fork")
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: self.tls
     )
     defer { Task { await socket.close() } }
 
@@ -111,7 +116,8 @@ public class HotlineFilePreviewClient {
     print("HotlineFilePreviewClient[\(self.referenceNumber)]: Reading up to \(limit) bytes of the resource fork")
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: self.tls
     )
     defer { Task { await socket.close() } }
 
@@ -192,7 +198,8 @@ public class HotlineFilePreviewClient {
     // Connect to transfer server
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: self.tls
     )
     defer { Task { await socket.close() } }
 
@@ -342,6 +349,8 @@ public class HotlineFilePreviewClient {
 actor HotlineFileStream: FilePreviewTransfer {
   private let address: String
   private let port: UInt16
+  /// TLS for the transfer, as the connection it's for has it.
+  private let tls: TLSPolicy
   private let reference: UInt32
   private let transferSize: Int
   /// Whether the transfer's from the start of the data fork, so what it says of its size is all
@@ -355,16 +364,17 @@ actor HotlineFileStream: FilePreviewTransfer {
   /// The most read at a time.
   private static let readSize = 256 * 1024
 
-  init(address: String, port: UInt16, reference: UInt32, size: Int, fromStart: Bool) {
+  init(address: String, port: UInt16, tls: TLSPolicy = .disabled, reference: UInt32, size: Int, fromStart: Bool) {
     self.address = address
     self.port = port
+    self.tls = tls
     self.reference = reference
     self.transferSize = size
     self.fromStart = fromStart
   }
 
   func open() async throws -> Int? {
-    let socket = try await NetSocket.connect(host: self.address, port: self.port + 1)
+    let socket = try await NetSocket.connect(host: self.address, port: self.port + 1, tls: self.tls)
     self.socket = socket
     try await socket.write(Data(endian: .big) {
       "HTXF".fourCharCode()

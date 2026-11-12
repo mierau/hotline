@@ -29,6 +29,11 @@ struct URLHighlightingTests {
     #expect(urls == ["hotline://server.example.com"])
   }
 
+  @Test func secureHotlineSchemeURL() {
+    let urls = matchedURLs(in: "Connect to hotlines://server.example.com")
+    #expect(urls == ["hotlines://server.example.com"])
+  }
+
   @Test func schemelessURL() {
     let urls = matchedURLs(in: "Visit example.com for more")
     #expect(urls == ["example.com"])
@@ -226,6 +231,13 @@ struct URLHighlightingTests {
   @Test func markdownConversionPreservesHotlineScheme() {
     let result = "Connect to hotline://server.com:5500".convertingLinksToMarkdown()
     #expect(result == "Connect to [hotline://server.com:5500](hotline://server.com:5500)")
+  }
+
+  @Test func markdownConversionPreservesSecureHotlineScheme() {
+    let result = "Connect to hotlines://server.com".convertingLinksToMarkdown()
+    #expect(result == "Connect to [hotlines://server.com](hotlines://server.com)")
+    let links = "Connect to hotlines://server.com/files/Maps/".detectedLinks()
+    #expect(links.map(\.url.absoluteString) == ["hotlines://server.com/files/Maps/"])
   }
 
   @Test func markdownConversionHandlesEmailAddress() {

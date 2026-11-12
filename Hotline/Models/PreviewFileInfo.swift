@@ -1,12 +1,23 @@
 import UniformTypeIdentifiers
+import NetSocket
 
 struct PreviewFileInfo: Identifiable, Codable {
   var id: UInt32
   var address: String
   var port: Int
+  /// The TLS port its server was connected to on, if it was, which its transfer goes over too.
+  var tlsPort: Int? = nil
   var size: Int
   var name: String
-  
+
+  /// Where its transfer goes, as `HotlineState.transferEndpoint(for:)` has it.
+  var transferEndpoint: (port: UInt16, tls: TLSPolicy) {
+    guard let tlsPort = self.tlsPort, let port = UInt16(exactly: tlsPort) else {
+      return (UInt16(self.port), .disabled)
+    }
+    return (port, ServerTrust.shared.policy(address: self.address, port: self.port, tlsPort: tlsPort))
+  }
+
   var type: String? = nil
   var creator: String? = nil
 

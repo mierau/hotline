@@ -15,6 +15,15 @@ struct ServerSuggestion: Identifiable, Hashable, Sendable {
   var password: String? = nil
   /// How many people are on it, for one a tracker lists, as the tracker says.
   var users: Int = 0
+  /// The port it takes TLS connections on, as the tracker lists it, or its bookmark has it, if it
+  /// does.
+  var tlsPort: Int? = nil
+
+  /// Whether it's connected to over TLS: it's listed or bookmarked with a TLS port, or it's been
+  /// connected to over TLS before.
+  var isSecure: Bool {
+    self.tlsPort != nil || ServerTrust.shared.record(address: self.address, port: self.port) != nil
+  }
 
   var id: String { "\(self.address.lowercased()):\(self.port)" }
 
@@ -36,7 +45,7 @@ final class ServerSuggestions {
 
   func load(bookmarks: [Bookmark]) async {
     let saved = bookmarks.filter { $0.type == .server }.map {
-      ServerSuggestion(name: $0.name, address: $0.address, port: $0.port, source: .bookmark, login: $0.login, password: $0.password)
+      ServerSuggestion(name: $0.name, address: $0.address, port: $0.port, source: .bookmark, login: $0.login, password: $0.password, tlsPort: $0.tlsPort)
     }
     let trackers = bookmarks.filter { $0.type == .tracker }.map { Tracker(address: $0.address, port: $0.port) }
     self.servers = Self.merged(saved, Self.trackerListings?.servers ?? [])
@@ -100,7 +109,10 @@ final class ServerSuggestions {
     var servers: [ServerSuggestion] = []
     do {
       for try await server in HotlineTrackerClient().fetchServers(address: tracker.address, port: tracker.port) {
-        servers.append(ServerSuggestion(name: server.name ?? server.address, address: server.address, port: Int(server.port), source: .tracker, users: Int(server.users)))
+        let tlsPort = server.tlsPort.map(Int.init)
+        servers.append(ServerSuggestion(name: server.name ?? server.address, address: server.address, port: Int(server.port), source: .tracker, users: Int(server.users), tlsPort: tlsPort))
+        // So it's tried over TLS however it's connected to, as it's typed or chosen here.
+        ServerTrust.shared.noteListed(address: server.address, port: Int(server.port), tlsPort: tlsPort)
       }
     }
     catch {

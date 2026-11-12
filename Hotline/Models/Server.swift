@@ -7,6 +7,14 @@ struct Server: Codable {
 
   var address: String
   var port: Int
+  /// The port it takes TLS connections on, as a tracker lists it, or a bookmark has it, if it
+  /// does. Once it's been connected to over TLS, that's known whichever way it's connected to (see
+  /// `ServerTrust`).
+  var tlsPort: Int?
+  /// Whether it has to be connected to over TLS, as a bookmark set to be encrypted has it, rather
+  /// than only tried over TLS first, as a tracker's listing has it. If it can't be, it isn't
+  /// connected to without, unless that's chosen.
+  var tlsRequired: Bool = false
   var login: String = ""
   var password: String = ""
 
@@ -20,7 +28,7 @@ struct Server: Codable {
   /// Must include credentials so restored windows reconnect properly.
   /// Name is included so the window title displays during reconnection.
   enum CodingKeys: String, CodingKey {
-    case name, description, address, port, login, password
+    case name, description, address, port, tlsPort, tlsRequired, login, password
   }
   
   var displayAddress: String {
@@ -43,22 +51,27 @@ struct Server: Codable {
     self.description = try container.decodeIfPresent(String.self, forKey: .description)
     self.address = try container.decode(String.self, forKey: .address)
     self.port = try container.decode(Int.self, forKey: .port)
+    self.tlsPort = try container.decodeIfPresent(Int.self, forKey: .tlsPort)
+    self.tlsRequired = try container.decodeIfPresent(Bool.self, forKey: .tlsRequired) ?? false
     self.login = try container.decodeIfPresent(String.self, forKey: .login) ?? ""
     self.password = try container.decodeIfPresent(String.self, forKey: .password) ?? ""
   }
 
-  init(name: String?, description: String?, address: String, port: Int = HotlinePorts.DefaultServerPort, users: Int = 0, login: String? = nil, password: String? = nil) {
+  init(name: String?, description: String?, address: String, port: Int = HotlinePorts.DefaultServerPort, tlsPort: Int? = nil, users: Int = 0, login: String? = nil, password: String? = nil) {
     self.name = name
     self.description = description
     self.address = address.lowercased()
     self.port = port
+    self.tlsPort = tlsPort
     self.users = users
     self.login = login ?? ""
     self.password = password ?? ""
   }
   
+  /// A server from a link to it: hotline://, or hotlines:// for one to connect to securely, as
+  /// https:// is for the web, where the port is its TLS port, 5600 unless it says otherwise.
   init?(url: URL) {
-    guard url.scheme?.lowercased() == "hotline" else {
+    guard Self.isLink(url) else {
       return nil
     }
     
@@ -71,7 +84,14 @@ struct Server: Codable {
     self.users = 0
     
     self.address = host.lowercased()
-    self.port = url.port ?? HotlinePorts.DefaultServerPort
+    if url.scheme?.lowercased() == Self.secureLinkScheme {
+      self.port = HotlinePorts.DefaultServerPort
+      self.tlsPort = url.port ?? HotlinePorts.DefaultTLSPort
+      self.tlsRequired = true
+    }
+    else {
+      self.port = url.port ?? HotlinePorts.DefaultServerPort
+    }
     
     self.login = url.user(percentEncoded: false) ?? ""
     self.password = url.password(percentEncoded: false) ?? ""
@@ -101,13 +121,38 @@ struct Server: Codable {
     }
   }
   
+  /// The schemes of links to servers: hotline://, and hotlines:// for one to connect to securely.
+  static let linkSchemes: Set<String> = ["hotline", "hotlines"]
+  static let secureLinkScheme = "hotlines"
+
+  /// Whether a link is to a Hotline server, over a secure connection or not.
+  static func isLink(_ url: URL) -> Bool {
+    Self.linkSchemes.contains(url.scheme?.lowercased() ?? "")
+  }
+
+  /// A link to a server: hotline://, with its port if it isn't the usual one, or for one that's
+  /// connected to securely, hotlines://, with its TLS port if it isn't the usual one.
+  static func link(address: String, port: Int, tlsPort: Int?) -> String {
+    let host = address.contains(":") ? "[\(address)]" : address
+    guard let tlsPort else {
+      return port == HotlinePorts.DefaultServerPort ? "hotline://\(host)" : "hotline://\(host):\(port)"
+    }
+    return tlsPort == HotlinePorts.DefaultTLSPort ? "\(Self.secureLinkScheme)://\(host)" : "\(Self.secureLinkScheme)://\(host):\(tlsPort)"
+  }
+
   /// An address as it's typed, which can start with a login and password, as in
   /// user:password@hotline.example.com, or be a hotline:// link: its host and port, and the login
-  /// and password, if it has them.
-  static func parseServerAddress(_ address: String) -> (host: String, port: Int, login: String?, password: String?) {
+  /// and password, if it has them. A hotlines:// link is to connect securely, with its port the TLS
+  /// port, 5600 unless it says otherwise, and the server's own port the usual one.
+  static func parseServerAddress(_ address: String) -> (host: String, port: Int, login: String?, password: String?, tlsPort: Int?) {
     var rest = address.trimmingCharacters(in: .whitespacesAndNewlines)
+    var secure = false
     if rest.lowercased().hasPrefix("hotline://") {
       rest = String(rest.dropFirst("hotline://".count))
+    }
+    else if rest.lowercased().hasPrefix("\(Self.secureLinkScheme)://") {
+      rest = String(rest.dropFirst("\(Self.secureLinkScheme)://".count))
+      secure = true
     }
     var login: String?
     var password: String?
@@ -123,8 +168,13 @@ struct Server: Codable {
         login = String(credentials)
       }
     }
-    let (host, port) = self.parseHostAndPort(rest)
-    return (host, port, login?.isEmpty == false ? login : nil, password)
+    let typedLogin = login?.isEmpty == false ? login : nil
+    guard secure else {
+      let (host, port) = self.parseHostAndPort(rest)
+      return (host, port, typedLogin, password, nil)
+    }
+    let (host, tlsPort) = self.parseHostAndPort(rest, defaultPort: HotlinePorts.DefaultTLSPort)
+    return (host, HotlinePorts.DefaultServerPort, typedLogin, password, tlsPort)
   }
 
   static func parseServerAddressAndPort(_ address: String) -> (String, Int) {
@@ -132,7 +182,7 @@ struct Server: Codable {
     return (parsed.host, parsed.port)
   }
 
-  private static func parseHostAndPort(_ address: String) -> (String, Int) {
+  private static func parseHostAndPort(_ address: String, defaultPort: Int = HotlinePorts.DefaultServerPort) -> (String, Int) {
     let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
 
     // Check if this looks like an IPv6 address (contains colons but no port delimiter)
@@ -157,7 +207,7 @@ struct Server: Codable {
           }
         }
 
-        return (host.lowercased(), HotlinePorts.DefaultServerPort)
+        return (host.lowercased(), defaultPort)
       }
     }
 
@@ -168,12 +218,12 @@ struct Server: Codable {
     if colonCount > 1 {
       // This is likely an IPv6 address without a port
       // Keep it as-is, including any zone identifier (e.g., %en1 for link-local)
-      return (trimmed.lowercased(), HotlinePorts.DefaultServerPort)
+      return (trimmed.lowercased(), defaultPort)
     }
 
     // Otherwise use URL parsing for IPv4 or hostnames
     let url = URL(string: "hotline://\(trimmed)")
-    let port = url?.port ?? HotlinePorts.DefaultServerPort
+    let port = url?.port ?? defaultPort
     let host = url?.host(percentEncoded: false) ?? ""
     return (host.lowercased(), port)
   }

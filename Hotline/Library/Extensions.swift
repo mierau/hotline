@@ -312,7 +312,7 @@ extension String {
     return end > NSMaxRange(range) ? NSRange(location: range.location, length: end - range.location) : nil
   }
   /// The schemes a link can have, which open a page, a server, or an email, and not anything on this Mac.
-  static let linkSchemes: Set<String> = ["http", "https", "hotline", "mailto"]
+  static let linkSchemes: Set<String> = ["http", "https", "hotline", "hotlines", "mailto"]
 
   func isEmailAddress() -> Bool {
     self.wholeMatch(of: RegularExpressions.emailAddress) != nil

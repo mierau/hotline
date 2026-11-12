@@ -331,7 +331,7 @@ struct ChatView: View {
   /// Opens a link from the chat: hotline:// links go to that part of this server, or connect to
   /// another one, and anything else opens in its app.
   private func open(_ url: URL) {
-    guard url.scheme?.lowercased() == "hotline", let linkServer = Server(url: url) else {
+    guard let linkServer = Server(url: url) else {
       NSWorkspace.shared.open(url)
       return
     }

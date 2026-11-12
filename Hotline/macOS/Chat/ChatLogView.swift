@@ -211,7 +211,7 @@ struct ChatLogView: View {
   /// Links to Hotline servers connect to them, in a window of their own, and anything else opens
   /// in its app.
   private func open(_ url: URL) {
-    if url.scheme?.lowercased() == "hotline", let server = Server(url: url) {
+    if let server = Server(url: url) {
       AppState.shared.pendingServerOpen = server
     }
     else {

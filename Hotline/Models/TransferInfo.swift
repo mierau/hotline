@@ -40,6 +40,8 @@ class TransferInfo: Identifiable, Equatable, Hashable {
   var timeRemaining: TimeInterval? = nil
   
   var isUpload: Bool = false
+  /// Whether it's over a secure connection, as the connection to its server was as it started.
+  var isSecure: Bool = false
   var isDownload: Bool {
     get { !self.isUpload }
     set { self.isUpload = !newValue }

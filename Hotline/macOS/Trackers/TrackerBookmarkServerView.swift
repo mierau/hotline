@@ -1,13 +1,80 @@
 import SwiftUI
 
+/// A server's globe, with a lock on it when the server takes secure connections, or the connection
+/// to it is secure.
+struct ServerIcon: View {
+  var name: String = "Server"
+  var isSecure: Bool = false
+
+  /// The name of the globe with the lock drawn into it, for a globe.
+  static func secureName(for name: String) -> String? {
+    switch name {
+    case "Server": "Sever Secure"
+    case "Server Large": "Server Secure Large"
+    default: nil
+    }
+  }
+
+  /// The small globe for a menu item, with the lock for a server that's secure. The one with the
+  /// lock is wider, so for a menu with both, `matchingSecure` makes the plain one as wide, with the
+  /// globe at its left, so the names after them line up.
+  static func menuImage(isSecure: Bool, matchingSecure: Bool = false) -> NSImage? {
+    let plain = NSImage(named: "Server")
+    guard let secure = Self.secureName(for: "Server").flatMap({ NSImage(named: $0) }) else {
+      return plain
+    }
+    if isSecure {
+      return secure
+    }
+    guard matchingSecure, let plain, secure.size.width > plain.size.width else {
+      return plain
+    }
+    // Drawn as it's shown, so it's the globe for the menu's appearance, light or dark.
+    return NSImage(size: NSSize(width: secure.size.width, height: plain.size.height), flipped: false) { _ in
+      plain.draw(in: NSRect(origin: .zero, size: plain.size))
+      return true
+    }
+  }
+
+  var body: some View {
+    // With its size, which for the small globe is wider than the globe, for the lock.
+    let secure = self.isSecure ? Self.secureName(for: self.name).flatMap { name in NSImage(named: name).map { (name: name, size: $0.size) } } : nil
+    Image(self.name)
+      .resizable()
+      .scaledToFit()
+      // Laid out as the plain globe, so the globe's the same size and names after it line up,
+      // secure or not.
+      .opacity(secure == nil ? 1 : 0)
+      .overlay(alignment: .topLeading) {
+        if let secure {
+          // The same globe, with the lock on it, past the small globe's right edge, out into the
+          // space after it.
+          GeometryReader { geometry in
+            let scale = geometry.size.height / max(secure.size.height, 1)
+            Image(secure.name)
+              .resizable()
+              .frame(width: secure.size.width * scale, height: geometry.size.height)
+          }
+        }
+      }
+      .help(self.isSecure ? "Supports secure connections" : "")
+      .accessibilityElement()
+      .accessibilityLabel(self.isSecure ? "Secure" : "")
+      .accessibilityHidden(!self.isSecure)
+  }
+}
+
 struct TrackerBookmarkServerView: View {
   let server: BookmarkServer
 
+  /// Whether it's listed with a TLS port, or it's been connected to over TLS.
+  private var isSecure: Bool {
+    self.server.tlsPort != nil || ServerTrust.shared.record(address: self.server.address, port: self.server.port) != nil
+  }
+
   var body: some View {
     HStack(alignment: .center, spacing: 6) {
-      Image("Server")
-        .resizable()
-        .scaledToFit()
+      ServerIcon(isSecure: self.isSecure)
         .frame(width: 16, height: 16, alignment: .center)
       Text(self.server.name ?? "Server").lineLimit(1).truncationMode(.tail)
       if let serverDescription = self.server.description {

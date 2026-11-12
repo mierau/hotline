@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreGraphics
+import NetSocket
 
 // MARK: - Connection & Event Loop
 
@@ -74,12 +75,19 @@ extension HotlineState {
 
   // MARK: - Connection
 
+  /// Connects to a server and logs in, over TLS when it's known to take it. See `connect(to:login:)`.
+  ///
+  /// - Parameter withoutEncryption: Whether to connect without TLS this once, as you can choose to
+  ///   when a server that's taken it before doesn't now.
   @MainActor
-  func login(server: Server, username: String, iconID: Int) async throws {
+  func login(server: Server, username: String, iconID: Int, withoutEncryption: Bool = false) async throws {
     print("HotlineState.login(): Starting login to \(server.address):\(server.port)")
     self.server = server
     self.username = username
     self.iconID = iconID
+    self.secureConnection = nil
+    self.encryptionProblem = nil
+    self.connectingSecurely = false
     self.status = .connecting
     print("HotlineState.login(): Status set to connecting")
 
@@ -113,14 +121,7 @@ extension HotlineState {
       )
 
       print("HotlineState.login(): Calling HotlineClient.connect()...")
-      let client = try await HotlineClient.connect(
-        host: server.address,
-        port: UInt16(server.port),
-        login: loginInfo,
-        willLogIn: { @MainActor [weak self] in
-          self?.status = .loggingIn
-        }
-      )
+      let client = try await self.connect(to: server, login: loginInfo, withoutEncryption: withoutEncryption)
       print("HotlineState.login(): HotlineClient.connect() returned")
 
       // The window may have closed just as the connection finished.
@@ -172,6 +173,15 @@ extension HotlineState {
       self.status = .disconnected
       throw error
     }
+    catch let problem as ServerTrust.Problem {
+      // For you to decide what to do about, rather than an error. See `encryptionProblem`.
+      print("HotlineState.login(): Couldn't connect over TLS: \(problem)")
+      self.secureConnection = nil
+      self.stopDownloadingBanner()
+      self.status = .disconnected
+      self.encryptionProblem = problem
+      throw problem
+    }
     catch let clientError as HotlineClientError {
       switch clientError {
       case .connectionFailed(_):
@@ -207,6 +217,154 @@ extension HotlineState {
   func displayError(_ error: Error, message: String? = nil) {
     self.errorDisplayed = true
     self.errorMessage = message ?? error.localizedDescription
+  }
+
+  // MARK: - Encryption
+
+  /// How long to wait for a TLS port that's only tried, as a tracker lists or as Mobius usually has
+  /// it, to take the connection and answer as a Hotline server, before connecting without.
+  static let tlsAttemptTimeout: TimeInterval = 5
+  /// How many seconds to wait to reach a TLS port a tracker lists, which it's likely to be on,
+  /// before connecting without: time for a lost first try to be tried again.
+  static let listedTLSReachTimeout = 3
+  /// How many seconds to wait to reach the TLS port Mobius usually has, which most servers don't
+  /// have anything on: plenty for a server that's there, from anywhere, to answer.
+  static let usualTLSReachTimeout = 1
+
+  /// Connects to a server and logs in, over TLS when it's known to take it: when it's bookmarked to
+  /// be, or once it's been connected to over TLS, which it has to be then, unless you choose
+  /// otherwise. Otherwise TLS is tried first, and it's connected to without if TLS isn't there: on
+  /// the port a tracker lists it with, or for a server on Hotline's usual port, on the TLS port
+  /// Mobius usually has, unless that was tried lately and wasn't there. Only on Hotline's usual port,
+  /// as a server on another could share its address with a different server, whose TLS port the
+  /// usual one would be.
+  ///
+  /// The TLS connection is the one that's logged in on, rather than one to try it first, as Mobius
+  /// takes only one connection from an address every two seconds, on either port. Each connection
+  /// waits out the two seconds after the last, whether it was this, a check, or one turned down a
+  /// moment ago, rather than being turned away, unless that one never reached the server.
+  ///
+  /// The server's certificate is kept once it answers as a Hotline server over TLS. Where TLS is
+  /// only tried, something that takes TLS on the port but isn't a Hotline server is connected
+  /// without, as if nothing were there.
+  ///
+  /// - Parameter trust: What's known of servers that take TLS, which tests can keep apart.
+  @MainActor
+  func connect(to server: Server, login: HotlineLogin, withoutEncryption: Bool, trust: ServerTrust = .shared) async throws -> HotlineClient {
+    let willLogIn: @Sendable () async -> Void = { @MainActor [weak self] in
+      self?.status = .loggingIn
+    }
+    let plain: () async throws -> HotlineClient = {
+      try await Self.attempt(server, trust: trust) {
+        try await HotlineClient.connect(host: server.address, port: UInt16(server.port), login: login, willLogIn: willLogIn)
+      }
+    }
+
+    let record = trust.record(address: server.address, port: server.port)
+    // A bookmark's port, as it's set, over the one it was connected to on before, over a tracker's,
+    // whether it came with the server, or the server's been listed with one since.
+    let required = server.tlsRequired || record != nil
+    let listed = server.tlsPort ?? trust.listedTLSPort(address: server.address, port: server.port)
+    let known = (server.tlsRequired ? server.tlsPort ?? HotlinePorts.DefaultTLSPort : nil) ?? record?.tlsPort ?? listed
+    // Nothing known of it, on the usual port, and not tried lately.
+    let guessing = known == nil
+      && server.port == HotlinePorts.DefaultServerPort
+      && !trust.hasNoSecurePort(address: server.address, port: server.port)
+    guard !withoutEncryption,
+          let tlsPort = known ?? (guessing ? HotlinePorts.DefaultTLSPort : nil),
+          let port = UInt16(exactly: tlsPort), port < .max else {
+      return try await plain()
+    }
+
+    let handshake = ServerTrust.Handshake()
+    let tls = trust.policy(address: server.address, port: server.port, tlsPort: tlsPort, handshake: handshake)
+    // It's a Hotline server over TLS once it's answered the Hotline handshake, so its certificate's
+    // kept then, before logging in, which could still be turned down.
+    let address = server.address
+    let serverPort = server.port
+    let willLogInSecurely: @Sendable () async -> Void = {
+      trust.confirm(handshake, address: address, port: serverPort, tlsPort: tlsPort)
+      await willLogIn()
+    }
+    self.connectingSecurely = true
+    do {
+      let client = try await Self.attempt(server, trust: trust) {
+        try await HotlineClient.connect(
+          host: server.address,
+          port: port,
+          tls: tls,
+          connectTimeout: required ? nil : Self.tlsAttemptTimeout,
+          reachTimeout: required ? nil : guessing ? Self.usualTLSReachTimeout : Self.listedTLSReachTimeout,
+          login: login,
+          willLogIn: willLogInSecurely
+        )
+      }
+      self.connectingSecurely = false
+      if let certificate = handshake.certificate {
+        self.secureConnection = ServerTrust.Connection(port: tlsPort, certificate: certificate, version: handshake.version)
+      }
+      print("HotlineState: Connected over \(handshake.version ?? "TLS") on port \(tlsPort), certificate for \(handshake.certificate?.name ?? "?") (\(String(describing: handshake.outcome)))")
+      return client
+    }
+    catch {
+      self.connectingSecurely = false
+      if Task.isCancelled {
+        throw error
+      }
+      if handshake.outcome == .changed, let certificate = handshake.certificate {
+        throw ServerTrust.Problem.certificateChanged(certificate, port: tlsPort)
+      }
+      // A Hotline server answered over TLS, so whatever went wrong after, like a login that's turned
+      // down, isn't for connecting without it to put right.
+      if handshake.isConfirmed {
+        throw error
+      }
+      // Nothing took TLS on the port, or what did isn't a Hotline server.
+      if required {
+        throw ServerTrust.Problem.unavailable(port: tlsPort)
+      }
+
+      print("HotlineState: No Hotline server over TLS on port \(tlsPort) (\(error)), connecting without")
+      let client = try await plain()
+      // It's there, so it's TLS that isn't, which isn't tried for it again for a while, once it's
+      // sure it isn't, rather than something passing.
+      if guessing, let isSure = ServerTrust.absenceIsSure(after: error, tookTLS: handshake.certificate != nil) {
+        trust.noteNoSecurePort(address: server.address, port: server.port, isSure: isSure)
+      }
+      return client
+    }
+  }
+
+  /// Makes a connection to a server, once it's been two seconds since the last one to its address,
+  /// and notes when this one was, unless nothing took it, as Mobius takes only one connection from
+  /// an address every two seconds.
+  @MainActor
+  static func attempt(_ server: Server, trust: ServerTrust = .shared, connect: () async throws -> HotlineClient) async throws -> HotlineClient {
+    let wait = trust.waitBeforeConnecting(address: server.address)
+    if wait > 0 {
+      print("HotlineState: Waiting \(String(format: "%.1f", wait))s to connect to \(server.address), as it was just connected to")
+      try await Task.sleep(for: .seconds(wait))
+    }
+    do {
+      let client = try await connect()
+      trust.noteContact(address: server.address)
+      return client
+    }
+    catch {
+      if !ServerTrust.wasNeverReached(error) {
+        trust.noteContact(address: server.address)
+      }
+      throw error
+    }
+  }
+
+  /// Where a transfer goes, as the connection it's for does: over TLS on the port after the TLS
+  /// port, while it's encrypted, or the port after the server's.
+  func transferEndpoint(for server: Server) -> (port: UInt16, tls: TLSPolicy) {
+    guard let secure = self.secureConnection, let port = UInt16(exactly: secure.port) else {
+      return (UInt16(server.port), .disabled)
+    }
+    return (port, ServerTrust.shared.policy(address: server.address, port: server.port, tlsPort: secure.port))
   }
 
   /// Complete the login process after agreement (or immediately if no agreement needed).
@@ -381,6 +539,7 @@ extension HotlineState {
 
     // Clear client reference
     self.client = nil
+    self.secureConnection = nil
     self.presenceTask?.cancel()
     self.presenceTask = nil
 
@@ -514,10 +673,12 @@ extension HotlineState {
 
       print("HotlineState: Banner download info - reference: \(transfer.referenceNumber), transferSize: \(transfer.transferSize)")
 
+      let endpoint = self.transferEndpoint(for: server)
       let previewClient = HotlineFilePreviewClient(
         fileName: "banner",
         address: server.address,
-        port: UInt16(server.port),
+        port: endpoint.port,
+        tls: endpoint.tls,
         reference: transfer.referenceNumber,
         size: UInt32(transfer.transferSize)
       )

@@ -16,7 +16,7 @@ struct FileLinkMenu {
   /// which shows that part of a server already open, or connects to it, and anything else in its
   /// app.
   static func open(_ url: URL) {
-    if url.scheme?.lowercased() == "hotline", let server = Server(url: url) {
+    if let server = Server(url: url) {
       AppState.shared.pendingServerOpen = server
     }
     else {

@@ -36,6 +36,37 @@ struct ServerAddressTests {
     #expect(self.parsed("mars:secret@[fe80::1]:5600") == "fe80::1 5600 mars secret")
   }
 
+  @Test func secureAddresses() {
+    let typed = Server.parseServerAddress("hotlines://hotline.example.com")
+    #expect(typed.host == "hotline.example.com" && typed.port == 5500 && typed.tlsPort == 5600)
+    let other = Server.parseServerAddress("hotlines://mars:secret@hotline.example.com:6600")
+    #expect(other.host == "hotline.example.com" && other.port == 5500 && other.tlsPort == 6600 && other.login == "mars")
+    #expect(Server.parseServerAddress("hotline.example.com").tlsPort == nil)
+    #expect(Server.parseServerAddress("hotline://hotline.example.com:5600").tlsPort == nil)
+  }
+
+  @Test func secureLinksOpenSecurely() throws {
+    let secureURL = try #require(URL(string: "hotlines://hotline.example.com/files/Maps"))
+    let server = try #require(Server(url: secureURL))
+    #expect(server.address == "hotline.example.com" && server.port == 5500)
+    #expect(server.tlsPort == 5600 && server.tlsRequired)
+    #expect(server.initialSection == .files && server.initialFilePath == ["Maps"])
+
+    let plainURL = try #require(URL(string: "hotline://hotline.example.com:5600"))
+    let plain = try #require(Server(url: plainURL))
+    #expect(plain.port == 5600 && plain.tlsPort == nil && !plain.tlsRequired)
+    let webURL = try #require(URL(string: "https://hotline.example.com"))
+    #expect(Server(url: webURL) == nil)
+  }
+
+  @Test func linksToServers() {
+    #expect(Server.link(address: "hotline.example.com", port: 5500, tlsPort: nil) == "hotline://hotline.example.com")
+    #expect(Server.link(address: "hotline.example.com", port: 6500, tlsPort: nil) == "hotline://hotline.example.com:6500")
+    #expect(Server.link(address: "hotline.example.com", port: 5500, tlsPort: 5600) == "hotlines://hotline.example.com")
+    #expect(Server.link(address: "hotline.example.com", port: 5500, tlsPort: 6600) == "hotlines://hotline.example.com:6600")
+    #expect(Server.link(address: "fe80::1", port: 5500, tlsPort: 5600) == "hotlines://[fe80::1]")
+  }
+
   @Test func addressAndPortLeavesTheLoginOut() {
     let (host, port) = Server.parseServerAddressAndPort("mars:secret@hotline.example.com:5600")
     #expect(host == "hotline.example.com" && port == 5600)
@@ -91,5 +122,27 @@ struct ChatHistoryRetentionTests {
     #expect(ChatStore.searchText(body: "ÉCLAIR time", username: "Mars") == "mars\néclair time")
     #expect(ChatStore.searchText(body: "files/My%20Maps/", username: nil).contains("my maps"))
     #expect(ChatStore.folded("Zoë") == "zoë")
+  }
+}
+
+struct BonjourServerTests {
+  private func server(address: String, port: UInt16 = 5500) -> BonjourState.BonjourServer {
+    BonjourState.BonjourServer(serviceName: "The Holographic Universe", name: "The Holographic Universe", address: address, port: port, txtRecords: [:])
+  }
+
+  @Test func foundAgainItsTheSameServer() {
+    // As when it's found on another network interface, and resolved again.
+    let first = self.server(address: "192.168.1.20")
+    let again = self.server(address: "192.168.1.20")
+    #expect(first == again)
+    #expect(first.hashValue == again.hashValue)
+    #expect(first.id == again.id)
+  }
+
+  @Test func atANewAddressItsTheSameRow() {
+    let first = self.server(address: "192.168.1.20")
+    let moved = self.server(address: "192.168.1.21")
+    #expect(first.id == moved.id)
+    #expect(first != moved)
   }
 }

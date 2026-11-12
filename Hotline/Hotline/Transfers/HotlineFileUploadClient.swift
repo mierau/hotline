@@ -11,6 +11,8 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
 
   private let serverAddress: String
   private let serverPort: UInt16
+  /// TLS for the transfer, as the connection it's for has it.
+  private let tls: TLSPolicy
   private let referenceNumber: UInt32
   private let fileURL: URL
 
@@ -29,6 +31,7 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
     fileURL: URL,
     address: String,
     port: UInt16,
+    tls: TLSPolicy = .disabled,
     reference: UInt32,
     configuration: Configuration = .init()
   ) {
@@ -43,6 +46,7 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
 
     self.serverAddress = address
     self.serverPort = port
+    self.tls = tls
     self.referenceNumber = reference
     self.fileURL = fileURL
     self.config = configuration
@@ -135,7 +139,8 @@ public class HotlineFileUploadClient: @MainActor HotlineTransferClient {
     // Connect to transfer server
     let socket = try await NetSocket.connect(
       host: self.serverAddress,
-      port: self.serverPort + 1
+      port: self.serverPort + 1,
+      tls: self.tls
     )
     defer { Task { await socket.close() } }
     self.socket = socket

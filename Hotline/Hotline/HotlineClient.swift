@@ -259,6 +259,77 @@ public actor HotlineClient {
 
   // MARK: - Connection
 
+  /// The handshake a connection to a Hotline server starts with, before logging in.
+  ///
+  /// - Throws: `HotlineClientError.connectionFailed` if what answers isn't a Hotline server, or
+  ///   turns the connection down
+  private static func handshake(on socket: NetSocket) async throws {
+    print("HotlineClient: Sending handshake...")
+    try await socket.write(Data(endian: .big, {
+      "TRTP".fourCharCode() // 'TRTP' protocol ID
+      "HOTL".fourCharCode() // 'HOTL' sub-protocol ID
+      UInt16(0x0001) // Version
+      UInt16(0x0002) // Sub-version
+    }))
+    let handshakeResponse = try await socket.read(8)
+    print("HotlineClient: Handshake response received")
+
+    // Verify handshake
+    guard handshakeResponse.prefix(4) == Data([0x54, 0x52, 0x54, 0x50]) else {
+      print("HotlineClient: Invalid handshake response")
+      throw HotlineClientError.connectionFailed(
+        NSError(domain: "HotlineClient", code: -1, userInfo: [
+          NSLocalizedDescriptionKey: "Invalid handshake response"
+        ])
+      )
+    }
+
+    let errorCode = handshakeResponse.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 4, as: UInt32.self) }
+    guard errorCode.bigEndian == 0 else {
+      print("HotlineClient: Handshake failed with error code \(errorCode)")
+      throw HotlineClientError.connectionFailed(
+        NSError(domain: "HotlineClient", code: Int(errorCode), userInfo: [
+          NSLocalizedDescriptionKey: "Handshake failed with error code \(errorCode)"
+        ])
+      )
+    }
+  }
+
+  /// Checks for a Hotline server on a port, over TLS or not: connects, makes the handshake every
+  /// connection starts with, and closes, without logging in, so it doesn't show up on the server.
+  ///
+  /// - Parameter timeout: How long to wait for the connection, and then for the handshake.
+  /// - Throws: `HotlineClientError.connectionFailed` if there's nothing there, or it isn't a Hotline
+  ///   server, as it is over TLS, if `tls` is on, or it didn't answer in time
+  public static func check(host: String, port: UInt16, tls: TLSPolicy = .disabled, timeout: TimeInterval) async throws {
+    let socket: NetSocket
+    do {
+      socket = try await Task.withTimeout(seconds: timeout) {
+        try await NetSocket.connect(host: host, port: port, tls: tls)
+      }
+    }
+    catch let socketError as NetSocketError {
+      throw HotlineClientError.connectionFailed(socketError)
+    }
+    catch let timeoutError as TaskTimeoutError {
+      throw HotlineClientError.connectionFailed(timeoutError)
+    }
+
+    do {
+      try await Task.withTimeout(seconds: timeout) {
+        try await Self.handshake(on: socket)
+      }
+      await socket.close()
+    }
+    catch {
+      await socket.close()
+      if error is HotlineClientError {
+        throw error
+      }
+      throw HotlineClientError.connectionFailed(error)
+    }
+  }
+
   /// Connect to a Hotline server and log in
   ///
   /// This method:
@@ -269,19 +340,28 @@ public actor HotlineClient {
   ///
   /// - Parameters:
   ///   - host: Server hostname or IP address
-  ///   - port: Server port (default: 5500)
-  ///   - login: Login credentials and user info
+  ///   - port: Server port (default: 5500), or its TLS port, for TLS
   ///   - tls: TLS policy (default: disabled for Hotline)
-  ///   - willLogIn: Called once it's connected, as it sends the login
+  ///   - connectTimeout: How long to wait for the connection, and its TLS handshake, and then for
+  ///     the server to answer the Hotline handshake, before giving up, or nil to wait as long as the
+  ///     network does
+  ///   - reachTimeout: How many seconds to wait to reach the port at all, before any TLS handshake,
+  ///     or nil to wait as long as the network does. A port that isn't reached in that time had
+  ///     nothing on the other end to see the connection.
+  ///   - login: Login credentials and user info
+  ///   - willLogIn: Called once the server's answered the Hotline handshake, as it sends the login
   /// - Returns: Connected and logged-in client
   /// - Throws: `HotlineClientError` if connection or login fails
   public static func connect(
     host: String,
     port: UInt16 = 5500,
+    tls: TLSPolicy = .disabled,
+    connectTimeout: TimeInterval? = nil,
+    reachTimeout: Int? = nil,
     login: HotlineLogin,
     willLogIn: (@Sendable () async -> Void)? = nil
   ) async throws -> HotlineClient {
-    print("HotlineClient.connect(): Starting connection to \(host):\(port) as '\(login.username)'")
+    print("HotlineClient.connect(): Starting connection to \(host):\(port)\(tls.enabled ? " over TLS" : "") as '\(login.username)'")
 
     // Connect socket
     print("HotlineClient.connect(): Connecting socket...")
@@ -290,7 +370,21 @@ public actor HotlineClient {
       var config = NetSocket.Config()
       config.enableKeepAlive = true
       config.keepAliveIdleTime = 60
-      socket = try await NetSocket.connect(host: host, port: port, config: config)
+      let socketConfig = config
+      let connectSocket: @Sendable () async throws -> NetSocket = {
+        if let reachTimeout, let nwPort = NWEndpoint.Port(rawValue: port) {
+          return try await NetSocket.connect(host: NWEndpoint.Host(host), port: nwPort, config: socketConfig, parameters: Self.parameters(tls: tls, reachTimeout: reachTimeout))
+        }
+        return try await NetSocket.connect(host: host, port: port, tls: tls, config: socketConfig)
+      }
+      if let connectTimeout {
+        socket = try await Task.withTimeout(seconds: connectTimeout) {
+          try await connectSocket()
+        }
+      }
+      else {
+        socket = try await connectSocket()
+      }
     }
     catch let socketError as NetSocketError {
       if case .failed(_) = socketError {
@@ -298,39 +392,25 @@ public actor HotlineClient {
       }
       throw socketError
     }
+    catch let timeout as TaskTimeoutError {
+      throw HotlineClientError.connectionFailed(timeout)
+    }
     print("HotlineClient.connect(): Socket connected")
 
-    // Perform handshake
+    // Perform handshake, in time, if there's a time to wait, as something that isn't a Hotline
+    // server might never answer it.
     do {
-      print("HotlineClient.connect(): Sending handshake...")
-      try await socket.write(Data(endian: .big, {
-        "TRTP".fourCharCode() // 'TRTP' protocol ID
-        "HOTL".fourCharCode() // 'HOTL' sub-protocol ID
-        UInt16(0x0001) // Version
-        UInt16(0x0002) // Sub-version
-      }))
-      let handshakeResponse = try await socket.read(8)
-      print("HotlineClient.connect(): Handshake response received")
-
-      // Verify handshake
-      guard handshakeResponse.prefix(4) == Data([0x54, 0x52, 0x54, 0x50]) else {
-        print("HotlineClient.connect(): Invalid handshake response")
-        throw HotlineClientError.connectionFailed(
-          NSError(domain: "HotlineClient", code: -1, userInfo: [
-            NSLocalizedDescriptionKey: "Invalid handshake response"
-          ])
-        )
+      if let connectTimeout {
+        try await Task.withTimeout(seconds: connectTimeout) {
+          try await Self.handshake(on: socket)
+        }
       }
-
-      let errorCode = handshakeResponse.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 4, as: UInt32.self) }
-      guard errorCode.bigEndian == 0 else {
-        print("HotlineClient.connect(): Handshake failed with error code \(errorCode)")
-        throw HotlineClientError.connectionFailed(
-          NSError(domain: "HotlineClient", code: Int(errorCode), userInfo: [
-            NSLocalizedDescriptionKey: "Handshake failed with error code \(errorCode)"
-          ])
-        )
+      else {
+        try await Self.handshake(on: socket)
       }
+    } catch let timeout as TaskTimeoutError {
+      await socket.close()
+      throw HotlineClientError.connectionFailed(timeout)
     } catch {
       await socket.close()
       throw error
@@ -361,6 +441,19 @@ public actor HotlineClient {
     print("HotlineClient.connect(): Login successful, server v\(serverInfo.version)")
 
     return client
+  }
+
+  /// TCP that gives up reaching the port after `reachTimeout` seconds, with TLS on it, if `tls` has
+  /// it on, set up as `tls` has it.
+  private static func parameters(tls: TLSPolicy, reachTimeout: Int) -> NWParameters {
+    let tcp = NWProtocolTCP.Options()
+    tcp.connectionTimeout = reachTimeout
+    guard tls.enabled else {
+      return NWParameters(tls: nil, tcp: tcp)
+    }
+    let options = NWProtocolTLS.Options()
+    tls.configure?(options)
+    return NWParameters(tls: options, tcp: tcp)
   }
 
   private init(socket: NetSocket) {
