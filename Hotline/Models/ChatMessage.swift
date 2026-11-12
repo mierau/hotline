@@ -89,7 +89,10 @@ struct ChatMessage: Identifiable {
     self.type == .joined || self.type == .left
   }
 
-  init(text: String, type: ChatMessageType, date: Date, id: UUID = UUID()) {
+  /// - Parameter names: The names of the people it could be from, those on the server, so it's from
+  ///   the one whose whole name it starts with, rather than from whoever has the start of someone's
+  ///   name with a colon in it, like "Dustin: new server at…".
+  init(text: String, type: ChatMessageType, date: Date, id: UUID = UUID(), names: [String] = []) {
     self.id = id
     self.type = type
     self.date = date
@@ -107,9 +110,9 @@ struct ChatMessage: Identifiable {
     }
     else if
       type == .message,
-      let match = text.firstMatch(of: ChatMessage.parser) {
-      self.username = String(match.1)
-      self.text = String(match.2)
+      let (name, said) = Self.sender(of: text, among: names) {
+      self.username = name
+      self.text = said
       self.isEmote = false
     }
     else {
@@ -129,6 +132,23 @@ struct ChatMessage: Identifiable {
     }
     self.searchText = NSString(string: searchText)
   }
+
+  /// Who said a line of chat, "name:  what they said", and what: the longest of `names` it starts
+  /// with, and a colon after it, or otherwise what's before its first colon.
+  static func sender(of line: String, among names: [String]) -> (name: String, text: String)? {
+    let start = line.drop(while: \.isWhitespace)
+    // The longest, as one that starts with someone else's name, and a colon, is still its own.
+    guard let name = names.filter({ !$0.isEmpty && start.hasPrefix($0 + ":") }).max(by: { $0.count < $1.count }) else {
+      return line.firstMatch(of: Self.parser).map { (String($0.1), String($0.2)) }
+    }
+    let said = start.dropFirst(name.count + 1)
+    let text = said.drop(while: \.isWhitespace)
+    // Only spaces, kept, or nothing at all, which isn't something anyone said.
+    guard !said.isEmpty else {
+      return nil
+    }
+    return (name, String(text.isEmpty ? said : text))
+  }
 }
 
 extension ChatMessage {
@@ -141,7 +161,8 @@ extension ChatMessage {
       // An emote with a link in it, saved before emotes were told apart first as if what came
       // before the link's colon were a name, put back as it was.
       let separator = username.firstMatch(of: ChatMessage.emoteParser) != nil && entry.body.hasPrefix("//") ? ":" : ": "
-      self.init(text: username + separator + entry.body, type: type, date: entry.date, id: entry.id)
+      // From who it was saved as being from, even with a colon in their name.
+      self.init(text: username + separator + entry.body, type: type, date: entry.date, id: entry.id, names: [username])
     }
     else {
       self.init(text: entry.body, type: type, date: entry.date, id: entry.id)

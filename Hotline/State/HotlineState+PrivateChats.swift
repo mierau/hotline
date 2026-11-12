@@ -214,7 +214,7 @@ extension HotlineState {
       return
     }
 
-    var message = ChatMessage(text: text, type: .message, date: Date())
+    var message = ChatMessage(text: text, type: .message, date: Date(), names: self.users.map(\.name))
     if let username = message.username,
        let user = self.users.first(where: { $0.name == username }) {
       message.iconID = user.iconID

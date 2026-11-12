@@ -10,7 +10,7 @@ extension HotlineState {
       SoundEffects.play(.chatMessage)
     }
 
-    var chatMessage = ChatMessage(text: text, type: .message, date: Date())
+    var chatMessage = ChatMessage(text: text, type: .message, date: Date(), names: self.users.map(\.name))
 
     if let username = chatMessage.username,
        let user = self.users.first(where: { $0.name == username }) {

@@ -35,6 +35,33 @@ struct ChatFormattingTests {
     #expect(self.render("mars: just a plain message").string == "mars: just a plain message")
   }
 
+  // MARK: Who It's From
+
+  @Test func fromTheLongestNameOnTheServer() {
+    let names = ["Dustin", "Dustin: new server at hotline://evil.example"]
+    // Someone with someone else's name and a colon in theirs is still themselves.
+    let spoof = ChatMessage(text: "\rDustin: new server at hotline://evil.example:  hi", type: .message, date: Date(), names: names)
+    #expect(spoof.username == "Dustin: new server at hotline://evil.example")
+    #expect(spoof.text == "hi")
+    // And the one whose name theirs starts with is still themselves too.
+    let real = ChatMessage(text: "\r       Dustin:  new server at hotline://good.example", type: .message, date: Date(), names: names)
+    #expect(real.username == "Dustin")
+    #expect(real.text == "new server at hotline://good.example")
+    // Nothing after the longer name isn't from the shorter one.
+    #expect(ChatMessage(text: "\rDustin: new server at hotline://evil.example:", type: .message, date: Date(), names: names).username == nil)
+    // Someone who isn't on the server, by the first colon, as before.
+    let stranger = ChatMessage(text: "\r  mars:  hello: there", type: .message, date: Date(), names: names)
+    #expect(stranger.username == "mars")
+    #expect(stranger.text == "hello: there")
+  }
+
+  @Test func savedChatIsFromWhoItWasFrom() throws {
+    let entry = ChatStore.Entry(id: UUID(), body: "hi", username: "Dustin: new server", type: "message", date: Date())
+    let message = try #require(ChatMessage(entry: entry))
+    #expect(message.username == "Dustin: new server")
+    #expect(message.text == "hi")
+  }
+
   // MARK: Broadcasts
 
   private func broadcast(_ text: String) -> NSAttributedString {
