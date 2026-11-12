@@ -381,7 +381,7 @@ struct Application: App {
     .restorationBehavior(.disabled)
   }
 
-  /// Look up bookmarks for a matching server and merge saved credentials.
+  /// The login saved in a bookmark of the server a link is to, as `Server.fillSavedLogin` fills it in.
   private func mergeBookmarkCredentials(into server: inout Server) {
     let context = ModelContext(self.modelContainer)
     let descriptor = FetchDescriptor<Bookmark>()
@@ -390,12 +390,7 @@ struct Application: App {
     if let bookmark = bookmarks.first(where: {
       $0.type == .server && $0.address.lowercased() == server.address && $0.port == server.port
     }) {
-      if server.login.isEmpty, let login = bookmark.login, !login.isEmpty {
-        server.login = login
-      }
-      if server.password.isEmpty, let password = bookmark.password, !password.isEmpty {
-        server.password = password
-      }
+      server.fillSavedLogin(login: bookmark.login, password: bookmark.password)
     }
   }
 }

@@ -248,6 +248,28 @@ struct PacketBytesTests {
     #expect(BonjourState.BonjourServer(serviceName: "s", name: "s", address: "10.0.0.1", port: 65535, txtRecords: [:]).server == nil)
   }
 
+  @Test func linksUseASavedLoginOnlyAsAPair() {
+    func link(_ login: String, _ password: String) -> Server {
+      var server = Server(name: nil, description: nil, address: "example.com", port: 5500)
+      server.login = login
+      server.password = password
+      server.fillSavedLogin(login: "dustin", password: "secret")
+      return server
+    }
+    // Without a login, the saved one, password and all.
+    #expect(link("", "").login == "dustin")
+    #expect(link("", "").password == "secret")
+    // With the saved login, its password.
+    #expect(link("dustin", "").password == "secret")
+    // With someone else's, never the saved password.
+    #expect(link("mallory", "").login == "mallory")
+    #expect(link("mallory", "").password == "")
+    // With a password of its own, as it is.
+    #expect(link("mallory", "pw").password == "pw")
+    #expect(link("", "pw").login == "")
+    #expect(link("", "pw").password == "pw")
+  }
+
   @MainActor @Test func connectingOnAPortNoServerCanBeOnFails() async {
     // Nowhere, so a mistake waits rather than reaching anything.
     let login = HotlineLogin(login: "", password: "", username: "test", iconID: 1)

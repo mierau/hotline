@@ -125,6 +125,19 @@ struct Server: Codable {
     }
   }
   
+  /// The login saved for it filled in, where a link to it leaves it out: the login and password
+  /// together, for a link with neither, or the password, for a link with the same login and none.
+  /// Never the password with a different login, which would log in as someone else with it.
+  mutating func fillSavedLogin(login savedLogin: String?, password savedPassword: String?) {
+    if self.login.isEmpty && self.password.isEmpty {
+      self.login = savedLogin ?? ""
+      self.password = savedPassword ?? ""
+    }
+    else if self.password.isEmpty && self.login == savedLogin {
+      self.password = savedPassword ?? ""
+    }
+  }
+
   /// The schemes of links to servers: hotline://, and hotlines:// for one to connect to securely.
   static let linkSchemes: Set<String> = ["hotline", "hotlines"]
   static let secureLinkScheme = "hotlines"
