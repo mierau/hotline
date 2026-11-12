@@ -253,6 +253,8 @@ class Prefs {
     } else {
       self.watchWords = []
     }
+
+    self.openDownloadFolder()
   }
 
   var username: String {
@@ -458,37 +460,44 @@ class Prefs {
   }
 
   var downloadFolderBookmark: Data? {
-    didSet { UserDefaults.standard.set(self.downloadFolderBookmark, forKey: PrefsKeys.downloadFolderBookmark.rawValue) }
+    didSet {
+      UserDefaults.standard.set(self.downloadFolderBookmark, forKey: PrefsKeys.downloadFolderBookmark.rawValue)
+      self.openDownloadFolder()
+    }
   }
 
-  var resolvedDownloadFolder: URL {
-    guard let bookmarkData = self.downloadFolderBookmark else {
-      return .downloadsDirectory
+  /// The folder downloads go to, as its bookmark has it, and whether it was opened for Hotline to
+  /// use, which it has to be closed again after: once, when it's chosen or Hotline starts, and
+  /// closed when another is, rather than each time it's used, which macOS takes only so many of.
+  @ObservationIgnored private var downloadFolder: (url: URL, isOpen: Bool)?
+
+  /// Opens the chosen folder, closing the one that was open, and renews its bookmark for a folder
+  /// that's been moved. One that can't be found now, like one on a drive that isn't connected, stays
+  /// chosen, with downloads going to Downloads until it's back.
+  private func openDownloadFolder() {
+    if let folder = self.downloadFolder, folder.isOpen {
+      folder.url.stopAccessingSecurityScopedResource()
     }
+    self.downloadFolder = nil
 
     var isStale = false
-    guard let url = try? URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale) else {
-      self.downloadFolderBookmark = nil
+    guard let bookmark = self.downloadFolderBookmark,
+          let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale) else {
+      return
+    }
+    self.downloadFolder = (url, url.startAccessingSecurityScopedResource())
+
+    // Renewed once it's open, which opens it again, by the renewed one.
+    if isStale, let renewed = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
+      self.downloadFolderBookmark = renewed
+    }
+  }
+
+  /// Where downloads go: the chosen folder, while it's there, or Downloads.
+  var resolvedDownloadFolder: URL {
+    guard let url = self.downloadFolder?.url, FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
       return .downloadsDirectory
     }
-
-    if isStale {
-      // Re-create the bookmark with current data
-      if let newBookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
-        self.downloadFolderBookmark = newBookmark
-      } else {
-        self.downloadFolderBookmark = nil
-        return .downloadsDirectory
-      }
-    }
-
-    // Verify the folder still exists
-    guard FileManager.default.fileExists(atPath: url.path) else {
-      self.downloadFolderBookmark = nil
-      return .downloadsDirectory
-    }
-
-    _ = url.startAccessingSecurityScopedResource()
     return url
   }
 
