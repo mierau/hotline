@@ -75,11 +75,12 @@ struct ChatFormattingTests {
   }
 
   @Test func quotesAndListsGoAfterTheName() {
+    // The name's line keeps the space after it, as it does before code.
     let quote = self.paragraphs(self.render("mars: > hack the planet\nyes"))
-    #expect(quote.map(\.text) == ["mars:", "hack the planet", "yes"])
+    #expect(quote.map(\.text) == ["mars: ", "hack the planet", "yes"])
     #expect(quote[1].first == self.wrapped + Markdown.quoteIndent)
     let list = self.paragraphs(self.render("mars: - eggs\n- milk"))
-    #expect(list.map(\.text) == ["mars:", "• eggs", "• milk"])
+    #expect(list.map(\.text) == ["mars: ", "• eggs", "• milk"])
   }
 
   @Test func messageGoingOnStartsUnderTheOneBefore() {

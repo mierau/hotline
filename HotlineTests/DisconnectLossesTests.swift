@@ -65,7 +65,7 @@ struct DisconnectLossesTests {
       appState.serverWindowClosed(state: state)
     }
 
-    #expect(appState.quitLosses == "1 transfer hasn't finished and will stop. The board post you're writing on Test Server will be lost.")
+    #expect(appState.quitLosses == "1 transfer is still active and will be stopped. The board post you're writing on Test Server will be lost.")
   }
 
   // MARK: - Window Close Guard

@@ -47,8 +47,10 @@ struct ImagePreviewSizesTests {
   }
 
   @Test func bigImagesFitWithinTheMaximum() {
-    #expect(ImagePreview.previewSize(forImageSize: CGSize(width: 4000, height: 3000)) == CGSize(width: 160, height: 120))
+    #expect(ImagePreview.previewSize(forImageSize: CGSize(width: 4000, height: 3000)) == CGSize(width: 240, height: 180))
     #expect(ImagePreview.previewSize(forImageSize: CGSize(width: 3000, height: 500)) == CGSize(width: 240, height: 40))
+    // A phone's screenshot, as tall as there's room for.
+    #expect(ImagePreview.previewSize(forImageSize: CGSize(width: 1170, height: 2532)) == CGSize(width: 92, height: 200))
   }
 
   @Test func unknownImagesGetThePlaceholder() {
