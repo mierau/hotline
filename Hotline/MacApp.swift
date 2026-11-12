@@ -63,8 +63,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
       AppState.shared.cloudKitReady = true
     }
 
-    Task {
-      await AppUpdate.shared.checkForUpdatesOnLaunch()
+    // Not while it's only hosting tests: each run would ask GitHub, which answers 60 requests an
+    // hour from an address that isn't signed in, which the About box's contributors need too.
+    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+      Task {
+        await AppUpdate.shared.checkForUpdatesOnLaunch()
+      }
     }
   }
   

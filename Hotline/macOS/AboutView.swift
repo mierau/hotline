@@ -1,11 +1,42 @@
 import SwiftUI
 
-struct AboutContributor: Identifiable {
+struct AboutContributor: Identifiable, Codable, Equatable {
   let username: String
   let webURL: URL
   let pictureURL: URL?
 
   var id: String { self.username }
+}
+
+/// The contributors as they last came from GitHub, kept so the About box has them straight away,
+/// and when GitHub can't be asked: offline, or past the 60 requests an hour it answers from an
+/// address that isn't signed in, which the app's update check, and anything else there, share.
+enum AboutContributorsCache {
+  struct Kept: Codable {
+    let date: Date
+    let contributors: [AboutContributor]
+  }
+
+  static let fileURL = URL.cachesDirectory.appending(path: "Contributors.json", directoryHint: .notDirectory)
+  /// How long what's kept is good for, before GitHub's asked again.
+  static let freshness: TimeInterval = 24 * 60 * 60
+
+  static func load(from fileURL: URL = Self.fileURL) -> Kept? {
+    guard let data = try? Data(contentsOf: fileURL) else {
+      return nil
+    }
+    return try? JSONDecoder().decode(Kept.self, from: data)
+  }
+
+  static func save(_ contributors: [AboutContributor], date: Date = .now, to fileURL: URL = Self.fileURL) {
+    do {
+      try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try JSONEncoder().encode(Kept(date: date, contributors: contributors)).write(to: fileURL, options: .atomic)
+    }
+    catch {
+      print("AboutView: Couldn't keep the contributors: \(error)")
+    }
+  }
 }
 
 struct AboutContributorView: View {
@@ -203,39 +234,72 @@ struct AboutView: View {
       .animation(.smooth(duration: 0.5).delay(Double(min(index, 12)) * 0.04))
   }
   
+  /// Shows the contributors as they were kept, straight away, and asks GitHub for them again once
+  /// they're a day old, or there aren't any yet.
   func loadContributors() async {
-    var newContributors: [AboutContributor] = []
-    
-    if let url = URL(string: "https://api.github.com/repos/mierau/hotline/contributors"),
-       let (data, _) = try? await URLSession.shared.data(from: url) {
-      if let jsonContributors = try? JSONSerialization.jsonObject(with: data, options: []) as? [[String: Any]] {
-        for contributor in jsonContributors {
-          if let username = contributor["login"] as? String,
-             let webURLString = contributor["html_url"] as? String,
-             let webURL = URL(string: webURLString) {
-            var pictureURL: URL? = nil
-            if let pictureURLString = contributor["avatar_url"] as? String {
-              pictureURL = URL(string: pictureURLString)
-            }
-            newContributors.append(AboutContributor(username: username, webURL: webURL, pictureURL: pictureURL))
-          }
-        }
+    let kept = AboutContributorsCache.load()
+    if let kept, !kept.contributors.isEmpty {
+      self.show(kept.contributors)
+      if Date.now.timeIntervalSince(kept.date) < AboutContributorsCache.freshness {
+        return
       }
     }
-    
-    // Keep what's on screen if the list couldn't be loaded this time.
-    guard !newContributors.isEmpty else {
+
+    // What's on screen stays, if they couldn't be had this time.
+    guard let fetched = await Self.fetchContributors(), !fetched.isEmpty else {
       return
     }
+    AboutContributorsCache.save(fetched)
+    self.show(fetched)
+  }
 
-    // Contributors animate in the first time. Coming back to the window refreshes them in place.
+  /// Contributors animate in the first time. Coming back to the window refreshes them in place.
+  private func show(_ contributors: [AboutContributor]) {
+    guard contributors != self.contributors else {
+      return
+    }
     if self.contributors.isEmpty {
       withAnimation {
-        self.contributors = newContributors
+        self.contributors = contributors
       }
     }
     else {
-      self.contributors = newContributors
+      self.contributors = contributors
+    }
+  }
+
+  /// The contributors, from GitHub, or nil, saying why, if GitHub didn't give them.
+  private static func fetchContributors() async -> [AboutContributor]? {
+    guard let url = URL(string: "https://api.github.com/repos/mierau/hotline/contributors") else {
+      return nil
+    }
+    let data: Data
+    do {
+      let (body, response) = try await URLSession.shared.data(from: url)
+      // GitHub says why it didn't, as when it's had its 60 requests this hour, in a message.
+      if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+        let message = (try? JSONSerialization.jsonObject(with: body) as? [String: Any])?["message"] as? String
+        print("AboutView: GitHub didn't give the contributors: HTTP \(http.statusCode) \(message ?? "")")
+        return nil
+      }
+      data = body
+    }
+    catch {
+      print("AboutView: Couldn't ask GitHub for the contributors: \(error)")
+      return nil
+    }
+
+    guard let jsonContributors = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+      return nil
+    }
+    return jsonContributors.compactMap { contributor in
+      guard let username = contributor["login"] as? String,
+            let webURLString = contributor["html_url"] as? String,
+            let webURL = URL(string: webURLString) else {
+        return nil
+      }
+      let pictureURL = (contributor["avatar_url"] as? String).flatMap { URL(string: $0) }
+      return AboutContributor(username: username, webURL: webURL, pictureURL: pictureURL)
     }
   }
 

@@ -146,3 +146,27 @@ struct BonjourServerTests {
     #expect(first != moved)
   }
 }
+
+struct AboutContributorsCacheTests {
+  @Test func contributorsAreKeptWithWhenTheyCame() throws {
+    let fileURL = URL.temporaryDirectory.appending(path: "AboutContributorsCacheTests-\(UUID().uuidString)/Contributors.json")
+    defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+    #expect(AboutContributorsCache.load(from: fileURL) == nil)
+
+    let contributors = [
+      AboutContributor(username: "mierau", webURL: URL(string: "https://github.com/mierau")!, pictureURL: URL(string: "https://avatars.githubusercontent.com/u/1")),
+      AboutContributor(username: "someone", webURL: URL(string: "https://github.com/someone")!, pictureURL: nil),
+    ]
+    let date = Date(timeIntervalSinceReferenceDate: 800_000_000)
+    AboutContributorsCache.save(contributors, date: date, to: fileURL)
+
+    let kept = try #require(AboutContributorsCache.load(from: fileURL))
+    #expect(kept.contributors == contributors)
+    #expect(kept.date == date)
+  }
+
+  @Test func testsCanBeToldApartFromLaunches() {
+    // What the app checks to skip asking GitHub for updates while it's hosting tests.
+    #expect(ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil)
+  }
+}
