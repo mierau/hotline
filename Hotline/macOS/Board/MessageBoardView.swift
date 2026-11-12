@@ -21,6 +21,10 @@ struct MessageBoardView: View {
           }
       }
     }
+    // Posts that come while it's shown are seen.
+    .onSeen(self.model.messageBoard.count) {
+      self.model.markBoardAsRead()
+    }
     .overlay {
       if self.model.messageBoard.isEmpty && (self.model.access?.contains(.canReadMessageBoard) != true) {
         self.disabledBoardView

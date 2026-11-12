@@ -19,50 +19,18 @@ extension HotlineState {
     }
 
     self.recordChatMessage(chatMessage)
-    self.unreadPublicChat = true
+
+    // Not your own, which come back to you too.
+    let isOwnMessage = chatMessage.username?.lowercased() == Prefs.shared.username.lowercased()
+    if !isOwnMessage {
+      self.unreadPublicChatCount += 1
+    }
 
     #if os(macOS)
-    let senderName = chatMessage.username
-    let ownUsername = Prefs.shared.username
-    let isOwnMessage = senderName?.lowercased() == ownUsername.lowercased()
-
-    if !isOwnMessage && !NSApplication.shared.isActive {
-      let lowercasedText = text.lowercased()
-      var didNotify = false
-
-      // Check for mention of our username
-      if Prefs.shared.showMentionNotifications
-          && !ownUsername.isEmpty
-          && lowercasedText.contains(ownUsername.lowercased()) {
-        let content = UNMutableNotificationContent()
-        content.title = senderName.map { "\($0) mentioned you" } ?? "You were mentioned"
-        content.body = String(chatMessage.text.prefix(200))
-        content.sound = .default
-        content.userInfo = ["type": "mention"]
-
-        let request = UNNotificationRequest(identifier: "mention-\(chatMessage.id)", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
-        didNotify = true
-      }
-
-      // Check for watch words (skip if we already notified for a mention)
-      let watchWords = Prefs.shared.watchWords
-      if !didNotify && !watchWords.isEmpty && Prefs.shared.showWatchWordNotifications {
-        for highlightWord in watchWords {
-          if lowercasedText.contains(highlightWord.word.lowercased()) {
-            let content = UNMutableNotificationContent()
-            content.title = senderName ?? "Watch Word: \(highlightWord.word)"
-            content.body = String(chatMessage.text.prefix(200))
-            content.sound = .default
-            content.userInfo = ["type": "watchWord"]
-
-            let identifier = "watchword-\(highlightWord.word.hashValue)"
-            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-            UNUserNotificationCenter.current().add(request)
-            break
-          }
-        }
-      }
+    // Said as what it is, a mention or a word you highlight, when it's one.
+    if !isOwnMessage && !self.notifyIfWatched(chatMessage, userInfo: ["type": "chat"]) && Prefs.shared.showChatNotifications {
+      // Each in place of the one before, so a busy chat doesn't fill Notification Center.
+      self.notify("chat", body: Self.chatLine(chatMessage), userInfo: ["type": "chat"])
     }
     #endif
   }
@@ -105,6 +73,12 @@ extension HotlineState {
     print("HotlineState: received server message:\n\(message)")
     let chatMessage = ChatMessage(text: message, type: .server, date: Date())
     self.recordChatMessage(chatMessage)
+
+    #if os(macOS)
+    if Prefs.shared.showBroadcastNotifications {
+      self.notify("broadcast-\(chatMessage.id)", body: message, userInfo: ["type": "chat"])
+    }
+    #endif
   }
 
   /// A private message from someone: one they wrote, maybe a reply to one of yours, as it quotes
@@ -143,19 +117,13 @@ extension HotlineState {
       }
 
       self.recordPrivateMessage(instantMessage, userID: userID, peerName: user.name)
-      self.unreadPrivateMessages[userID] = userID
+      self.unreadPrivateMessages[userID, default: 0] += 1
 
       #if os(macOS)
-      if Prefs.shared.showPrivateMessageNotifications && !NSApplication.shared.isActive {
-        let content = UNMutableNotificationContent()
+      if Prefs.shared.showPrivateMessageNotifications {
         // Said when it's not from them, as their automatic response isn't.
-        content.title = kind == .automaticResponse ? "\(user.name) (Auto-Reply)" : user.name
-        content.body = String(message.prefix(200))
-        content.sound = .default
-        content.userInfo = ["userID": userID]
-
-        let request = UNNotificationRequest(identifier: "pm-\(userID)", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+        let name = kind == .automaticResponse ? "\(user.name) (Auto-Reply)" : user.name
+        self.notify("pm-\(userID)", subtitle: "Private Message", body: "\(name): \(message)", userInfo: ["userID": userID])
       }
       #endif
     }
@@ -188,8 +156,77 @@ extension HotlineState {
       let post = MessageBoardPost.parse(cleaned)
       self.messageBoard.insert(post, at: 0)
       self.announceBoardPost(post)
+
+      // Not your own, which comes back to you too.
+      let isOwnPost = post.username?.lowercased() == Prefs.shared.username.lowercased()
+      if !isOwnPost {
+        self.unreadBoardPosts += 1
+      }
+
+      #if os(macOS)
+      // Clicked, it goes to the post.
+      if Prefs.shared.showBoardPostNotifications && !isOwnPost {
+        let body = post.username.map { "\($0): \(post.body)" } ?? post.body
+        self.notify("board-\(post.id)", subtitle: "New Board Post", body: body, userInfo: ["type": "board", "post": post.reference])
+      }
+      #endif
     }
 
     SoundEffects.play(.newNews)
   }
 }
+
+// MARK: - Notifications
+
+#if os(macOS)
+extension HotlineState {
+  /// Posts a notification from this server, while you're in another app: titled with the server's
+  /// name, and with `subtitle` saying what it is when that needs saying. It's grouped with the
+  /// server's others, and in place of one from the server with the same `identifier`. Clicked, it
+  /// brings this server's window forward, to what `userInfo` says.
+  func notify(_ identifier: String, subtitle: String? = nil, body: String, userInfo: [String: Any] = [:]) {
+    guard !NSApplication.shared.isActive else {
+      return
+    }
+
+    let content = UNMutableNotificationContent()
+    content.title = self.serverTitle
+    if let subtitle {
+      content.subtitle = subtitle
+    }
+    content.body = String(body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+    content.sound = .default
+    content.threadIdentifier = self.id.uuidString
+    content.userInfo = userInfo.merging(["server": self.id.uuidString]) { $1 }
+
+    let request = UNNotificationRequest(identifier: "\(self.id.uuidString)-\(identifier)", content: content, trigger: nil)
+    UNUserNotificationCenter.current().add(request)
+  }
+
+  /// Posts a notification for a message in a chat that mentions you, or a word you highlight, when
+  /// those are on, and says whether it did. It looks like the chat's others, with its `subtitle`,
+  /// as what it says shows why it came. Only what they said counts, not their name.
+  func notifyIfWatched(_ message: ChatMessage, subtitle: String? = nil, userInfo: [String: Any]) -> Bool {
+    let text = message.text.lowercased()
+    let username = Prefs.shared.username
+
+    if Prefs.shared.showMentionNotifications && !username.isBlank && text.contains(username.lowercased()) {
+      self.notify("mention-\(message.id)", subtitle: subtitle, body: Self.chatLine(message), userInfo: userInfo)
+      return true
+    }
+
+    if Prefs.shared.showWatchWordNotifications,
+       let watched = Prefs.shared.watchWords.first(where: { !$0.word.isBlank && text.contains($0.word.lowercased()) }) {
+      self.notify("watchword-\(watched.word.lowercased())", subtitle: subtitle, body: Self.chatLine(message), userInfo: userInfo)
+      return true
+    }
+
+    return false
+  }
+
+  /// A message as chat shows it: who said it, then what they said, or an emote as it is.
+  static func chatLine(_ message: ChatMessage) -> String {
+    message.username.map { "\($0): \(message.text)" } ?? message.text
+  }
+}
+#endif

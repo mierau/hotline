@@ -121,6 +121,12 @@ enum PrefsKeys: String {
   case showWatchWordNotifications = "show watch word notifications"
   case showTransferNotifications = "show transfer notifications"
   case showMentionNotifications = "show mention notifications"
+  case showChatNotifications = "show chat notifications"
+  case showPrivateChatNotifications = "show private chat notifications"
+  case showBroadcastNotifications = "show broadcast notifications"
+  case showBoardPostNotifications = "show board post notifications"
+  case showDisconnectNotifications = "show disconnect notifications"
+  case showUnreadDockBadge = "show unread dock badge"
   case highlightMentions = "highlight mentions"
   case mentionHighlightColor = "mention highlight color"
   case showBannerToolbar = "show banner toolbar"
@@ -145,6 +151,9 @@ class Prefs {
   static let shared = Prefs()
   
   private init() {
+    // Private chats went with private messages, until they had their own setting.
+    let showPrivateChatNotifications = UserDefaults.standard.object(forKey: PrefsKeys.showPrivateMessageNotifications.rawValue) as? Bool ?? true
+
     UserDefaults.standard.register(defaults:[
       PrefsKeys.username.rawValue: "unnamed",
       PrefsKeys.userIconID.rawValue: 191,
@@ -165,6 +174,12 @@ class Prefs {
       PrefsKeys.showTransferNotifications.rawValue: true,
       PrefsKeys.showWatchWordNotifications.rawValue: true,
       PrefsKeys.showMentionNotifications.rawValue: true,
+      PrefsKeys.showChatNotifications.rawValue: false,
+      PrefsKeys.showPrivateChatNotifications.rawValue: showPrivateChatNotifications,
+      PrefsKeys.showBroadcastNotifications.rawValue: true,
+      PrefsKeys.showBoardPostNotifications.rawValue: true,
+      PrefsKeys.showDisconnectNotifications.rawValue: true,
+      PrefsKeys.showUnreadDockBadge.rawValue: true,
       PrefsKeys.highlightMentions.rawValue: true,
       PrefsKeys.mentionHighlightColor.rawValue: "primary",
       PrefsKeys.showBannerToolbar.rawValue: true,
@@ -197,6 +212,12 @@ class Prefs {
     self.showTransferNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showTransferNotifications.rawValue)
     self.showWatchWordNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showWatchWordNotifications.rawValue)
     self.showMentionNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showMentionNotifications.rawValue)
+    self.showChatNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showChatNotifications.rawValue)
+    self.showPrivateChatNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showPrivateChatNotifications.rawValue)
+    self.showBroadcastNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showBroadcastNotifications.rawValue)
+    self.showBoardPostNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showBoardPostNotifications.rawValue)
+    self.showDisconnectNotifications = UserDefaults.standard.bool(forKey: PrefsKeys.showDisconnectNotifications.rawValue)
+    self.showUnreadDockBadge = UserDefaults.standard.bool(forKey: PrefsKeys.showUnreadDockBadge.rawValue)
     self.highlightMentions = UserDefaults.standard.bool(forKey: PrefsKeys.highlightMentions.rawValue)
     self.mentionHighlightColor = UserDefaults.standard.string(forKey: PrefsKeys.mentionHighlightColor.rawValue)!
     self.showBannerToolbar = UserDefaults.standard.bool(forKey: PrefsKeys.showBannerToolbar.rawValue)
@@ -308,6 +329,36 @@ class Prefs {
 
   var showMentionNotifications: Bool {
     didSet { UserDefaults.standard.set(self.showMentionNotifications, forKey: PrefsKeys.showMentionNotifications.rawValue) }
+  }
+
+  /// For every message in a server's chat, not just the ones that mention you.
+  var showChatNotifications: Bool {
+    didSet { UserDefaults.standard.set(self.showChatNotifications, forKey: PrefsKeys.showChatNotifications.rawValue) }
+  }
+
+  /// For invitations to private chats, and messages in the ones you're in.
+  var showPrivateChatNotifications: Bool {
+    didSet { UserDefaults.standard.set(self.showPrivateChatNotifications, forKey: PrefsKeys.showPrivateChatNotifications.rawValue) }
+  }
+
+  /// For what a server, or its administrators, send everyone.
+  var showBroadcastNotifications: Bool {
+    didSet { UserDefaults.standard.set(self.showBroadcastNotifications, forKey: PrefsKeys.showBroadcastNotifications.rawValue) }
+  }
+
+  /// For new posts on a server's message board.
+  var showBoardPostNotifications: Bool {
+    didSet { UserDefaults.standard.set(self.showBoardPostNotifications, forKey: PrefsKeys.showBoardPostNotifications.rawValue) }
+  }
+
+  /// For being disconnected by an administrator, with what they said.
+  var showDisconnectNotifications: Bool {
+    didSet { UserDefaults.standard.set(self.showDisconnectNotifications, forKey: PrefsKeys.showDisconnectNotifications.rawValue) }
+  }
+
+  /// Whether the Dock icon shows what the unread counts in every server window's sidebar add up to.
+  var showUnreadDockBadge: Bool {
+    didSet { UserDefaults.standard.set(self.showUnreadDockBadge, forKey: PrefsKeys.showUnreadDockBadge.rawValue) }
   }
 
   var highlightMentions: Bool {

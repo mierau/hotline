@@ -181,12 +181,32 @@ extension HotlineState {
     )
   }
 
+  func markBoardAsRead() {
+    if self.unreadBoardPosts > 0 {
+      self.unreadBoardPosts = 0
+    }
+  }
+
   func markPublicChatAsRead() {
-    self.unreadPublicChat = false
+    self.unreadPublicChatCount = 0
   }
 
   func hasUnreadPrivateMessages(userID: UInt16) -> Bool {
     return self.unreadPrivateMessages[userID] != nil
+  }
+
+  /// How many messages, and invitations to private chats, you haven't seen from someone, as their
+  /// row in the sidebar shows.
+  func unreadCount(from userID: UInt16) -> Int {
+    (self.unreadPrivateMessages[userID] ?? 0) + self.privateChats.count { $0.invitation?.userID == userID && $0.unread }
+  }
+
+  /// What the sidebar's counts add up to: the public chat's, the board's, each private chat's you're
+  /// in, and each person's here.
+  var unreadCount: Int {
+    let people = self.users.reduce(0) { $0 + self.unreadCount(from: $1.id) }
+    let chats = self.joinedPrivateChats.reduce(0) { $0 + $1.unreadCount }
+    return self.unreadPublicChatCount + self.unreadBoardPosts + people + chats
   }
 
   func markPrivateMessagesAsRead(userID: UInt16) {
@@ -439,7 +459,7 @@ extension HotlineState {
         let lastEntry = entries.last
         self.lastPersistedMessageType = lastEntry.flatMap { ChatMessageType(storageKey: $0.type) }
         self.lastPersistedMessageDate = lastEntry?.date
-        self.unreadPublicChat = false
+        self.unreadPublicChatCount = 0
         self.restoredChatSessionKey = key
       }
     }
@@ -509,7 +529,7 @@ extension HotlineState {
     self.chatRenderedCount = 0
     self.chatScrollback = 0
     self.hasOlderChat = true
-    self.unreadPublicChat = false
+    self.unreadPublicChatCount = 0
     self.restoredChatSessionKey = nil
     self.lastPersistedMessageType = nil
   }

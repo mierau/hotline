@@ -6,16 +6,14 @@ import NetSocket
 
 extension HotlineState {
 
-  private func postTransferNotification(title: String, body: String, transfer: TransferInfo) {
+  /// Says how a transfer went, titled with the server it's from, like the server's others.
+  private func postTransferNotification(_ body: String, transfer: TransferInfo) {
     #if os(macOS)
     guard Prefs.shared.showTransferNotifications else { return }
 
     let content = UNMutableNotificationContent()
-    content.title = title
+    content.title = transfer.serverName ?? ""
     content.body = body
-    if let serverName = transfer.serverName {
-      content.subtitle = serverName
-    }
     content.sound = .default
     content.userInfo = ["type": "transfer"]
 
@@ -322,7 +320,7 @@ extension HotlineState {
           transfer.downloadCallback?(transfer)
           fileURL.notifyDownloadFinished()
 
-          self?.postTransferNotification(title: "Download Complete", body: fileName, transfer: transfer)
+          self?.postTransferNotification("Downloaded \(fileName)", transfer: transfer)
           if Prefs.shared.playSounds && Prefs.shared.playFileTransferCompleteSound {
             SoundEffects.play(.transferComplete)
           }
@@ -341,7 +339,7 @@ extension HotlineState {
           // Mark as failed
           transfer.failed = true
           failureCallback?(error)
-          self?.postTransferNotification(title: "Download Failed", body: fileName, transfer: transfer)
+          self?.postTransferNotification("Couldn't download \(fileName)", transfer: transfer)
           print("HotlineState: Download failed - \(error)")
         }
 
@@ -502,7 +500,7 @@ extension HotlineState {
 
           folderURL.notifyDownloadFinished()
 
-          self?.postTransferNotification(title: "Download Complete", body: folderName, transfer: transfer)
+          self?.postTransferNotification("Downloaded \(folderName)", transfer: transfer)
           if Prefs.shared.playSounds && Prefs.shared.playFileTransferCompleteSound {
             SoundEffects.play(.transferComplete)
           }
@@ -520,7 +518,7 @@ extension HotlineState {
           // Mark as failed
           transfer.failed = true
           failureCallback?(error)
-          self?.postTransferNotification(title: "Download Failed", body: folderName, transfer: transfer)
+          self?.postTransferNotification("Couldn't download \(folderName)", transfer: transfer)
           print("HotlineState: Folder download failed - \(error)")
         }
 
@@ -700,7 +698,7 @@ extension HotlineState {
           // Call completion callback
           transfer.uploadCallback?(transfer)
 
-          self?.postTransferNotification(title: "Upload Complete", body: folderName, transfer: transfer)
+          self?.postTransferNotification("Uploaded \(folderName)", transfer: transfer)
           if Prefs.shared.playSounds && Prefs.shared.playFileTransferCompleteSound {
             SoundEffects.play(.transferComplete)
           }
@@ -718,7 +716,7 @@ extension HotlineState {
           // Mark as failed
           transfer.failed = true
           failureCallback?(error)
-          self?.postTransferNotification(title: "Upload Failed", body: folderName, transfer: transfer)
+          self?.postTransferNotification("Couldn't upload \(folderName)", transfer: transfer)
           print("HotlineState: Folder upload failed - \(error)")
         }
 
@@ -876,7 +874,7 @@ extension HotlineState {
           // Call completion callback
           transfer.uploadCallback?(transfer)
 
-          self?.postTransferNotification(title: "Upload Complete", body: fileName, transfer: transfer)
+          self?.postTransferNotification("Uploaded \(fileName)", transfer: transfer)
           if Prefs.shared.playSounds && Prefs.shared.playFileTransferCompleteSound {
             SoundEffects.play(.transferComplete)
           }
@@ -894,7 +892,7 @@ extension HotlineState {
           // Mark as failed
           transfer.failed = true
           failureCallback?(error)
-          self?.postTransferNotification(title: "Upload Failed", body: fileName, transfer: transfer)
+          self?.postTransferNotification("Couldn't upload \(fileName)", transfer: transfer)
           print("HotlineState: Upload failed - \(error)")
         }
 

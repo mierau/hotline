@@ -64,7 +64,8 @@ struct ListItemView: View {
   
   let icon: String?
   let title: String
-  let unread: Bool
+  /// How many unread there are, shown at its end, when there are any.
+  var count: Int = 0
   
   var body: some View {
     HStack(spacing: 5) {
@@ -80,11 +81,9 @@ struct ListItemView: View {
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer()
-      if unread {
-        Circle()
-          .frame(width: 6, height: 6)
-          .serverUnreadDot(opacity: 0.9)
-          .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 6))
+      if self.count > 0 {
+        ServerUnreadCount(count: self.count)
+          .padding(.leading, 8)
       }
     }
   }
@@ -517,9 +516,9 @@ struct ServerView: View {
       ForEach(model.serverVersion < 151 ? ServerView.classicMenuItems : ServerView.menuItems) { menuItem in
         if menuItem.type == .chat {
           // A button to start a private chat, for those who can, over the row's end, in place of
-          // its dot.
+          // its count.
           let startsChats = self.model.access?.contains(.canCreateChat) == true
-          ListItemView(icon: menuItem.image, title: menuItem.name, unread: model.unreadPublicChat && !(startsChats && self.chatRowHovered)).tag(menuItem.type)
+          ListItemView(icon: menuItem.image, title: menuItem.name, count: startsChats && self.chatRowHovered ? 0 : model.unreadPublicChatCount).tag(menuItem.type)
             .overlay(alignment: .trailing) {
               if startsChats && self.chatRowHovered {
                 Button {
@@ -538,7 +537,7 @@ struct ServerView: View {
                 .transition(.scale(scale: 0.5).combined(with: .opacity))
               }
             }
-            // The button grows in with the pointer, and the dot it takes the place of fades.
+            // The button grows in with the pointer, and the count it takes the place of fades.
             .onHover { hovering in
               withAnimation(.easeOut(duration: 0.15)) {
                 self.chatRowHovered = hovering
@@ -562,7 +561,7 @@ struct ServerView: View {
 //          }
 //        }
         else if menuItem.type == .files {
-          ListItemView(icon: menuItem.image, title: menuItem.name, unread: false).tag(menuItem.type)
+          ListItemView(icon: menuItem.image, title: menuItem.name).tag(menuItem.type)
             .overlay(alignment: .trailing) {
               if case .searching(_, _) = model.fileSearchStatus {
                 ProgressView()
@@ -573,7 +572,7 @@ struct ServerView: View {
             .serverThemedRow(for: menuItem.type)
         }
         else {
-          ListItemView(icon: menuItem.image, title: menuItem.name, unread: false).tag(menuItem.type)
+          ListItemView(icon: menuItem.image, title: menuItem.name, count: menuItem.type == .board ? model.unreadBoardPosts : 0).tag(menuItem.type)
             .serverThemedRow(for: menuItem.type)
         }
       }
@@ -594,6 +593,8 @@ struct ServerView: View {
       switch(state.selection) {
       case .chat:
         model.markPublicChatAsRead()
+      case .board:
+        model.markBoardAsRead()
       case .user(let userID):
         model.markPrivateMessagesAsRead(userID: userID)
       default:
@@ -610,29 +611,27 @@ struct ServerView: View {
   
   var usersSection: some View {
     ForEach(model.users) { user in
+      let unread = self.model.unreadCount(from: user.id)
       HStack(spacing: 5) {
-        // Fainter while they're idle, but not the dot, since unread messages from them matter
+        // Fainter while they're idle, but not the count, since unread messages from them matter
         // whether they're there or not.
         HStack(spacing: 5) {
           UserIconView(iconID: Int(user.iconID))
             .padding(.horizontal, 2)
 
           Text(user.name)
-            // Bolder with messages or an invitation from them you haven't seen, as the dot beside
+            // Bolder with messages or an invitation from them you haven't seen, as the count beside
             // it shows.
-            .fontWeight(model.hasUnreadPrivateMessages(userID: user.id) || model.hasUnreadInvitation(from: user.id) ? .semibold : nil)
+            .fontWeight(unread > 0 ? .semibold : nil)
             .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary))
         }
         .opacity(user.isIdle ? 0.5 : 1.0)
 
         Spacer()
-        
-        if model.hasUnreadPrivateMessages(userID: user.id) || model.hasUnreadInvitation(from: user.id) {
-          Circle()
-            .frame(width: 6, height: 6)
-            .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary.opacity(0.7)))
-            .serverUnreadDot()
-            .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2))
+
+        if unread > 0 {
+          ServerUnreadCount(count: unread)
+            .padding(.leading, 8)
         }
       }
       // A double click writes them a message, as Send Message does, when one can be sent to them,
@@ -715,7 +714,7 @@ struct ServerView: View {
   }
 
   /// A private chat you're in, under the public one, with who's in it under it, which can be folded
-  /// away. With the pointer over it, a button in place of its dot leaves it, once that's confirmed.
+  /// away. With the pointer over it, a button in place of its count leaves it, once that's confirmed.
   @ViewBuilder
   private func privateChatRow(_ chat: PrivateChat) -> some View {
     let item = ServerNavigationType.privateChat(chatID: chat.id)
@@ -747,11 +746,9 @@ struct ServerView: View {
         .padding(.trailing, 2)
         .transition(.scale(scale: 0.5).combined(with: .opacity))
       }
-      else if chat.unread {
-        Circle()
-          .frame(width: 6, height: 6)
-          .serverUnreadDot(opacity: 0.9)
-          .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 6))
+      else if chat.unreadCount > 0 {
+        ServerUnreadCount(count: chat.unreadCount)
+          .padding(.leading, 8)
       }
     }
     // As the Chat row's button does.

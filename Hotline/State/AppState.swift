@@ -58,12 +58,43 @@ final class AppState {
     self.serverWindows.last { $0.hotline.id == id }?.hotline
   }
 
+  /// The window state of the connection with that ID, while its window's open.
+  func serverState(id: UUID) -> ServerState? {
+    self.serverWindows.last { $0.hotline.id == id }?.state
+  }
+
   /// A server window closed. The toolbar falls back to the server window used before it.
   func serverWindowClosed(state: ServerState) {
     self.serverWindows.removeAll { $0.state === state }
   }
 
   #if os(macOS)
+  // MARK: - Dock Badge
+
+  /// What the counts in every server window's sidebar add up to.
+  @MainActor
+  var unreadCount: Int {
+    self.serverWindows.reduce(0) { $0 + $1.hotline.unreadCount }
+  }
+
+  /// Keeps the Dock icon showing what the counts in every server window's sidebar add up to, while
+  /// that's turned on, from now on. Past 999, it's 999+, so it's never much wider.
+  @MainActor
+  func showUnreadCountInDock() {
+    withObservationTracking {
+      let count = Prefs.shared.showUnreadDockBadge ? self.unreadCount : 0
+      let label = count > 999 ? "999+" : count > 0 ? String(count) : nil
+      if NSApplication.shared.dockTile.badgeLabel != label {
+        NSApplication.shared.dockTile.badgeLabel = label
+      }
+    } onChange: {
+      // Told before the change, so it's looked at again after.
+      Task { @MainActor in
+        self.showUnreadCountInDock()
+      }
+    }
+  }
+
   // MARK: - Banner Toolbar
 
   /// The floating banner toolbar, made the first time it's shown.

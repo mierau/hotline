@@ -331,12 +331,6 @@ extension View {
     self.modifier(ServerThemedDivider())
   }
 
-  /// A dot on a sidebar row for something unread, at `opacity`, as it is, or in a server's theme, in
-  /// its color for these instead, to stand out on its sidebar.
-  func serverUnreadDot(opacity: Double = 1) -> some View {
-    self.modifier(ServerUnreadDot(opacity: opacity))
-  }
-
   /// A row of a server-themed list or sidebar, for `item`, as it's tagged, without a line under it,
   /// which shows itself selected in the theme's color in place of the system's, when it has one.
   func serverThemedRow<Item: Hashable>(for item: Item) -> some View {
@@ -564,7 +558,7 @@ private struct ServerThemedRow: ViewModifier {
       .environment(\.colorScheme, textOnColor ?? self.colorScheme)
       .environment(\.serverAdminColor, textOnColor.map { $0 == .dark ? .white : .black } ?? self.adminColor)
       .environment(\.serverSecondaryColor, secondaryOnColor ?? self.secondaryColor)
-      // On the selection, the usual dot, in the text's color.
+      // On the selection, the usual count, in the system's accent.
       .environment(\.serverUnreadColor, textOnColor == nil ? self.unreadColor : nil)
       .listRowBackground(color.map { SelectionCapsule(color: $0, emphasized: emphasized, unemphasized: self.selection?.unemphasized, cornerRadius: self.selection?.cornerRadius ?? 8, joins: self.selection?.joined[self.item] ?? SelectionJoins()) })
       .listRowSeparator(.hidden)
@@ -593,20 +587,23 @@ private struct ServerThemedDivider: ViewModifier {
   }
 }
 
-/// An unread dot, in a server's theme, its color drawn over the usual dot, which isn't shown, so
-/// without one, the usual dot is just as it is, in the sidebar's own colors.
-private struct ServerUnreadDot: ViewModifier {
-  @Environment(\.serverUnreadColor) private var color
-  let opacity: Double
+/// How many unread there are, on a row in the sidebar: a capsule in the server's theme's accent, as
+/// the sidebar has it to stand out, or without a theme, the system's, with the count in white or
+/// black, whichever shows on it. Past 99, it's 99+, so it's never much wider.
+struct ServerUnreadCount: View {
+  @Environment(\.serverUnreadColor) private var themed
+  let count: Int
 
-  func body(content: Content) -> some View {
-    content
-      .opacity(self.color == nil ? self.opacity : 0)
-      .overlay {
-        if let color = self.color {
-          Circle().fill(color)
-        }
-      }
+  var body: some View {
+    let fill = self.themed.map { NSColor($0) } ?? .controlAccentColor
+    Text(self.count > 99 ? "99+" : String(self.count))
+      .font(.system(size: 11, weight: .semibold))
+      .monospacedDigit()
+      .foregroundStyle(fill.isDarkColor ? Color.white : Color.black)
+      .padding(.horizontal, 6)
+      .padding(.vertical, 1)
+      .background(Capsule().fill(Color(nsColor: fill)))
+      .accessibilityLabel("\(self.count) unread")
   }
 }
 

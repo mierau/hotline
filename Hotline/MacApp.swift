@@ -25,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     AppLaunchState.shared.launchState = .launched
 
     SoundEffects.prepare()
+    AppState.shared.showUnreadCountInDock()
 
     let center = UNUserNotificationCenter.current()
     center.delegate = self
@@ -108,27 +109,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
   func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
     let userInfo = response.notification.request.content.userInfo
+    let type = userInfo["type"] as? String
+    let serverID = (userInfo["server"] as? String).flatMap(UUID.init(uuidString:))
+    let chatID = userInfo["chatID"] as? UInt32
+    let userID = userInfo["userID"] as? UInt16
+    let post = userInfo["post"] as? String
 
-    if let type = userInfo["type"] as? String, type == "watchWord" || type == "mention" {
-      Task { @MainActor in
-        AppState.shared.activeServerState?.selection = .chat
-        NSApplication.shared.activate()
-      }
-    } else if let type = userInfo["type"] as? String, type == "transfer" {
-      Task { @MainActor in
+    Task { @MainActor in
+      NSApplication.shared.activate()
+
+      if type == "transfer" {
         AppState.openTransfersWindow?()
-        NSApplication.shared.activate()
+        return
       }
-    } else if let type = userInfo["type"] as? String, type == "privateChat", let chatID = userInfo["chatID"] as? UInt32 {
-      Task { @MainActor in
-        AppState.shared.activeServerState?.selection = .privateChat(chatID: chatID)
-        NSApplication.shared.activate()
+
+      // The window of the server it's from, as user IDs are only that server's, while it's open.
+      guard let serverID, let state = AppState.shared.serverState(id: serverID) else {
+        return
       }
-    } else if let userID = userInfo["userID"] as? UInt16 {
-      Task { @MainActor in
-        AppState.shared.activeServerState?.selection = .user(userID: userID)
-        NSApplication.shared.activate()
+      if type == "chat" {
+        state.selection = .chat
+      } else if type == "privateChat", let chatID {
+        // Unless it's ended, when there's nothing to go to.
+        if AppState.shared.hotline(id: serverID)?.privateChats.contains(where: { $0.id == chatID }) == true {
+          state.selection = .privateChat(chatID: chatID)
+        }
+      } else if type == "board" {
+        state.selection = .board
+        AppState.shared.hotline(id: serverID)?.boardPostToReveal = post
+      } else if let userID {
+        state.selection = .user(userID: userID)
       }
+      state.window?.makeKeyAndOrderFront(nil)
     }
     completionHandler()
   }

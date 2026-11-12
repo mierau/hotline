@@ -112,6 +112,7 @@ extension HotlineState {
       self.privateChats[i].subject = subject
       self.privateChats[i].invitation = nil
       self.privateChats[i].unread = false
+      self.privateChats[i].unreadCount = 0
       self.recordPresence("joined", in: i)
     }
     catch {
@@ -173,6 +174,7 @@ extension HotlineState {
   func markPrivateChatAsRead(_ chatID: UInt32) {
     if let i = self.privateChats.firstIndex(where: { $0.id == chatID }), self.privateChats[i].unread {
       self.privateChats[i].unread = false
+      self.privateChats[i].unreadCount = 0
     }
   }
 
@@ -199,16 +201,10 @@ extension HotlineState {
     }
 
     #if os(macOS)
-    if Prefs.shared.showPrivateMessageNotifications && !NSApplication.shared.isActive {
-      let content = UNMutableNotificationContent()
-      content.title = name
-      content.body = "Invited you to a private chat"
-      content.sound = .default
+    if Prefs.shared.showPrivateChatNotifications {
       // To your messages with them, where it waits.
-      content.userInfo = ["userID": userID]
-
-      let request = UNNotificationRequest(identifier: "chat-invitation-\(chatID)", content: content, trigger: nil)
-      UNUserNotificationCenter.current().add(request)
+      let body = subject.isBlank ? "\(name) invited you to a private chat." : "\(name) invited you to a private chat: “\(subject)”"
+      self.notify("chat-invitation-\(chatID)", body: body, userInfo: ["userID": userID])
     }
     #endif
   }
@@ -230,22 +226,25 @@ extension HotlineState {
     }
     self.privateChats[i].unread = true
 
+    // Not your own, which come back to you too.
+    let isOwnMessage = message.username?.lowercased() == Prefs.shared.username.lowercased()
+    if !isOwnMessage {
+      self.privateChats[i].unreadCount += 1
+    }
+
     if Prefs.shared.playSounds && Prefs.shared.playChatSound {
       SoundEffects.play(.chatMessage)
     }
 
     #if os(macOS)
-    // As for a private message, while you're in another app, unless it's yours.
-    let isOwnMessage = message.username?.lowercased() == Prefs.shared.username.lowercased()
-    if !isOwnMessage && Prefs.shared.showPrivateMessageNotifications && !NSApplication.shared.isActive {
-      let content = UNMutableNotificationContent()
-      content.title = self.title(of: self.privateChats[i])
-      content.body = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
-      content.sound = .default
-      content.userInfo = ["type": "privateChat", "chatID": chatID]
-
-      let request = UNNotificationRequest(identifier: "chat-\(chatID)", content: content, trigger: nil)
-      UNUserNotificationCenter.current().add(request)
+    // Unless it's yours, and said as a mention or a word you highlight when it's one, which come
+    // even with private chats' notifications off.
+    // Said as a private chat, by its subject when it has one, so it's not taken for public chat.
+    let subject = self.privateChats[i].subject
+    let subtitle = subject.isBlank ? "Private Chat" : subject
+    let userInfo: [String: Any] = ["type": "privateChat", "chatID": chatID]
+    if !isOwnMessage && !self.notifyIfWatched(message, subtitle: subtitle, userInfo: userInfo) && Prefs.shared.showPrivateChatNotifications {
+      self.notify("chat-\(chatID)", subtitle: subtitle, body: Self.chatLine(message), userInfo: userInfo)
     }
     #endif
   }

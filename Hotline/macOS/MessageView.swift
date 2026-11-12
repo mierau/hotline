@@ -93,8 +93,6 @@ struct MessageView: View {
     }
     .onAppear {
       self.model.restorePrivateHistory(userID: self.userID)
-      self.model.markPrivateMessagesAsRead(userID: self.userID)
-      self.model.markInvitationsAsRead(from: self.userID)
 
       let user = self.model.users.first(where: { $0.id == self.userID })
       self.username = user?.name
@@ -102,12 +100,12 @@ struct MessageView: View {
     .onDisappear {
       self.model.setPrivateMessagesRead(userID: self.userID)
     }
-    .onChange(of: self.invitations.count) {
+    // Their messages and invitations that come while it's shown are seen.
+    .onSeen(self.model.unreadCount(from: self.userID)) {
+      self.model.markPrivateMessagesAsRead(userID: self.userID)
       self.model.markInvitationsAsRead(from: self.userID)
     }
     .onChange(of: self.model.privateMessages[self.userID]?.count) {
-      self.model.markPrivateMessagesAsRead(userID: self.userID)
-
       if let newest = self.messages.last, newest.direction == .outgoing {
         self.focusedMessageID = newest.id
       }

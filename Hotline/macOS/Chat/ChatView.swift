@@ -171,9 +171,8 @@ struct ChatView: View {
             self.performSearch()
           }
         }
-        self.markAsRead()
       }
-      .onAppear {
+      .onSeen(self.messages.count) {
         self.markAsRead()
       }
       // Messages come in as usual while the chat isn't shown.

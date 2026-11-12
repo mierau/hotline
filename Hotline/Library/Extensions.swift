@@ -444,6 +444,27 @@ extension Color {
   }
 }
 
+// MARK: - Seen
+
+#if os(macOS)
+extension View {
+  /// Runs `action` as what this view shows is seen: as it appears and as `value` changes, while
+  /// Hotline's the app you're in, and as you come back to it. While you're in another app, what
+  /// comes stays unread, as you haven't seen it.
+  func onSeen<Value: Equatable>(_ value: Value, perform action: @escaping () -> Void) -> some View {
+    self
+      .onChange(of: value, initial: true) {
+        if NSApplication.shared.isActive {
+          action()
+        }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        action()
+      }
+  }
+}
+#endif
+
 // MARK: - Glass Button Styles
 
 #if os(macOS)

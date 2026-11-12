@@ -13,6 +13,8 @@ struct PrivateChat: Identifiable {
   var invitation: Invitation? = nil
   /// Whether something's come since you last looked: a message, or the invitation.
   var unread: Bool = false
+  /// How many messages others have said in it since you last looked.
+  var unreadCount: Int = 0
 
   struct Invitation {
     let userID: UInt16

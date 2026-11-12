@@ -580,7 +580,8 @@ extension HotlineState {
     self.privateMessages = [:]
     self.unreadPrivateMessages = [:]
     self.restoredPrivatePeers = []
-    self.unreadPublicChat = false
+    self.unreadPublicChatCount = 0
+    self.unreadBoardPosts = 0
     self.messageBoard = []
     self.messageBoardLoaded = false
     self.news = []
@@ -1040,6 +1041,15 @@ extension HotlineState {
     case .disconnectMessage(let message):
       print("HotlineState: Server sent disconnect message: \(message)")
       self.disconnectMessage = message
+
+      #if os(macOS)
+      // Clicked, it brings the window forward, where the message waits too.
+      if Prefs.shared.showDisconnectNotifications {
+        // Said, as their message alone could be anything.
+        let body = message.isBlank ? "You were disconnected." : "You were disconnected: “\(message.trimmingCharacters(in: .whitespacesAndNewlines))”"
+        self.notify("disconnected", body: body, userInfo: ["type": "disconnected"])
+      }
+      #endif
 
     case .chatInvitation(let chatID, let userID, let name, let subject):
       self.handleChatInvitation(chatID: chatID, userID: userID, name: name, subject: subject)

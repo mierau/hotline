@@ -424,11 +424,17 @@ class HotlineState: Equatable {
   @ObservationIgnored var newerChat: [ChatMessage] = []
   /// How many messages have come since you started reading back.
   var newWhileReadingBack = 0
-  var unreadPublicChat: Bool = false
+  /// How many messages others have said in the public chat since you last looked.
+  var unreadPublicChatCount: Int = 0
+
+  // Message Board
+  /// How many posts have come to the board since you last looked.
+  var unreadBoardPosts: Int = 0
 
   // Private Messages
   var privateMessages: [UInt16:[InstantMessage]] = [:]
-  var unreadPrivateMessages: [UInt16:UInt16] = [:]
+  /// How many messages you haven't read from each person, by their ID.
+  var unreadPrivateMessages: [UInt16: Int] = [:]
 
   // Private Chats
   /// The private chats you're in, and the ones you're invited to, in the order they came.
