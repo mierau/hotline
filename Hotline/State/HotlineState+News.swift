@@ -136,6 +136,7 @@ extension HotlineState {
     let result = try await client.getMessageBoard()
     self.messageBoard = MessageBoardPost.adjustDates(result.posts.map { MessageBoardPost.parse($0) })
     self.messageBoardSignature = result.dividerSignature
+    self.messageBoardDelimiter = result.delimiter
     self.messageBoardLoaded = true
     return self.messageBoard
   }

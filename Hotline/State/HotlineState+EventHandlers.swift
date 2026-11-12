@@ -144,11 +144,11 @@ extension HotlineState {
   func handleNewsPost(_ message: String) {
     let normalized = message.replacing(/\r\n?/, with: "\n")
     let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
-    let dividerRegex = /^[ \t]*([_\-=~*]{15,}|[_\-=~*]{5,}.+[_\-=~*]{5,})[ \t]*$/
 
-    // Strip divider lines from the incoming post
+    // Strip divider lines from the incoming post, and the board's own, if it has one.
+    let delimiter = self.messageBoardDelimiter
     let cleaned = lines
-      .filter { $0.wholeMatch(of: dividerRegex) == nil }
+      .filter { !HotlineClient.isMessageBoardDivider($0) && $0.trimmingCharacters(in: CharacterSet(charactersIn: " \t")) != delimiter }
       .joined(separator: "\n")
       .trimmingCharacters(in: .whitespacesAndNewlines)
 

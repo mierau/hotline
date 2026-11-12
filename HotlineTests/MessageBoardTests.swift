@@ -240,6 +240,76 @@ struct MessageBoardTests {
     #expect(!posts[0].contains("________"))
   }
 
+  @Test func byteDataShortLineOfSeparatorsNotSplit() {
+    // An underline in a post, or a drawing's, as new posts keep them, rather than two posts.
+    let divider = String(repeating: "_", count: 47)
+    let raw = "From Alice (Jan 1 12:00):\rMy drawing:\r  _____\r |_____|\rStill Alice's post\r\(divider)\rFrom Bob (Jan 2 12:00):\rPost two"
+    let posts = HotlineClient.parseMessageBoardData(Data(raw.utf8)).posts
+    #expect(posts.count == 2)
+    #expect(posts[0].contains("_____\n |_____|\nStill Alice's post"))
+    #expect(posts[1].hasPrefix("From Bob"))
+    // As long as new posts' dividers are, it's one.
+    let eleven = "From Alice (Jan 1 12:00):\rPost one\r\(String(repeating: "_", count: 11))\rFrom Bob (Jan 2 12:00):\rPost two"
+    #expect(HotlineClient.parseMessageBoardData(Data(eleven.utf8)).posts.count == 2)
+  }
+
+  // MARK: - Boards of Other Shapes
+
+  @Test func serversOwnDelimiterSplitsPosts() {
+    // As Mobius writes posts, with a NewsDelimiter of its own that isn't separators.
+    let raw = "From macro (Oct11 16:09):\r\rFirst post\r\r• • • • •\rFrom Halcyon (Oct10 09:00):\r\rSecond post\r\r• • • • •\rFrom mars (Oct09 12:00):\r\rThird post\r\r• • • • •\r"
+    let board = HotlineClient.parseMessageBoardData(Data(raw.utf8))
+    #expect(board.posts.count == 3)
+    #expect(board.posts.allSatisfy { !$0.contains("•") })
+    #expect(board.posts[1].hasPrefix("From Halcyon"))
+    #expect(board.delimiter == "• • • • •")
+    #expect(board.dividerSignature == nil)
+  }
+
+  @Test func serversOwnDelimiterOverDrawingsOfSeparators() {
+    // Lines like dividers in a post, but the server's own between posts.
+    let art = String(repeating: "_", count: 20)
+    let raw = "From Artist (Oct11 16:09):\r\(art)\r|  box  |\r\(art)\r#####\rFrom Bob (Oct10 09:00):\rNice\r#####\rFrom Carol (Oct09 09:00):\rAgreed\r#####"
+    let board = HotlineClient.parseMessageBoardData(Data(raw.utf8))
+    #expect(board.posts.count == 3)
+    #expect(board.posts[0].contains("|  box  |") && board.posts[0].contains(art))
+    #expect(board.delimiter == "#####")
+  }
+
+  @Test func postsWithNothingBetweenThemSplitAtTheirHeaders() {
+    let raw = "From Alice (Jan 1 12:00):\rPost one\r\rFrom Bob (Jan 2 12:00):\rPost two\rthanks!\rFrom Carol (Jan 3 12:00):\rPost three"
+    let posts = HotlineClient.parseMessageBoardData(Data(raw.utf8)).posts
+    #expect(posts.count == 3)
+    // Not a line of the server's own, as it's before only one of them.
+    #expect(posts[1].hasSuffix("thanks!"))
+  }
+
+  @Test func signatureBeforeTheOnlyOtherPostIsKept() {
+    let raw = "From Alice (Jan 1 12:00):\rPost one\r-- Alice\rFrom Bob (Jan 2 12:00):\rPost two"
+    let posts = HotlineClient.parseMessageBoardData(Data(raw.utf8)).posts
+    #expect(posts.count == 2)
+    #expect(posts[0].hasSuffix("-- Alice"))
+  }
+
+  @Test func boardWithNoShapeIsShownAsItIs() {
+    let raw = "Welcome to the board!\rPost whatever you like.\r\rNo dividers here."
+    let posts = HotlineClient.parseMessageBoardData(Data(raw.utf8)).posts
+    #expect(posts == ["Welcome to the board!\nPost whatever you like.\n\nNo dividers here."])
+    #expect(MessageBoardPost.parse(posts[0]).username == nil)
+  }
+
+  @Test func datesWithTabsAreRead() {
+    let post = MessageBoardPost.parse("From Alice (Nov 12,\t2025\t17:22 CET):\nHello")
+    #expect(post.date != nil)
+    #expect(post.rawDateString == "Nov 12,\t2025\t17:22 CET")
+  }
+
+  @Test func isoDatesAreRead() {
+    let post = MessageBoardPost.parse("From Alice (2026-11-12 15:04):\nHello")
+    #expect(post.date != nil)
+    #expect(post.yearInferred == false)
+  }
+
   @Test func byteDataMacRomanUsernameInHeader() {
     // "Hålø" in Mac OS Roman: H=48, å=8C, l=6C, ø=9D
     var data = Data()
@@ -485,6 +555,99 @@ struct MessageBoardTests {
     #expect(adjusted[2].date! < adjusted[0].date!)
   }
 
+  // MARK: - The Same as the Patterns They Replaced, Quickly
+
+  /// The patterns posts were read with before, which took minutes on lines of a few thousand
+  /// characters, to check what reads them now says the same, on lines short enough for them.
+  private static let dividerPattern = /^[ \t]*([_\-=~*]{15,}|[_\-=~*]{5,}.+[_\-=~*]{5,})[ \t]*$/
+  private static let headerPattern = /^From\s+(.+)\s*\(([^)]+)\)\s*:?\s*$/
+
+  /// Lines made of `pieces`, chosen at random, but the same each run.
+  private func lines(of pieces: [String], count: Int, length: ClosedRange<Int>, prefix: String = "") -> [String] {
+    var generator = SeededGenerator(seed: 2400)
+    return (0..<count).map { _ in
+      prefix + (0..<Int.random(in: length, using: &generator)).map { _ in pieces.randomElement(using: &generator)! }.joined()
+    }
+  }
+
+  @Test func dividersAreTheSameAsThePatternFound() {
+    let pieces = ["-", "-", "-", "_", "=", "~", "*", " ", "\t", "x", "é", "-\u{301}", "\u{2028}", "\u{A0}", "\n"]
+    // And lines like dividers, around the lengths that make them ones.
+    var generator = SeededGenerator(seed: 5500)
+    func some(_ pieces: [String], _ count: ClosedRange<Int>) -> String {
+      (0..<Int.random(in: count, using: &generator)).map { _ in pieces.randomElement(using: &generator)! }.joined()
+    }
+    let separators = ["-", "_", "=", "~", "*"]
+    let between = ["x", " ", "\t", "é", "-\u{301}", "\u{2028}", "\u{A0}", "-", " News ", "\n"]
+    let alike = (0..<30_000).map { _ in
+      some([" ", "\t"], 0...2) + some(separators, 3...16) + some(between, 0...3) + some(separators, 3...7) + some([" ", "\t"], 0...2)
+    }
+    var dividers = 0
+    for line in self.lines(of: pieces, count: 30_000, length: 0...24) + alike {
+      let found = line.wholeMatch(of: Self.dividerPattern) != nil
+      dividers += found ? 1 : 0
+      #expect(HotlineClient.isMessageBoardDivider(Substring(line)) == found, "\(line.debugDescription)")
+    }
+    // Enough of each to tell.
+    #expect(dividers > 5_000)
+  }
+
+  @Test func headersAreTheSameAsThePatternFound() {
+    let pieces = [" ", " ", "\t", "(", "(", ")", ")", ":", "x", "y", "é", "\u{301}", "\u{2028}", "\u{A0}", "\u{0B}", "\n"]
+    // And lines like headers, with what's around the name and date at their edges.
+    var generator = SeededGenerator(seed: 5600)
+    func some(_ pieces: [String], _ count: ClosedRange<Int>) -> String {
+      (0..<Int.random(in: count, using: &generator)).map { _ in pieces.randomElement(using: &generator)! }.joined()
+    }
+    let spaces = [" ", " ", "\t", "\u{2028}", "\u{A0}"]
+    let alike = (0..<30_000).map { _ in
+      "From" + some(spaces, 0...3) + some(["x", "Figgy", " ", "(", ")", "é", "\u{0B}", ":"], 0...4) + some(spaces, 0...2)
+        + some(["("], 0...2) + some(["Nov 12", "x", " ", "(", ")"], 0...3) + some([")"], 0...2) + some([" ", ":", "\t", "x"], 0...3)
+    }
+    let lines = self.lines(of: pieces, count: 30_000, length: 0...16, prefix: "From")
+      + self.lines(of: pieces + ["F", "r", "o", "m"], count: 2_000, length: 0...12)
+      + alike
+    var headers = 0
+    for line in lines {
+      let found = Substring(line).wholeMatch(of: Self.headerPattern).map { (String($0.1), String($0.2)) }
+      headers += found == nil ? 0 : 1
+      let header = HotlineClient.messageBoardHeader(in: Substring(line))
+      #expect(header?.name == found?.0 && header?.date == found?.1, "\(line.debugDescription)")
+    }
+    // Enough of each to tell.
+    #expect(headers > 2_000)
+  }
+
+  @Test func cleanedIsTheSameAsBefore() {
+    // As it was before, but for what it's still made from.
+    func before(_ text: String) -> String {
+      var lines = text.components(separatedBy: .newlines)
+      while let first = lines.first, first.isBlank {
+        lines.removeFirst()
+      }
+      return lines.joined(separator: "\n").replacing(/\s+\z/, with: "")
+    }
+    let pieces = ["a", "b", " ", " ", "\t", "\n", "\r", "\r\n", "\u{A0}", "\u{2028}", "\u{3000}", "\u{301}"]
+    for text in self.lines(of: pieces, count: 20_000, length: 0...20) {
+      #expect(MessageBoardPost.cleaned(text) == before(text), "\(text.debugDescription)")
+    }
+  }
+
+  @Test func longLinesAreQuick() {
+    let start = Date()
+    let spaces = String(repeating: " ", count: 20_000)
+    #expect(!HotlineClient.isMessageBoardDivider(Substring(String(repeating: "-", count: 20_000) + "\u{2028}" + String(repeating: "-", count: 20_000))))
+    #expect(HotlineClient.messageBoardHeader(in: Substring("From" + spaces + "x")) == nil)
+    #expect(HotlineClient.messageBoardHeader(in: Substring("From" + spaces + String(repeating: "(", count: 20_000) + "x)"))?.date == "x")
+    #expect(MessageBoardPost.parse("From someone (Nov 12 12:00):\n" + spaces + "b" + spaces).body == spaces + "b")
+    #expect(MessageBoardPost.cleaned(String(repeating: "\n", count: 20_000) + "a").count == 1)
+    #expect(MessageBoardPost.parse("From x (" + String(repeating: "\t", count: 20_000) + "y):\nbody").username == "x")
+    let posts = (0..<2_000).map { "From someone \($0) (Nov 12 12:00):\r" + spaces.prefix(2_000) + "\r#####\r" }.joined()
+    #expect(HotlineClient.parseMessageBoardData(Data(posts.utf8)).posts.count == 2_000)
+    // Each of these took minutes, or hours, before.
+    #expect(Date().timeIntervalSince(start) < 2)
+  }
+
   // MARK: - Helpers
 
   private func makeDate(year: Int, month: Int, day: Int) -> Date {
@@ -495,5 +658,23 @@ struct MessageBoardTests {
     components.hour = 12
     components.timeZone = TimeZone.current
     return Calendar.current.date(from: components)!
+  }
+}
+
+/// Random numbers that are the same each run, so a line that fails fails again.
+private struct SeededGenerator: RandomNumberGenerator {
+  private var state: UInt64
+
+  init(seed: UInt64) {
+    self.state = seed
+  }
+
+  mutating func next() -> UInt64 {
+    // SplitMix64
+    self.state &+= 0x9E3779B97F4A7C15
+    var z = self.state
+    z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+    return z ^ (z >> 31)
   }
 }

@@ -1310,13 +1310,14 @@ public actor HotlineClient {
 
   /// Get message board posts
   ///
-  /// - Returns: Tuple of message strings and optional divider signature label
-  public func getMessageBoard() async throws -> (posts: [String], dividerSignature: String?) {
+  /// - Returns: The posts, the divider's label, if it has one, and the line between posts, when the
+  ///   server has one of its own, which new posts come with too.
+  public func getMessageBoard() async throws -> (posts: [String], dividerSignature: String?, delimiter: String?) {
     let transaction = HotlineTransaction(id: self.generateTransactionID(), type: .getMessageBoard)
     let reply = try await self.sendTransaction(transaction)
 
     guard let field = reply.getField(type: .data) else {
-      return (posts: [], dividerSignature: nil)
+      return (posts: [], dividerSignature: nil, delimiter: nil)
     }
 
     // Split raw bytes on dividers BEFORE decoding, so each post gets
@@ -1327,9 +1328,10 @@ public actor HotlineClient {
 
   /// Split raw message board bytes into individual posts, decoding each
   /// post separately so mixed-encoding boards are handled correctly.
-  /// Returns the posts and the divider signature label (if any).
-  static func parseMessageBoardData(_ data: Data) -> (posts: [String], dividerSignature: String?) {
-    if data.isEmpty { return (posts: [], dividerSignature: nil) }
+  /// Returns the posts, the divider signature label (if any), and the line between posts when it's
+  /// one the server has of its own.
+  static func parseMessageBoardData(_ data: Data) -> (posts: [String], dividerSignature: String?, delimiter: String?) {
+    if data.isEmpty { return (posts: [], dividerSignature: nil, delimiter: nil) }
 
     // Split raw bytes on line endings (\r, \r\n)
     let lines = Self.splitRawLines(data)
@@ -1337,33 +1339,207 @@ public actor HotlineClient {
     // Find the canonical divider character and label for this board.
     // All real dividers on a server use the same separator char.
     let canonical = Self.findCanonicalDivider(in: lines)
-    let canonicalChar = canonical?.char
+    let divisions = Self.divisions(of: lines, canonicalChar: canonical?.char)
 
     var posts: [String] = []
     var currentPostBytes = Data()
-
-    for line in lines {
-      if let info = Self.classifyDividerLine(line), info.leadChar == canonicalChar {
-        if !currentPostBytes.isEmpty {
-          if let post = Self.decodePostBytes(currentPostBytes) {
-            posts.append(post)
-          }
-          currentPostBytes = Data()
-        }
-      } else {
-        if !currentPostBytes.isEmpty {
-          currentPostBytes.append(0x0A)
-        }
-        currentPostBytes.append(contentsOf: line)
+    func endPost() {
+      if let post = Self.decodePostBytes(currentPostBytes) {
+        posts.append(post)
       }
+      currentPostBytes = Data()
+    }
+
+    for (index, line) in lines.enumerated() {
+      if divisions.dividers.contains(index) {
+        endPost()
+        continue
+      }
+      if divisions.postStarts.contains(index) {
+        endPost()
+      }
+      if !currentPostBytes.isEmpty {
+        currentPostBytes.append(0x0A)
+      }
+      currentPostBytes.append(contentsOf: line)
     }
 
     // Capture trailing post after last divider
-    if let post = Self.decodePostBytes(currentPostBytes) {
-      posts.append(post)
+    endPost()
+
+    return (posts: posts, dividerSignature: divisions.usesCanonical ? canonical?.label : nil, delimiter: divisions.delimiter)
+  }
+
+  /// Which of a board's lines are between its posts, and which start them, as best as can be told,
+  /// and failing that, none, and the board is shown as it is, as one piece of text:
+  /// - Dividers of separators (_ - = ~ *), in the board's most common one, as servers draw them, but
+  ///   when the lines before its posts' "From name (date):" lines say better.
+  /// - The line before nearly every "From" line, whatever it is, as a server can have its own, like
+  ///   Mobius's NewsDelimiter.
+  /// - With nothing between posts, the "From" lines themselves, each starting a post.
+  private static func divisions(of lines: [Data], canonicalChar: UInt8?) -> (dividers: Set<Int>, postStarts: Set<Int>, usesCanonical: Bool, delimiter: String?) {
+    let canonical = canonicalChar.map { char in Set(lines.indices.filter { Self.classifyDividerLine(lines[$0])?.leadChar == char }) } ?? []
+    let headers = lines.indices.filter { Self.isMessageBoardHeaderLine(lines[$0]) }
+
+    // The line before each "From" line, but one at the top, and how often each is.
+    var before: [Data: (count: Int, first: Int)] = [:]
+    var gaps = 0
+    var canonicalBefore = 0
+    for header in headers {
+      guard let previous = lines[..<header].lastIndex(where: { !Self.isBlankLine($0) }) else {
+        continue
+      }
+      gaps += 1
+      if canonical.contains(previous) {
+        canonicalBefore += 1
+      }
+      // Another post's "From" line, with nothing between them.
+      if Self.isMessageBoardHeaderLine(lines[previous]) {
+        continue
+      }
+      before[Self.trimmedLine(lines[previous]), default: (count: 0, first: previous)].count += 1
     }
 
-    return (posts: posts, dividerSignature: canonical?.label)
+    // A line of the server's own, before at least 4 in 5 of them, and before both of two only if
+    // it's no words, like a signature would be.
+    let learned = before.max { $0.value.count != $1.value.count ? $0.value.count < $1.value.count : $0.value.first > $1.value.first }
+    if let (line, tally) = learned, tally.count > canonicalBefore,
+       tally.count >= 2 ? tally.count * 5 >= gaps * 4 : gaps == 1 && !Self.hasLettersOrDigits(line) {
+      let dividers = Set(lines.indices.filter { Self.trimmedLine(lines[$0]) == line })
+      return (dividers, [], false, line.readString(at: 0, length: line.count))
+    }
+    if !canonical.isEmpty {
+      return (canonical, [], true, nil)
+    }
+    if headers.count >= 2 {
+      return ([], Set(headers), false, nil)
+    }
+    return ([], [], false, nil)
+  }
+
+  /// Whether a line of a board's bytes is a post's "From name (date):" line.
+  private static func isMessageBoardHeaderLine(_ line: Data) -> Bool {
+    guard line.starts(with: "From".utf8), let string = line.readString(at: 0, length: line.count) else {
+      return false
+    }
+    return Self.messageBoardHeader(in: Substring(string)) != nil
+  }
+
+  /// Whether a line of a board's bytes is empty, or only spaces and tabs.
+  private static func isBlankLine(_ line: Data) -> Bool {
+    line.allSatisfy { $0 == 0x20 || $0 == 0x09 }
+  }
+
+  /// A line of a board's bytes without the spaces and tabs around it.
+  private static func trimmedLine(_ line: Data) -> Data {
+    guard let first = line.firstIndex(where: { $0 != 0x20 && $0 != 0x09 }),
+          let last = line.lastIndex(where: { $0 != 0x20 && $0 != 0x09 }) else {
+      return Data()
+    }
+    return Data(line[first...last])
+  }
+
+  /// Whether a line of a board's bytes has letters or digits in it.
+  private static func hasLettersOrDigits(_ line: Data) -> Bool {
+    line.contains { (0x30...0x39).contains($0) || (0x41...0x5A).contains($0) || (0x61...0x7A).contains($0) }
+  }
+
+  /// The name and date in a post's first line, "From name (date):", as the pattern
+  /// `^From\s+(.+)\s*\(([^)]+)\)\s*:?\s*$` finds them, with the same results, in one pass. The
+  /// pattern took minutes on a line of a few thousand spaces, which anyone posting could write.
+  static func messageBoardHeader(in line: Substring) -> (name: String, date: String)? {
+    let characters = Array(line)
+    let count = characters.count
+    guard count > 4, characters[0] == "F", characters[1] == "r", characters[2] == "o", characters[3] == "m" else {
+      return nil
+    }
+
+    // The spaces after "From", one or more.
+    var spaces = 0
+    while 4 + spaces < count, characters[4 + spaces].isWhitespace {
+      spaces += 1
+    }
+    guard spaces > 0 else {
+      return nil
+    }
+
+    // The date's ")", the last one, with nothing after it but spaces and a colon.
+    guard let close = characters.lastIndex(of: ")") else {
+      return nil
+    }
+    var end = close + 1
+    while end < count, characters[end].isWhitespace {
+      end += 1
+    }
+    if end < count, characters[end] == ":" {
+      end += 1
+    }
+    while end < count, characters[end].isWhitespace {
+      end += 1
+    }
+    guard end == count else {
+      return nil
+    }
+    // Its "(", after any ")" before it, with something between them.
+    let earliest = (characters[..<close].lastIndex(of: ")") ?? -1) + 1
+    let date = { (opening: Int) in String(characters[(opening + 1)..<close]) }
+
+    // The name, after all the spaces, up to the last "(" it can reach, where it goes as far as it
+    // can: to the "(", or to a line break, from which there's only spaces to the "(".
+    let nameStart = 4 + spaces
+    let lineBreak = { (start: Int) in characters[start...].firstIndex(where: \.isNewline) ?? count }
+    if nameStart < count {
+      let nameEnd = lineBreak(nameStart)
+      var opening = close - 2
+      while opening > nameStart, opening >= earliest {
+        if characters[opening] == "(" {
+          var spacesBefore = opening
+          while spacesBefore > 0, characters[spacesBefore - 1].isWhitespace {
+            spacesBefore -= 1
+          }
+          if spacesBefore <= nameEnd {
+            return (String(characters[nameStart..<min(opening, nameEnd)]), date(opening))
+          }
+        }
+        opening -= 1
+      }
+    }
+
+    // Or the "(" right after the spaces, with the name the spaces it can have of them: all but the
+    // first one, or as many after it as there are before a line break.
+    guard nameStart < count, nameStart <= close - 2, nameStart >= earliest, characters[nameStart] == "(" else {
+      return nil
+    }
+    for taken in stride(from: spaces - 1, through: 1, by: -1) where !characters[4 + taken].isNewline {
+      return (String(characters[(4 + taken)..<min(nameStart, lineBreak(4 + taken))]), date(nameStart))
+    }
+    return nil
+  }
+
+  /// Whether a line of a post is a divider, as servers draw between posts, as the pattern
+  /// `^[ \t]*([_\-=~*]{15,}|[_\-=~*]{5,}.+[_\-=~*]{5,})[ \t]*$` finds them, with the same results,
+  /// in one pass. The pattern took seconds on a line of a few hundred dashes, and minutes on a few
+  /// thousand, which anyone posting could write.
+  static func isMessageBoardDivider(_ line: Substring) -> Bool {
+    let separators: Set<Character> = ["_", "-", "=", "~", "*"]
+    let isBlank = { (character: Character) in character == " " || character == "\t" }
+    guard let first = line.firstIndex(where: { !isBlank($0) }),
+          let last = line.lastIndex(where: { !isBlank($0) }) else {
+      return false
+    }
+    let trimmed = line[first...last]
+    let leading = trimmed.prefix(while: { separators.contains($0) }).count
+    guard leading >= 5 else {
+      return false
+    }
+    // All separators: 15 or more, or 11, as 5, then anything, then 5.
+    let total = trimmed.count
+    if leading == total {
+      return total >= 11
+    }
+    // 5 or more at each end, with anything but a line break between them.
+    let trailing = trimmed.reversed().prefix(while: { separators.contains($0) }).count
+    return trailing >= 5 && !trimmed.dropFirst(leading).dropLast(trailing).contains(where: \.isNewline)
   }
 
   /// Split message board text (already decoded) into individual posts.
@@ -1474,7 +1650,10 @@ public actor HotlineClient {
     for byte in trimmed.reversed() {
       if separators.contains(byte) { trailCount += 1 } else { break }
     }
-    if leadCount >= 5 && trailCount >= 5 {
+    // Only separators takes 11, as 5, one, and 5, as it does in new posts, so a short underline, in
+    // a drawing or under a signature, stays in its post rather than splitting it in two.
+    let onlySeparators = leadCount == trimmed.count
+    if leadCount >= 5 && trailCount >= 5 && (!onlySeparators || trimmed.count >= 11) {
       // Extract the label text between the separator runs
       let labelBytes = trimmed.dropFirst(leadCount).dropLast(trailCount)
       let labelData = Data(labelBytes)

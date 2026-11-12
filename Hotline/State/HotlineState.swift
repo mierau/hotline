@@ -83,14 +83,14 @@ struct MessageBoardPost: Identifiable, Hashable {
   /// push it apart on the board, but with any spaces at the start of its first line, as for a
   /// drawing.
   static func cleaned(_ text: String) -> String {
-    var lines = text.components(separatedBy: .newlines)
-    while let first = lines.first, first.isBlank {
-      lines.removeFirst()
-    }
-    return lines.joined(separator: "\n").replacing(/\s+\z/, with: "")
+    let lines = text.components(separatedBy: .newlines)
+    let first = lines.firstIndex(where: { !$0.isBlank }) ?? lines.endIndex
+    let joined = lines[first...].joined(separator: "\n")
+    // Without the spaces at its end, as /\s+\z/ found them, but in one pass, as that took most of a
+    // minute on a post with tens of thousands of spaces in it.
+    let end = joined.lastIndex(where: { !$0.isWhitespace }).map { joined.index(after: $0) } ?? joined.startIndex
+    return String(joined[..<end])
   }
-
-  private static let headerRegex = /^From\s+(.+)\s*\(([^)]+)\)\s*:?\s*$/
 
   private static let dateFormats: [(format: String, needsYear: Bool)] = [
     ("EEEE, MMMM d, yyyy, h:mm:ss a", false),
@@ -107,18 +107,21 @@ struct MessageBoardPost: Identifiable, Hashable {
     ("MMM d HH:mm:ss yyyy", false),
     ("MMM d HH:mm yyyy", false),
     ("MMM d HH:mm", true),
+    // As a server can be set to have them, like Mobius, with its NewsDateFormat.
+    ("yyyy-MM-dd HH:mm:ss", false),
+    ("yyyy-MM-dd HH:mm", false),
   ]
 
   static func parse(_ rawPost: String) -> MessageBoardPost {
     let lines = rawPost.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
 
     guard let firstLine = lines.first,
-          let match = firstLine.wholeMatch(of: headerRegex) else {
+          let header = HotlineClient.messageBoardHeader(in: firstLine) else {
       return MessageBoardPost(username: nil, date: nil, rawDateString: nil, body: rawPost.trimmingCharacters(in: .whitespacesAndNewlines), yearInferred: false)
     }
 
-    let username = String(match.1).trimmingCharacters(in: .whitespaces)
-    let rawDate = String(match.2)
+    let username = header.name.trimmingCharacters(in: .whitespaces)
+    let rawDate = header.date
     // With the spaces its first line starts with, as a drawing's does.
     let body = lines.count > 1 ? Self.cleaned(String(lines[1])) : ""
 
@@ -170,8 +173,9 @@ struct MessageBoardPost: Identifiable, Hashable {
   }
 
   private static func parseDate(_ raw: String) -> (Date?, Bool) {
-    // Normalize: collapse multiple spaces
-    var normalized = raw.replacingOccurrences(of: "  +", with: " ", options: .regularExpression)
+    // Normalize: collapse spaces, and tabs and line breaks, to one, which reads a date with them in
+    // it, and keeps a long run of them from making the time zone below take seconds to find.
+    var normalized = raw.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     // Strip ordinal suffixes: "16th" → "16", "1st" → "1", "2nd" → "2", "3rd" → "3"
     normalized = normalized.replacingOccurrences(
       of: "(\\d{1,2})(st|nd|rd|th)\\b",
@@ -446,6 +450,9 @@ class HotlineState: Equatable {
   var messageBoard: [MessageBoardPost] = []
   var messageBoardLoaded: Bool = false
   var messageBoardSignature: String?
+  /// The line between the board's posts, when the server has one of its own, which new posts come
+  /// with, to take off them.
+  var messageBoardDelimiter: String?
   /// A post for the board to show, by its `reference`, from a link to it in chat, or once you've
   /// posted it.
   var boardPostToReveal: String? = nil
