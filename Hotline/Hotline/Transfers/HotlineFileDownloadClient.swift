@@ -120,13 +120,15 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
     
     let fm = FileManager.default
     var fileHandle: FileHandle?
+    // The file this made, the only one that's removed if it fails.
+    var createdURL: URL?
 
     try progressHandler?(.preparing)
     
     // Determine the download name
     // Determine destination URL based on location
     let destinationURL: URL
-    let destinationFilename: String
+    var destinationFilename: String
     switch destination {
     case .url(let url):
       destinationURL = url.resolvingSymlinksInPath()
@@ -191,15 +193,16 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
           }
           received += infoData.count
 
-          // Prepare temporary file for atomic write
-          try? fm.removeItem(at: destinationURL)
-
-          // Create file with metadata
-          fileHandle = try fm.createHotlineFile(at: destinationURL, infoFork: info)
+          // A new file with its metadata, by the next free name if something has its name, as
+          // nothing's replaced.
+          let created = try fm.createHotlineFile(at: destinationURL, infoFork: info)
+          createdURL = created.url
+          fileHandle = created.handle
+          destinationFilename = created.url.lastPathComponent
 
           // Create and configure progress, as a file operation, for the Finder to show
           self.transferProgress.kind = .file
-          self.transferProgress.fileURL = destinationURL
+          self.transferProgress.fileURL = created.url
           self.transferProgress.fileOperationKind = .downloading
           self.transferProgress.publish()
 
@@ -217,12 +220,12 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
         }
         else if forkHeader.isResourceFork {
           // The file is created when the info fork arrives.
-          guard fileHandle != nil else {
+          guard fileHandle != nil, let createdURL else {
             throw HotlineTransferClientError.failedToTransfer
           }
 
           // Stream resource fork to disk, so its size isn't limited by memory
-          let resourceHandle = try fm.openResourceForkForWriting(at: destinationURL)
+          let resourceHandle = try fm.openResourceForkForWriting(at: createdURL)
           defer { try? resourceHandle.close() }
           try await self.receiveFork(from: socket, to: resourceHandle, length: forkSize, startingAt: received, name: destinationFilename, progressHandler: progressHandler)
           received += forkSize
@@ -247,15 +250,17 @@ public class HotlineFileDownloadClient: @MainActor HotlineTransferClient {
       // See if we've been cancelled
       try self.checkCancelled()
 
-      try progressHandler?(.completed(url: destinationURL))
+      try progressHandler?(.completed(url: createdURL ?? destinationURL))
 
-      return destinationURL
+      return createdURL ?? destinationURL
 
     }
     catch {
-      // Cleanup on failure
+      // Cleanup on failure, of only what this made, never what was there before.
       try? fileHandle?.close()
-      try? fm.removeItem(at: destinationURL)
+      if let createdURL {
+        try? fm.removeItem(at: createdURL)
+      }
       self.transferProgress.unpublish()
 
       // Stopped, from the transfers list or the Finder, which isn't a failure.

@@ -128,23 +128,20 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
 
     // Determine destination folder URL
     let fm = FileManager.default
-    let destinationURL: URL
-
-    switch destination {
+    let requestedURL: URL = switch destination {
     case .url(let url):
-      destinationURL = url
-      destinationFilename = url.lastPathComponent
+      url
     case .downloads(let filename):
-      destinationURL = URL.downloadsDirectory.generateUniqueFileURL(filename: filename)
-      destinationFilename = destinationURL.lastPathComponent
+      URL.downloadsDirectory.generateUniqueFileURL(filename: filename)
     }
 
-    print("HotlineFolderDownloadClient[\(self.referenceNumber)]: Downloading folder to \(destinationURL.path)")
-
-    // Create destination folder
-    try? fm.removeItem(at: destinationURL)
-    try fm.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+    // A new folder, by the next free name if something has its name, as nothing's replaced. Everything
+    // in the folder goes in it, and only what's made here is removed if it's stopped.
+    let destinationURL = try fm.createNewFolder(at: requestedURL)
+    destinationFilename = destinationURL.lastPathComponent
     self.folderURL = destinationURL
+
+    print("HotlineFolderDownloadClient[\(self.referenceNumber)]: Downloading folder to \(destinationURL.path)")
 
     // Create and publish progress for the entire folder (shows in Finder), as a file operation, by
     // its URL as a folder, ending in a slash, which is how the Finder finds it, and which the URL of
@@ -356,19 +353,17 @@ public class HotlineFolderDownloadClient: @MainActor HotlineTransferClient {
           throw HotlineTransferClientError.failedToTransfer
         }
 
-        // Create parent folder
+        // Create parent folder, inside the download's, as each of its names is one name.
         let parentFolderURL = destinationFolder.appendingPathComponents(parentPath)
         if !fm.fileExists(atPath: parentFolderURL.path) {
           try fm.createDirectory(at: parentFolderURL, withIntermediateDirectories: true)
         }
 
-        // Determine final file path
-        let finalURL = parentFolderURL.appendingPathComponent(fileName)
-        filePath = finalURL
-
-        // Remove existing file if present and create with metadata
-        try? fm.removeItem(at: finalURL)
-        fileHandle = try fm.createHotlineFile(at: finalURL, infoFork: info)
+        // A new file, by its name as one name, and by the next free name if the server sends the
+        // same one twice, as nothing's replaced.
+        let created = try fm.createHotlineFile(at: parentFolderURL.appending(component: fileName.safeFileName), infoFork: info)
+        filePath = created.url
+        fileHandle = created.handle
 
       }
       else if forkHeader.isDataFork {

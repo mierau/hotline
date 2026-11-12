@@ -242,9 +242,10 @@ final class ServerItemPromiseProvider: NSFilePromiseProvider {
 }
 
 extension FileDragOut: NSFilePromiseProviderDelegate {
-  /// Its name, with a / as the : the Finder shows as one, as a name on disk can't have a / in it.
+  /// Its name as one name on disk, with a / as the : the Finder shows as one, so it lands where it's
+  /// dropped whatever the server calls it.
   func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String) -> String {
-    ((filePromiseProvider.userInfo as? FileInfo)?.name ?? "Untitled").replacingOccurrences(of: "/", with: ":")
+    ((filePromiseProvider.userInfo as? FileInfo)?.name ?? "Untitled").safeFileName
   }
 
   /// Asked for on the main queue, as everything it's written with is there.

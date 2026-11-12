@@ -265,12 +265,9 @@ final class AppUpdate {
   private func downloadRelease(_ release: UpdateReleaseInfo) async {
     do {
       let (temporaryURL, _) = try await URLSession.shared.download(from: release.downloadURL)
-      let destinationURL = URL.downloadsDirectory.appendingPathComponent(release.assetName)
-      
-      if FileManager.default.fileExists(atPath: destinationURL.path) {
-        try? FileManager.default.removeItem(at: destinationURL)
-      }
-      
+      // Beside anything of the same name, numbered, rather than in its place.
+      let destinationURL = URL.downloadsDirectory.generateUniqueFileURL(filename: release.assetName)
+
       try FileManager.default.moveItem(at: temporaryURL, to: destinationURL)
       
       await MainActor.run {

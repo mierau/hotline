@@ -307,7 +307,8 @@ public class HotlineFilePreviewClient {
   /// without meeting another file of the same name. One without an extension gets the one its type
   /// code goes with, so Quick Look, and the player, can tell what it is.
   public static func downloadURL(for fileName: String, fileType: String?) -> URL {
-    var previewFileName = fileName
+    // As one name, so it stays in its folder whatever the server calls it.
+    var previewFileName = fileName.safeFileName
     if (previewFileName as NSString).pathExtension.isEmpty,
        let fileType = fileType?.lowercased(),
        let ext = FileManager.HFSTypeToExtension[fileType] {
@@ -333,10 +334,10 @@ public class HotlineFilePreviewClient {
   /// kept after the preview's done with it, rather than cleaned up with it.
   public static func removeDownload(at url: URL) {
     let folder = url.deletingLastPathComponent()
-    // Only ever one of those folders, never the temporary folder they're in.
+    // Only ever one of those folders, and nothing else, whatever the file's called: never the
+    // temporary folder they're in, or a file anywhere else.
     guard UUID(uuidString: folder.lastPathComponent) != nil,
           folder.deletingLastPathComponent().resolvingSymlinksInPath().path(percentEncoded: false) == FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path(percentEncoded: false) else {
-      try? FileManager.default.removeItem(at: url)
       return
     }
     try? FileManager.default.removeItem(at: folder)

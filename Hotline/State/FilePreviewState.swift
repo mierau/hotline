@@ -199,7 +199,8 @@ final class FilePreviewState {
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     // Before it starts, so a download that's stopped partway is cleaned up too.
     self.webDownloadFolder = folder
-    let fileURL = folder.appending(path: self.info.name, directoryHint: .notDirectory)
+    // As one name, so it stays in its folder whatever the link says.
+    let fileURL = folder.appending(component: self.info.name.safeFileName, directoryHint: .notDirectory)
 
     // Only the newest progress, shown here on the main actor, so the download doesn't hold on to
     // the window's state.

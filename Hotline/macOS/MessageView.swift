@@ -584,7 +584,8 @@ struct MessageView: View {
   private func dragProvider(for msg: InstantMessage) -> NSItemProvider {
     let timestamp = Self.exactDateFormatter.string(from: msg.date)
     let content = "From: \(msg.senderName)\nDate: \(timestamp)\n\n\(msg.text)"
-    let filename = "Message from \(msg.senderName) \(Self.filenameDateFormatter.string(from: msg.date)).txt"
+    // As one name, as their nickname could have a / in it.
+    let filename = "Message from \(msg.senderName) \(Self.filenameDateFormatter.string(from: msg.date)).txt".safeFileName
 
     let provider = NSItemProvider()
     provider.suggestedName = filename

@@ -10,20 +10,34 @@ enum LineEnding {
 
 // MARK: -
 
+extension String {
+  /// A name from a server or a link as the name of one file or folder on disk, so it can only ever
+  /// name something in the folder it's put in: a "/" in it as the ":" the Finder shows as "/",
+  /// without NUL characters, and "Untitled" for a name that's empty, "." or "..".
+  var safeFileName: String {
+    let name = self.replacingOccurrences(of: "/", with: ":").replacingOccurrences(of: "\0", with: "")
+    return name.isEmpty || name == "." || name == ".." ? "Untitled" : name
+  }
+
+  /// The name with a number, the way the Finder names a copy: "Name 2.ext" for 2.
+  func numberedFileName(_ number: Int) -> String {
+    let base = (self as NSString).deletingPathExtension
+    let pathExtension = (self as NSString).pathExtension
+    return pathExtension.isEmpty ? "\(base) \(number)" : "\(base) \(number).\(pathExtension)"
+  }
+}
+
+// MARK: -
+
 extension URL {
   func urlForResourceFork() -> URL {
     self.appendingPathComponent("..namedfork/rsrc")
   }
 
-  /// Append multiple path components to a URL by iterating through an array
-  /// - Parameter components: Array of path component strings
-  /// - Returns: New URL with all components appended
+  /// A path of names from a server below this folder, each as one name, so the path can't lead
+  /// out of it, as a ".." or a "/" in a name would.
   func appendingPathComponents(_ components: [String]) -> URL {
-    var path = self.path
-    for component in components {
-      path = (path as NSString).appendingPathComponent(component)
-    }
-    return URL(filePath: path)
+    components.reduce(self) { $0.appending(component: $1.safeFileName) }
   }
   
 #if os(macOS)
@@ -453,14 +467,11 @@ extension FileManager {
     return (dataForkSize: dataForkSize, resourceForkSize: resourceForkSize)
   }
   
-  /// Create a file with metadata from a Hotline INFO fork
+  /// Makes a new file for a download, with the type and creator codes and dates from its info fork,
+  /// at `url`, or at the first free name like it. See `createNewFile(at:attributes:)`.
   ///
-  /// - Parameters:
-  ///   - url: Destination URL for the new file
-  ///   - infoFork: Hotline file info containing metadata
-  /// - Returns: FileHandle open for writing
-  /// - Throws: Error if file creation fails
-  func createHotlineFile(at url: URL, infoFork: HotlineFileInfoFork) throws -> FileHandle {
+  /// - Returns: Where it was made, and a handle open for writing it.
+  func createHotlineFile(at url: URL, infoFork: HotlineFileInfoFork) throws -> (url: URL, handle: FileHandle) {
     var attributes: [FileAttributeKey: Any] = [:]
 
     if infoFork.creator != 0 {
@@ -472,15 +483,59 @@ extension FileManager {
     attributes[.creationDate] = infoFork.createdDate as NSDate
     attributes[.modificationDate] = infoFork.modifiedDate as NSDate
 
-    guard self.createFile(atPath: url.path, contents: nil, attributes: attributes) else {
-      throw HotlineTransferClientError.failedToTransfer
-    }
+    return try self.createNewFile(at: url, attributes: attributes)
+  }
 
-    guard let handle = FileHandle(forWritingAtPath: url.path) else {
-      throw HotlineTransferClientError.failedToTransfer
+  /// Makes a new, empty file at `url`, or, when something's there already, at the first free name
+  /// like it, numbered the way the Finder numbers copies. What's there is never replaced, and a link
+  /// there is never followed.
+  ///
+  /// - Returns: Where it was made, and a handle open for writing it.
+  func createNewFile(at url: URL, attributes: [FileAttributeKey: Any] = [:]) throws -> (url: URL, handle: FileHandle) {
+    var candidate = url
+    var number = 1
+    while true {
+      let path = candidate.path(percentEncoded: false)
+      // Only if nothing's there, a link included.
+      let descriptor = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o644)
+      if descriptor >= 0 {
+        if !attributes.isEmpty {
+          try? self.setAttributes(attributes, ofItemAtPath: path)
+        }
+        return (candidate, FileHandle(fileDescriptor: descriptor, closeOnDealloc: true))
+      }
+      let failure = errno
+      number += 1
+      guard failure == EEXIST, number <= 10_000 else {
+        throw POSIXError(POSIXErrorCode(rawValue: failure) ?? .EIO)
+      }
+      candidate = url.deletingLastPathComponent().appending(component: url.lastPathComponent.numberedFileName(number))
     }
+  }
 
-    return handle
+  /// Makes a new folder at `url`, or, when something's there already, at the first free name like
+  /// it, numbered the way the Finder numbers copies. What's there is never replaced.
+  ///
+  /// - Returns: Where it was made.
+  func createNewFolder(at url: URL) throws -> URL {
+    try self.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    var candidate = url
+    var number = 1
+    while true {
+      do {
+        try self.createDirectory(at: candidate, withIntermediateDirectories: false)
+        return candidate
+      }
+      catch {
+        let taken = (error as? CocoaError)?.code == .fileWriteFileExists
+          || self.fileExists(atPath: candidate.path(percentEncoded: false))
+        number += 1
+        guard taken, number <= 10_000 else {
+          throw error
+        }
+        candidate = url.deletingLastPathComponent().appending(component: url.lastPathComponent.numberedFileName(number))
+      }
+    }
   }
 
   /// Open an existing file's resource fork for writing, creating the fork if needed.

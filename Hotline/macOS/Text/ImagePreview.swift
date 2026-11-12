@@ -739,9 +739,11 @@ final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelega
     }
   }
 
+  /// Its address's last part, decoded once, as it already is, as one name, so it lands where it's
+  /// dropped whatever the link says.
   func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String) -> String {
-    let name = self.url.lastPathComponent.removingPercentEncoding ?? self.url.lastPathComponent
-    return name.isEmpty || name == "/" ? "Image" : name
+    let name = self.url.lastPathComponent
+    return (name.isEmpty || name == "/" ? "Image" : name).safeFileName
   }
 
   func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue {

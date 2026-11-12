@@ -127,26 +127,17 @@ extension Data {
 // MARK: -
 
 extension URL {
+  /// A free path in this folder for something named `base`: by its name as one name, so it can't be
+  /// outside this folder whatever the name is, and when that's taken, numbered the way the Finder
+  /// numbers copies, as "Name 2.ext".
   func generateUniqueFilePath(filename base: String) -> String {
-    let fileManager = FileManager.default
-    var finalName = base
-    var counter = 2
-    
-    // Helper function to generate a new filename with a counter
-    func makeFileName() -> String {
-      let baseName = (base as NSString).deletingPathExtension
-      let extensionName = (base as NSString).pathExtension
-      return extensionName.isEmpty ? "\(baseName) \(counter)" : "\(baseName) \(counter).\(extensionName)"
+    let name = base.safeFileName
+    var filePath = self.appending(component: name).path(percentEncoded: false)
+    var number = 2
+    while FileManager.default.fileExists(atPath: filePath) {
+      filePath = self.appending(component: name.numberedFileName(number)).path(percentEncoded: false)
+      number += 1
     }
-    
-    // Check if file exists and append counter until a unique name is found
-    var filePath = self.appending(component: finalName).path(percentEncoded: false)
-    while fileManager.fileExists(atPath: filePath) {
-      finalName = makeFileName()
-      filePath = self.appending(component: finalName).path(percentEncoded: false)
-      counter += 1
-    }
-    
     return filePath
   }
   
