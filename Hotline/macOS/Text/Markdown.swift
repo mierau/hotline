@@ -1236,10 +1236,10 @@ enum Markdown {
       let url = self.destination(string.substring(with: match.range(at: 3)))
       // Shown as its preview alone, where there are any, or else as its words, or where it is,
       // without any, as a link to it.
-      if isImage, let url, layout.imagePreviews > 0, layout.imageSources.loadsByItself(url, isImage: true) {
+      if isImage, let url, layout.imagePreviews > 0, let picture = layout.imageSources.picture(for: url, isImage: true) {
         shown.hidden.insert(integersIn: whole.location..<NSMaxRange(whole))
         take(words)
-        shown.images.append((lineEnd, url, true))
+        shown.images.append((lineEnd, picture, true))
         continue
       }
       // Its words, as a link to where it goes, without the rest, or as words, if it goes nowhere.
@@ -1255,8 +1255,8 @@ enum Markdown {
         else {
           shown.links.append((words, url))
         }
-        if layout.imageSources.loadsByItself(url, isImage: isImage) {
-          shown.images.append((lineEnd, url, false))
+        if let picture = layout.imageSources.picture(for: url, isImage: isImage) {
+          shown.images.append((lineEnd, picture, false))
         }
       }
       else {
@@ -1283,8 +1283,8 @@ enum Markdown {
         take(address)
         shown?.links.append((address, link.url))
         shown?.addresses.append(address)
-        if layout.imageSources.loadsByItself(link.url, isImage: false) {
-          shown?.images.append((self.contentEnd(of: line, in: string), link.url, false))
+        if let picture = layout.imageSources.picture(for: link.url, isImage: false) {
+          shown?.images.append((self.contentEnd(of: line, in: string), picture, false))
         }
       }
     }

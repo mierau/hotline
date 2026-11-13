@@ -99,11 +99,36 @@ struct ImagePreviewSizesTests {
     #expect(loads("https://dn721509.ca.archive.org/0/items/hypercard_what_is_hypercard_2/00_screenshot.png"))
     #expect(loads("https://web.archive.org/web/2001/http://www.apple.com/home/images/indexhero.jpg"))
     #expect(loads("https://farm1.staticflickr.com/2/1418878_1e92283336_m.jpg"))
+    // Instagram's, Threads' and Facebook's pictures, from wherever Meta has them.
+    #expect(loads("https://scontent-lax3-1.cdninstagram.com/v/t51.29350-15/123_n.jpg?stp=dst-jpg_e35&oh=00_AYB&oe=6745D2F1"))
+    #expect(loads("https://instagram.fsjc1-3.fna.fbcdn.net/v/t51.2885-15/123_n.webp?oe=6745D2F1"))
+    #expect(loads("https://scontent.xx.fbcdn.net/v/t39.30808-6/123_n.jpg?oe=6745D2F1"))
     // Not sites whose names only end the same way.
     #expect(!loads("https://notarchive.org/pic.png"))
     #expect(!loads("https://archive.org.example.com/pic.png"))
+    #expect(!loads("https://notfbcdn.net/pic.jpg"))
     // Brave's image search copies, which have no extension.
     #expect(loads("https://imgs.search.brave.com/abc/rs:fit:500:0:0/g:ce/aHR0cHM6Ly9leGFtcGxlLmNvbQ"))
+  }
+
+  @Test func redditsViewerLinksShowThePictureInThem() {
+    let sources = ImagePreview.Sources()
+    let picture = URL(string: "https://i.redd.it/z6bs0bgwzst91.jpg")!
+    let viewer = "https://www.reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fz6bs0bgwzst91.jpg"
+    #expect(sources.picture(for: URL(string: viewer)!, isImage: false) == picture)
+    #expect(sources.picture(for: picture, isImage: false) == picture)
+    // Only a picture from where it could load by itself anyway, and only in Reddit's.
+    #expect(sources.picture(for: URL(string: "https://www.reddit.com/media?url=https%3A%2F%2Ftracker.example%2Fpixel.png")!, isImage: false) == nil)
+    #expect(sources.picture(for: URL(string: "https://reddit.com.example/media?url=https%3A%2F%2Fi.redd.it%2Fz6bs0bgwzst91.jpg")!, isImage: false) == nil)
+    // Shown under the line its link is on, as any picture's is.
+    let shown = Markdown.shownText("look \(viewer)", layout: .board)
+    var previews: [URL] = []
+    shown.enumerateAttribute(.attachment, in: NSRange(location: 0, length: shown.length)) { value, _, _ in
+      if let attachment = value as? ImageAttachment {
+        previews.append(attachment.url)
+      }
+    }
+    #expect(previews == [picture])
   }
 
   @Test func redirectsOnlyToWhereTheyCouldLoadFrom() {

@@ -29,6 +29,18 @@ enum ImagePreview {
     url.scheme?.lowercased() == "https" && self.imageExtensions.contains(url.pathExtension.lowercased())
   }
 
+  /// The picture in a link to a page that only shows one: Reddit's viewer's, whose links are to
+  /// reddit.com/media with the picture's own link after url=.
+  static func picture(in url: URL) -> URL? {
+    guard let host = url.host(percentEncoded: false)?.lowercased(),
+          host == "reddit.com" || host.hasSuffix(".reddit.com"),
+          url.path(percentEncoded: false) == "/media",
+          let link = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "url" })?.value else {
+      return nil
+    }
+    return URL(string: link)
+  }
+
   /// Where pictures load from by themselves, rather than once their link's clicked. Loading one tells
   /// whoever serves it your IP address, and when you looked, so by themselves only from hosts where
   /// whoever put a picture up can't see who looked at it, image search's copies, and the server
@@ -61,6 +73,14 @@ enum ImagePreview {
       return isImage
         || ImagePreview.imageExtensions.contains(url.pathExtension.lowercased())
         || ImagePreview.thumbnailHosts.contains(url.host(percentEncoded: false)?.lowercased() ?? "")
+    }
+
+    /// The picture shown for a link, loading by itself, if there's one: the link's own, or for a
+    /// link to a page that only shows a picture, the picture in it, which loads from where it is,
+    /// without the page.
+    func picture(for url: URL, isImage: Bool) -> URL? {
+      let picture = ImagePreview.picture(in: url) ?? url
+      return self.loadsByItself(picture, isImage: isImage) ? picture : nil
     }
   }
 
@@ -100,9 +120,11 @@ enum ImagePreview {
 
   /// Sites whose every host under their name is their own: the Internet Archive, whose downloads
   /// come from numbered servers, like dn721509.ca.archive.org, and whose Wayback Machine has its own
-  /// copies of old sites' pictures, so those sites don't see you either, and Flickr, whose older
-  /// links are to numbered servers too.
-  static let trustedDomains: [String] = ["archive.org", "staticflickr.com"]
+  /// copies of old sites' pictures, so those sites don't see you either, Flickr, whose older links
+  /// are to numbered servers too, and Meta, whose pictures for Instagram, Threads and Facebook come
+  /// from servers all over, like scontent-lax3-1.cdninstagram.com. Their links stop working after a
+  /// while, as Discord's do, by which time a preview's been kept.
+  static let trustedDomains: [String] = ["archive.org", "staticflickr.com", "cdninstagram.com", "fbcdn.net"]
 
   /// Image search's own copies of pictures, whose links have no extension: Google's and Bing's
   /// thumbnails, and DuckDuckGo's and Brave's, which get the picture from where it is themselves,
