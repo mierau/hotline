@@ -23,6 +23,10 @@ enum ImagePreview {
   /// Bigger images don't download, whether they say how big they are first or not.
   static let sizeLimit: Int64 = 10 * 1024 * 1024
 
+  /// Bigger pictures among a server's files aren't previewed: one linked to downloads to everyone
+  /// there at once, from a server that could be on a home connection.
+  static let serverSizeLimit = 5 * 1024 * 1024
+
   /// Whether a link looks like an image worth previewing. Only https, since the app doesn't allow
   /// insecure loads anyway.
   static func canPreview(_ url: URL) -> Bool {
@@ -48,11 +52,29 @@ enum ImagePreview {
   struct Sources: Equatable, Sendable {
     /// The address of the server a window's for, whose own pictures load there too, but only there.
     var server: String?
+    /// The server's port, and the connection to it, which pictures among its files load through,
+    /// from links to them, hotline://server/files/....
+    var serverPort: Int?
+    var connection: UUID?
     /// Pictures from any site, as Settings can have it.
     var anySite = false
 
+    /// Where a link to a file among the server's files goes: its path there, ending with its name,
+    /// for a link in the server's own window, which it loads through the connection to it.
+    func serverFile(at url: URL) -> [String]? {
+      guard self.connection != nil, let server = self.server, let port = self.serverPort,
+            let linked = Server(url: url), linked.address == server.lowercased(), linked.port == port,
+            linked.initialSection == .files, let path = linked.initialFilePath else {
+        return nil
+      }
+      return path
+    }
+
     /// Whether pictures from where `url` is load by themselves, which a redirect to it can too.
     func trusts(_ url: URL) -> Bool {
+      if self.serverFile(at: url) != nil {
+        return true
+      }
       guard url.scheme?.lowercased() == "https", let host = url.host(percentEncoded: false)?.lowercased() else {
         return false
       }
@@ -80,7 +102,17 @@ enum ImagePreview {
     /// without the page.
     func picture(for url: URL, isImage: Bool) -> URL? {
       let picture = ImagePreview.picture(in: url) ?? url
-      return self.loadsByItself(picture, isImage: isImage) ? picture : nil
+      guard self.loadsByItself(picture, isImage: isImage) else {
+        return nil
+      }
+      // One among the server's files, without the login and password its link can have, which the
+      // window's connected with already, so they aren't kept with it.
+      if self.serverFile(at: picture) != nil, var components = URLComponents(url: picture, resolvingAgainstBaseURL: false) {
+        components.user = nil
+        components.password = nil
+        return components.url ?? picture
+      }
+      return picture
     }
   }
 
@@ -187,6 +219,58 @@ enum ImagePreview {
 extension EnvironmentValues {
   /// Where a window's pictures load from by themselves: in a server's window, its server too.
   @Entry var imageSources = ImagePreview.Sources()
+}
+
+extension ImagePreview {
+  /// Why a preview's picture couldn't be had, which says when it's tried again.
+  enum Failure {
+    /// The server said no, as for a picture that isn't one, or is too big: not for a while.
+    case refused
+    /// It couldn't be reached: not until the app opens again.
+    case unreachable
+    /// Not now, as for a server busy with others' downloads: the next time it's shown.
+    case notNow
+  }
+
+  /// Opens a picture in a preview window, as clicking its preview does: one among a server's files
+  /// as Quick Look in Files does, through the connection to it, and one from the web as it is.
+  @MainActor
+  static func open(_ url: URL, sources: Sources, openWindow: OpenWindowAction) {
+    if let path = sources.serverFile(at: url), let name = path.last,
+       let model = sources.connection.flatMap({ AppState.shared.hotline(id: $0) }) {
+      FileActions(model: model, openWindow: openWindow).previewFile(FileInfo(linkedName: name, path: path, isFolder: false))
+    }
+    else {
+      openWindow(id: "preview-quicklook", value: PreviewFileInfo(webImage: url))
+    }
+  }
+}
+
+/// A picture among the files of the server a window's connected to, read whole through the
+/// connection, for Kingfisher to show, and keep, as it does a picture from the web.
+struct ServerPicture: ImageDataProvider {
+  let url: URL
+  /// Where it is among the server's files, ending with its name.
+  let path: [String]
+  let connection: UUID
+  /// Called as it starts to come.
+  let started: @MainActor @Sendable () -> Void
+
+  var cacheKey: String {
+    self.url.absoluteString
+  }
+
+  func data() async throws -> Data {
+    try await Self.read(self.path, through: self.connection, started: self.started)
+  }
+
+  @MainActor
+  private static func read(_ path: [String], through connection: UUID, started: @MainActor () -> Void) async throws -> Data {
+    guard let model = AppState.shared.hotline(id: connection) else {
+      throw ServerPictureError.disconnected
+    }
+    return try await model.readPicture(at: path, limit: ImagePreview.serverSizeLimit, started: started)
+  }
 }
 
 /// Checks each preview's response before its data downloads.
@@ -395,6 +479,8 @@ protocol LinkActions: AnyObject {
   var openURLAction: ((URL) -> Void)? { get }
   /// Opens an image in a preview window, as clicking its preview does.
   var openImageAction: ((URL) -> Void)? { get }
+  /// What can be done with a file a link's to, for its menu, which its picture's preview has too.
+  var fileLinkMenu: ((URL) -> NSMenu?)? { get }
   /// After a preview's grown, or shrunk, to fit its image, or gone.
   func previewDidResize()
 }
@@ -491,8 +577,8 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     view.onLoad = { [weak self] imageSize in
       self?.imageDidLoad(imageSize: imageSize)
     }
-    view.onFail = { [weak self] refused in
-      self?.hide(refused: refused)
+    view.onFail = { [weak self] failure in
+      self?.hide(for: failure)
     }
     self.view = view
   }
@@ -523,14 +609,16 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     self.layOutAgain()
   }
 
-  /// Takes the preview away, for an image that can't be had: for good if the server `refused` it,
-  /// or else until the app opens again.
-  private func hide(refused: Bool) {
+  /// Takes the preview away, for an image that can't be had: for a while if the server refused it,
+  /// until the app opens again if it couldn't be reached, or only for now.
+  private func hide(for failure: ImagePreview.Failure) {
     guard let attachment = self.textAttachment as? ImageAttachment else {
       return
     }
-    ImagePreview.failures.insert(attachment.url, refused: refused)
-    ImagePreview.sizes.forget(attachment.url)
+    if failure != .notNow {
+      ImagePreview.failures.insert(attachment.url, refused: failure == .refused)
+      ImagePreview.sizes.forget(attachment.url)
+    }
     guard attachment.isShown else {
       return
     }
@@ -585,9 +673,8 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   var onStart: (() -> Void)?
   /// Called with the image's size in pixels once it loads.
   var onLoad: ((CGSize) -> Void)?
-  /// Called if the image can't be had, with whether the server said no, rather than not being
-  /// reached.
-  var onFail: ((_ refused: Bool) -> Void)?
+  /// Called if the image can't be had, with why.
+  var onFail: ((ImagePreview.Failure) -> Void)?
   /// Whether the gray box shows where the image will be, until it's here.
   var showsPlaceholder = false {
     didSet {
@@ -662,7 +749,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     }
     self.started = true
     guard !ImagePreview.failures.contains(self.url) else {
-      self.onFail?(false)
+      self.onFail?(.notNow)
       return
     }
 
@@ -680,16 +767,26 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       options.append(.processor(DownsamplingImageProcessor(size: ImagePreview.maximumSize)))
       options.append(.scaleFactor(2))
     }
-    // Only on to somewhere it could load from by itself, so a link from a host it trusts can't send
-    // it somewhere else that would see you.
-    let sources = self.sources
-    options.append(.redirectHandler(AnyRedirectHandler { _, _, request, completion in
-      completion(request.url.map(sources.trusts) == true ? request : nil)
-    }))
+    // A picture among the server's files, through the connection to it, or one from the web, only
+    // redirected on to somewhere it could load from by itself, so a link from a host it trusts
+    // can't send it somewhere else that would see you.
+    let source: Source
+    if let path = self.sources.serverFile(at: self.url), let connection = self.sources.connection {
+      source = .provider(ServerPicture(url: self.url, path: path, connection: connection) { [weak self] in
+        self?.onStart?()
+      })
+    }
+    else {
+      source = .network(self.url)
+      let sources = self.sources
+      options.append(.redirectHandler(AnyRedirectHandler { _, _, request, completion in
+        completion(request.url.map(sources.trusts) == true ? request : nil)
+      }))
+    }
 
     var reportedStart = false
     var tooBig = false
-    self.imageView.kf.setImage(with: self.url, options: options, progressBlock: { [weak self] received, _ in
+    self.imageView.kf.setImage(with: source, options: options, progressBlock: { [weak self] received, _ in
       // Stopped once more has come than a preview's worth, which one that didn't say how big it is
       // could be, without end.
       if received > ImagePreview.sizeLimit, !tooBig {
@@ -707,7 +804,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
         return
       }
       if tooBig {
-        self.onFail?(true)
+        self.onFail?(.refused)
         return
       }
       switch result {
@@ -717,24 +814,34 @@ final class ImagePreviewView: NSView, NSDraggingSource {
         self.onLoad?(Self.pixelSize(of: value.image))
       case .failure(let error):
         // Not when it was only stopped, as when the view went away.
-        if !error.isTaskCancelled && !error.isNotCurrentTask {
-          self.onFail?(Self.wasRefused(error))
+        if !error.isNotCurrentTask, let failure = Self.failure(of: error) {
+          self.onFail?(failure)
         }
       }
     }
   }
 
-  /// Whether the server said no: turned the request away, or sent something that isn't an image,
-  /// or one too big, or one that can't be read. Not when it couldn't be reached, or was busy or in
-  /// trouble for the moment, which can pass.
-  private static func wasRefused(_ error: KingfisherError) -> Bool {
+  /// Why the image couldn't be had. Refused, when the server said no: turned the request away, or
+  /// sent something that isn't an image, or one too big, or one that can't be read. Unreachable,
+  /// when it couldn't be reached, or was busy or in trouble for the moment, which can pass. For a
+  /// picture among a server's files, not now, but for one too big. Nothing when it was only
+  /// stopped, as when the view went away.
+  private static func failure(of error: KingfisherError) -> ImagePreview.Failure? {
     switch error {
+    case .requestError(reason: .taskCancelled), .requestError(reason: .asyncTaskContextCancelled),
+         .requestError(reason: .dataProviderCancelled):
+      return nil
     case .responseError(reason: .invalidHTTPStatusCode(let response)):
-      return (400..<500).contains(response.statusCode) && response.statusCode != 408 && response.statusCode != 429
+      return (400..<500).contains(response.statusCode) && response.statusCode != 408 && response.statusCode != 429 ? .refused : .unreachable
     case .responseError(reason: .cancelledByDelegate), .processorError:
-      return true
+      return .refused
+    case .imageSettingError(reason: .dataProviderError(provider: _, error: let error)):
+      if error is CancellationError {
+        return nil
+      }
+      return (error as? ServerPictureError)?.isFinal == true ? .refused : .notNow
     default:
-      return false
+      return .unreachable
     }
   }
 
@@ -813,6 +920,10 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   // MARK: Menu
 
   override func menu(for event: NSEvent) -> NSMenu? {
+    // A picture among the server's files has its file's menu, as its link does.
+    if self.sources.serverFile(at: self.url) != nil, let menu = self.textView?.fileLinkMenu?(self.url) {
+      return menu
+    }
     guard let items = self.textView?.linkMenuItems(for: self.url) else {
       return nil
     }
@@ -836,7 +947,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       return
     }
     self.dragged = true
-    let item = NSDraggingItem(pasteboardWriter: ImageFilePromise(url: self.url))
+    let item = NSDraggingItem(pasteboardWriter: ImageFilePromise(url: self.url, sources: self.sources))
     item.setDraggingFrame(self.imageView.frame, contents: image)
     self.beginDraggingSession(with: [item], event: down, source: self)
   }
@@ -849,9 +960,13 @@ final class ImagePreviewView: NSView, NSDraggingSource {
 // MARK: - Dragging Out
 
 /// A preview dragged out: the image as a file, downloaded whole once it's dropped, and its
-/// link, for anywhere a link goes rather than a file.
+/// link, for anywhere a link goes rather than a file. One among a server's files downloads as one
+/// dragged out of Files does, with its progress in the transfers list.
 final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelegate {
   let url: URL
+  /// For a picture among a server's files, where it is there, and the connection it downloads
+  /// through.
+  private let serverFile: (path: [String], connection: UUID)?
 
   private static let queue: OperationQueue = {
     let queue = OperationQueue()
@@ -859,8 +974,14 @@ final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelega
     return queue
   }()
 
-  init(url: URL) {
+  init(url: URL, sources: ImagePreview.Sources = ImagePreview.Sources()) {
     self.url = url
+    if let path = sources.serverFile(at: url), let connection = sources.connection {
+      self.serverFile = (path, connection)
+    }
+    else {
+      self.serverFile = nil
+    }
     super.init()
     self.fileType = (UTType(filenameExtension: url.pathExtension) ?? .image).identifier
     self.delegate = self
@@ -888,11 +1009,18 @@ final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelega
     return (name.isEmpty || name == "/" ? "Image" : name).safeFileName
   }
 
+  /// A server's picture on the main queue, where its connection is.
   func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue {
-    Self.queue
+    self.serverFile == nil ? Self.queue : .main
   }
 
   func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, writePromiseTo url: URL, completionHandler: @escaping ((any Error)?) -> Void) {
+    if let serverFile = self.serverFile {
+      MainActor.assumeIsolated {
+        Self.download(serverFile.path, through: serverFile.connection, to: url, completion: completionHandler)
+      }
+      return
+    }
     URLSession.shared.downloadTask(with: self.url) { downloaded, response, error in
       guard let downloaded, let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) else {
         completionHandler(error ?? URLError(.badServerResponse))
@@ -906,5 +1034,24 @@ final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelega
         completionHandler(error)
       }
     }.resume()
+  }
+
+  /// A picture among a server's files, downloaded to where it's dropped as one dragged out of
+  /// Files is.
+  @MainActor
+  private static func download(_ path: [String], through connection: UUID, to url: URL, completion: @escaping ((any Error)?) -> Void) {
+    guard let model = AppState.shared.hotline(id: connection), let name = path.last else {
+      completion(CocoaError(.fileWriteUnknown))
+      return
+    }
+    // Where it's dropped can be somewhere it's let in only for this.
+    let accessing = url.startAccessingSecurityScopedResource()
+    model.enqueueDownload(FileInfo(linkedName: name, path: path, isFolder: false), to: url) { error in
+      if accessing {
+        url.stopAccessingSecurityScopedResource()
+      }
+      // Stopped from the transfers list, or the Finder, which isn't an error to show.
+      completion(error is CancellationError ? CocoaError(.userCancelled) : error)
+    }
   }
 }

@@ -37,7 +37,7 @@ struct MarkdownText: NSViewRepresentable {
     context.coordinator.openURL = openURL
     textView.openURLAction = openURL
     textView.openImageAction = { url in
-      environment.openWindow(id: "preview-quicklook", value: PreviewFileInfo(webImage: url))
+      ImagePreview.open(url, sources: environment.imageSources, openWindow: environment.openWindow)
     }
     textView.menuItems = self.menuItems
     textView.fileLinkMenu = self.fileLinkMenu

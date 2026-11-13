@@ -131,6 +131,41 @@ struct ImagePreviewSizesTests {
     #expect(previews == [picture])
   }
 
+  // MARK: - Pictures Among the Server's Files
+
+  @Test func picturesAmongTheServersFilesLoadThroughItInItsOwnWindow() {
+    let sources = ImagePreview.Sources(server: "hotline.example.com", serverPort: 5500, connection: UUID())
+    func picture(_ link: String, in sources: ImagePreview.Sources = sources) -> URL? {
+      sources.picture(for: URL(string: link)!, isImage: false)
+    }
+    // A picture among its files, by where it is there.
+    #expect(sources.serverFile(at: URL(string: "hotline://hotline.example.com/files/Pictures/My%20Cat.png")!) == ["Pictures", "My Cat.png"])
+    #expect(picture("hotline://hotline.example.com/files/Pictures/cat.png") != nil)
+    #expect(picture("hotline://HOTLINE.example.com:5500/files/cat.jpg") != nil)
+    // Not a file that isn't a picture, or a folder, or another server's, or one on another port.
+    #expect(picture("hotline://hotline.example.com/files/Pictures/notes.txt") == nil)
+    #expect(picture("hotline://hotline.example.com/files/Pictures/") == nil)
+    #expect(picture("hotline://other.example.com/files/cat.png") == nil)
+    #expect(picture("hotline://hotline.example.com:5600/files/cat.png") == nil)
+    // Nor where it isn't connected, as in a window of saved chat.
+    #expect(picture("hotline://hotline.example.com/files/cat.png", in: ImagePreview.Sources(server: "hotline.example.com", serverPort: 5500)) == nil)
+    // Without the login and password its link has, which aren't kept with it.
+    #expect(picture("hotline://guest:secret@hotline.example.com/files/cat.png") == URL(string: "hotline://hotline.example.com/files/cat.png"))
+  }
+
+  @Test func linksToPicturesAmongTheServersFilesShowThem() {
+    var layout = Markdown.Layout.board
+    layout.imageSources = ImagePreview.Sources(server: "hotline.example.com", serverPort: 5500, connection: UUID())
+    let shown = Markdown.shownText("look hotline://hotline.example.com/files/Pictures/cat.png", layout: layout)
+    var previews: [URL] = []
+    shown.enumerateAttribute(.attachment, in: NSRange(location: 0, length: shown.length)) { value, _, _ in
+      if let attachment = value as? ImageAttachment {
+        previews.append(attachment.url)
+      }
+    }
+    #expect(previews == [URL(string: "hotline://hotline.example.com/files/Pictures/cat.png")!])
+  }
+
   @Test func redirectsOnlyToWhereTheyCouldLoadFrom() {
     let sources = ImagePreview.Sources(server: "hotline.example.com")
     #expect(sources.trusts(URL(string: "https://i.imgur.com/removed.png")!))

@@ -70,8 +70,9 @@ struct ChatTranscriptView: NSViewRepresentable {
       textView.colors = coordinator.options.layout.colors
       textView.openURLAction = self.openURL
       let openWindow = context.environment.openWindow
+      let sources = context.environment.imageSources
       textView.openImageAction = { url in
-        openWindow(id: "preview-quicklook", value: PreviewFileInfo(webImage: url))
+        ImagePreview.open(url, sources: sources, openWindow: openWindow)
       }
       textView.describeHotlineLink = self.describeHotlineLink
       textView.fileLinkMenu = self.fileLinkMenu

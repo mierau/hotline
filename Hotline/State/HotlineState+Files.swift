@@ -1196,6 +1196,115 @@ extension HotlineState {
     return try await reader.readResourceFork(upTo: limit)
   }
 
+  // MARK: - Pictures
+
+  /// A picture among this server's files, whole, for its preview in what someone's written: no
+  /// bigger than `limit`, and only if the server sends it now, rather than after others waiting in
+  /// its queue, so a preview never holds up anyone's downloads. Read one at a time, and once for a
+  /// picture shown more than once. `path` ends with its name. `started` is called as it starts to
+  /// come.
+  func readPicture(at path: [String], limit: Int, started: () -> Void) async throws -> Data {
+    // Its turn, after any being read before it, each handing the turn on as it's done.
+    if self.isReadingPicture {
+      await withCheckedContinuation { continuation in
+        self.pictureTurns.append(continuation)
+      }
+    }
+    self.isReadingPicture = true
+    defer {
+      if self.pictureTurns.isEmpty {
+        self.isReadingPicture = false
+      }
+      else {
+        self.pictureTurns.removeFirst().resume()
+      }
+    }
+
+    let key = path.joined(separator: "\0") as NSString
+    if let data = self.recentPictures.object(forKey: key) {
+      return data as Data
+    }
+    // Not wanted anymore, after waiting.
+    try Task.checkCancellation()
+    guard let client = self.client, let server = self.server, let name = path.last else {
+      throw ServerPictureError.disconnected
+    }
+    guard self.access?.contains(.canDownloadFiles) == true else {
+      throw ServerPictureError.notAllowed
+    }
+    let folder = Array(path.dropLast())
+
+    // How big it is, before anything's sent, which says too whether it's there, as some servers
+    // answer for a file that isn't as if it were, with nothing in it.
+    let details: FileDetails?
+    do {
+      details = try await client.getFileInfo(name: name, path: folder)
+    }
+    catch HotlineClientError.serverError {
+      throw ServerPictureError.missing
+    }
+    guard let details, details.size > 0 else {
+      throw ServerPictureError.missing
+    }
+    guard details.size <= limit else {
+      throw ServerPictureError.tooBig
+    }
+
+    // Turned away, as for too many downloads at once, or waiting behind others, is only for now.
+    let transfer: (referenceNumber: UInt32, transferSize: UInt32, fileSize: Int, waitingCount: Int)?
+    do {
+      transfer = try await client.downloadFile(name: name, path: folder)
+    }
+    catch HotlineClientError.serverError {
+      throw ServerPictureError.busy
+    }
+    guard let transfer else {
+      throw ServerPictureError.busy
+    }
+    let endpoint = self.transferEndpoint(for: server)
+    let reader = HotlineFilePreviewClient(
+      fileName: name,
+      address: server.address,
+      port: endpoint.port,
+      tls: endpoint.tls,
+      reference: transfer.referenceNumber,
+      size: transfer.transferSize
+    )
+    guard transfer.waitingCount == 0 else {
+      await reader.decline()
+      throw ServerPictureError.busy
+    }
+    started()
+
+    // Given up on if it stops coming, at less than 16 KB a second, so it doesn't keep the others
+    // waiting.
+    let seconds = max(60, Double(details.size) / 16_384)
+    let (data, size) = try await withThrowingTaskGroup(of: (data: Data, size: Int).self) { group in
+      group.addTask {
+        try await reader.read(upTo: limit)
+      }
+      group.addTask {
+        try await Task.sleep(for: .seconds(seconds))
+        throw ServerPictureError.stalled
+      }
+      defer {
+        group.cancelAll()
+      }
+      guard let first = try await group.next() else {
+        throw ServerPictureError.stalled
+      }
+      return first
+    }
+    guard size <= limit else {
+      throw ServerPictureError.tooBig
+    }
+    guard !data.isEmpty else {
+      throw ServerPictureError.missing
+    }
+    self.recentPictures.setObject(data as NSData, forKey: key, cost: data.count)
+    return data
+  }
+
   // MARK: - File Search
 
   @MainActor
@@ -1741,5 +1850,32 @@ final class HotlineStateFileSearchSession {
 
     let nanoseconds = UInt64(self.currentDelay * 1_000_000_000)
     try? await Task.sleep(nanoseconds: nanoseconds)
+  }
+}
+
+/// Why a picture among a server's files isn't previewed.
+enum ServerPictureError: Error {
+  /// It isn't there, or can't be seen.
+  case missing
+  /// It's more than a preview's worth.
+  case tooBig
+  /// The account can't download files.
+  case notAllowed
+  /// The server's busy with other downloads, or would keep it waiting behind them.
+  case busy
+  /// It stopped coming.
+  case stalled
+  /// The connection to the server's gone.
+  case disconnected
+
+  /// Whether it's so for good, rather than only for now, to be tried again later. One that isn't
+  /// there may be soon, as a link to a picture can come before the picture's done uploading.
+  var isFinal: Bool {
+    switch self {
+    case .tooBig:
+      true
+    case .missing, .notAllowed, .busy, .stalled, .disconnected:
+      false
+    }
   }
 }

@@ -479,6 +479,17 @@ class HotlineState: Equatable {
   /// Downloads waiting their turn, as they go one at a time too, and what's fetching them.
   @ObservationIgnored var queuedDownloads: [QueuedDownload] = []
   @ObservationIgnored var downloadQueue: Task<Void, Never>? = nil
+  /// Whether a picture's being read for a preview in what someone's written, and the previews
+  /// waiting their turn, as they're read one at a time. See `readPicture(at:limit:started:)`.
+  @ObservationIgnored var isReadingPicture = false
+  @ObservationIgnored var pictureTurns: [CheckedContinuation<Void, Never>] = []
+  /// Pictures read for previews lately, for another preview of the same one, as for a picture
+  /// linked to more than once, without reading it again.
+  @ObservationIgnored let recentPictures: NSCache<NSString, NSData> = {
+    let cache = NSCache<NSString, NSData>()
+    cache.totalCostLimit = 16 * 1024 * 1024
+    return cache
+  }()
   /// Folders being listed again, as asked for, by where they are.
   var refreshingFileLists: Set<[String]> = []
   /// Set by post-login when a link was used to connect to a new server.

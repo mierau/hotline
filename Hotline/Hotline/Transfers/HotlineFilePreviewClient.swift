@@ -108,6 +108,26 @@ public class HotlineFilePreviewClient {
     return (Data(), 0)
   }
 
+  /// Gives the transfer up, as for one the server would keep waiting in its queue: connects for
+  /// it, and hangs up, so the server lets its place go, rather than holding it until it gives
+  /// up waiting for it.
+  public func decline() async {
+    guard let socket = try? await NetSocket.connect(
+      host: self.serverAddress,
+      port: HotlinePorts.transferPort(after: self.serverPort),
+      tls: self.tls
+    ) else {
+      return
+    }
+    _ = try? await socket.write(Data(endian: .big) {
+      "HTXF".fourCharCode()
+      self.referenceNumber
+      UInt32.zero
+      UInt32.zero
+    })
+    await socket.close()
+  }
+
   /// The file's resource fork, up to `limit` bytes of it, without its data fork, from a transfer
   /// resumed at the data fork's end. A server sends the resource fork after it with a header that
   /// says how big it is, or as Mobius does for a resumed transfer, without one, so it's what's

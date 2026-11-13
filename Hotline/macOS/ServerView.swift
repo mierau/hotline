@@ -866,8 +866,14 @@ struct ServerView: View {
         }
     }
     .serverTheme(self.themeColors, window: self.state.window)
-    // Its pictures, from where they load by themselves, its server's own too.
-    .environment(\.imageSources, ImagePreview.Sources(server: self.model.server?.address, anySite: Prefs.shared.imagePreviews == .anySite))
+    // Its pictures, from where they load by themselves, its server's own too, and those among its
+    // files, through the connection to it.
+    .environment(\.imageSources, ImagePreview.Sources(
+      server: self.model.server?.address,
+      serverPort: self.model.server?.port,
+      connection: self.model.id,
+      anySite: Prefs.shared.imagePreviews == .anySite
+    ))
     .navigationTitle(self.model.serverTitle)
     .sheet(item: self.$state.composeMessage) { compose in
       ComposeMessageView(userID: compose.userID, username: compose.username)
