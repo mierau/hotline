@@ -41,4 +41,22 @@ struct AppUpdateTests {
     let releases = [GitHubReleases.notes(from: self.release(32, notes: "  \n"))].compactMap { $0 }
     #expect(GitHubReleases.combined(releases, since: 31) == "_No release notes provided._")
   }
+
+  /// One of Sparkle's errors, as it reports them, with the reason under it.
+  private func sparkleError(_ code: Int, reason: Int? = nil) -> NSError {
+    var userInfo: [String: Any] = [:]
+    if let reason {
+      userInfo[NSUnderlyingErrorKey] = NSError(domain: "SUSparkleErrorDomain", code: reason)
+    }
+    return NSError(domain: "SUSparkleErrorDomain", code: code, userInfo: userInfo)
+  }
+
+  @Test func aFeedThatCouldntBeVerifiedIsToldApart() {
+    // The feed failed (1000) because its signature didn't (3002), as when it's signed with a new key.
+    #expect(AppUpdate.isUnverifiedFeed(self.sparkleError(1000, reason: 3002)))
+    // A feed that couldn't be read, no update, or no connection, isn't one.
+    #expect(!AppUpdate.isUnverifiedFeed(self.sparkleError(1000)))
+    #expect(!AppUpdate.isUnverifiedFeed(self.sparkleError(1001)))
+    #expect(!AppUpdate.isUnverifiedFeed(URLError(.notConnectedToInternet)))
+  }
 }

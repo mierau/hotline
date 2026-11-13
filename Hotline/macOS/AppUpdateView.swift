@@ -149,20 +149,36 @@ struct AppUpdateView: View {
           Text(message.title)
             .font(.title2)
             .fontWeight(.semibold)
+          // As many lines as it takes, as the window's only as tall as what's in it.
           Text(message.detail)
             .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
         Spacer()
       }
-      HStack {
-        Spacer()
-        Button("OK") {
-          self.update.acknowledgeFailure()
+      HStack(spacing: 12) {
+        // One Hotline can't install itself is on GitHub, to download there.
+        if let page = message.page {
+          Button("Not Now") {
+            self.update.acknowledgeFailure()
+          }
+          .keyboardShortcut(.escape, modifiers: [])
+          Spacer()
+          Button("Download from GitHub") {
+            self.update.download(from: page)
+          }
+          .keyboardShortcut(.defaultAction)
         }
-        .keyboardShortcut(.defaultAction)
-        .buttonBorderShape(.capsule)
-        .controlSize(.large)
+        else {
+          Spacer()
+          Button("OK") {
+            self.update.acknowledgeFailure()
+          }
+          .keyboardShortcut(.defaultAction)
+        }
       }
+      .buttonBorderShape(.capsule)
+      .controlSize(.large)
     }
   }
 }

@@ -73,12 +73,16 @@ struct AppUpdateMessage: Equatable {
   let title: String
   let detail: String
   let kind: Kind
+  /// Where to download Hotline instead, for an update it can't install itself.
+  var page: URL? = nil
 }
 
 /// Updates to Hotline, found and installed by Sparkle and shown in Hotline's own window: what's new
 /// since this build, then the update coming in, then installing it, which quits and relaunches
-/// Hotline. Sparkle reads the feed on Hotline's latest GitHub release, whose zip it downloads, checks
-/// is signed with Hotline's key and Developer ID, and installs from outside the sandbox.
+/// Hotline. Sparkle reads the feed on Hotline's latest GitHub release, which has to be signed with
+/// Hotline's key, downloads its zip, checks that's signed too, and installs it from outside the
+/// sandbox. When the feed can't be verified, as when it's signed with a new key, GitHub's releases
+/// page is offered instead, to download from there.
 @MainActor
 @Observable
 final class AppUpdate: NSObject {
@@ -121,6 +125,11 @@ final class AppUpdate: NSObject {
   private static let putOffVersionKey = "update.last.prompt.version"
   private static let remindDateKey = "update.remind.date"
   private static let putOffInterval: TimeInterval = 60 * 60 * 24 * 14
+  /// When a check of Sparkle's own that couldn't verify the feed can bring up GitHub's releases again.
+  private static let unverifiedRemindDateKey = "update.unverified.remind.date"
+
+  /// Hotline's latest release on GitHub, to download there when Hotline can't install it itself.
+  static let releasesPage = URL(string: "https://github.com/mierau/hotline/releases/latest")!
 
   private override init() {
     super.init()
@@ -201,6 +210,13 @@ final class AppUpdate: NSObject {
     self.close()
   }
 
+  /// Opens a page to download Hotline from, for an update it can't install itself, and closes what
+  /// was said.
+  func download(from page: URL) {
+    NSWorkspace.shared.open(page)
+    self.acknowledgeFailure()
+  }
+
   /// As the window closes, which, for an update that was found, is Not Now, and for one coming in,
   /// stops it, so Hotline doesn't quit to install it out of nowhere.
   func windowClosed() {
@@ -242,6 +258,40 @@ final class AppUpdate: NSObject {
       return false
     }
     return remindDate > Date()
+  }
+
+  /// Whether a check failed because the feed isn't signed with the key this build has, as when it's
+  /// signed with a new key, or it was changed. Sparkle won't install anything it lists then.
+  nonisolated static func isUnverifiedFeed(_ error: any Error) -> Bool {
+    let error = error as NSError
+    guard error.domain == SUSparkleErrorDomain,
+          error.code == Int(SUError.appcastParseError.rawValue),
+          let reason = error.userInfo[NSUnderlyingErrorKey] as? NSError else {
+      return false
+    }
+    return reason.domain == SUSparkleErrorDomain && reason.code == Int(SUError.validationError.rawValue)
+  }
+
+  /// What's said when the feed can't be verified, with Hotline's releases on GitHub to download from.
+  private static var unverifiedFeedMessage: AppUpdateMessage {
+    AppUpdateMessage(title: "Couldn't Update Hotline", detail: "Hotline couldn't verify its updates, so it can't install them itself. Download the latest version from GitHub instead.", kind: .error, page: Self.releasesPage)
+  }
+
+  /// GitHub's releases, for when a check of Sparkle's own couldn't verify the feed, which Sparkle keeps
+  /// to itself. Brought up once, then not again for a while, like an update that was put off.
+  private func offerReleasesPage() {
+    let defaults = UserDefaults.standard
+    if let remindDate = defaults.object(forKey: Self.unverifiedRemindDateKey) as? Date, remindDate > Date() {
+      return
+    }
+    guard !self.showWindow else {
+      return
+    }
+    defaults.set(Date().addingTimeInterval(Self.putOffInterval), forKey: Self.unverifiedRemindDateKey)
+    self.choose = nil
+    self.acknowledge = nil
+    self.stage = .failed(Self.unverifiedFeedMessage)
+    self.showWindow = true
   }
 
   /// This build's number.
@@ -319,7 +369,12 @@ extension AppUpdate: SPUUserDriver {
   func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
     self.choose = nil
     self.acknowledge = acknowledgement
-    self.stage = .failed(AppUpdateMessage(title: "Couldn't Update Hotline", detail: error.localizedDescription, kind: .error))
+    if Self.isUnverifiedFeed(error) {
+      self.stage = .failed(Self.unverifiedFeedMessage)
+    }
+    else {
+      self.stage = .failed(AppUpdateMessage(title: "Couldn't Update Hotline", detail: error.localizedDescription, kind: .error))
+    }
     self.showWindow = true
   }
 
@@ -390,4 +445,13 @@ extension AppUpdate: SPUUpdaterDelegate {
     #endif
   }
 
+  /// A check of Sparkle's own keeps its failures to itself, but not a feed that couldn't be verified,
+  /// as when it's signed with a new key: Hotline can't install what it lists, but GitHub has it. Check
+  /// for Updates says so itself, as its failures are shown.
+  func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
+    guard updateCheck == .updatesInBackground, let error, Self.isUnverifiedFeed(error) else {
+      return
+    }
+    self.offerReleasesPage()
+  }
 }
