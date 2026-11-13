@@ -49,6 +49,10 @@
 	<string>https://github.com/mierau/hotline/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>SMFDOovrGEIYv93F5tqS/h3ftcBwSrHhd0D7G/xcs2M=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
