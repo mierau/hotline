@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct FileItemView: View {
   @Environment(HotlineState.self) private var model: HotlineState

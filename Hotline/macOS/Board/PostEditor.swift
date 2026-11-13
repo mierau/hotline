@@ -102,17 +102,10 @@ struct PostEditor: NSViewRepresentable {
     var text: Binding<String>
     var onEndEditing: (() -> Void)?
     var onFit: ((CGFloat) -> Void)?
-    private var resizing: NSObjectProtocol?
 
     init(text: Binding<String>, controller: MarkdownEditor, layout: Markdown.Layout) {
       self.text = text
       super.init(editor: controller, layout: layout)
-    }
-
-    deinit {
-      if let resizing = self.resizing {
-        NotificationCenter.default.removeObserver(resizing)
-      }
     }
 
     override func textDidChange(_ notification: Notification) {
@@ -128,14 +121,16 @@ struct PostEditor: NSViewRepresentable {
     @MainActor
     func fitting(_ textView: NSTextView) {
       textView.postsFrameChangedNotifications = true
-      self.resizing = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: textView, queue: .main) { [weak self, weak textView] _ in
-        MainActor.assumeIsolated {
-          guard let self, let textView else {
-            return
-          }
-          self.fit(textView)
-        }
+      // Stops by itself once this goes away.
+      NotificationCenter.default.addObserver(self, selector: #selector(self.textViewDidResize(_:)), name: NSView.frameDidChangeNotification, object: textView)
+    }
+
+    /// On the main thread, where views change size.
+    @MainActor @objc private func textViewDidResize(_ notification: Notification) {
+      guard let textView = notification.object as? NSTextView else {
+        return
       }
+      self.fit(textView)
     }
 
     /// Tells how tall what's written is, laid out as it is now, with the room above and below it,
