@@ -67,9 +67,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     // Not while it's only hosting tests: each run would ask GitHub, which answers 60 requests an
     // hour from an address that isn't signed in, which the About box's contributors need too.
     if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
-      Task {
-        await AppUpdate.shared.checkForUpdatesOnLaunch()
-      }
+      AppUpdate.shared.start()
     }
   }
   
@@ -309,6 +307,16 @@ struct Application: App {
     }
     .windowResizability(.contentSize)
     .windowStyle(.hiddenTitleBar)
+    .restorationBehavior(.disabled)
+    .defaultPosition(.center)
+    .commandsRemoved()
+
+    // MARK: Release Notes Window
+    Window("Release Notes", id: "release-notes") {
+      ReleaseNotesView()
+        .frame(minWidth: 560, minHeight: 360)
+    }
+    .defaultSize(width: 760, height: 540)
     .restorationBehavior(.disabled)
     .defaultPosition(.center)
     .commandsRemoved()

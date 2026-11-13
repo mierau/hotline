@@ -11,10 +11,10 @@ struct AppMenuCommands: Commands {
       }
 
       Button("Check for Updates...", systemImage: "questionmark.diamond") {
-        Task {
-          await AppUpdate.shared.checkForUpdatesManually()
-        }
+        AppUpdate.shared.checkForUpdates()
       }
+      // Not while an update's being checked for, or installed.
+      .disabled(!AppUpdate.shared.canCheck)
     }
 
     CommandGroup(replacing: .appSettings) {

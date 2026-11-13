@@ -69,6 +69,7 @@
 		DA432E9A30A4E52D000179F6 /* ServerTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432E9930A4E52D000179F6 /* ServerTrust.swift */; };
 		DA432EDE30A78EC3000179F6 /* HiddenWords.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432EDD30A78EC3000179F6 /* HiddenWords.swift */; };
 		DA432EE030A78ED0000179F6 /* PrivacySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432EDF30A78ED0000179F6 /* PrivacySettingsView.swift */; };
+		DA432EEB30A7A749000179F6 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DA432EEA30A7A749000179F6 /* Sparkle */; };
 		DA4B8F3A2EA6FB3C00CBFD53 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */; platformFilter = ios; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
@@ -387,6 +388,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA432EEB30A7A749000179F6 /* Sparkle in Frameworks */,
 				DA501BEE2EBEC42E001714F8 /* Kingfisher in Frameworks */,
 				DA432D4E30A15FFF000179F6 /* NetSocket in Frameworks */,
 				DACCE5EF2EAC19C9008CDD92 /* SwiftUIIntrospect in Frameworks */,
@@ -813,6 +815,7 @@
 				DACCE5EE2EAC19C9008CDD92 /* SwiftUIIntrospect */,
 				DA501BED2EBEC42E001714F8 /* Kingfisher */,
 				DA432D4D30A15FFF000179F6 /* NetSocket */,
+				DA432EEA30A7A749000179F6 /* Sparkle */,
 			);
 			productName = Hotline;
 			productReference = DA9CAFB72B126D5700CDA197 /* Hotline.app */;
@@ -851,6 +854,7 @@
 				DACCE5ED2EAC19C9008CDD92 /* XCRemoteSwiftPackageReference "SwiftUI-Introspect" */,
 				DA501BEC2EBEC42E001714F8 /* XCRemoteSwiftPackageReference "Kingfisher" */,
 				DA432D4C30A15FFF000179F6 /* XCRemoteSwiftPackageReference "netsocket" */,
+				DA432EE930A7A749000179F6 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = DA9CAFB82B126D5700CDA197 /* Products */;
 			projectDirPath = "";
@@ -1247,11 +1251,11 @@
 				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
-				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = NO;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
@@ -1274,7 +1278,10 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = co.goodmake.hotline;
@@ -1296,7 +1303,7 @@
 				CODE_SIGN_ENTITLEMENTS = Hotline/Hotline.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_ASSET_PATHS = "\"Hotline/Preview Content\"";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
@@ -1323,7 +1330,10 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = co.goodmake.hotline;
@@ -1378,6 +1388,14 @@
 				minimumVersion = 0.1.0;
 			};
 		};
+		DA432EE930A7A749000179F6 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.10.1;
+			};
+		};
 		DA501BEC2EBEC42E001714F8 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/onevcat/Kingfisher";
@@ -1409,6 +1427,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DA432D4C30A15FFF000179F6 /* XCRemoteSwiftPackageReference "netsocket" */;
 			productName = NetSocket;
+		};
+		DA432EEA30A7A749000179F6 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DA432EE930A7A749000179F6 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 		DA501BED2EBEC42E001714F8 /* Kingfisher */ = {
 			isa = XCSwiftPackageProductDependency;

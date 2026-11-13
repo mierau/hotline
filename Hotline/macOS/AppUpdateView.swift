@@ -2,62 +2,67 @@ import SwiftUI
 import AppKit
 import Observation
 
+/// A newer build of Hotline, and what's new since this one, to install or not, then its coming in and
+/// installing, which quits and relaunches Hotline, all in one window.
 struct AppUpdateView: View {
   @Environment(\.dismiss) private var dismiss
   @Bindable private var update = AppUpdate.shared
-  
+
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
-      if let message = update.message {
-        messageOnlyView(message)
-      }
-      else if update.release != nil {
-        headerSection
-        releaseNotesSection
-        actionRow
+      if case .failed(let message) = self.update.stage {
+        self.failure(message)
       }
       else {
-        defaultPlaceholder
+        self.header
+        self.releaseNotes
+        self.actions
       }
     }
     .padding(.horizontal, 24)
     .padding(.bottom, 24)
     .padding(.top, 8)
-    .frame(width: update.message != nil ? 380 : 520)
+    .frame(width: self.isFailure ? 380 : 520)
     .frame(idealHeight: 360)
-    .onChange(of: update.showWindow) { _, show in
+    .onChange(of: self.update.showWindow) { _, show in
       if !show {
-        dismiss()
+        self.dismiss()
       }
     }
     .onDisappear {
-      update.handleWindowDismissed()
+      self.update.windowClosed()
     }
   }
-  
-  private var headerSection: some View {
+
+  private var isFailure: Bool {
+    if case .failed = self.update.stage {
+      return true
+    }
+    return false
+  }
+
+  private var header: some View {
     HStack(alignment: .center, spacing: 8) {
       Image(nsImage: NSApplication.shared.applicationIconImage)
         .resizable()
         .scaledToFit()
         .frame(width: 56, height: 56)
         .shadow(color: Color.black.mix(with: .red, by: 0.4).opacity(0.15), radius: 3, y: 1.5)
-      
+
       VStack(alignment: .leading, spacing: 2) {
-        if let release = update.release {
-          Text("Hotline \(release.displayVersion)")
-            .font(.title2)
-            .fontWeight(.semibold)
-        }
+        Text("Hotline \(self.update.version)")
+          .font(.title2)
+          .fontWeight(.semibold)
         Text("A new version of Hotline is available. 🎉")
           .foregroundStyle(.secondary)
       }
     }
   }
-  
-  private var releaseNotesSection: some View {
-    ScrollView(.vertical) {
-      MarkdownText(text: releaseNotesMarkdown(), layout: Markdown.Layout(font: .systemFont(ofSize: 12), lineSpacing: 3), inset: NSSize(width: 12, height: 12))
+
+  private var releaseNotes: some View {
+    let notes = self.update.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+    return ScrollView(.vertical) {
+      MarkdownText(text: notes.isEmpty ? "_No release notes provided._" : notes, layout: Markdown.Layout(font: .systemFont(ofSize: 12), lineSpacing: 3), inset: NSSize(width: 12, height: 12))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     .frame(minHeight: 220, maxHeight: 260)
@@ -66,114 +71,209 @@ struct AppUpdateView: View {
         .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
     )
   }
-  
-  private var actionRow: some View {
-    HStack {
-      Button("Not Now") {
-        update.remindLater()
-      }
-      .buttonBorderShape(.capsule)
-      .keyboardShortcut(.escape, modifiers: [])
-      .controlSize(.large)
-      .disabled(update.isDownloading)
-      
-      Spacer()
-      
-      if update.isDownloading {
-        ProgressView()
-          .controlSize(.small)
-          .padding(.trailing, 12)
-      }
-      
-      Button("Download") {
-        update.startDownload()
-      }
-      .buttonBorderShape(.capsule)
-      .keyboardShortcut(.defaultAction)
-      .controlSize(.large)
-      .disabled(update.isDownloading)
-    }
-  }
-  
+
+  /// What can be done, as far as the update's got: installed or not, its download stopped, or
+  /// Hotline quit to install it, once something stopped it quitting.
   @ViewBuilder
-  private func messageOnlyView(_ message: AppUpdateMessage) -> some View {
-    let iconName = {
-      switch message.kind {
-      case .info:
-        return "info.circle"
-      case .success:
-        return "checkmark.circle.fill"
-      case .error:
-        return "exclamationmark.triangle.fill"
+  private var actions: some View {
+    HStack(spacing: 12) {
+      switch self.update.stage {
+      case .found, .failed:
+        Button("Not Now") {
+          self.update.notNow()
+        }
+        .keyboardShortcut(.escape, modifiers: [])
+        Spacer()
+        Button("Install Update") {
+          self.update.install()
+        }
+        .keyboardShortcut(.defaultAction)
+      case .downloading(let received, let expected):
+        VStack(alignment: .leading, spacing: 4) {
+          if expected > 0 {
+            ProgressView(value: Double(min(received, expected)), total: Double(expected))
+          }
+          else {
+            ProgressView()
+          }
+          Text(Self.progress(received: received, expected: expected))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+        }
+        .progressViewStyle(.linear)
+        Button("Cancel") {
+          self.update.cancel()
+        }
+        .keyboardShortcut(.escape, modifiers: [])
+      case .installing:
+        VStack(alignment: .leading, spacing: 4) {
+          ProgressView()
+            .progressViewStyle(.linear)
+          Text("Installing… Hotline will open again in a moment.")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+      case .waitingToQuit:
+        Text("The update installs once Hotline quits.")
+          .foregroundStyle(.secondary)
+        Spacer()
+        Button("Quit and Install") {
+          self.update.retryQuitting()
+        }
+        .keyboardShortcut(.defaultAction)
       }
-    }()
-    
-    HStack(alignment: .center, spacing: 12) {
-      
-      if message.kind == .success {
-        Text("👍")
-          .font(.system(size: 42))
-          .shadow(color: .yellow.mix(with: .black, by: 0.3).opacity(0.2), radius: 4, y: 1.5)
-      }
-      else {
-        Image(systemName: iconName)
+    }
+    .buttonBorderShape(.capsule)
+    .controlSize(.large)
+  }
+
+  private static func progress(received: UInt64, expected: UInt64) -> String {
+    let format = ByteCountFormatStyle(style: .file)
+    let done = Int64(received).formatted(format)
+    guard expected > 0 else {
+      return "Downloading… \(done)"
+    }
+    return "Downloading… \(done) of \(Int64(expected).formatted(format))"
+  }
+
+  private func failure(_ message: AppUpdateMessage) -> some View {
+    VStack(alignment: .leading, spacing: 20) {
+      HStack(alignment: .center, spacing: 12) {
+        Image(systemName: "exclamationmark.triangle.fill")
           .resizable()
           .scaledToFit()
           .symbolRenderingMode(.multicolor)
           .frame(width: 48, height: 48)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(message.title)
+            .font(.title2)
+            .fontWeight(.semibold)
+          Text(message.detail)
+            .foregroundStyle(.secondary)
+        }
+        Spacer()
       }
-      
-      VStack(alignment: .leading, spacing: 2) {
-        Text(message.title)
-          .font(.title2)
-          .fontWeight(.semibold)
-        Text(message.detail)
-          .foregroundStyle(.secondary)
+      HStack {
+        Spacer()
+        Button("OK") {
+          self.update.acknowledgeFailure()
+        }
+        .keyboardShortcut(.defaultAction)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
       }
-      
-      Spacer()
     }
-  }
-  
-  private var defaultPlaceholder: some View {
-    VStack(alignment: .center, spacing: 12) {
-      Text("No update information available.")
-        .font(.headline)
-      Button("Close") {
-        update.acknowledgeMessage()
-      }
-      .keyboardShortcut(.defaultAction)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-  }
-  
-  private func releaseNotesMarkdown() -> String {
-    if let combined = update.releaseNotesCombined?
-      .trimmingCharacters(in: .whitespacesAndNewlines),
-       combined.isEmpty == false {
-      return combined
-    }
-    
-    let fallback = update.release?.notes.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return fallback.isEmpty ? "_No release notes provided._" : fallback
   }
 }
 
-#Preview {
-  AppUpdate.shared.release = UpdateReleaseInfo(
-    tagName: "1.0beta1",
-    displayVersion: "1.0b1",
-    versionNumber: 1.0,
-    buildNumber: 1,
-    notes: """
-    - Added support for release notes in Markdown.
-    - Improved the update workflow for macOS users.
-    """,
-    downloadURL: URL(string: "https://example.com")!,
-    assetName: "Hotline.zip"
-  )
-  AppUpdate.shared.releases = [AppUpdate.shared.release!]
-  AppUpdate.shared.releaseNotesCombined = nil
-  AppUpdate.shared.showWindow = true
-  return AppUpdateView()
+// MARK: - Release Notes
+
+/// Every build's notes, from Hotline's releases on GitHub: the builds down the side, the newest first,
+/// and the notes of the one chosen, which starts as the build that's running.
+struct ReleaseNotesView: View {
+  @State private var releases: [ReleaseNotes] = []
+  @State private var selection: ReleaseNotes.ID?
+  @State private var failed = false
+
+  private let currentBuild = Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0
+
+  var body: some View {
+    NavigationSplitView {
+      List(self.releases, selection: self.$selection) { release in
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Hotline \(release.version)")
+          Text(self.subtitle(of: release))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+      }
+      .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
+    } detail: {
+      if let release = self.releases.first(where: { $0.id == self.selection }) {
+        ScrollView(.vertical) {
+          ReleaseNotesDetail(release: release, isInstalled: release.build == self.currentBuild)
+        }
+        // From the top for each build.
+        .id(release.id)
+      }
+      else if self.failed {
+        ContentUnavailableView {
+          Label("Couldn't Load Release Notes", systemImage: "exclamationmark.triangle")
+        } description: {
+          Text("Check your connection to the internet, then try again.")
+        } actions: {
+          Button("Try Again") {
+            Task {
+              await self.load()
+            }
+          }
+        }
+      }
+      else {
+        ProgressView()
+      }
+    }
+    .navigationTitle("Release Notes")
+    .task {
+      await self.load()
+    }
+  }
+
+  /// When it came out, and whether it's the build that's running.
+  private func subtitle(of release: ReleaseNotes) -> String {
+    let date = release.date?.formatted(date: .abbreviated, time: .omitted)
+    let installed = release.build == self.currentBuild ? "Installed" : nil
+    return [date, installed].compactMap { $0 }.joined(separator: " · ")
+  }
+
+  private func load() async {
+    self.failed = false
+    do {
+      let releases = try await GitHubReleases.fetch()
+      self.releases = releases
+      if self.selection == nil {
+        self.selection = (releases.first { $0.build == self.currentBuild } ?? releases.first)?.id
+      }
+    }
+    catch {
+      self.failed = true
+    }
+  }
+}
+
+/// One build's notes: its version, when it came out, whether it's the one running, and a link to its
+/// release on GitHub, then the notes themselves.
+struct ReleaseNotesDetail: View {
+  let release: ReleaseNotes
+  let isInstalled: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Hotline \(self.release.version)")
+          .font(.title2)
+          .fontWeight(.semibold)
+        HStack(spacing: 0) {
+          if let details = self.details {
+            Text("\(details) · ")
+              .foregroundStyle(.secondary)
+          }
+          Link("View on GitHub", destination: self.release.page)
+        }
+        .font(.callout)
+      }
+      let notes = self.release.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+      MarkdownText(text: notes.isEmpty ? "_No release notes provided._" : notes, layout: Markdown.Layout(font: .systemFont(ofSize: 13), lineSpacing: 3))
+    }
+    .padding(24)
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  /// When it came out, and whether it's the build that's running.
+  private var details: String? {
+    let parts = [self.release.date?.formatted(date: .long, time: .omitted), self.isInstalled ? "Installed" : nil].compactMap { $0 }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
 }

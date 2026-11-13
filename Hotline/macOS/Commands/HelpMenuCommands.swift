@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Links to the project, below Hotline Help in the Help menu.
+/// Links to the project, below Hotline Help in the Help menu, and every build's release notes.
 struct HelpMenuCommands: Commands {
   @Environment(\.openURL) private var openURL
+  @Environment(\.openWindow) private var openWindow
 
   var body: some Commands {
     CommandGroup(after: .help) {
@@ -14,8 +15,9 @@ struct HelpMenuCommands: Commands {
         self.open("https://github.com/mierau/hotline/issues/new?labels=bug")
       }
       Divider()
-      Button("View Latest Release...", systemImage: "app.gift") {
-        self.open("https://github.com/mierau/hotline/releases/latest")
+      // Each build's, with a link to its release on GitHub.
+      Button("Release Notes", systemImage: "app.gift") {
+        self.openWindow(id: "release-notes")
       }
     }
   }
