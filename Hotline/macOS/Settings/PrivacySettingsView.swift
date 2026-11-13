@@ -4,8 +4,10 @@ import SwiftUI
 /// from them, what you'd rather not see, who can message you, and which servers are only connected to
 /// securely.
 struct PrivacySettingsView: View {
+  #if SENSITIVE_CONTENT_ANALYSIS
   /// How the Mac has sensitive content shown, read again as the app comes back from System Settings.
   @State private var intervention = SensitiveContent.currentIntervention()
+  #endif
   @State private var showsEncryptedServers = false
 
   var body: some View {
@@ -39,6 +41,7 @@ struct PrivacySettingsView: View {
           set: { Prefs.shared.hideOffensiveWords = $0 }
         ))
 
+        #if SENSITIVE_CONTENT_ANALYSIS
         // The Mac's own setting, which is what blurs them, so it's changed there.
         LabeledContent("Blur sensitive pictures") {
           HStack(spacing: 8) {
@@ -54,6 +57,7 @@ struct PrivacySettingsView: View {
             }
           }
         }
+        #endif
       }
 
       Section {
@@ -76,9 +80,11 @@ struct PrivacySettingsView: View {
     }
     .formStyle(.grouped)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    #if SENSITIVE_CONTENT_ANALYSIS
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       self.intervention = SensitiveContent.currentIntervention()
     }
+    #endif
     .sheet(isPresented: self.$showsEncryptedServers) {
       EncryptedServersView()
     }

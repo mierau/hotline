@@ -3,7 +3,9 @@ import AVFoundation
 import CoreImage
 import Kingfisher
 import os
+#if SENSITIVE_CONTENT_ANALYSIS
 import SensitiveContentAnalysis
+#endif
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -1207,6 +1209,9 @@ final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelega
 /// asked for. Only while the Mac has it on: Sensitive Content Warning, which someone turns on for
 /// themselves, or Communication Safety, which is for children. Otherwise nothing's checked. Nothing
 /// about what's found leaves the Mac, as Apple asks.
+///
+/// Only in builds with SENSITIVE_CONTENT_ANALYSIS, which Apple's checker is behind, below. Without
+/// it, nothing's ever checked, and none of this shows.
 enum SensitiveContent {
   /// How the Mac has sensitive content shown.
   enum Intervention {
@@ -1237,47 +1242,13 @@ enum SensitiveContent {
     let finding: Finding
   }
 
-  /// How the Mac has sensitive content shown.
-  static var intervention: Intervention {
-    switch self.policy {
-    case .simpleInterventions: .brief
-    case .descriptiveInterventions: .descriptive
-    default: .none
-    }
-  }
-
   /// Whether anything's checked.
   static var isOn: Bool {
     self.intervention != .none
   }
 
-  /// How the Mac has it now, read again, for Settings, which shows it.
-  static func currentIntervention() -> Intervention {
-    self.cachedPolicy.withLock { $0 = nil }
-    return self.intervention
-  }
-
   /// Sensitive Content Warning, in System Settings' Privacy & Security, which is where it's turned on.
   static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_NudityDetection")!
-
-  private static let analyzer = SCSensitivityAnalyzer()
-
-  /// The Mac's setting, as of when the app last came to the front, since it's changed elsewhere: in
-  /// System Settings, or Screen Time.
-  private static let cachedPolicy = OSAllocatedUnfairLock<SCSensitivityAnalysisPolicy?>(initialState: nil)
-  nonisolated(unsafe) private static let policyRefresher = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in
-    SensitiveContent.cachedPolicy.withLock { $0 = nil }
-  }
-
-  private static var policy: SCSensitivityAnalysisPolicy {
-    _ = self.policyRefresher
-    if let policy = self.cachedPolicy.withLock({ $0 }) {
-      return policy
-    }
-    let policy = self.analyzer.analysisPolicy
-    self.cachedPolicy.withLock { $0 = policy }
-    return policy
-  }
 
   /// What's been found of each picture or video checked, by its key, for as long as the app's open,
   /// so one shown again isn't checked again.
@@ -1384,57 +1355,8 @@ enum SensitiveContent {
 
   // MARK: Checking
 
-  /// What's in a picture, by its frames, checked once: nothing, when nothing's checked, or none of
-  /// them can be, which is tried again next time.
-  @concurrent
-  private static func check(_ frames: [CGImage], key: String) async -> Finding {
-    guard self.isOn, !frames.isEmpty else {
-      return .nothing
-    }
-    if let known = self.finding(for: key) {
-      return known
-    }
-    var finding = Finding.nothing
-    var checked = false
-    for frame in frames {
-      guard let analysis = try? await self.analyzer.analyzeImage(frame) else {
-        continue
-      }
-      checked = true
-      if analysis.isSensitive {
-        finding = self.finding(of: analysis)
-        break
-      }
-    }
-    if checked {
-      self.remember(finding, for: key)
-    }
-    return finding
-  }
-
-  private static func remember(_ finding: Finding, for key: String) {
+  fileprivate static func remember(_ finding: Finding, for key: String) {
     self.found.withLock { $0[key] = finding }
-  }
-
-  /// What's in a video, all through, checked once.
-  @concurrent
-  private static func check(videoAt url: URL, key: String) async -> Finding {
-    if let known = self.finding(for: key) {
-      return known
-    }
-    guard let analysis = try? await self.analyzer.videoAnalysis(forFileAt: url).hasSensitiveContent() else {
-      return .nothing
-    }
-    let finding = analysis.isSensitive ? self.finding(of: analysis) : .nothing
-    self.remember(finding, for: key)
-    return finding
-  }
-
-  private static func finding(of analysis: SCSensitivityAnalysis) -> Finding {
-    if #available(macOS 27, *), !analysis.detectedTypes.isEmpty, !analysis.detectedTypes.contains(.sexuallyExplicit) {
-      return .violence
-    }
-    return .nudity
   }
 
   /// A picture's frames, small, as a check needs no more: an animation's from along it, and any
@@ -1531,6 +1453,115 @@ enum SensitiveContent {
     return await check.answer(in: window) == .alertSecondButtonReturn
   }
 }
+
+#if SENSITIVE_CONTENT_ANALYSIS
+// Apple's checker, in builds with SENSITIVE_CONTENT_ANALYSIS and the Sensitive Content Analysis
+// capability. Its entitlement is only for the App Store and development, not Developer ID, which
+// Hotline's downloaded with, so without them, nothing's checked.
+extension SensitiveContent {
+  /// How the Mac has sensitive content shown.
+  static var intervention: Intervention {
+    switch self.policy {
+    case .simpleInterventions: .brief
+    case .descriptiveInterventions: .descriptive
+    default: .none
+    }
+  }
+
+  /// How the Mac has it now, read again, for Settings, which shows it.
+  static func currentIntervention() -> Intervention {
+    self.cachedPolicy.withLock { $0 = nil }
+    return self.intervention
+  }
+
+  private static let analyzer = SCSensitivityAnalyzer()
+
+  /// The Mac's setting, as of when the app last came to the front, since it's changed elsewhere: in
+  /// System Settings, or Screen Time.
+  private static let cachedPolicy = OSAllocatedUnfairLock<SCSensitivityAnalysisPolicy?>(initialState: nil)
+  nonisolated(unsafe) private static let policyRefresher = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in
+    SensitiveContent.cachedPolicy.withLock { $0 = nil }
+  }
+
+  private static var policy: SCSensitivityAnalysisPolicy {
+    _ = self.policyRefresher
+    if let policy = self.cachedPolicy.withLock({ $0 }) {
+      return policy
+    }
+    let policy = self.analyzer.analysisPolicy
+    self.cachedPolicy.withLock { $0 = policy }
+    return policy
+  }
+
+  /// What's in a picture, by its frames, checked once: nothing, when nothing's checked, or none of
+  /// them can be, which is tried again next time.
+  @concurrent
+  fileprivate static func check(_ frames: [CGImage], key: String) async -> Finding {
+    guard self.isOn, !frames.isEmpty else {
+      return .nothing
+    }
+    if let known = self.finding(for: key) {
+      return known
+    }
+    var finding = Finding.nothing
+    var checked = false
+    for frame in frames {
+      guard let analysis = try? await self.analyzer.analyzeImage(frame) else {
+        continue
+      }
+      checked = true
+      if analysis.isSensitive {
+        finding = self.finding(of: analysis)
+        break
+      }
+    }
+    if checked {
+      self.remember(finding, for: key)
+    }
+    return finding
+  }
+
+  /// What's in a video, all through, checked once.
+  @concurrent
+  fileprivate static func check(videoAt url: URL, key: String) async -> Finding {
+    if let known = self.finding(for: key) {
+      return known
+    }
+    guard let analysis = try? await self.analyzer.videoAnalysis(forFileAt: url).hasSensitiveContent() else {
+      return .nothing
+    }
+    let finding = analysis.isSensitive ? self.finding(of: analysis) : .nothing
+    self.remember(finding, for: key)
+    return finding
+  }
+
+  private static func finding(of analysis: SCSensitivityAnalysis) -> Finding {
+    if #available(macOS 27, *), !analysis.detectedTypes.isEmpty, !analysis.detectedTypes.contains(.sexuallyExplicit) {
+      return .violence
+    }
+    return .nudity
+  }
+}
+#else
+// Without Apple's checker: nothing's checked, so nothing's covered.
+extension SensitiveContent {
+  static var intervention: Intervention {
+    .none
+  }
+
+  static func currentIntervention() -> Intervention {
+    .none
+  }
+
+  fileprivate static func check(_ frames: [CGImage], key: String) async -> Finding {
+    .nothing
+  }
+
+  fileprivate static func check(videoAt url: URL, key: String) async -> Finding {
+    .nothing
+  }
+}
+#endif
 
 private extension NSAlert {
   /// Shown as a sheet on a window, or on its own without one, and what was chosen.
