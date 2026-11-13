@@ -194,13 +194,13 @@ struct ImagePreviewSizesTests {
     let suite = "ImagePreviewSizesTests-\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
-    // Never set, from well-known sites.
-    #expect(ImagePreviews.saved(in: defaults) == .wellKnownSites)
-    // Set before, off stays off, and on is from well-known sites.
+    // Never set, from trusted sites.
+    #expect(ImagePreviews.saved(in: defaults) == .trustedSites)
+    // Set before, off stays off, and on is from trusted sites.
     defaults.set(false, forKey: PrefsKeys.previewChatImages.rawValue)
     #expect(ImagePreviews.saved(in: defaults) == .never)
     defaults.set(true, forKey: PrefsKeys.previewChatImages.rawValue)
-    #expect(ImagePreviews.saved(in: defaults) == .wellKnownSites)
+    #expect(ImagePreviews.saved(in: defaults) == .trustedSites)
     // As it's set now, whatever previews were before.
     defaults.set(false, forKey: PrefsKeys.previewChatImages.rawValue)
     defaults.set(ImagePreviews.anySite.rawValue, forKey: PrefsKeys.imagePreviews.rawValue)

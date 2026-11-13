@@ -581,10 +581,10 @@ enum ChatHistoryRetention: String, CaseIterable, Identifiable, Sendable {
 /// on see your IP address. See `ImagePreview.Sources`.
 enum ImagePreviews: String, CaseIterable, Identifiable, Sendable {
   case never
-  case wellKnownSites
+  case trustedSites
   case anySite
 
-  static let standard = ImagePreviews.wellKnownSites
+  static let standard = ImagePreviews.trustedSites
 
   /// As it's set, or as previews were, on or off, before there was a choice of sites.
   static func saved(in defaults: UserDefaults = .standard) -> ImagePreviews {
@@ -601,7 +601,7 @@ enum ImagePreviews: String, CaseIterable, Identifiable, Sendable {
   var title: String {
     switch self {
     case .never: "Never"
-    case .wellKnownSites: "From Well-Known Sites"
+    case .trustedSites: "From Trusted Sites"
     case .anySite: "From Any Site"
     }
   }
@@ -610,7 +610,7 @@ enum ImagePreviews: String, CaseIterable, Identifiable, Sendable {
   var explanation: String? {
     switch self {
     case .never: nil
-    case .wellKnownSites: "Popular image hosts and the server you're on."
+    case .trustedSites: "Popular image hosts and the server you're on."
     case .anySite: "Those sites can see your IP address, as if you'd visited them."
     }
   }
