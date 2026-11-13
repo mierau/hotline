@@ -51,6 +51,8 @@ enum ChatMessageRenderer {
     /// What matters least, like the days between messages, in place of the system's tertiary color,
     /// as a server's theme has it.
     var tertiaryColor: NSColor? = nil
+    /// Whether swearing and slurs are hidden, as Settings can have it.
+    var hidesWords = false
 
     /// How what's said is laid out: in chat's font, starting after the icon column, and further in
     /// than the name, where a message's wrapped lines start, with code blocks closer to what's
@@ -103,6 +105,15 @@ enum ChatMessageRenderer {
   /// A message's text. One `continuing` the message before it, from the same person, goes without
   /// their name and icon.
   static func render(_ message: ChatMessage, continuing: Bool = false, options: Options = Options()) -> NSAttributedString {
+    let text = self.shown(message, continuing: continuing, options: options)
+    // Hidden in all of it, names too, as it's shown, not as it was said.
+    if options.hidesWords {
+      HiddenWords.hide(in: text)
+    }
+    return text
+  }
+
+  private static func shown(_ message: ChatMessage, continuing: Bool, options: Options) -> NSMutableAttributedString {
     let text: NSMutableAttributedString
     switch message.type {
     case .message:

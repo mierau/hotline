@@ -991,7 +991,7 @@ private struct SuggestionRow: View {
       ServerIcon(isSecure: self.server.isSecure)
         .frame(width: 16, height: 16)
       VStack(alignment: .leading, spacing: 1) {
-        Text(self.server.name)
+        Text(self.server.name.hidingOffensiveWords)
           .font(.system(size: 13))
           .lineLimit(1)
         if self.server.source == .bookmark {

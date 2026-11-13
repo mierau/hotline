@@ -94,7 +94,7 @@ struct FolderItemView: View {
           .fixedSize(horizontal: true, vertical: false)
       }
       else {
-        Text(self.rename?.name(of: self.file) ?? self.file.name)
+        Text(self.rename?.name(of: self.file) ?? self.file.name.hidingOffensiveWords)
           .lineLimit(1)
           .truncationMode(.tail)
           .foregroundStyle(Color.primary)

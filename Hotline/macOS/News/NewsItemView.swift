@@ -65,7 +65,7 @@ struct NewsItemView: View {
         EmptyView()
       }
       
-      Text(news.name)
+      Text(news.name.hidingOffensiveWords)
         .fontWeight((news.type == .bundle || news.type == .category || !news.read) ? .semibold : .regular)
         .lineLimit(1)
         .truncationMode(.tail)

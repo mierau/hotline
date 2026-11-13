@@ -259,4 +259,19 @@ struct ServerTrustTests {
     #expect(reopened.record(address: "hotline.example.com", port: 5500)?.tlsPort == 5600)
     #expect(reopened.compare(self.certificate(1), identity: self.identity) == .known)
   }
+
+  @Test func serversConnectedToSecurelyAreListedNewestFirst() async throws {
+    let trust = ServerTrust(fileURL: nil)
+    trust.keep(self.certificate(1), identity: ServerTrust.identity(address: "Older.Example.com", port: 5500), tlsPort: 5600)
+    try await Task.sleep(for: .milliseconds(10))
+    // An IPv6 address, with colons of its own before the port's.
+    trust.keep(self.certificate(2), identity: ServerTrust.identity(address: "fe80::1", port: 5501), tlsPort: 5601)
+
+    let servers = trust.remembered
+    #expect(servers.map(\.address) == ["fe80::1", "older.example.com"])
+    #expect(servers.map(\.port) == [5501, 5500])
+
+    trust.forget(address: "fe80::1", port: 5501)
+    #expect(trust.remembered.map(\.address) == ["older.example.com"])
+  }
 }

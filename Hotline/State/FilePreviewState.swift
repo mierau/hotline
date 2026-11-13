@@ -94,6 +94,16 @@ final class FilePreviewState {
     self.total = info.size
   }
 
+  /// Whether a video's checked for sensitive content before it plays, while the Mac has that on,
+  /// which takes all of it, so it doesn't play as it comes.
+  private static func checksBeforePlaying(_ type: UTType) -> Bool {
+    #if os(macOS)
+    return type.conforms(to: .movie) && SensitiveContent.isOn
+    #else
+    return false
+    #endif
+  }
+
   // MARK: - API
 
   func download() {
@@ -110,7 +120,7 @@ final class FilePreviewState {
           return
         }
 
-        if let type = self.info.playableType {
+        if let type = self.info.playableType, !Self.checksBeforePlaying(type) {
           try await self.stream(type)
           return
         }

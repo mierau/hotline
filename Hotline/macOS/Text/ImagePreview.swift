@@ -1,5 +1,9 @@
 import AppKit
+import AVFoundation
+import CoreImage
 import Kingfisher
+import os
+import SensitiveContentAnalysis
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -684,6 +688,11 @@ final class ImagePreviewView: NSView, NSDraggingSource {
 
   private let imageView = NSImageView()
   private var started = false
+  /// The picture as it came, while it's covered, blurred, since it might be sensitive, and what was
+  /// found in it.
+  private var covered: (image: NSImage, finding: SensitiveContent.Finding)?
+  /// What's over the picture while it's covered: that it might be sensitive, and Show.
+  private var coverLabel: NSView?
 
   init(url: URL, sources: ImagePreview.Sources) {
     self.url = url
@@ -693,7 +702,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.wantsLayer = true
     self.layer?.cornerRadius = 6
     self.layer?.masksToBounds = true
-    self.toolTip = url.host(percentEncoded: false).map { "View image from \($0)" } ?? "View Image"
+    self.toolTip = self.linkToolTip
     self.setAccessibilityLabel("Image preview")
 
     self.imageView.imageScaling = .scaleProportionallyUpOrDown
@@ -709,6 +718,10 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   // its size catches up, keep the image from stretching: fit it from the top left.
   override func layout() {
     super.layout()
+    // What says it might be sensitive covers the picture, wherever it is.
+    defer {
+      self.coverLabel?.frame = self.imageView.frame
+    }
     guard let size = self.imageView.image?.size, size.width > 0, size.height > 0 else {
       self.imageView.frame = self.bounds
       return
@@ -737,7 +750,8 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   }
 
   private func updatePlaceholder() {
-    let showsPlaceholder = self.showsPlaceholder && self.imageView.image == nil
+    // Until the picture's here, and checked, if it's to be.
+    let showsPlaceholder = self.showsPlaceholder && (self.imageView.image == nil || self.imageView.isHidden)
     self.effectiveAppearance.performAsCurrentDrawingAppearance {
       self.layer?.backgroundColor = showsPlaceholder ? NSColor.quaternarySystemFill.cgColor : nil
     }
@@ -784,6 +798,11 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       }))
     }
 
+    // Checked before it's seen, while the Mac asks for that, unless it's been shown already.
+    let key = self.url.absoluteString
+    let checks = SensitiveContent.isOn && !SensitiveContent.shown.contains(key)
+    self.imageView.isHidden = checks
+
     var reportedStart = false
     var tooBig = false
     self.imageView.kf.setImage(with: source, options: options, progressBlock: { [weak self] received, _ in
@@ -809,6 +828,9 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       }
       switch result {
       case .success(let value):
+        if checks {
+          self.check(value, key: key)
+        }
         self.updatePlaceholder()
         self.needsLayout = true
         self.onLoad?(Self.pixelSize(of: value.image))
@@ -862,6 +884,99 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     return image.size
   }
 
+  // MARK: Sensitive
+
+  /// Where clicking it goes, for its tooltip.
+  private var linkToolTip: String {
+    self.url.host(percentEncoded: false).map { "View image from \($0)" } ?? "View Image"
+  }
+
+  /// Checks the picture before it's seen, then shows it, covered if it might be sensitive.
+  private func check(_ value: RetrieveImageResult, key: String) {
+    let image = value.image
+    // An animation's frames from along it, as it came, since its first can be harmless, or the
+    // picture as it's previewed.
+    let animation = (image.kf.imageFrameCount ?? 1) > 1 ? value.data : nil
+    let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    Task { [weak self] in
+      let cover = await SensitiveContent.cover(for: picture, animation: animation, key: key)
+      // Unless it's gone. It only ever loads once.
+      guard let self else {
+        return
+      }
+      if let cover {
+        self.cover(image, with: cover)
+      }
+      self.imageView.isHidden = false
+      self.updatePlaceholder()
+    }
+  }
+
+  /// Blurs the picture, which might be sensitive, and says so, until it's asked for.
+  private func cover(_ image: NSImage, with cover: SensitiveContent.Cover) {
+    self.covered = (image, cover.finding)
+    self.imageView.animates = false
+    // At the picture's size, which the preview's laid out by.
+    self.imageView.image = NSImage(cgImage: cover.image, size: image.size)
+    let label = NSHostingView(rootView: SensitiveContentLabel(style: .preview))
+    label.frame = self.imageView.frame
+    self.addSubview(label)
+    self.coverLabel = label
+    self.toolTip = "This may be sensitive. Click to show it."
+    self.setAccessibilityLabel("Image preview that may be sensitive")
+  }
+
+  /// Shows the picture, once it's asked for: straight away, or for a child, once they're sure.
+  private func showCovered() {
+    guard let covered = self.covered else {
+      return
+    }
+    Task {
+      guard await SensitiveContent.confirmShowing(covered.finding, in: self.window) else {
+        return
+      }
+      SensitiveContent.shown.insert(self.url.absoluteString)
+      self.uncover()
+    }
+  }
+
+  private func uncover() {
+    guard let covered = self.covered else {
+      return
+    }
+    self.covered = nil
+    self.coverLabel?.removeFromSuperview()
+    self.coverLabel = nil
+    self.imageView.image = covered.image
+    self.imageView.animates = true
+    self.toolTip = self.linkToolTip
+    self.setAccessibilityLabel("Image preview")
+  }
+
+  /// Covers the picture again, once it's been shown, for one that might be sensitive.
+  private func hideShown() {
+    let key = self.url.absoluteString
+    guard self.covered == nil, let image = self.imageView.image else {
+      return
+    }
+    SensitiveContent.shown.remove(key)
+    let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    Task { [weak self] in
+      // Known already, so it isn't checked again.
+      guard let cover = await SensitiveContent.cover(for: picture, animation: nil, key: key),
+            let self, self.covered == nil, self.imageView.image === image else {
+        return
+      }
+      self.cover(image, with: cover)
+    }
+  }
+
+  /// Whether it's a picture shown since it was found to be sensitive, which can be covered again.
+  private var isShownSensitive: Bool {
+    let key = self.url.absoluteString
+    return self.covered == nil && SensitiveContent.isOn && SensitiveContent.shown.contains(key) && SensitiveContent.finding(for: key)?.isSensitive == true
+  }
+
   // MARK: Clicking
 
   // Clicks go to the preview, not the image view inside it, and nowhere while it isn't showing.
@@ -896,6 +1011,11 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     guard !self.dragged, self.bounds.contains(self.convert(event.locationInWindow, from: nil)) else {
       return
     }
+    // Covered, as it might be sensitive, it's shown here, rather than opened.
+    if self.covered != nil {
+      self.showCovered()
+      return
+    }
     let textView = self.textView
     if let openImage = textView?.openImageAction {
       openImage(self.url)
@@ -920,7 +1040,30 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   // MARK: Menu
 
   override func menu(for event: NSEvent) -> NSMenu? {
-    // A picture among the server's files has its file's menu, as its link does.
+    let menu = self.linkMenu() ?? NSMenu()
+    // Covered, Show comes first, and once it's shown, there's a way to cover it again.
+    if self.covered != nil {
+      if !menu.items.isEmpty {
+        menu.insertItem(.separator(), at: 0)
+      }
+      menu.insertItem(ChatMenuItem("Show Picture", systemImage: "eye") { [weak self] in
+        self?.showCovered()
+      }, at: 0)
+    }
+    else if self.isShownSensitive {
+      if !menu.items.isEmpty {
+        menu.addItem(.separator())
+      }
+      menu.addItem(ChatMenuItem("Hide Picture", systemImage: "eye.slash") { [weak self] in
+        self?.hideShown()
+      })
+    }
+    return menu.items.isEmpty ? nil : menu
+  }
+
+  /// What can be done with its link: a picture among the server's files has its file's menu, as its
+  /// link does, and any other picture a link's.
+  private func linkMenu() -> NSMenu? {
     if self.sources.serverFile(at: self.url) != nil, let menu = self.textView?.fileLinkMenu?(self.url) {
       return menu
     }
@@ -936,9 +1079,10 @@ final class ImagePreviewView: NSView, NSDraggingSource {
 
   // MARK: Dragging
 
-  // Dragged a little way, it takes the image along, which arrives whole where it's dropped.
+  // Dragged a little way, it takes the image along, which arrives whole where it's dropped. Not
+  // while it's covered.
   override func mouseDragged(with event: NSEvent) {
-    guard !self.dragged, let down = self.mouseDownEvent, let image = self.imageView.image else {
+    guard !self.dragged, self.covered == nil, !self.imageView.isHidden, let down = self.mouseDownEvent, let image = self.imageView.image else {
       return
     }
     let start = down.locationInWindow
@@ -1053,5 +1197,503 @@ final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelega
       // Stopped from the transfers list, or the Finder, which isn't an error to show.
       completion(error is CancellationError ? CocoaError(.userCancelled) : error)
     }
+  }
+}
+
+// MARK: - Sensitive Content
+
+/// Pictures and videos that might be sensitive, as Apple's Sensitive Content Analysis finds them on
+/// this Mac: in previews, server banners and preview windows, which show them blurred until they're
+/// asked for. Only while the Mac has it on: Sensitive Content Warning, which someone turns on for
+/// themselves, or Communication Safety, which is for children. Otherwise nothing's checked. Nothing
+/// about what's found leaves the Mac, as Apple asks.
+enum SensitiveContent {
+  /// How the Mac has sensitive content shown.
+  enum Intervention {
+    /// It doesn't: nothing's checked.
+    case none
+    /// Briefly, for someone who asked to be warned: blurred, with Show.
+    case brief
+    /// For a child, with Communication Safety: blurred, and asked about twice before it's shown.
+    case descriptive
+  }
+
+  /// What a check found.
+  enum Finding: Sendable {
+    case nothing
+    /// Nudity, or before macOS 27, which can't tell, anything sensitive.
+    case nudity
+    /// Violence or gore, and no nudity, which macOS 27 tells apart.
+    case violence
+
+    var isSensitive: Bool {
+      self != .nothing
+    }
+  }
+
+  /// Something that might be sensitive, blurred too much to make out, and what was found in it.
+  struct Cover: Sendable {
+    let image: CGImage
+    let finding: Finding
+  }
+
+  /// How the Mac has sensitive content shown.
+  static var intervention: Intervention {
+    switch self.policy {
+    case .simpleInterventions: .brief
+    case .descriptiveInterventions: .descriptive
+    default: .none
+    }
+  }
+
+  /// Whether anything's checked.
+  static var isOn: Bool {
+    self.intervention != .none
+  }
+
+  /// How the Mac has it now, read again, for Settings, which shows it.
+  static func currentIntervention() -> Intervention {
+    self.cachedPolicy.withLock { $0 = nil }
+    return self.intervention
+  }
+
+  /// Sensitive Content Warning, in System Settings' Privacy & Security, which is where it's turned on.
+  static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_NudityDetection")!
+
+  private static let analyzer = SCSensitivityAnalyzer()
+
+  /// The Mac's setting, as of when the app last came to the front, since it's changed elsewhere: in
+  /// System Settings, or Screen Time.
+  private static let cachedPolicy = OSAllocatedUnfairLock<SCSensitivityAnalysisPolicy?>(initialState: nil)
+  nonisolated(unsafe) private static let policyRefresher = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in
+    SensitiveContent.cachedPolicy.withLock { $0 = nil }
+  }
+
+  private static var policy: SCSensitivityAnalysisPolicy {
+    _ = self.policyRefresher
+    if let policy = self.cachedPolicy.withLock({ $0 }) {
+      return policy
+    }
+    let policy = self.analyzer.analysisPolicy
+    self.cachedPolicy.withLock { $0 = policy }
+    return policy
+  }
+
+  /// What's been found of each picture or video checked, by its key, for as long as the app's open,
+  /// so one shown again isn't checked again.
+  private static let found = OSAllocatedUnfairLock<[String: Finding]>(initialState: [:])
+
+  /// What was found of something, once it's been checked.
+  static func finding(for key: String) -> Finding? {
+    self.found.withLock { $0[key] }
+  }
+
+  /// What's been shown since it was found to be sensitive, by key, for as long as the app's open, so
+  /// it isn't covered again each time it's seen.
+  @MainActor static let shown = Shown()
+
+  @MainActor
+  @Observable
+  final class Shown {
+    private(set) var keys: Set<String> = []
+
+    func contains(_ key: String) -> Bool {
+      self.keys.contains(key)
+    }
+
+    func insert(_ key: String) {
+      self.keys.insert(key)
+    }
+
+    func remove(_ key: String) {
+      self.keys.remove(key)
+    }
+  }
+
+  /// A key for a file, which changes when the file does, as a server's banner can. From the file as
+  /// it is, rather than its URL's resource values, which the URL keeps from when they were first read.
+  static func key(forFileAt url: URL) -> String {
+    let path = url.path(percentEncoded: false)
+    let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+    let size = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+    let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+    return "\(path) \(size) \(modified)"
+  }
+
+  // MARK: Covers
+
+  /// A picture's cover, if it might be sensitive: checked as it's previewed, or an animation by its
+  /// frames from along it, as it came, since its first can be harmless. Nil when it isn't, or
+  /// nothing's checked.
+  @concurrent
+  static func cover(for picture: CGImage?, animation: (@Sendable () -> Data?)?, key: String) async -> Cover? {
+    guard self.isOn, let picture else {
+      return nil
+    }
+    var finding = self.finding(for: key)
+    if finding == nil {
+      var frames = animation?().map { self.frames(of: $0) } ?? []
+      if frames.isEmpty {
+        frames = [picture]
+      }
+      finding = await self.check(frames, key: key)
+    }
+    // Dark gray, should it not blur, rather than shown as it is.
+    guard let finding, finding.isSensitive, let image = self.blurred(picture) ?? self.blank() else {
+      return nil
+    }
+    return Cover(image: image, finding: finding)
+  }
+
+  /// A picture file's cover, if it might be sensitive, checked by its frames, for an animation from
+  /// along it.
+  @concurrent
+  static func cover(forImageAt url: URL, key: String) async -> Cover? {
+    guard self.isOn else {
+      return nil
+    }
+    let frames = self.frames(at: url)
+    let finding = await self.check(frames, key: key)
+    guard finding.isSensitive, let image = frames.first.flatMap({ self.blurred($0) }) ?? self.blank() else {
+      return nil
+    }
+    return Cover(image: image, finding: finding)
+  }
+
+  /// A video's cover, if it might be sensitive, from a frame a moment into it. All of it's checked,
+  /// which can take a moment.
+  @concurrent
+  static func cover(forVideoAt url: URL, key: String) async -> Cover? {
+    guard self.isOn else {
+      return nil
+    }
+    let finding = await self.check(videoAt: url, key: key)
+    guard finding.isSensitive else {
+      return nil
+    }
+    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+    generator.appliesPreferredTrackTransform = true
+    generator.maximumSize = CGSize(width: 256, height: 256)
+    let frame = try? await generator.image(at: CMTime(seconds: 1, preferredTimescale: 600)).image
+    // Dark gray, without a frame.
+    guard let image = frame.flatMap({ self.blurred($0) }) ?? self.blank() else {
+      return nil
+    }
+    return Cover(image: image, finding: finding)
+  }
+
+  // MARK: Checking
+
+  /// What's in a picture, by its frames, checked once: nothing, when nothing's checked, or none of
+  /// them can be, which is tried again next time.
+  @concurrent
+  private static func check(_ frames: [CGImage], key: String) async -> Finding {
+    guard self.isOn, !frames.isEmpty else {
+      return .nothing
+    }
+    if let known = self.finding(for: key) {
+      return known
+    }
+    var finding = Finding.nothing
+    var checked = false
+    for frame in frames {
+      guard let analysis = try? await self.analyzer.analyzeImage(frame) else {
+        continue
+      }
+      checked = true
+      if analysis.isSensitive {
+        finding = self.finding(of: analysis)
+        break
+      }
+    }
+    if checked {
+      self.remember(finding, for: key)
+    }
+    return finding
+  }
+
+  private static func remember(_ finding: Finding, for key: String) {
+    self.found.withLock { $0[key] = finding }
+  }
+
+  /// What's in a video, all through, checked once.
+  @concurrent
+  private static func check(videoAt url: URL, key: String) async -> Finding {
+    if let known = self.finding(for: key) {
+      return known
+    }
+    guard let analysis = try? await self.analyzer.videoAnalysis(forFileAt: url).hasSensitiveContent() else {
+      return .nothing
+    }
+    let finding = analysis.isSensitive ? self.finding(of: analysis) : .nothing
+    self.remember(finding, for: key)
+    return finding
+  }
+
+  private static func finding(of analysis: SCSensitivityAnalysis) -> Finding {
+    if #available(macOS 27, *), !analysis.detectedTypes.isEmpty, !analysis.detectedTypes.contains(.sexuallyExplicit) {
+      return .violence
+    }
+    return .nudity
+  }
+
+  /// A picture's frames, small, as a check needs no more: an animation's from along it, and any
+  /// other picture's one.
+  private static func frames(of source: CGImageSource) -> [CGImage] {
+    let count = CGImageSourceGetCount(source)
+    guard count > 0 else {
+      return []
+    }
+    let checked = min(count, 4)
+    let options = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceThumbnailMaxPixelSize: 512,
+    ] as CFDictionary
+    return (0..<checked).compactMap { CGImageSourceCreateThumbnailAtIndex(source, $0 * count / checked, options) }
+  }
+
+  static func frames(of data: Data) -> [CGImage] {
+    CGImageSourceCreateWithData(data as CFData, nil).map { self.frames(of: $0) } ?? []
+  }
+
+  private static func frames(at url: URL) -> [CGImage] {
+    CGImageSourceCreateWithURL(url as CFURL, nil).map { self.frames(of: $0) } ?? []
+  }
+
+  // MARK: Blurring
+
+  private static let context = CIContext(options: [.cacheIntermediates: false])
+
+  /// A picture blurred too much to make out: made small, then blurred, which looks smooth at any
+  /// size, with nothing sharp left in it.
+  static func blurred(_ image: CGImage) -> CGImage? {
+    let input = CIImage(cgImage: image)
+    let longest = max(input.extent.width, input.extent.height)
+    guard longest > 0 else {
+      return nil
+    }
+    // Averaged down, so even its edges are, rather than sampled, which keeps whatever's along them.
+    let small = input.applyingFilter("CILanczosScaleTransform", parameters: [
+      kCIInputScaleKey: min(1, 64 / longest),
+      kCIInputAspectRatioKey: 1,
+    ])
+    let extent = small.extent.integral
+    let blurred = small.clampedToExtent()
+      .applyingGaussianBlur(sigma: max(extent.width, extent.height) / 12)
+      // Back up to four times that, smoothly, so it isn't blotchy shown big, as in a window.
+      .applyingFilter("CILanczosScaleTransform", parameters: [
+        kCIInputScaleKey: 4,
+        kCIInputAspectRatioKey: 1,
+      ])
+      .cropped(to: CGRect(x: extent.minX * 4, y: extent.minY * 4, width: extent.width * 4, height: extent.height * 4))
+    return self.context.createCGImage(blurred, from: blurred.extent)
+  }
+
+  /// Dark gray, for a video no frame could be had of.
+  private static func blank() -> CGImage? {
+    let context = CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    context?.setFillColor(CGColor(gray: 0.2, alpha: 1))
+    context?.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+    return context?.makeImage()
+  }
+
+  // MARK: Showing
+
+  /// Whether to show something that might be sensitive, once Show's been clicked: for a child, asked
+  /// twice first, in words for them, as Messages does, so it never comes as a surprise, and for
+  /// anyone else, straight away.
+  @MainActor
+  static func confirmShowing(_ finding: Finding, isVideo: Bool = false, in window: NSWindow?) async -> Bool {
+    guard self.intervention == .descriptive else {
+      return true
+    }
+    let kind = isVideo ? "video" : "picture"
+    let ask = NSAlert()
+    if finding == .violence {
+      ask.messageText = "This \(kind) could be upsetting. Are you sure you want to see it?"
+      ask.informativeText = "It might show violence, or someone getting hurt. You don't have to look."
+    }
+    else {
+      ask.messageText = "This \(kind) could be sensitive. Are you sure you want to see it?"
+      ask.informativeText = "Sensitive pictures and videos show the private parts of the body that a swimsuit covers. It's not your fault it's here, and you don't have to look."
+    }
+    ask.addButton(withTitle: "Not Now")
+    ask.addButton(withTitle: "I'm Sure")
+    guard await ask.answer(in: window) == .alertSecondButtonReturn else {
+      return false
+    }
+    let check = NSAlert()
+    check.messageText = "It's your choice, but make sure you feel safe."
+    check.informativeText = "If something you see upsets you, you can talk to a grown-up you trust."
+    check.addButton(withTitle: "Don't View")
+    check.addButton(withTitle: "View")
+    return await check.answer(in: window) == .alertSecondButtonReturn
+  }
+}
+
+private extension NSAlert {
+  /// Shown as a sheet on a window, or on its own without one, and what was chosen.
+  @MainActor
+  func answer(in window: NSWindow?) async -> NSApplication.ModalResponse {
+    guard let window, window.isVisible, window.attachedSheet == nil else {
+      return self.runModal()
+    }
+    return await withCheckedContinuation { continuation in
+      self.beginSheetModal(for: window) { response in
+        continuation.resume(returning: response)
+      }
+    }
+  }
+}
+
+/// What's over something that might be sensitive, while it's blurred: that it might be, and Show, as
+/// Messages has it, brief, in a preview as small as one gets, along a banner, or in a window.
+struct SensitiveContentLabel: View {
+  enum Style {
+    /// In a preview, whose Show is the whole preview, clicked: as much as fits.
+    case preview
+    /// Along a server's banner.
+    case banner
+    /// In a preview window.
+    case window
+  }
+
+  let style: Style
+  /// What Show does, as a button, along a banner or in a window.
+  var show: (() -> Void)? = nil
+
+  var body: some View {
+    Group {
+      switch self.style {
+      case .preview:
+        ViewThatFits {
+          VStack(spacing: 5) {
+            self.symbol(size: 15)
+            self.title(size: 11)
+            self.showLabel(size: 11)
+          }
+          VStack(spacing: 4) {
+            self.symbol(size: 14)
+            self.showLabel(size: 11)
+          }
+          self.symbol(size: 12)
+        }
+        .padding(4)
+        .accessibilityElement(children: .combine)
+      case .banner:
+        HStack(spacing: 8) {
+          self.symbol(size: 13)
+          self.title(size: 12)
+          self.showButton(size: 11)
+        }
+      case .window:
+        VStack(spacing: 10) {
+          self.symbol(size: 28)
+          self.title(size: 15)
+          self.showButton(size: 13)
+        }
+      }
+    }
+    .foregroundStyle(.white)
+    .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // A little darker, so it reads over any picture.
+    .background {
+      Color.black.opacity(0.2)
+        .allowsHitTesting(false)
+    }
+  }
+
+  private func symbol(size: CGFloat) -> some View {
+    Image(systemName: "eye.slash")
+      .font(.system(size: size, weight: .medium))
+      .allowsHitTesting(false)
+  }
+
+  private func title(size: CGFloat) -> some View {
+    Text("This may be sensitive")
+      .font(.system(size: size, weight: .semibold))
+      .lineLimit(1)
+      .allowsHitTesting(false)
+  }
+
+  /// Show, in a light capsule, as Messages has it.
+  private func showLabel(size: CGFloat) -> some View {
+    Text("Show")
+      .font(.system(size: size, weight: .semibold))
+      .padding(.horizontal, size)
+      .padding(.vertical, size / 4)
+      .background(Color.white.opacity(0.25), in: .capsule)
+  }
+
+  @ViewBuilder
+  private func showButton(size: CGFloat) -> some View {
+    if let show = self.show {
+      Button(action: show) {
+        self.showLabel(size: size)
+      }
+      .buttonStyle(.plain)
+    }
+  }
+}
+
+/// A server's banner, checked before it's seen while the Mac has that on, and blurred, with Show, if
+/// it might be sensitive. It keeps its place, unseen, for the moment it's checked.
+private struct SensitiveBannerCover: ViewModifier {
+  let fileURL: URL?
+  let cornerRadius: CGFloat
+  /// Whether a child's asked in a sheet on the window it's in, or on its own, from a panel.
+  let asksInWindow: Bool
+
+  /// The banner that's been checked, and its cover, if it might be sensitive.
+  @State private var checked: URL?
+  @State private var cover: SensitiveContent.Cover?
+  @State private var key: String?
+
+  func body(content: Content) -> some View {
+    let isCovered = self.cover != nil && !SensitiveContent.shown.contains(self.key ?? "")
+    content
+      .opacity(isCovered || (SensitiveContent.isOn && self.fileURL != nil && self.checked != self.fileURL) ? 0 : 1)
+      .overlay {
+        if isCovered, let cover = self.cover, let key = self.key {
+          Image(decorative: cover.image, scale: 1)
+            .resizable()
+            .overlay {
+              SensitiveContentLabel(style: .banner) {
+                self.show(cover, key: key)
+              }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: self.cornerRadius, style: .continuous))
+        }
+      }
+      .task(id: self.fileURL) {
+        self.cover = nil
+        self.key = nil
+        guard let fileURL = self.fileURL, SensitiveContent.isOn else {
+          self.checked = self.fileURL
+          return
+        }
+        let key = SensitiveContent.key(forFileAt: fileURL)
+        self.cover = await SensitiveContent.cover(forImageAt: fileURL, key: key)
+        self.key = key
+        self.checked = fileURL
+      }
+  }
+
+  private func show(_ cover: SensitiveContent.Cover, key: String) {
+    Task {
+      guard await SensitiveContent.confirmShowing(cover.finding, in: self.asksInWindow ? NSApp.keyWindow : nil) else {
+        return
+      }
+      SensitiveContent.shown.insert(key)
+    }
+  }
+}
+
+extension View {
+  /// Covers a server's banner while it might be sensitive, until it's asked for.
+  func sensitiveBanner(_ fileURL: URL?, cornerRadius: CGFloat = 0, asksInWindow: Bool = true) -> some View {
+    self.modifier(SensitiveBannerCover(fileURL: fileURL, cornerRadius: cornerRadius, asksInWindow: asksInWindow))
   }
 }

@@ -213,6 +213,32 @@ final class ServerTrust: Observable, @unchecked Sendable {
     return self.lock.withLock { self.records[identity] }
   }
 
+  /// A server that's been connected to over TLS, by its address and port.
+  struct Remembered: Identifiable, Sendable {
+    let address: String
+    let port: Int
+    let record: Record
+
+    var id: String {
+      ServerTrust.identity(address: self.address, port: self.port)
+    }
+  }
+
+  /// Every server that's been connected to over TLS, the most recently first. A view that asks is
+  /// shown again when one's kept or forgotten.
+  var remembered: [Remembered] {
+    self.registrar.access(self, keyPath: \.records)
+    let records = self.lock.withLock { self.records }
+    return records.compactMap { identity, record in
+      // Its address is all but what's after the last colon, as an IPv6 address has colons too.
+      guard let colon = identity.lastIndex(of: ":"), let port = Int(identity[identity.index(after: colon)...]) else {
+        return nil
+      }
+      return Remembered(address: String(identity[..<colon]), port: port, record: record)
+    }
+    .sorted { $0.record.date > $1.record.date }
+  }
+
   /// Tells views that asked which servers take TLS that one's been kept or forgotten, on the main
   /// thread, where they're shown again, whatever thread it was kept on.
   private func recordsChanged() {

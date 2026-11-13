@@ -10,6 +10,10 @@
 	<array>
 		<string>CloudKit</string>
 	</array>
+	<key>com.apple.developer.sensitivecontentanalysis.client</key>
+	<array>
+		<string>analysis</string>
+	</array>
 	<key>com.apple.security.files.bookmarks.app-scope</key>
 	<true/>
 </dict>

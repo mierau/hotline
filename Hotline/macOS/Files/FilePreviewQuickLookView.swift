@@ -28,6 +28,11 @@ struct FilePreviewQuickLookView: View {
   @State private var showsTitleBar = true
   /// The picture or video the window's been fitted to, which it's no smaller than after.
   @State private var fittedMedia: Media? = nil
+  /// A picture or video that might be sensitive, blurred, until it's asked for, while the Mac has
+  /// that checked.
+  @State private var cover: SensitiveContent.Cover? = nil
+  /// Whether a picture or video that's here is being checked, before it's shown.
+  @State private var checking = false
 
   @FocusState private var focusField: FilePreviewFocus?
 
@@ -109,6 +114,8 @@ struct FilePreviewQuickLookView: View {
         ToolbarItem(placement: .primaryAction) {
           self.shareButton
             .help("Share File")
+            // Sharing shows it, which a cover's there to wait for.
+            .disabled(self.cover != nil)
         }
       }
     }
@@ -130,14 +137,34 @@ struct FilePreviewQuickLookView: View {
         return
       }
       if self.preview?.previewType == .pict {
-        self.media = self.preview?.image.map { Media(kind: .picture, size: $0.size, image: $0) }
+        let media = self.preview?.image.map { Media(kind: .picture, size: $0.size, image: $0) }
+        if let picture = media?.image?.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+          self.cover = await self.check { key in
+            await SensitiveContent.cover(for: picture, animation: nil, key: key)
+          }
+        }
+        self.media = media
       }
       else {
         var media = await Self.media(at: fileURL)
-        // Playing as soon as it's shown.
+        switch media?.kind {
+        case .picture:
+          self.cover = await self.check { key in
+            await SensitiveContent.cover(forImageAt: fileURL, key: key)
+          }
+        case .video:
+          self.cover = await self.check { key in
+            await SensitiveContent.cover(forVideoAt: fileURL, key: key)
+          }
+        default:
+          break
+        }
+        // Playing as soon as it's shown, unless it's covered, until it's asked for.
         if media?.kind == .video {
           media?.player = AVPlayer(url: fileURL)
-          media?.player?.play()
+          if self.cover == nil {
+            media?.player?.play()
+          }
         }
         self.media = media
       }
@@ -304,7 +331,13 @@ struct FilePreviewQuickLookView: View {
   /// the pointer, in a window shaped like it that's moved by dragging it.
   private func shapedMediaView(_ fileURL: URL?, media: Media) -> some View {
     Group {
-      if let image = media.image {
+      // Blurred, as it might be sensitive, until it's asked for.
+      if let cover = self.cover {
+        Image(decorative: cover.image, scale: 1)
+          .resizable()
+          .interpolation(.high)
+      }
+      else if let image = media.image {
         PictureView(image: image)
       }
       else if media.kind == .audio, let playing = self.preview?.playing, let preview = self.preview {
@@ -341,10 +374,19 @@ struct FilePreviewQuickLookView: View {
       }
     }
     .overlay {
-      if media.kind == .video, let player = media.player {
+      if media.kind == .video, let player = media.player, self.cover == nil {
         // What's come of it along its timeline, as it's playing as it comes, or all of it.
         VideoControls(player: player, downloaded: self.preview?.isStreaming == true ? self.preview?.downloadedParts ?? [] : [0..<1], shown: self.showsTitleBar)
           .ignoresSafeArea()
+      }
+    }
+    // Over all of it, with Show, which the rest of it moves the window by.
+    .overlay {
+      if self.cover != nil {
+        SensitiveContentLabel(style: .window) {
+          self.showCovered()
+        }
+        .ignoresSafeArea()
       }
     }
     .background {
@@ -365,7 +407,7 @@ struct FilePreviewQuickLookView: View {
   private var downloadingView: some View {
     self.fileRow {
       Group {
-        if let preview = self.preview, preview.transferred > 0, preview.total > 0 {
+        if !self.checking, let preview = self.preview, preview.transferred > 0, preview.total > 0 {
           ProgressView(value: max(0.0, min(1.0, preview.progress)))
         }
         else {
@@ -415,7 +457,7 @@ struct FilePreviewQuickLookView: View {
           }
         }
       VStack(alignment: .leading, spacing: 3) {
-        Text(self.info?.name ?? "")
+        Text((self.info?.name ?? "").hidingOffensiveWords)
           .font(.system(size: 13, weight: .semibold))
           .lineLimit(1)
           .truncationMode(.middle)
@@ -470,6 +512,10 @@ struct FilePreviewQuickLookView: View {
     if self.info?.isArchive == true {
       return "Previewing archive contents…"
     }
+    // Once it's here, before it's shown, which for a video can take a moment.
+    if self.checking {
+      return "Checking for sensitive content…"
+    }
     guard let preview = self.preview, preview.transferred > 0 else {
       return "Connecting…"
     }
@@ -487,6 +533,50 @@ struct FilePreviewQuickLookView: View {
 
   private static func byteCount(_ bytes: Int) -> String {
     ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+  }
+
+  /// What a picture or video here is known by, for whether it's been shown: one from the web by its
+  /// link, as its preview in chat is, so one shown there shows here too.
+  private var sensitivityKey: String? {
+    guard let info = self.info else {
+      return nil
+    }
+    if let webURL = info.webURL {
+      return webURL.absoluteString
+    }
+    return "hotline://\(info.address):\(info.port)/\((info.path ?? []).joined(separator: "/"))/\(info.name)"
+  }
+
+  /// Its cover, if it might be sensitive, checked before it's shown while the Mac has that on, unless
+  /// it's been shown already.
+  private func check(_ cover: (String) async -> SensitiveContent.Cover?) async -> SensitiveContent.Cover? {
+    guard SensitiveContent.isOn, let key = self.sensitivityKey, !SensitiveContent.shown.contains(key) else {
+      return nil
+    }
+    self.checking = true
+    defer {
+      self.checking = false
+    }
+    return await cover(key)
+  }
+
+  /// Shows what's covered, once it's asked for: straight away, or for a child, once they're sure. A
+  /// video plays.
+  private func showCovered() {
+    guard let cover = self.cover else {
+      return
+    }
+    let isVideo = self.media?.kind == .video
+    Task {
+      guard await SensitiveContent.confirmShowing(cover.finding, isVideo: isVideo, in: NSApp.keyWindow) else {
+        return
+      }
+      if let key = self.sensitivityKey {
+        SensitiveContent.shown.insert(key)
+      }
+      self.cover = nil
+      self.media?.player?.play()
+    }
   }
 
   /// A picture or video, and its size as it's shown, or nil for anything else.

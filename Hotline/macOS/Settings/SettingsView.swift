@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
   private enum Section: Hashable {
-    case identity, general, chat, sound, notifications
+    case identity, general, chat, sound, notifications, privacy
   }
 
   @State private var selection: Section = .identity
@@ -49,6 +49,13 @@ struct SettingsView: View {
             .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
         }
         .tag(Section.notifications)
+        Label {
+          Text("Privacy")
+        } icon: {
+          Image("Settings/Privacy")
+            .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
+        }
+        .tag(Section.privacy)
       }
       .listStyle(.sidebar)
       .navigationSplitViewColumnWidth(180)
@@ -64,6 +71,8 @@ struct SettingsView: View {
         SoundSettingsView()
       case .notifications:
         NotificationSettingsView()
+      case .privacy:
+        PrivacySettingsView()
       }
     }
   }

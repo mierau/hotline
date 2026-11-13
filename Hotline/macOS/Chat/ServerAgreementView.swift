@@ -79,7 +79,7 @@ struct ServerAgreementSheet: View {
 
   var body: some View {
     ScrollView(.vertical) {
-      Text(model.agreementText?.convertToAttributedStringWithLinks() ?? AttributedString())
+      Text((model.agreementText?.convertToAttributedStringWithLinks() ?? AttributedString()).hidingOffensiveWords)
         .font(.system(size: 12))
         .fontDesign(.monospaced)
         .textSelection(.enabled)

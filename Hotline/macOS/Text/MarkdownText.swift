@@ -18,6 +18,8 @@ struct MarkdownText: NSViewRepresentable {
   var openURL: ((URL) -> Void)? = nil
   /// Whether links to images have previews, as they're set to, in chat and everywhere else.
   var previewsImages = Prefs.shared.imagePreviews != .never
+  /// Whether swearing and slurs are hidden, as Settings can have it.
+  var hidesWords = HiddenWords.isOn
 
   func makeCoordinator() -> Coordinator {
     Coordinator()
@@ -50,7 +52,7 @@ struct MarkdownText: NSViewRepresentable {
     layout.imageSources = environment.imageSources
     layout.colors = Markdown.Colors(theme: environment.serverTheme)
     textView.colors = layout.colors
-    textView.show(self.text, layout: layout)
+    textView.show(self.text, layout: layout, hidingWords: self.hidesWords)
   }
 
   func sizeThatFits(_ proposal: ProposedViewSize, nsView textView: MarkdownTextView, context: Context) -> CGSize? {
@@ -112,7 +114,7 @@ final class MarkdownTextView: NSTextView, LinkActions {
   }
 
   /// What's shown, as it's written, and how, so it's only shown again when that changes.
-  private var shown: (text: String, layout: Markdown.Layout)?
+  private var shown: (text: String, layout: Markdown.Layout, hidingWords: Bool)?
   /// How tall the words are at the width they were last measured at.
   private var measured: (width: CGFloat, height: CGFloat)?
   /// The one with the selection, if any has one.
@@ -146,8 +148,9 @@ final class MarkdownTextView: NSTextView, LinkActions {
     self.linkTextAttributes = [:]
   }
 
-  func show(_ text: String, layout: Markdown.Layout) {
-    guard self.shown?.text != text || self.shown?.layout != layout else {
+  /// Shows some text, laid out as `layout` has it, with swearing and slurs hidden if `hidingWords`.
+  func show(_ text: String, layout: Markdown.Layout, hidingWords: Bool = false) {
+    guard self.shown?.text != text || self.shown?.layout != layout || self.shown?.hidingWords != hidingWords else {
       return
     }
     if self.shown?.layout.codePadding != layout.codePadding {
@@ -156,9 +159,17 @@ final class MarkdownTextView: NSTextView, LinkActions {
       self.fragments = fragments
       self.textLayoutManager?.delegate = fragments
     }
-    self.shown = (text, layout)
+    self.shown = (text, layout, hidingWords)
     self.measured = nil
-    self.textStorage?.setAttributedString(Markdown.shown(text, layout: layout))
+    let shown = Markdown.shown(text, layout: layout)
+    if hidingWords {
+      let hidden = NSMutableAttributedString(attributedString: shown)
+      HiddenWords.hide(in: hidden)
+      self.textStorage?.setAttributedString(hidden)
+    }
+    else {
+      self.textStorage?.setAttributedString(shown)
+    }
   }
 
   /// How tall the words are, laid out at a width, with the room around them.

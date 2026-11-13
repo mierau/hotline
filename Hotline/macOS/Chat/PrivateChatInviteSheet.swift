@@ -244,7 +244,7 @@ private struct PrivateChatPersonRow: View {
         UserIconView(iconID: Int(self.user.iconID))
           .padding(.horizontal, 2)
 
-        Text(self.user.name)
+        Text(self.user.name.hidingOffensiveWords)
           .lineLimit(1)
           .fontWeight(self.isChosen ? .semibold : .regular)
           .foregroundStyle(self.user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary))

@@ -294,7 +294,7 @@ struct TransferRow: View {
       
       VStack(alignment: .leading, spacing: 2) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(self.transfer.title)
+          Text(self.transfer.title.hidingOffensiveWords)
             .font(.headline)
             .lineLimit(1)
             .truncationMode(.tail)

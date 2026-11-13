@@ -67,6 +67,8 @@
 		DA432DE930A24175000179F6 /* FormatMenuCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432DE830A24175000179F6 /* FormatMenuCommands.swift */; platformFilters = (macos, ); };
 		DA432DF930A2A194000179F6 /* AutomaticResponseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432DF830A2A194000179F6 /* AutomaticResponseSheet.swift */; platformFilters = (macos, ); };
 		DA432E9A30A4E52D000179F6 /* ServerTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432E9930A4E52D000179F6 /* ServerTrust.swift */; };
+		DA432EDE30A78EC3000179F6 /* HiddenWords.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432EDD30A78EC3000179F6 /* HiddenWords.swift */; };
+		DA432EE030A78ED0000179F6 /* PrivacySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432EDF30A78ED0000179F6 /* PrivacySettingsView.swift */; };
 		DA4B8F3A2EA6FB3C00CBFD53 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */; platformFilter = ios; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
@@ -254,6 +256,8 @@
 		DA432DE830A24175000179F6 /* FormatMenuCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatMenuCommands.swift; sourceTree = "<group>"; };
 		DA432DF830A2A194000179F6 /* AutomaticResponseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomaticResponseSheet.swift; sourceTree = "<group>"; };
 		DA432E9930A4E52D000179F6 /* ServerTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerTrust.swift; sourceTree = "<group>"; };
+		DA432EDD30A78EC3000179F6 /* HiddenWords.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiddenWords.swift; sourceTree = "<group>"; };
+		DA432EDF30A78ED0000179F6 /* PrivacySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsView.swift; sourceTree = "<group>"; };
 		DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -404,6 +408,7 @@
 				BBE3ACA3E788C6BE871E20E0 /* CodeHighlighter.swift */,
 				6DF11A389B4DE29AEAF66B70 /* ImagePreview.swift */,
 				6EFBB61CA417B72829F286D2 /* FileLinkMenu.swift */,
+				DA432EDD30A78EC3000179F6 /* HiddenWords.swift */,
 			);
 			path = Text;
 			sourceTree = "<group>";
@@ -517,6 +522,7 @@
 				DAA98C782F4CFEF5002C6334 /* NotificationSettingsView.swift */,
 				DAA98C7A2F4CFF0B002C6334 /* ChatSettingsView.swift */,
 				DA52689F2EB073BC00DCB941 /* SoundSettingsView.swift */,
+				DA432EDF30A78ED0000179F6 /* PrivacySettingsView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -963,6 +969,8 @@
 				CD2D29BE6956D7A6596296CF /* Markdown.swift in Sources */,
 				EC29163D1DDBE787FFEDE187 /* FileLinkMenu.swift in Sources */,
 				4E29D4951BEDF0AD279DAAE8 /* MarkdownText.swift in Sources */,
+				DA432EDE30A78EC3000179F6 /* HiddenWords.swift in Sources */,
+				DA432EE030A78ED0000179F6 /* PrivacySettingsView.swift in Sources */,
 				79314884D8A244AD9CD393E8 /* MarkdownFragments.swift in Sources */,
 				862BBD3A1741F709226D3A9C /* Markdown+Shown.swift in Sources */,
 				DA432D4B30A14F5C000179F6 /* WindowMenuCommands.swift in Sources */,

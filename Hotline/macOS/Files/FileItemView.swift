@@ -50,7 +50,7 @@ struct FileItemView: View {
           .fixedSize(horizontal: true, vertical: false)
       }
       else {
-        Text(self.rename?.name(of: self.file) ?? self.file.name)
+        Text(self.rename?.name(of: self.file) ?? self.file.name.hidingOffensiveWords)
           .lineLimit(1)
           .truncationMode(.tail)
           .opacity(file.isUnavailable ? 0.5 : 1.0)

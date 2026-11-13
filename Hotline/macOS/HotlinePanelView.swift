@@ -366,6 +366,8 @@ struct HotlinePanelView: View {
     }
     .animation(.default, value: self.bannerIsAnimated)
     .animation(.default, value: self.bannerFileURL)
+    // The panel never comes to the front, so a child's asked on their own.
+    .sensitiveBanner(self.bannerFileURL, asksInWindow: false)
   }
 
   /// Without a server banner, the default artwork behind the panel shows here, with the H spinning on it.

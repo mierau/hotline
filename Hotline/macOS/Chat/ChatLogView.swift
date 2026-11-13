@@ -80,6 +80,7 @@ struct ChatLogView: View {
       showsIcons: Prefs.shared.showChatIcons,
       previewsImages: Prefs.shared.imagePreviews != .never,
       showsConnections: Prefs.shared.showJoinLeaveMessages,
+      hidesWords: HiddenWords.isOn,
       onNearStart: {
         if self.debouncedQuery.isEmpty {
           self.loadOlder()

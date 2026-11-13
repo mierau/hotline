@@ -417,7 +417,7 @@ struct MessageView: View {
         }
 
         if collapsed {
-          Text(self.collapsedSnippet(msg))
+          Text(self.collapsedSnippet(msg).hidingOffensiveWords)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .truncationMode(.tail)
@@ -503,7 +503,7 @@ struct MessageView: View {
         Capsule()
           .fill(.tertiary)
           .frame(width: 3)
-        Text(Self.plain(quoting))
+        Text(Self.plain(quoting).hidingOffensiveWords)
           .foregroundStyle(.secondary)
           .lineLimit(3)
           .truncationMode(.tail)
@@ -735,7 +735,7 @@ struct ComposeMessageView: View {
                 .offset(y: self.recipientFocused ? 1 : 0)
                 .textInputSuggestions(self.suggestions) { user in
                   Label {
-                    Text(user.name)
+                    Text(user.name.hidingOffensiveWords)
                   } icon: {
                     if let icon = HotlineState.getClassicIcon(Int(user.iconID)) {
                       Image(nsImage: icon)
@@ -782,7 +782,7 @@ struct ComposeMessageView: View {
           Capsule()
             .fill(.tertiary)
             .frame(width: 3)
-          Text(Self.plain(quoting))
+          Text(Self.plain(quoting).hidingOffensiveWords)
             .foregroundStyle(.secondary)
             .lineLimit(3)
             .truncationMode(.tail)

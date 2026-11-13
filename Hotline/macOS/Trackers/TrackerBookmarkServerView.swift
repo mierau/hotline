@@ -76,9 +76,9 @@ struct TrackerBookmarkServerView: View {
     HStack(alignment: .center, spacing: 6) {
       ServerIcon(isSecure: self.isSecure)
         .frame(width: 16, height: 16, alignment: .center)
-      Text(self.server.name ?? "Server").lineLimit(1).truncationMode(.tail)
+      Text((self.server.name ?? "Server").hidingOffensiveWords).lineLimit(1).truncationMode(.tail)
       if let serverDescription = self.server.description {
-        Text(serverDescription)
+        Text(serverDescription.hidingOffensiveWords)
           .foregroundStyle(.secondary)
           .lineLimit(1)
           .truncationMode(.tail)

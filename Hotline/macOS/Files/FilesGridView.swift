@@ -83,7 +83,7 @@ struct FileGridItemView: View {
           .frame(width: 100, alignment: .center)
       }
       else {
-        Text(self.rename?.name(of: self.file) ?? self.file.name)
+        Text(self.rename?.name(of: self.file) ?? self.file.name.hidingOffensiveWords)
           .font(.subheadline)
           .lineLimit(2)
           .truncationMode(.middle)

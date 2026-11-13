@@ -273,7 +273,7 @@ struct NewsThreadView: View {
       }
 
       if showsTitle {
-        Text(article.name)
+        Text(article.name.hidingOffensiveWords)
           .font(isFirst ? .title : .headline)
           .textSelection(.enabled)
           .padding(.bottom, isFirst ? 12 : 6)

@@ -137,6 +137,7 @@ enum PrefsKeys: String {
   /// `ImagePreviews.saved(in:)`.
   case previewChatImages = "preview chat images"
   case imagePreviews = "image previews"
+  case hideOffensiveWords = "hide offensive words"
   case chatHistoryRetention = "chat history retention"
   case downloadFolderBookmark = "download folder bookmark"
   case filesViewMode = "files view mode"
@@ -227,6 +228,7 @@ class Prefs {
     self.showJoinLeaveMessages = UserDefaults.standard.bool(forKey: PrefsKeys.showJoinLeaveMessages.rawValue)
     self.showChatIcons = UserDefaults.standard.bool(forKey: PrefsKeys.showChatIcons.rawValue)
     self.imagePreviews = ImagePreviews.saved()
+    self.hideOffensiveWords = UserDefaults.standard.object(forKey: PrefsKeys.hideOffensiveWords.rawValue) as? Bool
     self.chatHistoryRetention = ChatHistoryRetention.saved
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
@@ -398,6 +400,12 @@ class Prefs {
   /// Which links to pictures show the picture by itself. See `ImagePreviews`.
   var imagePreviews: ImagePreviews {
     didSet { UserDefaults.standard.set(self.imagePreviews.rawValue, forKey: PrefsKeys.imagePreviews.rawValue) }
+  }
+
+  /// Whether swearing and slurs are hidden where others' words show, once it's been chosen. Until
+  /// then, nil, and they're hidden on a child's Mac, as `HiddenWords.isOn` has it.
+  var hideOffensiveWords: Bool? {
+    didSet { UserDefaults.standard.set(self.hideOffensiveWords, forKey: PrefsKeys.hideOffensiveWords.rawValue) }
   }
 
   /// How long chat, and private messages, are kept on this Mac, for when you're back.

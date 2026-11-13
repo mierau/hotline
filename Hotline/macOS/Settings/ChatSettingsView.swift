@@ -17,20 +17,6 @@ struct ChatSettingsView: View {
       Toggle("Show connections in chat", isOn: $preferences.showJoinLeaveMessages)
       Toggle("Show user icons in chat", isOn: $preferences.showChatIcons)
 
-      Section("Image Previews") {
-        Picker(selection: $preferences.imagePreviews) {
-          ForEach(ImagePreviews.allCases) { previews in
-            Text(previews.title)
-              .tag(previews)
-          }
-        } label: {
-          Text("Show previews")
-          if let explanation = preferences.imagePreviews.explanation {
-            Text(explanation)
-          }
-        }
-      }
-
       Section("Highlighted Words") {
         HStack(spacing: 8) {
           let mentionWord = HighlightWord(word: preferences.username, color: preferences.mentionHighlightColor)

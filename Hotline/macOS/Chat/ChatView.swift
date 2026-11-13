@@ -71,6 +71,7 @@ struct ChatView: View {
     }
     .frame(maxWidth: 468.0, minHeight: 60, maxHeight: 60)
     .clipped()
+    .sensitiveBanner(self.stableBannerFileURL, cornerRadius: 8)
   }
   
   var body: some View {
@@ -124,6 +125,7 @@ struct ChatView: View {
         previewsImages: Prefs.shared.imagePreviews != .never,
         // A private chat's people coming and going are who's in it, so they're always shown.
         showsConnections: self.chatID != nil || Prefs.shared.showJoinLeaveMessages,
+        hidesWords: HiddenWords.isOn,
         // Older chat, or older results, as they're scrolled back to.
         onNearStart: self.chatID == nil ? {
           if self.debouncedQuery.isEmpty {

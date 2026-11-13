@@ -191,10 +191,11 @@ extension HotlineState {
 
     let content = UNMutableNotificationContent()
     content.title = self.serverTitle
+    // With swearing and slurs hidden, as they are in the window, if Settings has them hidden.
     if let subtitle {
-      content.subtitle = subtitle
+      content.subtitle = subtitle.hidingOffensiveWords
     }
-    content.body = String(body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+    content.body = String(body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)).hidingOffensiveWords
     content.sound = .default
     content.threadIdentifier = self.id.uuidString
     content.userInfo = userInfo.merging(["server": self.id.uuidString]) { $1 }

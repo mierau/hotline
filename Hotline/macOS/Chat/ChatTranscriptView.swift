@@ -24,6 +24,8 @@ struct ChatTranscriptView: NSViewRepresentable {
   var previewsImages = true
   /// Whether people connecting and disconnecting are shown, among the messages.
   var showsConnections = true
+  /// Whether swearing and slurs are hidden, as Settings can have it.
+  var hidesWords = false
   /// Asked for older messages, as the start of what's shown comes near.
   var onNearStart: (() -> Void)?
   /// Told when the view leaves the newest message, or comes back to it.
@@ -63,7 +65,7 @@ struct ChatTranscriptView: NSViewRepresentable {
     let coordinator = context.coordinator
     coordinator.onCacheUpdate = self.onCacheUpdate
     let theme = context.environment.serverTheme
-    coordinator.options = ChatMessageRenderer.Options(showsIcons: self.showsIcons, previewsImages: self.previewsImages, imageSources: context.environment.imageSources, showsConnections: self.showsConnections, adminColor: theme?.admin, secondaryColor: theme?.secondaryText, tertiaryColor: theme?.tertiaryText)
+    coordinator.options = ChatMessageRenderer.Options(showsIcons: self.showsIcons, previewsImages: self.previewsImages, imageSources: context.environment.imageSources, showsConnections: self.showsConnections, adminColor: theme?.admin, secondaryColor: theme?.secondaryText, tertiaryColor: theme?.tertiaryText, hidesWords: self.hidesWords)
 
     if let textView = coordinator.textView {
       textView.applyServerTheme(theme)
@@ -233,7 +235,7 @@ struct ChatTranscriptView: NSViewRepresentable {
     private static let renderingKey = NSAttributedString.Key("chatRendering")
 
     private var rendering: String {
-      "icons \(self.options.showsIcons), previews \(self.options.previewsImages), connections \(self.options.showsConnections), admins \(self.options.adminColor?.description ?? "red"), secondary \(self.options.secondaryColor?.description ?? "system"), tertiary \(self.options.tertiaryColor?.description ?? "system")"
+      "icons \(self.options.showsIcons), previews \(self.options.previewsImages), connections \(self.options.showsConnections), hidden words \(self.options.hidesWords), admins \(self.options.adminColor?.description ?? "red"), secondary \(self.options.secondaryColor?.description ?? "system"), tertiary \(self.options.tertiaryColor?.description ?? "system")"
     }
 
     /// Keeps the chat's text for when it's shown again, as it goes, rather than copying all of it

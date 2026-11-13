@@ -619,7 +619,7 @@ struct ServerView: View {
           UserIconView(iconID: Int(user.iconID))
             .padding(.horizontal, 2)
 
-          Text(user.name)
+          Text(user.name.hidingOffensiveWords)
             // Bolder with messages or an invitation from them you haven't seen, as the count beside
             // it shows.
             .fontWeight(unread > 0 ? .semibold : nil)
@@ -726,7 +726,7 @@ struct ServerView: View {
         .frame(width: 20, height: 20)
         .opacity(self.controlActiveState == .inactive ? 0.5 : 1.0)
 
-      Text(self.model.title(of: chat))
+      Text(self.model.title(of: chat).hidingOffensiveWords)
         .lineLimit(1)
         .truncationMode(.tail)
 
@@ -794,7 +794,7 @@ struct ServerView: View {
       UserIconView(iconID: Int(user.iconID))
         .padding(.horizontal, 2)
 
-      Text(user.name)
+      Text(user.name.hidingOffensiveWords)
         .lineLimit(1)
         .foregroundStyle(user.isAdmin ? AnyShapeStyle(.serverAdmin) : AnyShapeStyle(.primary))
 
@@ -1199,7 +1199,7 @@ struct ServerTransferRow: View {
       }
       .frame(width: 20)
       
-      Text(self.transfer.folderName ?? self.transfer.title)
+      Text((self.transfer.folderName ?? self.transfer.title).hidingOffensiveWords)
         .lineLimit(1)
         .truncationMode(.middle)
       
