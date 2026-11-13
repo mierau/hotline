@@ -176,20 +176,20 @@ struct MarkdownTests {
   // MARK: Images and Files
 
   @Test func imagesShowAsTheirPreviews() {
-    #expect(look("![a cat](https://example.com/cat.png)") == "[P:▢]")
-    #expect(look("look ![a cat](https://example.com/cat.png) here") == "look  here⏎[P:▢]")
-    #expect(look("![a cat](https://example.com/cat.png)", previews: 0) == "[l:a cat]")
+    #expect(look("![a cat](https://i.imgur.com/cat.png)") == "[P:▢]")
+    #expect(look("look ![a cat](https://i.imgur.com/cat.png) here") == "look  here⏎[P:▢]")
+    #expect(look("![a cat](https://i.imgur.com/cat.png)", previews: 0) == "[l:a cat]")
   }
 
   @Test func linksToImagesHavePreviews() {
-    #expect(look("https://example.com/cat.png") == "[l:https://example.com/cat.png]⏎[P:▢]")
-    #expect(look("[my cat](https://example.com/cat.png)") == "[l:my cat]⏎[P:▢]")
-    #expect(look("two https://example.com/a.png https://example.com/b.png") == "two [l:https://example.com/a.png] [l:https://example.com/b.png]⏎[P:▢]⏎[P:▢]")
+    #expect(look("https://i.imgur.com/cat.png") == "[l:https://i.imgur.com/cat.png]⏎[P:▢]")
+    #expect(look("[my cat](https://i.imgur.com/cat.png)") == "[l:my cat]⏎[P:▢]")
+    #expect(look("two https://i.imgur.com/a.png https://i.imgur.com/b.png") == "two [l:https://i.imgur.com/a.png] [l:https://i.imgur.com/b.png]⏎[P:▢]⏎[P:▢]")
   }
 
   @Test func imagesCopyAsTheirLinks() {
-    let text = Markdown.shownText("![a cat](https://example.com/cat.png)", layout: .board)
-    #expect(Markdown.plainText(text) == "https://example.com/cat.png")
+    let text = Markdown.shownText("![a cat](https://i.imgur.com/cat.png)", layout: .board)
+    #expect(Markdown.plainText(text) == "https://i.imgur.com/cat.png")
   }
 
   @Test func linksToFiles() {

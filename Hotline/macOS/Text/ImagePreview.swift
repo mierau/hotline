@@ -1,5 +1,6 @@
 import AppKit
 import Kingfisher
+import SwiftUI
 import UniformTypeIdentifiers
 
 /// Small previews of linked images, shown under the line with the link, in chat, on the board, in
@@ -19,11 +20,99 @@ enum ImagePreview {
 
   private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff"]
 
+  /// Bigger images don't download, whether they say how big they are first or not.
+  static let sizeLimit: Int64 = 10 * 1024 * 1024
+
   /// Whether a link looks like an image worth previewing. Only https, since the app doesn't allow
   /// insecure loads anyway.
   static func canPreview(_ url: URL) -> Bool {
     url.scheme?.lowercased() == "https" && self.imageExtensions.contains(url.pathExtension.lowercased())
   }
+
+  /// Where pictures load from by themselves, rather than once their link's clicked. Loading one tells
+  /// whoever serves it your IP address, and when you looked, so by themselves only from hosts where
+  /// whoever put a picture up can't see who looked at it, image search's copies, and the server
+  /// you're on, which has your address already, or from anywhere, as Settings can have it.
+  struct Sources: Equatable, Sendable {
+    /// The address of the server a window's for, whose own pictures load there too, but only there.
+    var server: String?
+    /// Pictures from any site, as Settings can have it.
+    var anySite = false
+
+    /// Whether pictures from where `url` is load by themselves, which a redirect to it can too.
+    func trusts(_ url: URL) -> Bool {
+      guard url.scheme?.lowercased() == "https", let host = url.host(percentEncoded: false)?.lowercased() else {
+        return false
+      }
+      return self.anySite
+        || ImagePreview.trustedHosts.contains(host)
+        || ImagePreview.trustedDomains.contains { host == $0 || host.hasSuffix("." + $0) }
+        || ImagePreview.thumbnailHosts.contains(host)
+        || self.server?.lowercased() == host
+    }
+
+    /// Whether a link is shown as its picture's preview, loading by itself: from where it can, to
+    /// one by its extension, or written as a picture in Markdown, or to image search's copies, which
+    /// have none.
+    func loadsByItself(_ url: URL, isImage: Bool) -> Bool {
+      guard self.trusts(url) else {
+        return false
+      }
+      return isImage
+        || ImagePreview.imageExtensions.contains(url.pathExtension.lowercased())
+        || ImagePreview.thumbnailHosts.contains(url.host(percentEncoded: false)?.lowercased() ?? "")
+    }
+  }
+
+  /// Hosts of pictures where whoever put one up can't see who looked at it: image hosts, chat's and
+  /// social sites', and reference sites'. Only these hosts, and not others under the same names,
+  /// which could be anyone's.
+  static let trustedHosts: Set<String> = [
+    // Image hosts
+    "i.imgur.com", "imgur.com",
+    "i.giphy.com", "media.giphy.com", "media0.giphy.com", "media1.giphy.com", "media2.giphy.com", "media3.giphy.com", "media4.giphy.com",
+    "media.tenor.com", "media1.tenor.com", "c.tenor.com",
+    "i.gyazo.com",
+    "image.prntscr.com",
+    "i.postimg.cc",
+    "i.ibb.co",
+    "files.catbox.moe",
+    // Chat and social sites
+    "cdn.discordapp.com", "media.discordapp.net", "images-ext-1.discordapp.net", "images-ext-2.discordapp.net",
+    "i.redd.it", "preview.redd.it", "external-preview.redd.it",
+    "pbs.twimg.com",
+    "cdn.bsky.app",
+    "64.media.tumblr.com",
+    "i.pinimg.com",
+    "i.ytimg.com", "img.youtube.com",
+    // Photos and reference
+    "upload.wikimedia.org",
+    "images.unsplash.com",
+    "lh3.googleusercontent.com", "blogger.googleusercontent.com",
+    "1.bp.blogspot.com", "2.bp.blogspot.com", "3.bp.blogspot.com", "4.bp.blogspot.com",
+    "i.sstatic.net", "i.stack.imgur.com",
+    // Apple's own pictures, and its artwork for apps, music and podcasts
+    "www.apple.com",
+    "is1-ssl.mzstatic.com", "is2-ssl.mzstatic.com", "is3-ssl.mzstatic.com", "is4-ssl.mzstatic.com", "is5-ssl.mzstatic.com",
+    // GitHub
+    "user-images.githubusercontent.com", "raw.githubusercontent.com", "avatars.githubusercontent.com",
+  ]
+
+  /// Sites whose every host under their name is their own: the Internet Archive, whose downloads
+  /// come from numbered servers, like dn721509.ca.archive.org, and whose Wayback Machine has its own
+  /// copies of old sites' pictures, so those sites don't see you either, and Flickr, whose older
+  /// links are to numbered servers too.
+  static let trustedDomains: [String] = ["archive.org", "staticflickr.com"]
+
+  /// Image search's own copies of pictures, whose links have no extension: Google's and Bing's
+  /// thumbnails, and DuckDuckGo's and Brave's, which get the picture from where it is themselves,
+  /// so that site doesn't see you either.
+  static let thumbnailHosts: Set<String> = [
+    "encrypted-tbn0.gstatic.com", "encrypted-tbn1.gstatic.com", "encrypted-tbn2.gstatic.com", "encrypted-tbn3.gstatic.com",
+    "th.bing.com", "tse1.mm.bing.net", "tse2.mm.bing.net", "tse3.mm.bing.net", "tse4.mm.bing.net",
+    "external-content.duckduckgo.com",
+    "imgs.search.brave.com",
+  ]
 
   /// How big a preview of an image this many pixels in size is: a point per pixel, the way web
   /// pages show images, scaled down to fit if it's bigger than the maximum.
@@ -60,25 +149,32 @@ enum ImagePreview {
   /// Links whose image couldn't be had, which aren't shown or tried again for a while.
   static let failures = ImagePreviewFailures(fileURL: directory.appending(path: "Failures.plist", directoryHint: .notDirectory))
 
-  /// Downloads previews, turning away anything that isn't an image or is too big to be worth it.
+  /// Downloads previews, turning away anything that isn't an image or is too big to be worth it, or
+  /// still coming after a minute, as one that never ends would be.
   static let downloader: ImageDownloader = {
     let downloader = ImageDownloader(name: "Chat Image Previews")
     downloader.downloadTimeout = 20
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.timeoutIntervalForResource = 60
+    downloader.sessionConfiguration = configuration
     downloader.delegate = ImageDownloadCheck.shared
     return downloader
   }()
+}
+
+extension EnvironmentValues {
+  /// Where a window's pictures load from by themselves: in a server's window, its server too.
+  @Entry var imageSources = ImagePreview.Sources()
 }
 
 /// Checks each preview's response before its data downloads.
 private final class ImageDownloadCheck: ImageDownloaderDelegate {
   static let shared = ImageDownloadCheck()
 
-  /// Bigger images don't download at all.
-  private let sizeLimit: Int64 = 10 * 1024 * 1024
-
+  /// Not one that says it's too big. One that doesn't say is stopped once too much of it has come.
   func imageDownloader(_ downloader: ImageDownloader, didReceive response: URLResponse) async -> URLSession.ResponseDisposition {
     guard response.mimeType?.lowercased().hasPrefix("image/") == true,
-          response.expectedContentLength <= self.sizeLimit else {
+          response.expectedContentLength <= ImagePreview.sizeLimit else {
       return .cancel
     }
     return .allow
@@ -321,10 +417,13 @@ final class ImageAttachment: NSTextAttachment {
   /// Whether the preview takes up any room: from the start for an image that's loaded before, or
   /// else once its image starts to come in, so a link to one that can't be had shows nothing.
   var isShown: Bool
+  /// Where it loads from by itself, which a redirect has to be to as well.
+  let sources: ImagePreview.Sources
 
-  init(url: URL, standsForLink: Bool = false) {
+  init(url: URL, standsForLink: Bool = false, sources: ImagePreview.Sources = ImagePreview.Sources()) {
     self.url = url
     self.standsForLink = standsForLink
+    self.sources = sources
     self.imageSize = ImagePreview.sizes.size(for: url)
     self.isShown = self.imageSize != nil && !ImagePreview.failures.contains(url)
     super.init(data: nil, ofType: nil)
@@ -362,7 +461,7 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     guard let attachment = self.textAttachment as? ImageAttachment else {
       return
     }
-    let view = ImagePreviewView(url: attachment.url)
+    let view = ImagePreviewView(url: attachment.url, sources: attachment.sources)
     view.showsPlaceholder = attachment.isShown
     view.onStart = { [weak self] in
       self?.show()
@@ -458,6 +557,8 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
 /// preview window, dragging it takes the image along, and its menu has what a link's has.
 final class ImagePreviewView: NSView, NSDraggingSource {
   let url: URL
+  /// Where it loads from by itself, which a redirect has to be to as well.
+  let sources: ImagePreview.Sources
   /// Called once the image starts to come in.
   var onStart: (() -> Void)?
   /// Called with the image's size in pixels once it loads.
@@ -475,8 +576,9 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   private let imageView = NSImageView()
   private var started = false
 
-  init(url: URL) {
+  init(url: URL, sources: ImagePreview.Sources) {
     self.url = url
+    self.sources = sources
     super.init(frame: .zero)
 
     self.wantsLayer = true
@@ -556,9 +658,23 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       options.append(.processor(DownsamplingImageProcessor(size: ImagePreview.maximumSize)))
       options.append(.scaleFactor(2))
     }
+    // Only on to somewhere it could load from by itself, so a link from a host it trusts can't send
+    // it somewhere else that would see you.
+    let sources = self.sources
+    options.append(.redirectHandler(AnyRedirectHandler { _, _, request, completion in
+      completion(request.url.map(sources.trusts) == true ? request : nil)
+    }))
 
     var reportedStart = false
-    self.imageView.kf.setImage(with: self.url, options: options, progressBlock: { [weak self] _, _ in
+    var tooBig = false
+    self.imageView.kf.setImage(with: self.url, options: options, progressBlock: { [weak self] received, _ in
+      // Stopped once more has come than a preview's worth, which one that didn't say how big it is
+      // could be, without end.
+      if received > ImagePreview.sizeLimit, !tooBig {
+        tooBig = true
+        self?.imageView.kf.cancelDownloadTask()
+        return
+      }
       guard !reportedStart else {
         return
       }
@@ -566,6 +682,10 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       self?.onStart?()
     }) { [weak self] result in
       guard let self else {
+        return
+      }
+      if tooBig {
+        self.onFail?(true)
         return
       }
       switch result {

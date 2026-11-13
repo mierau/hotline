@@ -38,6 +38,8 @@ enum ChatMessageRenderer {
     var showsIcons = true
     /// Whether links to images have a preview under them.
     var previewsImages = true
+    /// Where the images previewed load from by themselves.
+    var imageSources = ImagePreview.Sources()
     /// Whether people connecting and disconnecting are shown.
     var showsConnections = true
     /// Admins' names, and when they come and go, in place of Hotline's red, as a server's theme has
@@ -61,6 +63,7 @@ enum ChatMessageRenderer {
         codePadding: ChatMessageRenderer.codeBlockPadding,
         codeBlockSpacing: 6,
         imagePreviews: self.previewsImages ? ChatMessageRenderer.previewLimit : 0,
+        imageSources: self.imageSources,
         colors: Markdown.Colors(secondary: self.secondaryColor, tertiary: self.tertiaryColor)
       )
     }

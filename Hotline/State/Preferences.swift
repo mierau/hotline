@@ -133,7 +133,10 @@ enum PrefsKeys: String {
   case useServerThemedColors = "use server themed colors"
   case showJoinLeaveMessages = "show join leave messages"
   case showChatIcons = "show chat icons"
+  /// Previews on or off, as they were before there was a choice of sites, read only for
+  /// `ImagePreviews.saved(in:)`.
   case previewChatImages = "preview chat images"
+  case imagePreviews = "image previews"
   case chatHistoryRetention = "chat history retention"
   case downloadFolderBookmark = "download folder bookmark"
   case filesViewMode = "files view mode"
@@ -186,7 +189,6 @@ class Prefs {
       PrefsKeys.useServerThemedColors.rawValue: true,
       PrefsKeys.showJoinLeaveMessages.rawValue: true,
       PrefsKeys.showChatIcons.rawValue: true,
-      PrefsKeys.previewChatImages.rawValue: true,
       PrefsKeys.chatHistoryRetention.rawValue: ChatHistoryRetention.standard.rawValue,
       PrefsKeys.filesViewMode.rawValue: "grid",
       PrefsKeys.showRecentServers.rawValue: true,
@@ -224,7 +226,7 @@ class Prefs {
     self.useServerThemedColors = UserDefaults.standard.bool(forKey: PrefsKeys.useServerThemedColors.rawValue)
     self.showJoinLeaveMessages = UserDefaults.standard.bool(forKey: PrefsKeys.showJoinLeaveMessages.rawValue)
     self.showChatIcons = UserDefaults.standard.bool(forKey: PrefsKeys.showChatIcons.rawValue)
-    self.previewChatImages = UserDefaults.standard.bool(forKey: PrefsKeys.previewChatImages.rawValue)
+    self.imagePreviews = ImagePreviews.saved()
     self.chatHistoryRetention = ChatHistoryRetention.saved
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
@@ -393,8 +395,9 @@ class Prefs {
     didSet { UserDefaults.standard.set(self.showChatIcons, forKey: PrefsKeys.showChatIcons.rawValue) }
   }
 
-  var previewChatImages: Bool {
-    didSet { UserDefaults.standard.set(self.previewChatImages, forKey: PrefsKeys.previewChatImages.rawValue) }
+  /// Which links to pictures show the picture by itself. See `ImagePreviews`.
+  var imagePreviews: ImagePreviews {
+    didSet { UserDefaults.standard.set(self.imagePreviews.rawValue, forKey: PrefsKeys.imagePreviews.rawValue) }
   }
 
   /// How long chat, and private messages, are kept on this Mac, for when you're back.
@@ -570,5 +573,45 @@ enum ChatHistoryRetention: String, CaseIterable, Identifiable, Sendable {
   func keepsMore(than other: ChatHistoryRetention) -> Bool {
     let order = Self.allCases
     return order.firstIndex(of: self)! > order.firstIndex(of: other)!
+  }
+}
+
+/// Which links to pictures show the picture by itself, in chat, on the board, and in the news and
+/// private messages: none, those from where it's safe to, or any, which lets the site a picture's
+/// on see your IP address. See `ImagePreview.Sources`.
+enum ImagePreviews: String, CaseIterable, Identifiable, Sendable {
+  case never
+  case wellKnownSites
+  case anySite
+
+  static let standard = ImagePreviews.wellKnownSites
+
+  /// As it's set, or as previews were, on or off, before there was a choice of sites.
+  static func saved(in defaults: UserDefaults = .standard) -> ImagePreviews {
+    if let saved = defaults.string(forKey: PrefsKeys.imagePreviews.rawValue).flatMap(ImagePreviews.init(rawValue:)) {
+      return saved
+    }
+    return defaults.object(forKey: PrefsKeys.previewChatImages.rawValue) as? Bool == false ? .never : .standard
+  }
+
+  var id: String {
+    self.rawValue
+  }
+
+  var title: String {
+    switch self {
+    case .never: "Never"
+    case .wellKnownSites: "From Well-Known Sites"
+    case .anySite: "From Any Site"
+    }
+  }
+
+  /// What it means, in a line under it in the settings, when that needs saying.
+  var explanation: String? {
+    switch self {
+    case .never: nil
+    case .wellKnownSites: "Popular image hosts and the server you're on."
+    case .anySite: "Those sites can see your IP address, as if you'd visited them."
+    }
   }
 }

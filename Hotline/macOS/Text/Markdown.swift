@@ -73,6 +73,8 @@ enum Markdown {
     var codeBlockSpacing: CGFloat = 12
     /// At most how many links to images have a preview, under the line they're on.
     var imagePreviews = 10
+    /// Where the images previewed load from by themselves. Others are only links.
+    var imageSources = ImagePreview.Sources()
     /// Whether lines can be more than words: code blocks, drawings, headings, lines across, quotes,
     /// and lists' items. Without, as in a broadcast, which is centered, every line is words, with
     /// its marks shown as they're written.
@@ -1234,7 +1236,7 @@ enum Markdown {
       let url = self.destination(string.substring(with: match.range(at: 3)))
       // Shown as its preview alone, where there are any, or else as its words, or where it is,
       // without any, as a link to it.
-      if isImage, let url, layout.imagePreviews > 0, url.scheme?.lowercased() == "https" {
+      if isImage, let url, layout.imagePreviews > 0, layout.imageSources.loadsByItself(url, isImage: true) {
         shown.hidden.insert(integersIn: whole.location..<NSMaxRange(whole))
         take(words)
         shown.images.append((lineEnd, url, true))
@@ -1253,7 +1255,7 @@ enum Markdown {
         else {
           shown.links.append((words, url))
         }
-        if ImagePreview.canPreview(url) || isImage {
+        if layout.imageSources.loadsByItself(url, isImage: isImage) {
           shown.images.append((lineEnd, url, false))
         }
       }
@@ -1281,7 +1283,7 @@ enum Markdown {
         take(address)
         shown?.links.append((address, link.url))
         shown?.addresses.append(address)
-        if ImagePreview.canPreview(link.url) {
+        if layout.imageSources.loadsByItself(link.url, isImage: false) {
           shown?.images.append((self.contentEnd(of: line, in: string), link.url, false))
         }
       }

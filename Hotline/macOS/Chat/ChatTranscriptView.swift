@@ -63,7 +63,7 @@ struct ChatTranscriptView: NSViewRepresentable {
     let coordinator = context.coordinator
     coordinator.onCacheUpdate = self.onCacheUpdate
     let theme = context.environment.serverTheme
-    coordinator.options = ChatMessageRenderer.Options(showsIcons: self.showsIcons, previewsImages: self.previewsImages, showsConnections: self.showsConnections, adminColor: theme?.admin, secondaryColor: theme?.secondaryText, tertiaryColor: theme?.tertiaryText)
+    coordinator.options = ChatMessageRenderer.Options(showsIcons: self.showsIcons, previewsImages: self.previewsImages, imageSources: context.environment.imageSources, showsConnections: self.showsConnections, adminColor: theme?.admin, secondaryColor: theme?.secondaryText, tertiaryColor: theme?.tertiaryText)
 
     if let textView = coordinator.textView {
       textView.applyServerTheme(theme)

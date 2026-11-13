@@ -17,7 +17,7 @@ struct MarkdownText: NSViewRepresentable {
   /// What clicking a link does, when it's something other than what SwiftUI's openURL does.
   var openURL: ((URL) -> Void)? = nil
   /// Whether links to images have previews, as they're set to, in chat and everywhere else.
-  var previewsImages = Prefs.shared.previewChatImages
+  var previewsImages = Prefs.shared.imagePreviews != .never
 
   func makeCoordinator() -> Coordinator {
     Coordinator()
@@ -47,6 +47,7 @@ struct MarkdownText: NSViewRepresentable {
     if !self.previewsImages {
       layout.imagePreviews = 0
     }
+    layout.imageSources = environment.imageSources
     layout.colors = Markdown.Colors(theme: environment.serverTheme)
     textView.colors = layout.colors
     textView.show(self.text, layout: layout)

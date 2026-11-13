@@ -125,7 +125,7 @@ extension Markdown {
     var lines: [Int: [ImageAttachment]] = [:]
     for image in images where seen.count < layout.imagePreviews && !seen.contains(image.url) {
       seen.insert(image.url)
-      lines[min(max(0, image.lineEnd), storage.length), default: []].append(ImageAttachment(url: image.url, standsForLink: image.isImage))
+      lines[min(max(0, image.lineEnd), storage.length), default: []].append(ImageAttachment(url: image.url, standsForLink: image.isImage, sources: layout.imageSources))
     }
     // From the end, so what's before each line stays put.
     for (at, attachments) in lines.sorted(by: { $0.key > $1.key }) {

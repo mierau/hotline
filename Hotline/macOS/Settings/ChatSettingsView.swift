@@ -16,9 +16,19 @@ struct ChatSettingsView: View {
     Form {
       Toggle("Show connections in chat", isOn: $preferences.showJoinLeaveMessages)
       Toggle("Show user icons in chat", isOn: $preferences.showChatIcons)
-      Toggle(isOn: $preferences.previewChatImages) {
-        Text("Preview image links")
-        Text("In chat, on the message board, in the news, and in messages.")
+
+      Section("Image Previews") {
+        Picker(selection: $preferences.imagePreviews) {
+          ForEach(ImagePreviews.allCases) { previews in
+            Text(previews.title)
+              .tag(previews)
+          }
+        } label: {
+          Text("Show previews")
+          if let explanation = preferences.imagePreviews.explanation {
+            Text(explanation)
+          }
+        }
       }
 
       Section("Highlighted Words") {

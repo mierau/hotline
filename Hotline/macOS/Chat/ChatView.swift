@@ -121,7 +121,7 @@ struct ChatView: View {
           self.userMenu(name: name, iconID: iconID)
         },
         showsIcons: Prefs.shared.showChatIcons,
-        previewsImages: Prefs.shared.previewChatImages,
+        previewsImages: Prefs.shared.imagePreviews != .never,
         // A private chat's people coming and going are who's in it, so they're always shown.
         showsConnections: self.chatID != nil || Prefs.shared.showJoinLeaveMessages,
         // Older chat, or older results, as they're scrolled back to.

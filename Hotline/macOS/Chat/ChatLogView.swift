@@ -34,6 +34,8 @@ struct ChatLogView: View {
             .ignoresSafeArea()
         }
       }
+      // Its pictures, from where they load by themselves, outside a server's window, without one's.
+      .environment(\.imageSources, ImagePreview.Sources(anySite: Prefs.shared.imagePreviews == .anySite))
       .navigationTitle(self.serverName ?? self.key?.identifier ?? "Chat History")
       .navigationSubtitle(self.subtitle)
       .searchable(text: self.$searchQuery, isPresented: self.$isSearching, placement: .toolbar, prompt: "Search")
@@ -76,7 +78,7 @@ struct ChatLogView: View {
       },
       fileLinkMenu: { self.fileLinkMenu(for: $0) },
       showsIcons: Prefs.shared.showChatIcons,
-      previewsImages: Prefs.shared.previewChatImages,
+      previewsImages: Prefs.shared.imagePreviews != .never,
       showsConnections: Prefs.shared.showJoinLeaveMessages,
       onNearStart: {
         if self.debouncedQuery.isEmpty {

@@ -1,6 +1,7 @@
 // ImagePreviewSizesTests
 
 import Testing
+import AppKit
 import CoreGraphics
 import Foundation
 @testable import Hotline
@@ -55,5 +56,94 @@ struct ImagePreviewSizesTests {
 
   @Test func unknownImagesGetThePlaceholder() {
     #expect(ImagePreview.previewSize(forImageSize: nil) == ImagePreview.placeholderSize)
+  }
+
+  // MARK: - Where Pictures Load From by Themselves
+
+  @Test func picturesLoadByThemselvesOnlyFromWhereItsSafe() throws {
+    let sources = ImagePreview.Sources(server: "hotline.example.com")
+    func loads(_ link: String, isImage: Bool = false, in sources: ImagePreview.Sources = sources) -> Bool {
+      sources.loadsByItself(URL(string: link)!, isImage: isImage)
+    }
+    // Image hosts, and the server's own address.
+    #expect(loads("https://i.imgur.com/cat.png"))
+    #expect(loads("https://hotline.example.com/banner.jpg"))
+    #expect(loads("https://HOTLINE.example.com/banner.jpg"))
+    // Not another under the same name, or a site of whoever posted it.
+    #expect(!loads("https://evil.imgur.com/cat.png"))
+    #expect(!loads("https://files.example.com/banner.jpg"))
+    #expect(!loads("https://tracker.example/pixel.png"))
+    // Nor without https, or for a link to something that isn't a picture, but for image search's
+    // copies, which have no extension.
+    #expect(!loads("http://i.imgur.com/cat.png"))
+    #expect(!loads("https://raw.githubusercontent.com/someone/repo/main/README.md"))
+    #expect(loads("https://encrypted-tbn0.gstatic.com/images?q=tbn:abc"))
+    #expect(loads("https://external-content.duckduckgo.com/iu/?u=https://tracker.example/pixel.png"))
+    // A picture written in Markdown, by where it is, whatever its extension.
+    #expect(loads("https://i.imgur.com/cat", isImage: true))
+    #expect(!loads("https://tracker.example/pixel", isImage: true))
+    // Not the server's own in another server's window.
+    #expect(!loads("https://hotline.example.com/banner.jpg", in: ImagePreview.Sources(server: "other.example.com")))
+    // From any site, as Settings can have it.
+    #expect(loads("https://tracker.example/pixel.png", in: ImagePreview.Sources(anySite: true)))
+  }
+
+  @Test func picturesFromSitesWhoseEveryHostIsTheirOwnLoadByThemselves() {
+    let sources = ImagePreview.Sources()
+    func loads(_ link: String) -> Bool {
+      sources.loadsByItself(URL(string: link)!, isImage: false)
+    }
+    // The Internet Archive's downloads, and the server it sends them from, the Wayback Machine's
+    // copies, and Flickr's older links.
+    #expect(loads("https://archive.org/download/hypercard_what_is_hypercard_2/00_screenshot.png"))
+    #expect(loads("https://dn721509.ca.archive.org/0/items/hypercard_what_is_hypercard_2/00_screenshot.png"))
+    #expect(loads("https://web.archive.org/web/2001/http://www.apple.com/home/images/indexhero.jpg"))
+    #expect(loads("https://farm1.staticflickr.com/2/1418878_1e92283336_m.jpg"))
+    // Not sites whose names only end the same way.
+    #expect(!loads("https://notarchive.org/pic.png"))
+    #expect(!loads("https://archive.org.example.com/pic.png"))
+    // Brave's image search copies, which have no extension.
+    #expect(loads("https://imgs.search.brave.com/abc/rs:fit:500:0:0/g:ce/aHR0cHM6Ly9leGFtcGxlLmNvbQ"))
+  }
+
+  @Test func redirectsOnlyToWhereTheyCouldLoadFrom() {
+    let sources = ImagePreview.Sources(server: "hotline.example.com")
+    #expect(sources.trusts(URL(string: "https://i.imgur.com/removed.png")!))
+    #expect(sources.trusts(URL(string: "https://hotline.example.com/moved.png")!))
+    #expect(!sources.trusts(URL(string: "https://tracker.example/pixel")!))
+  }
+
+  @Test func markdownPicturesFromElsewhereStayLinks() {
+    func previews(_ text: String) -> Int {
+      let shown = Markdown.shownText(text, layout: .board)
+      var count = 0
+      shown.enumerateAttribute(.attachment, in: NSRange(location: 0, length: shown.length)) { value, _, _ in
+        count += value is ImageAttachment ? 1 : 0
+      }
+      return count
+    }
+    #expect(previews("![cat](https://i.imgur.com/cat.png)") == 1)
+    #expect(previews("![cat](https://tracker.example/cat.png)") == 0)
+    #expect(Markdown.shownText("![cat](https://tracker.example/cat.png)", layout: .board).string.contains("cat"))
+  }
+
+  // MARK: - The Setting
+
+  @Test func previewsTurnedOffBeforeThereWereChoicesStayOff() throws {
+    // A scratch set of settings, never the app's own.
+    let suite = "ImagePreviewSizesTests-\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    // Never set, from well-known sites.
+    #expect(ImagePreviews.saved(in: defaults) == .wellKnownSites)
+    // Set before, off stays off, and on is from well-known sites.
+    defaults.set(false, forKey: PrefsKeys.previewChatImages.rawValue)
+    #expect(ImagePreviews.saved(in: defaults) == .never)
+    defaults.set(true, forKey: PrefsKeys.previewChatImages.rawValue)
+    #expect(ImagePreviews.saved(in: defaults) == .wellKnownSites)
+    // As it's set now, whatever previews were before.
+    defaults.set(false, forKey: PrefsKeys.previewChatImages.rawValue)
+    defaults.set(ImagePreviews.anySite.rawValue, forKey: PrefsKeys.imagePreviews.rawValue)
+    #expect(ImagePreviews.saved(in: defaults) == .anySite)
   }
 }
