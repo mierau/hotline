@@ -36,10 +36,11 @@ extension HotlineState {
   }
 
   /// Sends someone a private message, and, for a reply, the message of theirs it's a reply to, as
-  /// it quotes it, which the server passes on with it.
+  /// it quotes it, which the server passes on with it. It's in your conversation with them at once,
+  /// as on its way, and then as delivered, once the server says it has it, or as not, and why.
   @MainActor
-  func sendInstantMessage(_ text: String, userID: UInt16, quoting: String? = nil) async throws {
-    guard let client = self.client else {
+  func sendInstantMessage(_ text: String, userID: UInt16, quoting: String? = nil) throws {
+    guard self.client != nil else {
       throw HotlineClientError.notConnected
     }
 
@@ -57,22 +58,82 @@ extension HotlineState {
       date: Date(),
       isRead: false,
       senderIsAdmin: selfUser?.isAdmin ?? false,
-      quoting: quoting
+      quoting: quoting,
+      delivery: .sending
     )
 
-    if self.privateMessages[userID] == nil {
-      self.privateMessages[userID] = [message]
-    } else {
-      self.privateMessages[userID]!.append(message)
+    let conversation = self.conversations.file(message, with: userID, name: user?.name ?? "", iconID: user?.iconID ?? 0)
+    self.recordPrivateMessage(message, peerName: conversation.name)
+    self.deliver(message, to: userID)
+  }
+
+  /// Sends one of yours that didn't get to them again, as it was, to them as they are now, in its
+  /// place in your conversation.
+  @MainActor
+  func resendPrivateMessage(id: UUID, userID: UInt16) {
+    guard self.client != nil,
+          let current = self.currentUserID(of: userID),
+          let conversation = self.conversations[userID],
+          var message = conversation.messages.first(where: { $0.id == id }),
+          case .notDelivered? = message.delivery else {
+      return
     }
 
-    self.recordPrivateMessage(message, userID: userID, peerName: user?.name)
+    message.delivery = .sending
+    self.conversations.update(conversation.id) { conversation in
+      if let i = conversation.messages.firstIndex(where: { $0.id == id }) {
+        conversation.messages[i].delivery = .sending
+      }
+    }
+    self.recordPrivateMessage(message, peerName: conversation.name)
+    self.deliver(message, to: current)
+  }
 
-    try await client.sendInstantMessage(text, to: userID, quoting: quoting)
+  /// Waits, apart from whatever sent it, for the server to say whether one of yours got to them,
+  /// and says so on it, and where it's saved.
+  @MainActor
+  private func deliver(_ message: InstantMessage, to userID: UInt16) {
+    guard let client = self.client else {
+      return
+    }
+    let name = self.conversations[userID]?.name ?? message.receiverName
 
-//    if Prefs.shared.playPrivateMessageSound {
-//      SoundEffects.play(.chatMessage)
-//    }
+    Task { [weak self] in
+      let delivery: InstantMessageDelivery
+      do {
+        try await client.sendInstantMessage(message.text, to: userID, quoting: message.quoting)
+        delivery = .delivered
+      }
+      catch HotlineClientError.timeout where self?.users.contains(where: { $0.id == userID }) == true {
+        // No answer, which a server might not give, while they're still here.
+        delivery = .unconfirmed
+      }
+      catch {
+        delivery = .notDelivered(Self.undeliveredReason(for: error, to: name))
+      }
+
+      guard let self, let delivered = self.conversations.deliver(message.id, with: userID, as: delivery), let conversation = self.conversations[userID] else {
+        return
+      }
+      self.recordPrivateMessage(delivered, peerName: conversation.name)
+    }
+  }
+
+  /// Why one of yours didn't get to them: as the server said, or, when it didn't answer, that they'd
+  /// gone, as Mobius doesn't answer for someone who isn't there. Nil otherwise, as when the
+  /// connection's lost.
+  static func undeliveredReason(for error: Error, to name: String?) -> String? {
+    switch error {
+    case HotlineClientError.serverError(_, let message?) where !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
+      return message
+    case HotlineClientError.timeout:
+      if let name, !name.isEmpty {
+        return "\(name) isn't on the server anymore."
+      }
+      return "They aren't on the server anymore."
+    default:
+      return nil
+    }
   }
 
   @MainActor
@@ -191,14 +252,26 @@ extension HotlineState {
     self.unreadPublicChatCount = 0
   }
 
-  func hasUnreadPrivateMessages(userID: UInt16) -> Bool {
-    return self.unreadPrivateMessages[userID] != nil
-  }
-
   /// How many messages, and invitations to private chats, you haven't seen from someone, as their
   /// row in the sidebar shows.
   func unreadCount(from userID: UInt16) -> Int {
-    (self.unreadPrivateMessages[userID] ?? 0) + self.privateChats.count { $0.invitation?.userID == userID && $0.unread }
+    (self.conversations[userID]?.unread ?? 0) + self.privateChats.count { $0.invitation?.userID == userID && $0.unread }
+  }
+
+  /// The user ID of whoever had `userID` this visit, as it is now: the same while they're here, the
+  /// one they came back with, if they have, and nil while they're gone.
+  func currentUserID(of userID: UInt16) -> UInt16? {
+    let current: UInt16?
+    if let conversation = self.conversations[userID] {
+      current = conversation.userID
+    }
+    else {
+      current = userID
+    }
+    guard let current, self.users.contains(where: { $0.id == current }) else {
+      return nil
+    }
+    return current
   }
 
   /// What the sidebar's counts add up to: the public chat's, the board's, each private chat's you're
@@ -210,55 +283,64 @@ extension HotlineState {
   }
 
   func markPrivateMessagesAsRead(userID: UInt16) {
-    self.unreadPrivateMessages.removeValue(forKey: userID)
+    guard let conversation = self.conversations[userID], conversation.unread > 0 else { return }
+    self.conversations.update(conversation.id) { $0.unread = 0 }
   }
 
+  /// Marks what's been said with them read, here and on your computer, whether they're still here
+  /// or not.
   func setPrivateMessagesRead(userID: UInt16) {
-    guard var messages = self.privateMessages[userID] else { return }
-    var changed = false
-    for i in messages.indices where !messages[i].isRead {
-      messages[i].isRead = true
-      changed = true
+    guard let conversation = self.conversations[userID] else { return }
+    let unread = conversation.messages.filter { !$0.isRead }.map(\.id)
+    guard !unread.isEmpty else { return }
+    self.conversations.update(conversation.id) { conversation in
+      for i in conversation.messages.indices {
+        conversation.messages[i].isRead = true
+      }
     }
-    guard changed else { return }
-    self.privateMessages[userID] = messages
-
-    guard let user = self.users.first(where: { $0.id == userID }),
-          let key = self.chatSessionKey else { return }
-    let peerName = user.name
 
     Task {
-      await ChatStore.shared.markPrivateEntriesAsRead(for: key, peerName: peerName)
+      await ChatStore.shared.markEntriesAsRead(ids: unread)
     }
   }
 
   func deletePrivateMessage(id: UUID, userID: UInt16) {
-    self.privateMessages[userID]?.removeAll(where: { $0.id == id })
+    if let conversation = self.conversations[userID] {
+      self.conversations.update(conversation.id) { $0.messages.removeAll(where: { $0.id == id }) }
+    }
 
     Task {
       await ChatStore.shared.deleteEntry(id: id)
     }
   }
 
+  /// Deletes all the conversation with them shows, here and on your computer, whether they're still
+  /// here or not, and whatever names it was saved under.
   func deleteAllPrivateMessages(userID: UInt16) {
-    self.privateMessages[userID] = nil
-
-    guard let user = self.users.first(where: { $0.id == userID }),
-          let key = self.chatSessionKey else { return }
-    let peerName = user.name
+    guard let conversation = self.conversations[userID] else { return }
+    let ids = conversation.messages.map(\.id)
+    self.conversations.update(conversation.id) { conversation in
+      conversation.messages = []
+      conversation.unread = 0
+    }
 
     Task {
-      await ChatStore.shared.deletePrivateEntries(for: key, peerName: peerName)
+      await ChatStore.shared.deleteEntries(ids: ids)
     }
   }
 
+  /// Reads back what was saved of your conversation with them on earlier visits, by their name,
+  /// once, into it, or into one started with them, for someone here you haven't talked with yet.
   func restorePrivateHistory(userID: UInt16) {
-    guard let user = self.users.first(where: { $0.id == userID }) else { return }
-    let peerName = user.name
-    guard !self.restoredPrivatePeers.contains(peerName) else { return }
-    guard let key = self.chatSessionKey else { return }
+    var conversation = self.conversations[userID]
+    if conversation == nil, let user = self.users.first(where: { $0.id == userID }) {
+      conversation = self.conversations.start(with: user.id, name: user.name, iconID: user.iconID)
+    }
+    guard let conversation, !conversation.restored, let key = self.chatSessionKey else { return }
 
-    self.restoredPrivatePeers.insert(peerName)
+    self.conversations.update(conversation.id) { $0.restored = true }
+    let id = conversation.id
+    let peerName = conversation.name
 
     Task { [weak self] in
       guard let self else { return }
@@ -280,16 +362,17 @@ extension HotlineState {
             date: entry.date,
             isRead: entry.isRead,
             senderIsAdmin: entry.metadata?.senderIsAdmin ?? false,
-            quoting: entry.metadata?.quoting
+            quoting: entry.metadata?.quoting,
+            delivery: InstantMessageDelivery(saved: entry.metadata?.delivery, reason: entry.metadata?.undeliveredReason)
           )
         }
 
         guard !historyMessages.isEmpty else { return }
 
-        let currentMessages = self.privateMessages[userID] ?? []
-        let currentIDs = Set(currentMessages.map { $0.id })
-        let newHistory = historyMessages.filter { !currentIDs.contains($0.id) }
-        self.privateMessages[userID] = newHistory + currentMessages
+        self.conversations.update(id) { conversation in
+          let currentIDs = Set(conversation.messages.map { $0.id })
+          conversation.messages = historyMessages.filter { !currentIDs.contains($0.id) } + conversation.messages
+        }
       }
     }
   }
@@ -409,8 +492,8 @@ extension HotlineState {
     }
   }
 
-  func recordPrivateMessage(_ message: InstantMessage, userID: UInt16, peerName: String?) {
-    guard let key = self.chatSessionKey, let peerName else { return }
+  func recordPrivateMessage(_ message: InstantMessage, peerName: String) {
+    guard let key = self.chatSessionKey, !peerName.isEmpty else { return }
 
     let entryType = message.direction == .outgoing ? "privateOut" : "privateIn"
     let entry = ChatStore.Entry(
@@ -419,7 +502,7 @@ extension HotlineState {
       username: message.senderName,
       type: entryType,
       date: message.date,
-      metadata: ChatStore.EntryMetadata(iconID: message.senderIconID, receiverName: message.receiverName, receiverIconID: message.receiverIconID, senderIsAdmin: message.senderIsAdmin ? true : nil, quoting: message.quoting, kind: message.type == .message ? nil : message.type.rawValue),
+      metadata: ChatStore.EntryMetadata(iconID: message.senderIconID, receiverName: message.receiverName, receiverIconID: message.receiverIconID, senderIsAdmin: message.senderIsAdmin ? true : nil, quoting: message.quoting, kind: message.type == .message ? nil : message.type.rawValue, delivery: message.delivery?.saved, undeliveredReason: message.delivery?.reason),
       isRead: message.isRead
     )
     let serverName = self.serverName ?? self.server?.name

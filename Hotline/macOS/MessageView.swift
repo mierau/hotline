@@ -25,7 +25,6 @@ struct MessageView: View {
   @State private var userInfo: HotlineUserClientInfo?
   @State private var disconnectConfirmShown: Bool = false
   @State private var deleteAllConfirmShown: Bool = false
-  @State private var username: String?
   @State private var composeContext: ComposeContext? = nil
   @State private var deleteMessageID: UUID? = nil
   /// A linked file's info, from its link's menu.
@@ -93,9 +92,6 @@ struct MessageView: View {
     }
     .onAppear {
       self.model.restorePrivateHistory(userID: self.userID)
-
-      let user = self.model.users.first(where: { $0.id == self.userID })
-      self.username = user?.name
     }
     .onDisappear {
       self.model.setPrivateMessagesRead(userID: self.userID)
@@ -105,7 +101,7 @@ struct MessageView: View {
       self.model.markPrivateMessagesAsRead(userID: self.userID)
       self.model.markInvitationsAsRead(from: self.userID)
     }
-    .onChange(of: self.model.privateMessages[self.userID]?.count) {
+    .onChange(of: self.messages.count) {
       if let newest = self.messages.last, newest.direction == .outgoing {
         self.focusedMessageID = newest.id
       }
@@ -148,14 +144,14 @@ struct MessageView: View {
             } label: {
               Label("User Info", systemImage: "info.circle")
             }
-            .disabled(self.model.access?.contains(.canGetClientInfo) != true)
+            .disabled(self.model.access?.contains(.canGetClientInfo) != true || self.currentUserID == nil)
 
             Button(role: .destructive) {
               self.disconnectConfirmShown = true
             } label: {
               Label("Disconnect \(self.username ?? "User")...", systemImage: "nosign")
             }
-            .disabled(self.model.access?.contains(.canDisconnectUsers) != true)
+            .disabled(self.model.access?.contains(.canDisconnectUsers) != true || self.currentUserID == nil)
           } label: {
             Image(systemName: "ellipsis")
           }
@@ -176,7 +172,7 @@ struct MessageView: View {
       }
     }
     .sheet(item: self.$composeContext) { context in
-      ComposeMessageView(userID: self.userID, username: self.username, quoting: context.quoting)
+      ComposeMessageView(userID: self.currentUserID ?? self.userID, username: self.username, quoting: context.quoting)
     }
     .sheet(item: self.$userInfo) { info in
       UserClientInfoSheet(info: info)
@@ -223,7 +219,7 @@ struct MessageView: View {
   }
 
   private var messages: [InstantMessage] {
-    self.model.privateMessages[self.userID] ?? []
+    self.model.conversations[self.userID]?.messages ?? []
   }
 
   /// Messages in display order (newest first).
@@ -231,8 +227,19 @@ struct MessageView: View {
     self.messages.reversed()
   }
 
+  /// Their name as it is now, through any change, or as it was when they left.
+  private var username: String? {
+    self.model.conversations[self.userID]?.name ?? self.model.users.first(where: { $0.id == self.userID })?.name
+  }
+
+  /// Where they are on the server now: the user ID they're shown for while they're here, the one
+  /// they came back with if they've reconnected, or nil while they're gone.
+  private var currentUserID: UInt16? {
+    self.model.currentUserID(of: self.userID)
+  }
+
   private var userRefusesMessages: Bool {
-    self.model.users.first(where: { $0.id == self.userID })?.refusesPrivateMessages ?? false
+    self.model.users.first(where: { $0.id == self.currentUserID })?.refusesPrivateMessages ?? false
   }
 
   /// Why nothing can be sent to them, as Reply and Compose say while they're off, or nil when it
@@ -244,7 +251,7 @@ struct MessageView: View {
     if self.userRefusesMessages {
       return "\(self.username ?? "They") doesn't accept private messages"
     }
-    if !self.model.users.contains(where: { $0.id == self.userID }) {
+    if self.currentUserID == nil {
       return "\(self.username ?? "They") isn't on the server"
     }
     return nil
@@ -274,16 +281,22 @@ struct MessageView: View {
   }
 
   private func getUserInfo() {
+    guard let id = self.currentUserID else {
+      return
+    }
     Task {
-      if let info = try? await self.model.getClientInfoText(id: self.userID) {
+      if let info = try? await self.model.getClientInfoText(id: id) {
         self.userInfo = info
       }
     }
   }
 
   private func disconnectUser() {
+    guard let id = self.currentUserID else {
+      return
+    }
     Task {
-      try? await self.model.disconnectUser(id: self.userID, options: nil)
+      try? await self.model.disconnectUser(id: id, options: nil)
     }
   }
 
@@ -416,6 +429,10 @@ struct MessageView: View {
             .textSelection(.disabled)
         }
 
+        if case .notDelivered(let reason)? = msg.delivery {
+          self.notDelivered(msg, reason: reason)
+        }
+
         if collapsed {
           Text(self.collapsedSnippet(msg).hidingOffensiveWords)
             .foregroundStyle(.secondary)
@@ -425,6 +442,10 @@ struct MessageView: View {
         }
 
         Spacer()
+
+        if let delivery = msg.delivery {
+          DeliveryMark(delivery: delivery)
+        }
 
         TimelineView(.periodic(from: .now, by: 60)) { context in
           Text(Self.relativeDateFormatter.localizedString(for: msg.date, relativeTo: context.date))
@@ -451,6 +472,28 @@ struct MessageView: View {
       ? LinearGradient(colors: [.white.opacity(0.2), .white.opacity(0.0)], startPoint: .top, endPoint: .bottom).blendMode(.softLight)
       : LinearGradient(colors: [.white.opacity(0.1), .white.opacity(0.0)], startPoint: .top, endPoint: .bottom).blendMode(.softLight)
     )
+  }
+
+  /// That one of yours didn't get to them, in red, with why in its tip, and Try Again, to send it to
+  /// them as it was, while they're here.
+  private func notDelivered(_ msg: InstantMessage, reason: String?) -> some View {
+    HStack(spacing: 8) {
+      Text("Not Delivered")
+        .font(.caption)
+        .foregroundStyle(.red)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 1)
+        .background(.red.opacity(0.12), in: .capsule)
+        .help(reason ?? "It didn't get to them.")
+      Button("Try Again") {
+        self.model.resendPrivateMessage(id: msg.id, userID: self.userID)
+      }
+      .buttonStyle(.link)
+      .font(.caption)
+      .disabled(self.cantSendReason != nil)
+      .help(self.cantSendReason ?? "Send it to them again")
+    }
+    .textSelection(.disabled)
   }
 
   /// What a message says, without its Markdown's marks, as it reads, for a line of it, like a
@@ -600,6 +643,44 @@ struct MessageView: View {
   }
 }
 
+// MARK: - Delivery
+
+/// Whether one of yours got to them, by when it was sent: a spinner while it's on its way, once that's
+/// taken a moment, as it usually takes none, and a check once the server says it has it.
+private struct DeliveryMark: View {
+  let delivery: InstantMessageDelivery
+
+  @State private var slow = false
+
+  var body: some View {
+    switch self.delivery {
+    case .sending:
+      ProgressView()
+        .controlSize(.mini)
+        .opacity(self.slow ? 1 : 0)
+        .help("Sending…")
+        .accessibilityLabel("Sending")
+        .task {
+          try? await Task.sleep(for: .milliseconds(400))
+          guard !Task.isCancelled else {
+            return
+          }
+          withAnimation(.easeOut(duration: 0.2)) {
+            self.slow = true
+          }
+        }
+    case .delivered:
+      Image(systemName: "checkmark")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .help("Delivered")
+        .accessibilityLabel("Delivered")
+    case .unconfirmed, .notDelivered:
+      EmptyView()
+    }
+  }
+}
+
 // MARK: - Compose Message View
 
 /// Writing a private message, across all of the sheet, with who it's to at the top, which can
@@ -643,7 +724,6 @@ struct ComposeMessageView: View {
   /// Whether the name's been typed, or changed, here, as names are only suggested once it has, and
   /// not for one it starts with, as the field can have the keys for a moment as the sheet opens.
   @State private var recipientEdited = false
-  @State private var sending = false
   @State private var failed = false
   @State private var confirmingDiscard = false
   /// How big it opens: as big as it was last made, or else as it's meant to be.
@@ -655,9 +735,15 @@ struct ComposeMessageView: View {
   @State private var shown = ShownSize()
   @FocusState private var recipientFocused: Bool
 
-  /// Who it's to, by the name typed: the one it started to, while it's still their name, or else
-  /// whoever on the server has that name, and nobody, for a name nobody here has.
+  /// Who it's to. For a reply, whoever wrote what it's a reply to, by who they are rather than by
+  /// their name, which they can change, under whatever user ID they've come back with, while
+  /// they're here. For a new message, by the name typed: the one it started to, while it's still
+  /// their name, or else whoever on the server has that name, and nobody, for a name nobody here
+  /// has.
   private var recipient: User? {
+    if self.isReply {
+      return self.userID.flatMap { self.model.currentUserID(of: $0) }.flatMap { id in self.model.users.first(where: { $0.id == id }) }
+    }
     let name = self.recipientName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else {
       return nil
@@ -711,7 +797,8 @@ struct ComposeMessageView: View {
         // went to someone else would quote what they've never seen. A new message is to whoever's
         // typed.
         if self.isReply {
-          Text(self.recipientName)
+          // As they're named now.
+          Text(recipient?.name ?? self.recipientName)
             .font(.system(size: Self.recipientFontSize, weight: .semibold))
             .lineLimit(1)
         }
@@ -815,13 +902,6 @@ struct ComposeMessageView: View {
     // As big as it's meant to be, as above.
     .presentationSizing(.fitted)
     .toolbar {
-      if self.sending {
-        ToolbarItem {
-          ProgressView()
-            .controlSize(.small)
-        }
-      }
-
       // The formatting, at the bottom on the left, across from Cancel and Send, as one item, in the
       // one place a sheet's bottom bar has on that side, which is for a destructive button but
       // takes anything, and off while who it's to is being typed, which has none.
@@ -849,7 +929,7 @@ struct ComposeMessageView: View {
         .buttonStyle(.borderedProminent)
         // Return is for new lines.
         .keyboardShortcut(.return, modifiers: .command)
-        .disabled(message.isEmpty || recipient == nil || recipient?.refusesPrivateMessages == true || room < 0 || self.sending)
+        .disabled(message.isEmpty || recipient == nil || recipient?.refusesPrivateMessages == true || room < 0)
         .help("Send Message (⌘↩)")
       }
     }
@@ -878,13 +958,13 @@ struct ComposeMessageView: View {
     return !name.isEmpty && !self.recipientFocused ? "Not Online" : nil
   }
 
-  /// What's at the right of who it's to: that it didn't go through, if it didn't.
+  /// What's at the right of who it's to: that it couldn't be sent, if it couldn't.
   @ViewBuilder
   private var status: some View {
     if self.failed {
       Label("not sent", systemImage: "exclamationmark.circle.fill")
         .foregroundStyle(.red)
-        .help("It didn't go through. Try sending it again.")
+        .help("It couldn't be sent, as you're not connected.")
         .transition(.opacity)
     }
   }
@@ -903,43 +983,39 @@ struct ComposeMessageView: View {
     return recipient.map { "Write a message to \($0.name)…" } ?? "Write a message…"
   }
 
-  /// Sends it, and once it's gone, puts the sheet away. If it doesn't go through, it's still here to
-  /// try again.
+  /// Sends it, and puts the sheet away, as it's in your conversation with them at once, which says
+  /// whether it got to them, once the server does. If it can't be sent, as when you're not
+  /// connected, it's still here.
   private func send() {
     let message = MessageBoardPost.cleaned(self.text)
     guard let recipient = self.recipient, !message.isEmpty else {
       return
     }
 
-    self.sending = true
-    withAnimation(.easeOut(duration: 0.15)) {
-      self.failed = false
+    do {
+      try self.model.sendInstantMessage(message, userID: recipient.id, quoting: self.quoting)
     }
-    Task {
-      do {
-        try await self.model.sendInstantMessage(message, userID: recipient.id, quoting: self.quoting)
+    catch {
+      withAnimation(.easeOut(duration: 0.15)) {
+        self.failed = true
       }
-      catch {
-        self.sending = false
-        withAnimation(.easeOut(duration: 0.15)) {
-          self.failed = true
-        }
-        return
-      }
-      self.sending = false
-      self.dismiss()
+      return
     }
+    self.dismiss()
   }
 }
 
 #Preview("Conversation") {
   let model = HotlineState()
   model.users = [User(id: 1, name: "Halcyon", iconID: 4217, status: [])]
-  model.privateMessages[1] = [
+  for message in [
     InstantMessage(direction: .incoming, senderName: "Halcyon", senderIconID: 4217, text: "Have you seen the **new** `hotline://` links? They're in *Files* now.\n\n> Quoted from the board\n\n- one\n- two", type: .message, date: .now.addingTimeInterval(-600)),
-    InstantMessage(direction: .outgoing, senderName: "macro", senderIconID: 130, text: "Yes! ~~Old~~ new and _shiny_.\n\n```\nlet x = 1\n```", type: .message, date: .now.addingTimeInterval(-300), isRead: false, quoting: "Have you seen the **new** `hotline://` links? They're in *Files* now.\n\n> Quoted from the board\n\n- one\n- two"),
-    InstantMessage(direction: .incoming, senderName: "Halcyon", senderIconID: 4217, text: "Out to lunch, back at 2.", type: .automaticResponse, date: .now),
-  ]
+    InstantMessage(direction: .outgoing, senderName: "macro", senderIconID: 130, text: "Yes! ~~Old~~ new and _shiny_.\n\n```\nlet x = 1\n```", type: .message, date: .now.addingTimeInterval(-300), isRead: false, quoting: "Have you seen the **new** `hotline://` links? They're in *Files* now.\n\n> Quoted from the board\n\n- one\n- two", delivery: .delivered),
+    InstantMessage(direction: .incoming, senderName: "Halcyon", senderIconID: 4217, text: "Out to lunch, back at 2.", type: .automaticResponse, date: .now.addingTimeInterval(-290)),
+    InstantMessage(direction: .outgoing, senderName: "macro", senderIconID: 130, text: "Back already?", type: .message, date: .now, isRead: false, delivery: .notDelivered("Halcyon isn't on the server anymore.")),
+  ] {
+    model.conversations.file(message, with: 1, name: "Halcyon", iconID: 4217)
+  }
   return MessageView(userID: 1)
     .environment(model)
     .frame(width: 520, height: 600)

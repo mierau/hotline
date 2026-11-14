@@ -46,9 +46,10 @@ public enum HotlineEvent: Sendable {
   case userDisconnected(UInt16)
   /// Server sent a broadcast message
   case serverMessage(String)
-  /// Received a private message from a user, with the message of yours it's a reply to, when
-  /// they quoted one, and whether they wrote it or the server sent it for them
-  case privateMessage(userID: UInt16, message: String, quoting: String?, kind: HotlinePrivateMessageKind)
+  /// Received a private message from a user, by their ID and the name the server sends with it,
+  /// with the message of yours it's a reply to, when they quoted one, and whether they wrote it or
+  /// the server sent it for them
+  case privateMessage(userID: UInt16, name: String?, message: String, quoting: String?, kind: HotlinePrivateMessageKind)
   /// Server sent a news post notification
   case newsPost(String)
   /// Server sent agreement (nil text means no agreement required)
@@ -623,7 +624,9 @@ public actor HotlineClient {
           // The message of yours it's a reply to, when they quoted it, as clients from 1.5 on do.
           let quoting = transaction.getField(type: .quotingMessage)?.getString().flatMap { $0.isEmpty ? nil : $0 }
           let kind = HotlinePrivateMessageKind(options: transaction.getField(type: .options)?.getInteger())
-          eventContinuation.yield(.privateMessage(userID: userID, message: message, quoting: quoting, kind: kind))
+          // Who it's from by name too, as servers send it, for someone the user list doesn't have.
+          let name = transaction.getField(type: .userName)?.getString()
+          eventContinuation.yield(.privateMessage(userID: userID, name: name, message: message, quoting: quoting, kind: kind))
         } else {
           eventContinuation.yield(.serverMessage(message))
         }
@@ -929,14 +932,19 @@ public actor HotlineClient {
     return reply.getFieldList(type: .userNameWithInfo).compactMap { $0.getUser() }
   }
 
-  /// Send a private instant message to a user
+  /// Send a private instant message to a user, and wait for the server to say it has it, as servers
+  /// do, and the original client waited for
   ///
   /// - Parameters:
   ///   - message: Text to send
   ///   - userID: Target user ID
   ///   - quoting: The message of theirs it's a reply to, if it is one
   ///   - encoding: Text encoding (default: UTF-8)
-  public func sendInstantMessage(_ message: String, to userID: UInt16, quoting: String? = nil, encoding: String.Encoding = .utf8) async throws {
+  ///   - timeout: How long to wait for the server to say so, which servers do at once
+  /// - Throws: The server's error, when it turns it away, as when they've gone, or
+  ///   `HotlineClientError.timeout`, when it doesn't answer, as Mobius doesn't for a user ID that
+  ///   nobody has
+  public func sendInstantMessage(_ message: String, to userID: UInt16, quoting: String? = nil, encoding: String.Encoding = .utf8, timeout: TimeInterval = 5) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .sendInstantMessage)
     transaction.setFieldUInt16(type: .userID, val: userID)
     transaction.setFieldUInt32(type: .options, val: 1)
@@ -946,7 +954,7 @@ public actor HotlineClient {
       transaction.setFieldString(type: .quotingMessage, val: quoting.convertingLineEndings(to: .cr), encoding: encoding)
     }
 
-    try await self.send(transaction)
+    try await self.sendTransaction(transaction, timeout: timeout)
   }
   
   /// Get information text about a user

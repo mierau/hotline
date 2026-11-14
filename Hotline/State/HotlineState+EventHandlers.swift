@@ -62,6 +62,8 @@ extension HotlineState {
         SoundEffects.play(.userLogout)
       }
     }
+    // Their conversation waits for them.
+    self.followConversations()
     self.removeFromPrivateChats(userID: userID)
   }
 
@@ -82,51 +84,61 @@ extension HotlineState {
   }
 
   /// A private message from someone: one they wrote, maybe a reply to one of yours, as it quotes
-  /// it, or one the server sent for them, like their automatic response.
-  func handlePrivateMessage(userID: UInt16, message: String, quoting: String? = nil, kind: HotlinePrivateMessageKind = .message) {
-    if let existingUserIndex = self.users.firstIndex(where: { $0.id == UInt(userID) }) {
-      let user = self.users[existingUserIndex]
-      print("HotlineState: received private message from \(user.name): \(message)")
-
-      if Prefs.shared.playPrivateMessageSound {
-        if self.unreadPrivateMessages[userID] == nil {
-          SoundEffects.play(.serverMessage)
-        } else {
-          SoundEffects.play(.chatMessage)
-        }
-      }
-
-      let instantMessage = InstantMessage(
-        direction: .incoming,
-        senderName: user.name,
-        senderIconID: user.iconID,
-        receiverName: self.username,
-        receiverIconID: UInt(self.iconID),
-        text: message,
-        type: Self.messageType(of: kind),
-        date: Date(),
-        isRead: false,
-        senderIsAdmin: user.isAdmin,
-        quoting: quoting
-      )
-
-      if self.privateMessages[userID] == nil {
-        self.privateMessages[userID] = [instantMessage]
-      } else {
-        self.privateMessages[userID]!.append(instantMessage)
-      }
-
-      self.recordPrivateMessage(instantMessage, userID: userID, peerName: user.name)
-      self.unreadPrivateMessages[userID, default: 0] += 1
-
-      #if os(macOS)
-      if Prefs.shared.showPrivateMessageNotifications {
-        // Said when it's not from them, as their automatic response isn't.
-        let name = kind == .automaticResponse ? "\(user.name) (Auto-Reply)" : user.name
-        self.notify("pm-\(userID)", subtitle: "Private Message", body: "\(name): \(message)", userInfo: ["userID": userID])
-      }
-      #endif
+  /// it, or one the server sent for them, like their automatic response. From someone in the user
+  /// list, or else by the name the server sends with it, as for someone the list doesn't have.
+  func handlePrivateMessage(userID: UInt16, name: String?, message: String, quoting: String? = nil, kind: HotlinePrivateMessageKind = .message) {
+    // Until the user list is in, to know who it's from. See `getUserList()`.
+    if self.heldUserEvents != nil {
+      self.heldUserEvents?.append(.privateMessage(userID: userID, name: name, message: message, quoting: quoting, kind: kind))
+      return
     }
+
+    let user = self.users.first(where: { $0.id == userID })
+    guard let senderName = user?.name ?? name else {
+      return
+    }
+    print("HotlineState: received private message from \(senderName): \(message)")
+
+    // That they don't take private messages, for one of yours just sent: said on it, rather than as
+    // a message of its own.
+    if kind == .refusedMessage, let refused = self.conversations.refuse(latestTo: userID, reason: message), let conversation = self.conversations[userID] {
+      self.recordPrivateMessage(refused, peerName: conversation.name)
+      return
+    }
+
+    if Prefs.shared.playPrivateMessageSound {
+      if (self.conversations[userID]?.unread ?? 0) == 0 {
+        SoundEffects.play(.serverMessage)
+      } else {
+        SoundEffects.play(.chatMessage)
+      }
+    }
+
+    let iconID = user?.iconID ?? self.conversations[userID]?.iconID ?? 0
+    let instantMessage = InstantMessage(
+      direction: .incoming,
+      senderName: senderName,
+      senderIconID: iconID,
+      receiverName: self.username,
+      receiverIconID: UInt(self.iconID),
+      text: message,
+      type: Self.messageType(of: kind),
+      date: Date(),
+      isRead: false,
+      senderIsAdmin: user?.isAdmin ?? false,
+      quoting: quoting
+    )
+
+    let conversation = self.conversations.file(instantMessage, with: userID, name: senderName, iconID: iconID, unseen: true)
+    self.recordPrivateMessage(instantMessage, peerName: conversation.name)
+
+    #if os(macOS)
+    if Prefs.shared.showPrivateMessageNotifications {
+      // Said when it's not from them, as their automatic response isn't.
+      let name = kind == .automaticResponse ? "\(senderName) (Auto-Reply)" : senderName
+      self.notify("pm-\(userID)", subtitle: "Private Message", body: "\(name): \(message)", userInfo: ["userID": userID])
+    }
+    #endif
   }
 
   /// What kind of message it's kept as, from what the server said it is.

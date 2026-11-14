@@ -27,10 +27,12 @@ extension HotlineState {
     let hotlineUsers = try await client.getUserList()
     self.users = hotlineUsers.map { User(hotlineUser: $0) }
     self.findOwnUser()
+    self.followConversations()
   }
 
-  /// Goes through what people did while it was held, in the order they did it. Without sounds, as
-  /// it all comes at once, as you arrive.
+  /// Goes through what people did while it was held, in the order they did it. Without the sounds of
+  /// their coming and going, as it all comes at once, as you arrive. What they sent you comes as
+  /// messages do.
   func releaseHeldUserEvents() {
     guard let events = self.heldUserEvents else {
       return
@@ -42,9 +44,21 @@ extension HotlineState {
         self.addOrUpdateHotlineUser(user, playsSound: false)
       case .userDisconnected(let userID):
         self.handleUserDisconnected(userID, playsSound: false)
+      case .privateMessage(let userID, let name, let message, let quoting, let kind):
+        self.handlePrivateMessage(userID: userID, name: name, message: message, quoting: quoting, kind: kind)
       default:
         break
       }
+    }
+  }
+
+  /// Follows people in their private conversations, as they are now, saying so only when something
+  /// changed, for what shows them not to be drawn again for nothing. See
+  /// `PrivateConversations.follow(_:)`.
+  func followConversations() {
+    var conversations = self.conversations
+    if conversations.follow(self.users) {
+      self.conversations = conversations
     }
   }
 
@@ -172,5 +186,7 @@ extension HotlineState {
       chatMessage.isAdmin = user.isAdmin
       self.recordChatMessage(chatMessage)
     }
+    // Their conversation, under the name they have now, or one that's waited for them.
+    self.followConversations()
   }
 }

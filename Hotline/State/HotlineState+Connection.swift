@@ -587,9 +587,7 @@ extension HotlineState {
     self.isReadingBack = false
     self.newerChat = []
     self.newWhileReadingBack = 0
-    self.privateMessages = [:]
-    self.unreadPrivateMessages = [:]
-    self.restoredPrivatePeers = []
+    self.conversations = PrivateConversations()
     self.unreadPublicChatCount = 0
     self.unreadBoardPosts = 0
     self.messageBoard = []
@@ -1022,8 +1020,8 @@ extension HotlineState {
     case .serverMessage(let message):
       self.handleServerMessage(message)
 
-    case .privateMessage(let userID, let message, let quoting, let kind):
-      self.handlePrivateMessage(userID: userID, message: message, quoting: quoting, kind: kind)
+    case .privateMessage(let userID, let name, let message, let quoting, let kind):
+      self.handlePrivateMessage(userID: userID, name: name, message: message, quoting: quoting, kind: kind)
 
     case .newsPost(let message):
       self.handleNewsPost(message)

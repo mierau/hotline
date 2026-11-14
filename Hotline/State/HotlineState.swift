@@ -436,9 +436,8 @@ class HotlineState: Equatable {
   var unreadBoardPosts: Int = 0
 
   // Private Messages
-  var privateMessages: [UInt16:[InstantMessage]] = [:]
-  /// How many messages you haven't read from each person, by their ID.
-  var unreadPrivateMessages: [UInt16: Int] = [:]
+  /// Your private conversations here, each with someone, whether they're here now or not.
+  var conversations = PrivateConversations()
 
   // Private Chats
   /// The private chats you're in, and the ones you're invited to, in the order they came.
@@ -564,8 +563,8 @@ class HotlineState: Equatable {
   @ObservationIgnored var eventTask: Task<Void, Never>?
   /// Keeps the server from saying you're idle while you're at your Mac. See `startPresence()`.
   @ObservationIgnored var presenceTask: Task<Void, Never>?
-  /// What people do before the user list is in: coming, going, and changing, held to go through
-  /// after it. Nil once it's in. See `getUserList()`.
+  /// What people do before the user list is in: coming, going, changing, and sending you private
+  /// messages, held to go through after it. Nil once it's in. See `getUserList()`.
   @ObservationIgnored var heldUserEvents: [HotlineEvent]?
   /// The last line in chat saying someone posted to the board, still on its way. See
   /// `announceBoardPost(_:)`.
@@ -576,7 +575,6 @@ class HotlineState: Equatable {
   @ObservationIgnored private var serverHistoryObserver: NSObjectProtocol?
   @ObservationIgnored var lastPersistedMessageType: ChatMessageType?
   @ObservationIgnored var lastPersistedMessageDate: Date?
-  @ObservationIgnored var restoredPrivatePeers: Set<String> = []
 
   // MARK: - Initialization
 

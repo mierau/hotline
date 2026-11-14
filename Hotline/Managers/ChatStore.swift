@@ -52,6 +52,11 @@ actor ChatStore {
     /// What kind of private message it is, when it's not one someone wrote, like an automatic
     /// response. See `InstantMessageType`.
     var kind: String?
+    /// Whether a private message of yours got to them, as the server said. See
+    /// `InstantMessageDelivery`.
+    var delivery: String?
+    /// Why a private message of yours didn't get to them, when that's known.
+    var undeliveredReason: String?
 
     struct ImageMetadata: Codable {
       let url: String
@@ -103,7 +108,6 @@ actor ChatStore {
   private var stmtDividers: OpaquePointer?
   private var stmtUpdateMetadata: OpaquePointer?
   private var stmtLoadPrivateEntries: OpaquePointer?
-  private var stmtMarkPrivateRead: OpaquePointer?
 
   func append(entry: Entry, for key: SessionKey, serverName: String?, peerName: String? = nil) async {
     guard self.retention != .never else {
@@ -203,49 +207,45 @@ actor ChatStore {
     }
   }
 
-  func markPrivateEntriesAsRead(for key: SessionKey, peerName: String) async {
-    do {
-      try openIfNeeded()
-
-      guard let serverID = findServerID(key: key) else { return }
-      guard let stmt = stmtMarkPrivateRead else { return }
-
-      sqlite3_reset(stmt)
-      sqlite3_bind_int64(stmt, 1, Int64(serverID))
-      sqlite3_bind_text(stmt, 2, peerName, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
-
-      if sqlite3_step(stmt) != SQLITE_DONE {
-        print("ChatStore: failed to mark private entries as read —", errorMessage())
-      }
-    }
-    catch {
-      print("ChatStore: failed to mark private entries as read —", error)
-    }
+  /// Marks these entries read, by their IDs, as a private conversation's messages are, whatever
+  /// name they were saved under.
+  func markEntriesAsRead(ids: [UUID]) async {
+    self.run("UPDATE entries SET isRead = 1 WHERE id = ?1", forEach: ids, "mark entries as read")
   }
 
-  func deletePrivateEntries(for key: SessionKey, peerName: String) async {
+  /// Deletes these entries, by their IDs, as a private conversation's messages are, whatever name
+  /// they were saved under.
+  func deleteEntries(ids: [UUID]) async {
+    self.run("DELETE FROM entries WHERE id = ?1", forEach: ids, "delete entries")
+  }
+
+  /// Runs `sql` for each of the IDs, as ?1, all together.
+  private func run(_ sql: String, forEach ids: [UUID], _ what: String) {
+    guard !ids.isEmpty else {
+      return
+    }
     do {
       try openIfNeeded()
 
-      guard let serverID = findServerID(key: key) else { return }
-
       var stmt: OpaquePointer?
-      let sql = "DELETE FROM entries WHERE serverId = ?1 AND peerName = ?2"
       guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-        print("ChatStore: failed to prepare deletePrivateEntries —", errorMessage())
+        print("ChatStore: failed to prepare to \(what) —", errorMessage())
         return
       }
       defer { sqlite3_finalize(stmt) }
 
-      sqlite3_bind_int64(stmt, 1, Int64(serverID))
-      sqlite3_bind_text(stmt, 2, peerName, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
-
-      if sqlite3_step(stmt) != SQLITE_DONE {
-        print("ChatStore: failed to delete private entries —", errorMessage())
+      try execute("BEGIN")
+      for id in ids {
+        sqlite3_reset(stmt)
+        sqlite3_bind_text(stmt, 1, id.uuidString, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+        if sqlite3_step(stmt) != SQLITE_DONE {
+          print("ChatStore: failed to \(what) —", errorMessage())
+        }
       }
+      try execute("COMMIT")
     }
     catch {
-      print("ChatStore: failed to delete private entries —", error)
+      print("ChatStore: failed to \(what) —", error)
     }
   }
 
@@ -750,10 +750,6 @@ actor ChatStore {
       SELECT id, body, username, type, date, metadata, isRead
       FROM entries WHERE serverId = ?1 AND peerName = ?2 ORDER BY date DESC
       """)
-
-    stmtMarkPrivateRead = try prepare(
-      "UPDATE entries SET isRead = 1 WHERE serverId = ?1 AND peerName = ?2 AND isRead = 0"
-    )
   }
 
   private func prepare(_ sql: String) throws -> OpaquePointer? {
@@ -779,7 +775,7 @@ actor ChatStore {
       stmtUpsertServer, stmtGetServerID, stmtInsertEntry,
       stmtLoadEntries, stmtLoadMetadata, stmtPageStart,
       stmtLoadPage, stmtSearch, stmtDividers, stmtUpdateMetadata,
-      stmtLoadPrivateEntries, stmtMarkPrivateRead
+      stmtLoadPrivateEntries
     ]
     for stmt in stmts {
       sqlite3_finalize(stmt)
@@ -795,7 +791,6 @@ actor ChatStore {
     stmtDividers = nil
     stmtUpdateMetadata = nil
     stmtLoadPrivateEntries = nil
-    stmtMarkPrivateRead = nil
 
     if let db {
       sqlite3_close(db)
