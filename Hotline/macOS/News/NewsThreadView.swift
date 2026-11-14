@@ -3,10 +3,12 @@ import SwiftUI
 /// An article, the width of the window, and under it, the replies to it, and the replies to those,
 /// all at once, on gray, in the server's theme: who wrote each and when, its title, and what it
 /// says, in Markdown, as it's shown everywhere. Each reply is under what it replies to, and further
-/// in, so a conversation reads from top to bottom without choosing each reply. The replies are all
-/// joined, as one, with lines between them. Choosing a reply shows it in its conversation,
-/// highlighted a moment. Each has a button to reply to it, when you can post. Each is marked read
-/// once it's on screen, and what it says is read from the server then, not before.
+/// in, so a conversation reads from top to bottom without choosing each reply. Each reply to the
+/// article is a card of its own, apart from the next, joined to the replies to it, and to those,
+/// with lines between them, so where one reply's conversation ends and the next starts shows.
+/// Choosing a reply shows it in its conversation, highlighted a moment. Each has a button to reply
+/// to it, when you can post. Each is marked read once it's on screen, and what it says is read from
+/// the server then, not before.
 struct NewsThreadView: View {
   @Environment(HotlineState.self) private var model: HotlineState
   @Environment(\.serverTheme) private var theme
@@ -103,8 +105,9 @@ struct NewsThreadView: View {
                 }
                 .padding(.leading, Self.leading(of: entry))
                 .padding(.trailing, Self.margin)
-                // Right under the reply above, or for the first, apart from the article.
-                .padding(.top, index == 1 ? Self.margin : 0)
+                // Right under the reply above, or for a reply to the article, apart from what's
+                // above it: the article, or the conversation of the reply to it before.
+                .padding(.top, entry.depth == 1 ? Self.margin : 0)
             }
           }
           .id(entry.id)
@@ -161,10 +164,10 @@ struct NewsThreadView: View {
 
   /// How much further in a reply is than the reply right above it, which it's joined to: more under
   /// what it replies to, less back out from the replies to another reply above it, or none under
-  /// another reply to the same one. Nil for the first reply, with only the article above it, and
-  /// past the last.
+  /// another reply to the same one. Nil for a reply to the article, which starts a card of its own,
+  /// and past the last.
   private static func step(at index: Int, in thread: [Entry]) -> CGFloat? {
-    guard index > 1, index < thread.count else {
+    guard index > 1, index < thread.count, thread[index].depth > 1 else {
       return nil
     }
     return Self.leading(of: thread[index]) - Self.leading(of: thread[index - 1])
