@@ -12,10 +12,10 @@
 #   2. checks the app that unzips is signed with Developer ID, notarized and stapled, that it trusts
 #      your signing key, that it's newer than the latest release, and that it's the build the
 #      project's at on main, then signs the zip with your key,
-#   3. writes appcast.xml, Sparkle's feed: the build, the zip's link and signature, and the notes, and
-#      signs that too, as Hotline only reads a signed feed,
-#   4. makes a draft release, Hotline for Mac b<build>, with the zip first, which older builds
-#      download, then the feed, and checks GitHub has them just as they were signed.
+#   3. writes Sparkle's feed, named as the app's SUFeedURL has it, updates.xml: the build, the zip's
+#      link and signature, and the notes, and signs that too, as Hotline only reads a signed feed,
+#   4. makes a draft release, Hotline for Mac b<build>, with the zip and the feed, and checks GitHub
+#      has them just as they were signed, with the zip first, which older builds download.
 # Publish the draft on GitHub, as the latest release, not a pre-release. Its tag, 1.0beta<build>, goes
 # on the commit main's at now. Then --check reads the feed from the latest release, as Hotline does,
 # and checks it, and the zip it points to.
@@ -90,12 +90,14 @@ check() {
   FEED_URL=$(/usr/libexec/PlistBuddy -c "Print :SUFeedURL" "$ROOT/Hotline/Info.plist" 2>/dev/null) || fail "Couldn't read SUFeedURL from Hotline/Info.plist."
   OUT=$(mktemp -d "${${TMPDIR:-/tmp}%/}/Hotline Release Check.XXXX")
 
+  FEED=${FEED_URL:t}
+
   print "Reading the feed, as Hotline does…"
-  curl -fsSL --retry 2 -o "$OUT/appcast.xml" "$FEED_URL" || fail "Couldn't download $FEED_URL. Is the release published, as the latest release, with appcast.xml?"
-  "$SIGN_UPDATE" --verify "$OUT/appcast.xml" >/dev/null || fail "The feed isn't signed with your key, so Hotline won't read it."
+  curl -fsSL --retry 2 -o "$OUT/$FEED" "$FEED_URL" || fail "Couldn't download $FEED_URL. Is the release published, as the latest release, with $FEED?"
+  "$SIGN_UPDATE" --verify "$OUT/$FEED" >/dev/null || fail "The feed isn't signed with your key, so Hotline won't read it."
 
   feed() {
-    xmllint --xpath "string($1)" "$OUT/appcast.xml" 2>/dev/null || true
+    xmllint --xpath "string($1)" "$OUT/$FEED" 2>/dev/null || true
   }
   BUILD=$(feed '//item[1]/*[local-name()="version"]')
   SHORT_VERSION=$(feed '//item[1]/*[local-name()="shortVersionString"]')
@@ -144,8 +146,11 @@ VERSION=$(read_info CFBundleShortVersionString)
 BUILD=$(read_info CFBundleVersion)
 MINIMUM_SYSTEM=$(read_info LSMinimumSystemVersion)
 [[ -n "$VERSION" && "$BUILD" == <-> ]] || fail "Couldn't read the version and build from $INFO."
-[[ -n "$(read_info SUFeedURL)" ]] || fail "The app has no SUFeedURL, so it couldn't find later updates."
+FEED_URL=$(read_info SUFeedURL)
+[[ -n "$FEED_URL" ]] || fail "The app has no SUFeedURL, so it couldn't find later updates."
 [[ -n "$(read_info SUPublicEDKey)" ]] || fail "The app has no SUPublicEDKey, so Sparkle would refuse later updates."
+# The feed's named as Hotline looks for it, a file of the latest release.
+FEED=${FEED_URL:t}
 
 # Named as every release has been: the tag 1.0beta30, "Hotline for Mac b30", and Hotline.b30.zip.
 TAG="${VERSION}beta${BUILD}"
@@ -161,6 +166,11 @@ check_failed() {
     fail "$1"
   fi
 }
+
+# GitHub lists a release's files by name, ignoring case, and older builds download its first, so the
+# feed has to be named to come after the zip, as updates.xml does.
+[[ "$FEED_URL" == "https://github.com/$REPO/releases/latest/download/$FEED" ]] || check_failed "Its SUFeedURL, $FEED_URL, isn't a file of the latest release on GitHub."
+[[ "${(L)ZIP}" < "${(L)FEED}" ]] || check_failed "GitHub would list $FEED before $ZIP, so older builds would download it instead. Its SUFeedURL has to name a file that comes after the zip, like updates.xml."
 
 # Zipped without extended attributes, which a folder synced with iCloud, like the Desktop, puts on
 # the folders in an app, and which break its code signature wherever it's unzipped, or a resource
@@ -226,11 +236,11 @@ LENGTH=$(print -r -- "$SIGNATURE" | sed -n 's/.*length="\([0-9]*\)".*/\1/p')
 [[ -n "$ED_SIGNATURE" && -n "$LENGTH" ]] || fail "sign_update didn't sign it: $SIGNATURE"
 "$SIGN_UPDATE" --verify "$OUT/$ZIP" "$ED_SIGNATURE" >/dev/null || fail "The zip's signature didn't verify."
 
-print "Writing appcast.xml…"
+print "Writing $FEED…"
 PUB_DATE=$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")
 # The notes as they are, in Markdown, which Sparkle 2.9 shows, inside CDATA, which can't hold "]]>".
 NOTES_TEXT=$(sed 's/]]>/]]]]><![CDATA[>/g' "$NOTES")
-cat > "$OUT/appcast.xml" <<EOF
+cat > "$OUT/$FEED" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
@@ -251,13 +261,13 @@ cat > "$OUT/appcast.xml" <<EOF
 EOF
 
 # Signed, as Hotline won't read a feed that isn't. sign_update puts the signature at its end.
-print "Signing appcast.xml…"
-"$SIGN_UPDATE" "$OUT/appcast.xml" >/dev/null || fail "sign_update didn't sign appcast.xml."
-"$SIGN_UPDATE" --verify "$OUT/appcast.xml" >/dev/null || fail "appcast.xml's signature didn't verify."
-xmllint --noout "$OUT/appcast.xml" || fail "appcast.xml isn't well-formed."
+print "Signing $FEED…"
+"$SIGN_UPDATE" "$OUT/$FEED" >/dev/null || fail "sign_update didn't sign $FEED."
+"$SIGN_UPDATE" --verify "$OUT/$FEED" >/dev/null || fail "$FEED's signature didn't verify."
+xmllint --noout "$OUT/$FEED" || fail "$FEED isn't well-formed."
 
 if $DRY_RUN; then
-  print "Dry run: $ZIP and appcast.xml are in $OUT"
+  print "Dry run: $ZIP and $FEED are in $OUT"
   open "$OUT"
   exit 0
 fi
@@ -271,14 +281,14 @@ draft_failed() {
 # release's first file, then the feed.
 print "Making a draft release, $TITLE…"
 PAGE=$(gh release create "$TAG" "$OUT/$ZIP" --repo "$REPO" --draft --target "$COMMIT" --title "$TITLE" --notes-file "$NOTES") || fail "Couldn't make the draft release. If GitHub has a draft of it, delete it, then run this again."
-gh release upload "$TAG" "$OUT/appcast.xml" --repo "$REPO" || draft_failed "Couldn't add appcast.xml to the draft."
+gh release upload "$TAG" "$OUT/$FEED" --repo "$REPO" || draft_failed "Couldn't add $FEED to the draft."
 
 # GitHub should have what was signed, just as it was.
 print "Checking the draft…"
 mkdir "$OUT/Draft"
 gh release download "$TAG" --repo "$REPO" --dir "$OUT/Draft" || draft_failed "Couldn't download the draft's files to check them."
 cmp -s "$OUT/$ZIP" "$OUT/Draft/$ZIP" || draft_failed "The draft's $ZIP isn't the zip that was signed."
-cmp -s "$OUT/appcast.xml" "$OUT/Draft/appcast.xml" || draft_failed "The draft's appcast.xml isn't the feed that was signed."
+cmp -s "$OUT/$FEED" "$OUT/Draft/$FEED" || draft_failed "The draft's $FEED isn't the feed that was signed."
 FIRST=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[0].name') || draft_failed "Couldn't read the draft's files."
 [[ "$FIRST" == "$ZIP" ]] || draft_failed "The draft's first file is $FIRST, not $ZIP, which older builds download."
 
