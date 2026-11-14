@@ -16,6 +16,10 @@ class ServerState: Equatable {
   var automaticResponseShown: Bool = false
   var fileNavigationPath: [String]? = nil
   var fileFolderPath: [String] = []
+  /// The news topic chosen, or category of topics, and the article chosen in it, by where they are
+  /// in the news, so they're still chosen once the news is shown again.
+  var newsTopic: String? = nil
+  var newsArticle: String? = nil
 #if os(macOS)
   /// New Folder or Upload, from the File menu while the Files list doesn't have the keys, waiting
   /// for Files to be shown, to do it in the folder it shows.

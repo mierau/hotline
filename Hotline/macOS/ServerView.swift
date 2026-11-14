@@ -849,7 +849,7 @@ struct ServerView: View {
         case .chat:
           ChatView(serverState: self.state)
         case .news:
-          NewsView()
+          NewsView(serverState: self.state)
         case .board:
           MessageBoardView(serverState: self.state)
         case .files:

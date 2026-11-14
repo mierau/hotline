@@ -1,10 +1,31 @@
 import SwiftUI
 
+/// A row in the news: in the topics, a category, which opens to show the topics and categories in
+/// it, or a topic, which doesn't, as its articles are listed beside it, each with how many it has;
+/// or in a topic's articles, an article, which opens to show the replies to it, and the replies to
+/// those, with who wrote it and when.
 struct NewsItemView: View {
   @Environment(HotlineState.self) private var model: HotlineState
   
   var news: NewsInfo
   let depth: Int
+
+  /// How wide the arrows' column is, before the icon or title, and as much, how much further in each
+  /// row is than the one it's in, for each arrow to be under the start of what it's in, as the
+  /// Finder has them. Rows without an arrow keep the column, for titles to line up.
+  private static let indent: CGFloat = 15
+
+  /// Whether it opens: a category, to what's in it, or an article with replies, to them.
+  private var opens: Bool {
+    switch self.news.type {
+    case .bundle:
+      return true
+    case .category:
+      return false
+    case .article:
+      return !self.news.children.isEmpty
+    }
+  }
   
   static var dateFormatter: DateFormatter = {
     var dateFormatter = DateFormatter()
@@ -24,7 +45,11 @@ struct NewsItemView: View {
   
   var body: some View {
     HStack(alignment: .center, spacing: 0) {
-      if news.expandable {
+      // Tree indent, before the arrow, for each arrow to be beside what it opens.
+      Spacer()
+        .frame(width: CGFloat(self.depth) * Self.indent)
+
+      if self.opens {
         Button {
           news.expanded.toggle()
         } label: {
@@ -36,19 +61,12 @@ struct NewsItemView: View {
         }
         .buttonStyle(.plain)
         .frame(width: 10)
-        .padding(.leading, 4)
-        .padding(.trailing, 8)
+        .padding(.trailing, Self.indent - 10)
       }
       else {
         Spacer()
-          .frame(width: 10)
-          .padding(.leading, 4)
-          .padding(.trailing, 8)
+          .frame(width: Self.indent)
       }
-      
-      // Tree indent
-      Spacer()
-        .frame(width: (CGFloat(depth) * 22))
       
       switch news.type {
       case .category:
@@ -79,17 +97,21 @@ struct NewsItemView: View {
       
       Spacer()
       
+      // How many articles a topic has, or topics a category, as a number, in the narrow list of
+      // them, with what of in its tip.
       if news.type == .category && news.count > 0 {
-        Text("^[\(news.count) Article](inflect: true)")
+        Text(Int(news.count), format: .number)
           .lineLimit(1)
           .foregroundStyle(.secondary)
           .padding(.trailing, 8)
+          .help(Text("^[\(news.count) Article](inflect: true)"))
       }
       else if news.type == .bundle && news.count > 0 {
-        Text("^[\(news.count) Category](inflect: true)")
+        Text(Int(news.count), format: .number)
           .lineLimit(1)
           .foregroundStyle(.secondary)
           .padding(.trailing, 8)
+          .help(Text("^[\(news.count) Category](inflect: true)"))
       }
 //      if news.type == .bundle {
 //        Text("\(news.count)")
@@ -129,7 +151,8 @@ struct NewsItemView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onChange(of: news.expanded) {
-      guard news.expanded, news.type == .bundle || news.type == .category else {
+      // What's in a category, read as it's opened. A topic's articles are read as it's chosen.
+      guard news.expanded, news.type == .bundle else {
         return
       }
 
@@ -139,8 +162,10 @@ struct NewsItemView: View {
     }
     .serverThemedRow(for: self.news)
     
-    if news.expanded {
-      ForEach(news.children.reversed(), id: \.self) { childNews in
+    if news.expanded && self.opens {
+      // A category's topics in the server's order, as those at the top are, and an article's
+      // replies newest first, as the articles are.
+      ForEach(news.type == .article ? news.children.reversed() : news.children, id: \.self) { childNews in
         NewsItemView(news: childNews, depth: self.depth + 1).tag(childNews.id)
       }
     }
