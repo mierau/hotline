@@ -7,9 +7,11 @@
 #
 # Export the app from Xcode first: Product ▸ Archive, then Distribute App ▸ Direct Distribution, which
 # signs it with Developer ID and has Apple notarize it. Commit and push its build number. Then this:
-#   1. checks it's signed with Developer ID, notarized and stapled, that it trusts your signing key,
-#      that it's newer than the latest release, and that it's the build the project's at on main,
-#   2. zips it as Hotline.b<build>.zip, keeping its permissions, and signs the zip with your key,
+#   1. zips it as Hotline.b<build>.zip, keeping its permissions, but not the extended attributes a
+#      folder synced with iCloud, like the Desktop, adds, which break its signature once unzipped,
+#   2. checks the app that unzips is signed with Developer ID, notarized and stapled, that it trusts
+#      your signing key, that it's newer than the latest release, and that it's the build the
+#      project's at on main, then signs the zip with your key,
 #   3. writes appcast.xml, Sparkle's feed: the build, the zip's link and signature, and the notes, and
 #      signs that too, as Hotline only reads a signed feed,
 #   4. makes a draft release, Hotline for Mac b<build>, with the zip first, which older builds
@@ -160,10 +162,21 @@ check_failed() {
   fi
 }
 
+# Zipped without extended attributes, which a folder synced with iCloud, like the Desktop, puts on
+# the folders in an app, and which break its code signature wherever it's unzipped, or a resource
+# fork or quarantine, which a signed app has no use for.
+OUT=$(mktemp -d "${${TMPDIR:-/tmp}%/}/Hotline Release $BUILD.XXXX")
+print "Zipping $ZIP…"
+ditto -c -k --norsrc --noextattr --noqtn --keepParent "$APP" "$OUT/$ZIP"
+
+# What's checked is what people get: the app as it comes out of the zip.
 print "Checking Hotline $VERSION ($BUILD)…"
-codesign --verify --deep --strict "$APP" || check_failed "Its code signature isn't valid."
-is_notarized "$APP" || check_failed "It isn't notarized with Developer ID. Export it with Direct Distribution."
-xcrun stapler validate -q "$APP" >/dev/null 2>&1 || check_failed "Its notarization ticket isn't stapled."
+ditto -x -k "$OUT/$ZIP" "$OUT/Unzipped" || fail "Couldn't unzip $ZIP to check it."
+SHIPPED="$OUT/Unzipped/${APP:t}"
+INFO="$SHIPPED/Contents/Info.plist"
+codesign --verify --deep --strict "$SHIPPED" || check_failed "Its code signature isn't valid."
+is_notarized "$SHIPPED" || check_failed "It isn't notarized with Developer ID. Export it with Direct Distribution."
+xcrun stapler validate -q "$SHIPPED" >/dev/null 2>&1 || check_failed "Its notarization ticket isn't stapled."
 [[ "$(read_info SUPublicEDKey)" == "$KEY" ]] || check_failed "It doesn't trust your signing key. Its SUPublicEDKey is $(read_info SUPublicEDKey), but your key's is $KEY."
 
 # The release's tag goes on the commit this checkout's at once the draft's published, so that should
@@ -205,10 +218,6 @@ if gh auth status --hostname github.com >/dev/null 2>&1; then
 else
   check_failed "gh isn't signed in to GitHub. Run gh auth login."
 fi
-
-OUT=$(mktemp -d "${${TMPDIR:-/tmp}%/}/Hotline Release $BUILD.XXXX")
-print "Zipping $ZIP…"
-ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/$ZIP"
 
 print "Signing it with your key…"
 SIGNATURE=$("$SIGN_UPDATE" "$OUT/$ZIP")
