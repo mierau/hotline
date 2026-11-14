@@ -196,14 +196,17 @@ struct ReleaseNotesView: View {
 
   var body: some View {
     NavigationSplitView {
-      List(self.releases, selection: self.$selection) { release in
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Hotline \(release.version)")
-          Text(self.subtitle(of: release))
-            .font(.caption)
-            .foregroundStyle(.secondary)
+      // How long ago each came out, kept up to the minute.
+      TimelineView(.everyMinute) { context in
+        List(self.releases, selection: self.$selection) { release in
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Hotline \(release.version)")
+            Text(self.subtitle(of: release, now: context.date))
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          .padding(.vertical, 2)
         }
-        .padding(.vertical, 2)
       }
       .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
     } detail: {
@@ -237,12 +240,56 @@ struct ReleaseNotesView: View {
     }
   }
 
-  /// When it came out, and whether it's the build that's running.
-  private func subtitle(of release: ReleaseNotes) -> String {
-    let date = release.date?.formatted(date: .abbreviated, time: .omitted)
+  /// How long ago it came out, and whether it's the build that's running.
+  private func subtitle(of release: ReleaseNotes, now: Date) -> String {
+    let date = release.date.map { Self.howLongAgo($0, now: now) }
     let installed = release.build == self.currentBuild ? "Installed" : nil
     return [date, installed].compactMap { $0 }.joined(separator: " · ")
   }
+
+  /// How long ago something was, to the nearest of the biggest unit it's been at least one of, as
+  /// GitHub says it: just now, for under a minute, then minutes, hours, days, weeks, months and
+  /// years, so 20 days and 23 hours is 3 weeks, and 35 months is 3 years. One day, week, month or
+  /// year is yesterday, last week, last month or last year.
+  static func howLongAgo(_ date: Date, now: Date) -> String {
+    let seconds = now.timeIntervalSince(date)
+    guard seconds >= 60 else {
+      return String(localized: "Just now")
+    }
+    let minutes = Int((seconds / 60).rounded())
+    let hours = Int((seconds / 3600).rounded())
+    let days = seconds / 86400
+    let months = Int((days / 30.44).rounded())
+    var ago = DateComponents()
+    if minutes < 60 {
+      ago.minute = -minutes
+    }
+    else if hours < 24 {
+      ago.hour = -hours
+    }
+    else if days.rounded() < 7 {
+      ago.day = -Int(days.rounded())
+    }
+    else if days < 30 {
+      ago.weekOfMonth = -max(1, Int((days / 7).rounded()))
+    }
+    else if months < 12 {
+      ago.month = -max(1, months)
+    }
+    else {
+      ago.year = -max(1, Int((days / 365.25).rounded()))
+    }
+    return Self.relativeFormatter.localizedString(from: ago)
+  }
+
+  private static let relativeFormatter: RelativeDateTimeFormatter = {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .full
+    formatter.dateTimeStyle = .named
+    // Capitalized, as it starts the line: Yesterday, Last week.
+    formatter.formattingContext = .beginningOfSentence
+    return formatter
+  }()
 
   private func load() async {
     self.failed = false
