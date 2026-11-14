@@ -37,14 +37,14 @@ struct MessageView: View {
   /// Given a private chat they invited you to, once you've joined it, to go to it.
   var onJoinPrivateChat: (UInt32) -> Void = { _ in }
 
-  private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+  fileprivate static let relativeDateFormatter: RelativeDateTimeFormatter = {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .abbreviated
     formatter.dateTimeStyle = .named
     return formatter
   }()
 
-  private static let exactDateFormatter: DateFormatter = {
+  fileprivate static let exactDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
     formatter.timeStyle = .short
@@ -429,10 +429,6 @@ struct MessageView: View {
             .textSelection(.disabled)
         }
 
-        if case .notDelivered(let reason)? = msg.delivery {
-          self.notDelivered(msg, reason: reason)
-        }
-
         if collapsed {
           Text(self.collapsedSnippet(msg).hidingOffensiveWords)
             .foregroundStyle(.secondary)
@@ -443,17 +439,8 @@ struct MessageView: View {
 
         Spacer()
 
-        if let delivery = msg.delivery {
-          DeliveryMark(delivery: delivery)
-        }
-
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-          Text(Self.relativeDateFormatter.localizedString(for: msg.date, relativeTo: context.date))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .textSelection(.disabled)
-            .help(Self.exactDateFormatter.string(from: msg.date))
+        MessageStatus(message: msg, cantSendReason: self.cantSendReason) {
+          self.model.resendPrivateMessage(id: msg.id, userID: self.userID)
         }
       }
 
@@ -472,28 +459,6 @@ struct MessageView: View {
       ? LinearGradient(colors: [.white.opacity(0.2), .white.opacity(0.0)], startPoint: .top, endPoint: .bottom).blendMode(.softLight)
       : LinearGradient(colors: [.white.opacity(0.1), .white.opacity(0.0)], startPoint: .top, endPoint: .bottom).blendMode(.softLight)
     )
-  }
-
-  /// That one of yours didn't get to them, in red, with why in its tip, and Try Again, to send it to
-  /// them as it was, while they're here.
-  private func notDelivered(_ msg: InstantMessage, reason: String?) -> some View {
-    HStack(spacing: 8) {
-      Text("Not Delivered")
-        .font(.caption)
-        .foregroundStyle(.red)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 1)
-        .background(.red.opacity(0.12), in: .capsule)
-        .help(reason ?? "It didn't get to them.")
-      Button("Try Again") {
-        self.model.resendPrivateMessage(id: msg.id, userID: self.userID)
-      }
-      .buttonStyle(.link)
-      .font(.caption)
-      .disabled(self.cantSendReason != nil)
-      .help(self.cantSendReason ?? "Send it to them again")
-    }
-    .textSelection(.disabled)
   }
 
   /// What a message says, without its Markdown's marks, as it reads, for a line of it, like a
@@ -643,40 +608,127 @@ struct MessageView: View {
   }
 }
 
-// MARK: - Delivery
+// MARK: - Status
 
-/// Whether one of yours got to them, by when it was sent: a spinner while it's on its way, once that's
-/// taken a moment, as it usually takes none, and a check once the server says it has it.
-private struct DeliveryMark: View {
-  let delivery: InstantMessageDelivery
+/// What's at the right of a message: when it was sent, with a check once one of yours got to them.
+/// While one of yours is on its way, once that's taken a moment, as it usually takes none, that it
+/// is, in place of when, which is now. For one that didn't get to them, that it didn't, in red, with
+/// why, and when, in its tip, and Try Again, which is off while they're not here.
+private struct MessageStatus: View {
+  let message: InstantMessage
+  /// Why it can't be sent again, as when they're not here, or nil when it can.
+  let cantSendReason: String?
+  let tryAgain: () -> Void
 
   @State private var slow = false
 
   var body: some View {
-    switch self.delivery {
-    case .sending:
-      ProgressView()
-        .controlSize(.mini)
-        .opacity(self.slow ? 1 : 0)
-        .help("Sending…")
-        .accessibilityLabel("Sending")
-        .task {
-          try? await Task.sleep(for: .milliseconds(400))
-          guard !Task.isCancelled else {
-            return
-          }
-          withAnimation(.easeOut(duration: 0.2)) {
-            self.slow = true
-          }
+    Group {
+      switch self.message.delivery {
+      case .sending? where self.slow:
+        HStack(spacing: 6) {
+          ProgressView()
+            .controlSize(.mini)
+          Text("Sending…")
+            .foregroundStyle(.secondary)
         }
-    case .delivered:
-      Image(systemName: "checkmark")
-        .font(.caption.weight(.semibold))
+        .transition(.opacity)
+      case .notDelivered(let reason)?:
+        VStack(alignment: .trailing, spacing: 4) {
+          Label("Not Delivered", systemImage: "exclamationmark.circle.fill")
+            .font(.caption)
+            .foregroundStyle(.red)
+            .help(self.failure(reason))
+          Button(action: self.tryAgain) {
+            Label("Try Again", systemImage: "arrow.clockwise")
+          }
+          .buttonStyle(CapsuleButtonStyle())
+          .disabled(self.cantSendReason != nil)
+          .help(self.cantSendReason ?? "Send it to them again")
+        }
+        .labelStyle(CloseLabelStyle())
+      default:
+        HStack(spacing: 6) {
+          if self.message.delivery == .delivered {
+            Image(systemName: "checkmark")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(.secondary)
+              .help("Delivered")
+              .accessibilityLabel("Delivered")
+          }
+          self.time
+        }
+      }
+    }
+    .lineLimit(1)
+    .fixedSize()
+    .textSelection(.disabled)
+    // That it's on its way, once it's been a moment.
+    .task(id: self.message.delivery) {
+      guard self.message.delivery == .sending else {
+        self.slow = false
+        return
+      }
+      try? await Task.sleep(for: .milliseconds(400))
+      guard !Task.isCancelled else {
+        return
+      }
+      withAnimation(.easeOut(duration: 0.2)) {
+        self.slow = true
+      }
+    }
+  }
+
+  private var time: some View {
+    TimelineView(.periodic(from: .now, by: 60)) { context in
+      Text(MessageView.relativeDateFormatter.localizedString(for: self.message.date, relativeTo: context.date))
         .foregroundStyle(.secondary)
-        .help("Delivered")
-        .accessibilityLabel("Delivered")
-    case .unconfirmed, .notDelivered:
-      EmptyView()
+        .help(MessageView.exactDateFormatter.string(from: self.message.date))
+    }
+  }
+
+  /// Why it didn't get to them, and when it was sent, for its tip.
+  private func failure(_ reason: String?) -> String {
+    "\(reason ?? "It didn't get to them.")\n\(MessageView.exactDateFormatter.string(from: self.message.date))"
+  }
+}
+
+/// An icon close to its words, as a label in small type is, where a label's own room between them
+/// would set them apart.
+private struct CloseLabelStyle: LabelStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HStack(spacing: 3) {
+      configuration.icon
+      configuration.title
+    }
+  }
+}
+
+/// A small button in a capsule, as the labels beside a message's sender are, like Auto-Reply, a
+/// little darker while the pointer's over it, and lighter as it's pressed.
+private struct CapsuleButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    CapsuleButton(configuration: configuration)
+  }
+
+  private struct CapsuleButton: View {
+    let configuration: ButtonStyleConfiguration
+
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovered = false
+
+    var body: some View {
+      self.configuration.label
+        .font(.caption)
+        .foregroundStyle(self.isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .background(self.hovered && self.isEnabled ? AnyShapeStyle(.fill) : AnyShapeStyle(.fill.secondary), in: .capsule)
+        .opacity(self.configuration.isPressed ? 0.6 : 1)
+        .contentShape(.capsule)
+        .onHover { hovering in
+          self.hovered = hovering
+        }
     }
   }
 }

@@ -74,7 +74,8 @@ struct InstantMessage: Identifiable {
   let receiverIconID: UInt
   let text: String
   let type: InstantMessageType
-  let date: Date
+  /// When it was sent, or, for one of yours sent again, when it was last.
+  var date: Date
   var isRead: Bool
   let senderIsAdmin: Bool
   /// The message it's a reply to, as it quotes it, when it's a reply.
@@ -237,6 +238,26 @@ struct PrivateConversations {
       delivered = conversation.messages[i]
     }
     return delivered
+  }
+
+  /// Puts one of yours that didn't get to them on its way again, as of `date`, after all that's been
+  /// said since, as it's said again now. Gives it as it is now, to send and save.
+  mutating func resend(_ messageID: UUID, with userID: UInt16, at date: Date = .now) -> InstantMessage? {
+    guard let id = self.byUserID[userID] else {
+      return nil
+    }
+    var resent: InstantMessage?
+    self.update(id) { conversation in
+      guard let i = conversation.messages.firstIndex(where: { $0.id == messageID }), case .notDelivered? = conversation.messages[i].delivery else {
+        return
+      }
+      var message = conversation.messages.remove(at: i)
+      message.date = date
+      message.delivery = .sending
+      conversation.messages.append(message)
+      resent = message
+    }
+    return resent
   }
 
   /// How long after one of yours a server's saying they don't take private messages is about it.

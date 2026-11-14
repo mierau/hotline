@@ -158,6 +158,23 @@ struct PrivateConversationTests {
     #expect(withOneLongAgo == nil)
   }
 
+  @Test func tryingAgainSendsItAsOfNow() throws {
+    var conversations = self.withBob()
+    var failed = self.sent("Are you there?", at: .now.addingTimeInterval(-120))
+    failed.delivery = .notDelivered("Bob isn't on the server anymore.")
+    conversations.file(failed, with: 5, name: "Bob", iconID: 128)
+    conversations.file(self.message("Back now"), with: 5, name: "Bob", iconID: 128)
+    let now = Date.now
+    let resent = conversations.resend(failed.id, with: 5, at: now)
+    #expect(resent?.delivery == .sending)
+    #expect(resent?.date == now)
+    // With what's said now, after what was said since.
+    #expect(conversations[5]?.messages.map(\.text) == ["Hi", "Back now", "Are you there?"])
+    // Only one that didn't get to them.
+    let again = conversations.resend(failed.id, with: 5)
+    #expect(again == nil)
+  }
+
   @Test func whetherItGotToThemIsSaved() {
     for delivery: InstantMessageDelivery in [.delivered, .unconfirmed, .notDelivered("Bob isn't on the server anymore."), .notDelivered(nil)] {
       #expect(InstantMessageDelivery(saved: delivery.saved, reason: delivery.reason) == delivery)

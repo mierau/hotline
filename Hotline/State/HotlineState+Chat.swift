@@ -67,23 +67,15 @@ extension HotlineState {
     self.deliver(message, to: userID)
   }
 
-  /// Sends one of yours that didn't get to them again, as it was, to them as they are now, in its
-  /// place in your conversation.
+  /// Sends one of yours that didn't get to them again, as it was, to them as they are now, as of
+  /// now, so it's with what's said now in your conversation.
   @MainActor
   func resendPrivateMessage(id: UUID, userID: UInt16) {
     guard self.client != nil,
           let current = self.currentUserID(of: userID),
-          let conversation = self.conversations[userID],
-          var message = conversation.messages.first(where: { $0.id == id }),
-          case .notDelivered? = message.delivery else {
+          let message = self.conversations.resend(id, with: userID),
+          let conversation = self.conversations[userID] else {
       return
-    }
-
-    message.delivery = .sending
-    self.conversations.update(conversation.id) { conversation in
-      if let i = conversation.messages.firstIndex(where: { $0.id == id }) {
-        conversation.messages[i].delivery = .sending
-      }
     }
     self.recordPrivateMessage(message, peerName: conversation.name)
     self.deliver(message, to: current)
