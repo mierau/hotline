@@ -59,4 +59,52 @@ struct AppUpdateTests {
     #expect(!AppUpdate.isUnverifiedFeed(self.sparkleError(1001)))
     #expect(!AppUpdate.isUnverifiedFeed(URLError(.notConnectedToInternet)))
   }
+
+  /// An answer from GitHub's API, with its headers.
+  private func answer(_ status: Int, _ headers: [String: String] = [:]) throws -> HTTPURLResponse {
+    try #require(HTTPURLResponse(url: URL(string: "https://api.github.com/repos/mierau/hotline/releases")!, statusCode: status, httpVersion: "HTTP/2", headerFields: headers))
+  }
+
+  @Test func gitHubsLimitIsToldApartFromOtherFailures() throws {
+    let now = Date(timeIntervalSince1970: 1_794_600_000)
+    #expect(GitHubReleases.failure(for: try self.answer(200)) == nil)
+    // Its 60 an hour used up, until the time it says.
+    let limited = try self.answer(403, ["X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1794603600"])
+    #expect(GitHubReleases.failure(for: limited, now: now) == .limited(until: Date(timeIntervalSince1970: 1_794_603_600)))
+    // Too many too close together, for as many seconds as it says.
+    #expect(GitHubReleases.failure(for: try self.answer(429, ["Retry-After": "60"]), now: now) == .limited(until: now.addingTimeInterval(60)))
+    #expect(GitHubReleases.failure(for: try self.answer(403, ["X-RateLimit-Remaining": "0"]), now: now) == .limited(until: nil))
+    // Turned away for something else, or broken.
+    #expect(GitHubReleases.failure(for: try self.answer(403, ["X-RateLimit-Remaining": "12"]), now: now) == .unexpected)
+    #expect(GitHubReleases.failure(for: try self.answer(500), now: now) == .unexpected)
+  }
+
+  @Test func noConnectionIsToldApartFromOtherErrors() {
+    #expect(GitHubReleases.failure(for: URLError(.notConnectedToInternet)) == .offline)
+    #expect(GitHubReleases.failure(for: URLError(.timedOut)) == .offline)
+    #expect(GitHubReleases.failure(for: URLError(.badURL)) == .unexpected)
+    #expect(GitHubReleases.failure(for: CancellationError()) == .unexpected)
+  }
+
+  @Test @MainActor func theLimitSaysWhenToTryAgain() {
+    let now = Date(timeIntervalSince1970: 1_794_600_000)
+    let later = now.addingTimeInterval(1800)
+    let time = later.formatted(date: .omitted, time: .shortened)
+    #expect(ReleaseNotesView.explanation(of: .limited(until: later), now: now).hasSuffix("Try again after \(time)."))
+    // Without a time, or one that's passed.
+    #expect(ReleaseNotesView.explanation(of: .limited(until: nil), now: now).hasSuffix("Try again in a little while."))
+    #expect(ReleaseNotesView.explanation(of: .limited(until: now.addingTimeInterval(-5)), now: now).hasSuffix("Try again in a little while."))
+    #expect(ReleaseNotesView.explanation(of: .offline, now: now) == "Check your connection to the internet, then try again.")
+  }
+
+  @Test func notesAreKeptAsTheyWere() throws {
+    let fileURL = FileManager.default.temporaryDirectory.appending(path: "Release Notes \(UUID()).json")
+    defer {
+      try? FileManager.default.removeItem(at: fileURL)
+    }
+    #expect(ReleaseNotesCache.load(from: fileURL).isEmpty)
+    let releases = [32, 31].compactMap { GitHubReleases.notes(from: self.release($0, notes: "In b\($0).")) }
+    ReleaseNotesCache.save(releases, to: fileURL)
+    #expect(ReleaseNotesCache.load(from: fileURL) == releases)
+  }
 }

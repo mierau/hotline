@@ -3,7 +3,7 @@ import Observation
 import Sparkle
 
 /// What's new in one of Hotline's builds, as its release on GitHub has it.
-struct ReleaseNotes: Identifiable, Equatable, Sendable {
+struct ReleaseNotes: Identifiable, Equatable, Sendable, Codable {
   /// Its tag, like 1.0beta31.
   let tag: String
   /// As it's shown, like 1.0b31.
@@ -24,14 +24,67 @@ struct ReleaseNotes: Identifiable, Equatable, Sendable {
 enum GitHubReleases {
   private static let url = URL(string: "https://api.github.com/repos/mierau/hotline/releases?per_page=100")!
 
-  /// Every build's notes, the newest first.
+  /// Why GitHub didn't give the releases.
+  enum Failure: Error, Equatable {
+    /// It's had as many requests from this network as it takes for now, which is 60 an hour without
+    /// an account, shared by everything on it, until when it says, if it does.
+    case limited(until: Date?)
+    /// There's no connection to it, or it was lost.
+    case offline
+    /// It answered with something other than the releases.
+    case unexpected
+  }
+
+  /// Every build's notes, the newest first, kept for next time, or the failure that says why not.
   static func fetch() async throws -> [ReleaseNotes] {
-    let (data, response) = try await URLSession.shared.data(from: self.url)
-    guard (response as? HTTPURLResponse)?.statusCode == 200,
-          let releases = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-      throw URLError(.badServerResponse)
+    let data: Data
+    let response: URLResponse
+    do {
+      (data, response) = try await URLSession.shared.data(from: self.url)
     }
-    return releases.compactMap(self.notes(from:)).sorted { $0.build > $1.build }
+    catch {
+      throw Self.failure(for: error)
+    }
+    guard let http = response as? HTTPURLResponse else {
+      throw Failure.unexpected
+    }
+    if let failure = Self.failure(for: http) {
+      throw failure
+    }
+    guard let releases = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+      throw Failure.unexpected
+    }
+    let notes = releases.compactMap(self.notes(from:)).sorted { $0.build > $1.build }
+    ReleaseNotesCache.save(notes)
+    return notes
+  }
+
+  /// Why an answer from GitHub isn't the releases, or nil for one that is. Its limit is a 403, or a
+  /// 429, with no requests remaining until a time it gives in seconds since 1970, or for its limit
+  /// on requests too close together, a number of seconds to wait.
+  static func failure(for response: HTTPURLResponse, now: Date = .now) -> Failure? {
+    let status = response.statusCode
+    if status == 200 {
+      return nil
+    }
+    if status == 403 || status == 429 {
+      if let wait = response.value(forHTTPHeaderField: "retry-after").flatMap(TimeInterval.init) {
+        return .limited(until: now.addingTimeInterval(wait))
+      }
+      if response.value(forHTTPHeaderField: "x-ratelimit-remaining") == "0" {
+        return .limited(until: response.value(forHTTPHeaderField: "x-ratelimit-reset").flatMap(TimeInterval.init).map(Date.init(timeIntervalSince1970:)))
+      }
+    }
+    return .unexpected
+  }
+
+  /// Why asking GitHub didn't get an answer: no connection, when it's that, or else something else.
+  static func failure(for error: any Error) -> Failure {
+    let offline: Set<URLError.Code> = [.notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .dataNotAllowed, .internationalRoamingOff]
+    if let error = error as? URLError, offline.contains(error.code) {
+      return .offline
+    }
+    return .unexpected
   }
 
   /// A release's notes, for a tag like 1.0beta31, which says the version and build it's for.
@@ -60,6 +113,30 @@ enum GitHubReleases {
   private static func body(of release: ReleaseNotes) -> String {
     let notes = release.notes.trimmingCharacters(in: .whitespacesAndNewlines)
     return notes.isEmpty ? "_No release notes provided._" : notes
+  }
+}
+
+/// The builds' notes as GitHub last gave them, to show straight away the next time, and when GitHub
+/// doesn't give them.
+enum ReleaseNotesCache {
+  static let fileURL = URL.cachesDirectory.appending(path: "Release Notes.json", directoryHint: .notDirectory)
+
+  /// The notes kept, the newest first, or none.
+  static func load(from fileURL: URL = Self.fileURL) -> [ReleaseNotes] {
+    guard let data = try? Data(contentsOf: fileURL) else {
+      return []
+    }
+    return (try? JSONDecoder().decode([ReleaseNotes].self, from: data)) ?? []
+  }
+
+  static func save(_ releases: [ReleaseNotes], to fileURL: URL = Self.fileURL) {
+    do {
+      try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try JSONEncoder().encode(releases).write(to: fileURL, options: .atomic)
+    }
+    catch {
+      print("ReleaseNotesCache: Couldn't keep the release notes: \(error)")
+    }
   }
 }
 
@@ -299,11 +376,11 @@ final class AppUpdate: NSObject {
     Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0
   }
 
-  /// What's new since this build, from GitHub, in place of the feed's notes, which are only the
-  /// newest build's.
+  /// What's new since this build, from GitHub, or as it last gave them, in place of the feed's notes,
+  /// which are only the newest build's.
   private func loadNotes(for version: String) async {
-    guard let releases = try? await GitHubReleases.fetch(),
-          let combined = GitHubReleases.combined(releases, since: Self.currentBuild),
+    let releases = (try? await GitHubReleases.fetch()) ?? ReleaseNotesCache.load()
+    guard let combined = GitHubReleases.combined(releases, since: Self.currentBuild),
           self.version == version else {
       return
     }

@@ -186,11 +186,17 @@ struct AppUpdateView: View {
 // MARK: - Release Notes
 
 /// Every build's notes, from Hotline's releases on GitHub: the builds down the side, the newest first,
-/// and the notes of the one chosen, which starts as the build that's running.
+/// and the notes of the one chosen, which starts as the build that's running. The notes GitHub last
+/// gave show straight away, and stay, if it doesn't give them this time. Without any, it says why:
+/// no connection, or GitHub's limit for the network, and until when.
 struct ReleaseNotesView: View {
   @State private var releases: [ReleaseNotes] = []
   @State private var selection: ReleaseNotes.ID?
-  @State private var failed = false
+  /// The build chosen for you, before you choose one, which the window goes on choosing as newer
+  /// notes come in: the build that's running, once there are notes for it.
+  @State private var picked: ReleaseNotes.ID?
+  /// Why GitHub didn't give the notes, the last time it was asked.
+  @State private var failure: GitHubReleases.Failure?
 
   private let currentBuild = Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0
 
@@ -217,11 +223,11 @@ struct ReleaseNotesView: View {
         // From the top for each build.
         .id(release.id)
       }
-      else if self.failed {
+      else if let failure = self.failure {
         ContentUnavailableView {
           Label("Couldn't Load Release Notes", systemImage: "exclamationmark.triangle")
         } description: {
-          Text("Check your connection to the internet, then try again.")
+          Text(Self.explanation(of: failure))
         } actions: {
           Button("Try Again") {
             Task {
@@ -291,17 +297,49 @@ struct ReleaseNotesView: View {
     return formatter
   }()
 
+  /// Shows the notes GitHub last gave, straight away, then asks it for them again, as one may have
+  /// come out since.
   private func load() async {
-    self.failed = false
+    self.failure = nil
+    if self.releases.isEmpty {
+      self.show(ReleaseNotesCache.load())
+    }
     do {
-      let releases = try await GitHubReleases.fetch()
-      self.releases = releases
-      if self.selection == nil {
-        self.selection = (releases.first { $0.build == self.currentBuild } ?? releases.first)?.id
-      }
+      self.show(try await GitHubReleases.fetch())
     }
     catch {
-      self.failed = true
+      self.failure = error as? GitHubReleases.Failure ?? .unexpected
+    }
+  }
+
+  /// Shows builds' notes, with the build that's running chosen, or the newest without notes for it,
+  /// unless you've chosen another.
+  private func show(_ releases: [ReleaseNotes]) {
+    guard !releases.isEmpty else {
+      return
+    }
+    self.releases = releases
+    if self.selection == nil || self.selection == self.picked {
+      let pick = (releases.first { $0.build == self.currentBuild } ?? releases.first)?.id
+      self.picked = pick
+      self.selection = pick
+    }
+  }
+
+  /// Why there aren't any notes, and what to do: wait for GitHub's limit to pass, as long as it
+  /// says, or check the connection, or try again.
+  static func explanation(of failure: GitHubReleases.Failure, now: Date = .now) -> String {
+    switch failure {
+    case .limited(let until):
+      guard let until, until > now else {
+        return String(localized: "GitHub is limiting requests from your network for now. Try again in a little while.")
+      }
+      let time = until.formatted(date: Calendar.current.isDate(until, inSameDayAs: now) ? .omitted : .abbreviated, time: .shortened)
+      return String(localized: "GitHub is limiting requests from your network for now. Try again after \(time).")
+    case .offline:
+      return String(localized: "Check your connection to the internet, then try again.")
+    case .unexpected:
+      return String(localized: "GitHub didn't send them this time. Try again in a moment.")
     }
   }
 }
