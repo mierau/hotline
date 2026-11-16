@@ -472,8 +472,8 @@ struct ReleaseNotesRow: View {
   }
 }
 
-/// One build's notes: Hotline's icon, beside its version, when it came out, and whether it's the one
-/// running, then under a line, the notes themselves.
+/// One build's notes: Hotline's icon, beside its version and when it came out, and at the other side,
+/// whether it's the one running, then under a line, the notes themselves.
 struct ReleaseNotesDetail: View {
   let release: ReleaseNotes
   let isInstalled: Bool
@@ -486,20 +486,21 @@ struct ReleaseNotesDetail: View {
           .frame(width: 52, height: 52)
           .accessibilityHidden(true)
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
           Text("Hotline \(self.release.version)")
             .font(.title2)
             .fontWeight(.semibold)
-          HStack(spacing: 8) {
-            if let date = self.release.date {
-              Text(date.formatted(date: .long, time: .omitted))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            }
-            if self.isInstalled {
-              self.installed
-            }
+          if let date = self.release.date {
+            Text(date.formatted(date: .long, time: .omitted))
+              .font(.callout)
+              .foregroundStyle(.secondary)
           }
+        }
+
+        Spacer(minLength: 0)
+
+        if self.isInstalled {
+          self.installed
         }
       }
 
