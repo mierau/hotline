@@ -261,7 +261,7 @@ struct OnboardingView: View {
 //        .buttonStyle(.plain)
         .controlSize(.large)
         .buttonBorderShape(.capsule)
-        .glassProminentButtonStyle()
+        .buttonStyle(.glassProminent)
         .tint(Color.white.opacity(0.7))
         
         Spacer()

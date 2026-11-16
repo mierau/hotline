@@ -115,7 +115,7 @@ final class FilePreviewStream: NSObject {
   }
 
   nonisolated private static let playableTypes: Set<String> = {
-    if #available(macOS 26.0, iOS 26.0, *) {
+    if #available(iOS 26.0, *) {
       return Set(AVURLAsset.audiovisualContentTypes.map(\.identifier))
     }
     return Set(AVURLAsset.audiovisualTypes().map(\.rawValue))

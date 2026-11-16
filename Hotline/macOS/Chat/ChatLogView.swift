@@ -26,13 +26,8 @@ struct ChatLogView: View {
     self.content
       .frame(minWidth: 400, maxWidth: .infinity, minHeight: 300, maxHeight: .infinity)
       .background {
-        if #available(macOS 26.0, *) {
-          Color(.windowBackgroundColor)
-            .ignoresSafeArea()
-        } else {
-          Color(nsColor: .textBackgroundColor)
-            .ignoresSafeArea()
-        }
+        Color(.windowBackgroundColor)
+          .ignoresSafeArea()
       }
       // Its pictures, from where they load by themselves, outside a server's window, without one's.
       .environment(\.imageSources, ImagePreview.Sources(anySite: Prefs.shared.imagePreviews == .anySite))
@@ -91,7 +86,8 @@ struct ChatLogView: View {
       }
     )
     .ignoresSafeArea(edges: .top)
-    .modifier(SoftTopScrollEdge())
+    // Text scrolling under the toolbar fades out, as it does in other apps.
+    .scrollEdgeEffectStyle(.soft, for: .top)
   }
 
   private func searchChanged() {

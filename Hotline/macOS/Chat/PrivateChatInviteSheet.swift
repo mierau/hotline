@@ -295,26 +295,17 @@ private struct PrivateChatPersonRow: View {
   }
 }
 
-/// The checkmark of someone chosen, which draws itself in as they're chosen and away as they're not,
-/// or before macOS 26, which can't, grows in and shrinks away.
+/// The checkmark of someone chosen, which draws itself in as they're chosen and away as they're not.
 private struct PrivateChatCheckmark: View {
   let isChosen: Bool
 
   var body: some View {
-    Group {
-      if #available(macOS 26.0, *) {
-        Image(systemName: "checkmark")
-          .symbolEffect(.drawOff, isActive: !self.isChosen)
-      }
-      else if self.isChosen {
-        Image(systemName: "checkmark")
-          .transition(.scale(scale: 0.3).combined(with: .opacity))
-      }
-    }
-    .fontWeight(.semibold)
-    .foregroundStyle(.tint)
-    // The row says whether they're chosen.
-    .accessibilityHidden(true)
+    Image(systemName: "checkmark")
+      .symbolEffect(.drawOff, isActive: !self.isChosen)
+      .fontWeight(.semibold)
+      .foregroundStyle(.tint)
+      // The row says whether they're chosen.
+      .accessibilityHidden(true)
   }
 }
 

@@ -23,21 +23,11 @@ struct NewFolderPopover: View {
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
         
-        if #available(macOS 26.0, *) {
-          Button("New Folder", role: .confirm) {
-            self.createFolder()
-          }
-          .buttonStyle(.borderedProminent)
-          .buttonBorderShape(.capsule)
+        Button("New Folder", role: .confirm) {
+          self.createFolder()
         }
-        else {
-          Button("OK") {
-            self.dismiss()
-            self.action?(self.folderName)
-          }
-          .buttonStyle(.borderedProminent)
-          .buttonBorderShape(.capsule)
-        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
       }
     }
     .frame(width: 250)

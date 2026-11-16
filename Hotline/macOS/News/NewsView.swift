@@ -151,9 +151,7 @@ struct NewsView: View {
         .disabled(self.article == nil || !self.canPost)
       }
       
-      if #available(macOS 26.0, *) {
-        ToolbarSpacer(.fixed)
-      }
+      ToolbarSpacer(.fixed)
       
       if self.model.access?.contains(.canCreateNewsCategories) == true {
         ToolbarItem {
@@ -782,20 +780,11 @@ struct NewNewsItemPopover: View {
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
         
-        if #available(macOS 26.0, *) {
-          Button(self.title, role: .confirm) {
-            self.create()
-          }
-          .buttonStyle(.borderedProminent)
-          .buttonBorderShape(.capsule)
+        Button(self.title, role: .confirm) {
+          self.create()
         }
-        else {
-          Button("OK") {
-            self.create()
-          }
-          .buttonStyle(.borderedProminent)
-          .buttonBorderShape(.capsule)
-        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
       }
     }
     .frame(width: 250)

@@ -57,7 +57,7 @@ struct ConnectView: View {
   private static let addressHeight: CGFloat = 36
 
   var body: some View {
-    GlassGroup(spacing: 10) {
+    GlassEffectContainer(spacing: 10) {
       HStack(alignment: .top, spacing: 10) {
         VStack(spacing: 12) {
           self.addressField
@@ -1045,9 +1045,9 @@ private struct SuggestionRow: View {
 }
 
 /// A round button, 10 points bigger than its label all around: glass in the accent, or a server's
-/// theme's, when it's prominent and plain glass when not, or before macOS 26, a circle in the
-/// accent or gray. Unlike glassProminent and glass, which are two different buttons, it's the same
-/// button either way, so its symbol can turn from one to the other.
+/// theme's, when it's prominent and plain glass when not. Unlike glassProminent and glass, which
+/// are two different buttons, it's the same button either way, so its symbol can turn from one to
+/// the other.
 private struct RoundButtonStyle: ButtonStyle {
   let prominent: Bool
   @Environment(\.isEnabled) private var isEnabled
@@ -1061,59 +1061,21 @@ private struct RoundButtonStyle: ButtonStyle {
       .foregroundStyle(tinted ? AnyShapeStyle(.white) : self.isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
       .padding(10)
       .contentShape(Circle())
-    if #available(macOS 26, *) {
-      label.glassEffect(tinted ? .regular.tint(self.theme?.accent.map { Color(nsColor: $0) } ?? .accentColor).interactive() : .regular.interactive(), in: Circle())
-    }
-    else {
-      label.background(tinted ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), in: Circle())
-        .opacity(configuration.isPressed ? 0.8 : 1)
-    }
-  }
-}
-
-/// Glass shapes that sit together, so they're drawn as one, from macOS 26.
-private struct GlassGroup<Content: View>: View {
-  let spacing: CGFloat
-  @ViewBuilder let content: Content
-
-  var body: some View {
-    if #available(macOS 26, *) {
-      GlassEffectContainer(spacing: self.spacing) {
-        self.content
-      }
-    }
-    else {
-      self.content
-    }
+    label.glassEffect(tinted ? .regular.tint(self.theme?.accent.map { Color(nsColor: $0) } ?? .accentColor).interactive() : .regular.interactive(), in: Circle())
   }
 }
 
 private extension View {
-  /// What's behind a field: Liquid Glass, or before macOS 26, a field's own fill and edge.
-  @ViewBuilder
+  /// What's behind a field: Liquid Glass.
   func fieldBackground(in shape: some Shape) -> some View {
-    if #available(macOS 26, *) {
-      self.glassEffect(.regular, in: shape)
-        // Fading in where it is, the way it fades out, rather than growing out of the glass beside
-        // it.
-        .glassEffectTransition(.materialize)
-    }
-    else {
-      self.background(Color(nsColor: .controlBackgroundColor), in: shape)
-        .overlay(shape.stroke(Color(nsColor: .separatorColor)))
-    }
+    self.glassEffect(.regular, in: shape)
+      // Fading in where it is, the way it fades out, rather than growing out of the glass beside
+      // it.
+      .glassEffectTransition(.materialize)
   }
 
-  /// What's behind the suggestions: Liquid Glass, or before macOS 26, a window's background and
-  /// edge. The window they're in casts their shadow.
-  @ViewBuilder
+  /// What's behind the suggestions: Liquid Glass. The window they're in casts their shadow.
   func suggestionsBackground(in shape: some Shape) -> some View {
-    if #available(macOS 26, *) {
-      self.glassEffect(.regular, in: shape)
-    }
-    else {
-      self.background(Color(nsColor: .windowBackgroundColor), in: shape)
-        .overlay(shape.stroke(Color(nsColor: .separatorColor)))
-    }
+    self.glassEffect(.regular, in: shape)
   }
 }

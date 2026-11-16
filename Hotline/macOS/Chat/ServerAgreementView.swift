@@ -25,7 +25,7 @@ struct ServerAgreementSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .bottomBar {
+    .safeAreaBar(edge: .bottom) {
       switch self.purpose {
       case .agreeing:
         self.buttonBar
@@ -44,40 +44,34 @@ struct ServerAgreementSheet: View {
   }
 
   private var buttonBar: some View {
-    VStack(spacing: 0) {
-      if #unavailable(macOS 26) {
-        Divider()
+    HStack {
+      Button("Disagree", role: .cancel) {
+        Task {
+          await self.model.disconnect()
+        }
       }
+      .buttonStyle(.glass)
+      .buttonBorderShape(.capsule)
+      .controlSize(.extraLarge)
 
-      HStack {
-        Button("Disagree", role: .cancel) {
-          Task {
+      Spacer()
+
+      Button("Agree") {
+        Task {
+          do {
+            try await self.model.sendAgree()
+          } catch {
+            print("HotlineState: Agree failed: \(error), disconnecting")
             await self.model.disconnect()
           }
         }
-        .glassButtonStyle()
-        .buttonBorderShape(.capsule)
-        .controlSize(.extraLarge)
-
-        Spacer()
-
-        Button("Agree") {
-          Task {
-            do {
-              try await self.model.sendAgree()
-            } catch {
-              print("HotlineState: Agree failed: \(error), disconnecting")
-              await self.model.disconnect()
-            }
-          }
-        }
-        .keyboardShortcut(.defaultAction)
-        .buttonBorderShape(.capsule)
-        .glassProminentButtonStyle()
-        .controlSize(.extraLarge)
       }
-      .padding(20)
+      .keyboardShortcut(.defaultAction)
+      .buttonBorderShape(.capsule)
+      .buttonStyle(.glassProminent)
+      .controlSize(.extraLarge)
     }
+    .padding(20)
   }
 
   /// OK, to close it, once it's been read again.

@@ -82,7 +82,7 @@ extension HotlineState {
   /// to be about anything.
   private static func boardPostTopic(_ body: String) async -> String? {
     #if canImport(FoundationModels)
-    guard #available(macOS 26.0, iOS 26.0, *) else {
+    guard #available(iOS 26.0, *) else {
       return nil
     }
     guard case .available = SystemLanguageModel.default.availability,

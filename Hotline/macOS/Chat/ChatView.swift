@@ -153,7 +153,8 @@ struct ChatView: View {
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .ignoresSafeArea(edges: .top)
-      .modifier(SoftTopScrollEdge())
+      // Text scrolling under the toolbar fades out, as it does in other apps.
+      .scrollEdgeEffectStyle(.soft, for: .top)
       .overlay(alignment: .bottom) {
         if self.chatID == nil, self.debouncedQuery.isEmpty, self.model.newWhileReadingBack > 0 {
           NewMessagesButton(count: self.model.newWhileReadingBack) {
@@ -562,17 +563,6 @@ final class ChatMenuItem: NSMenuItem {
 
   @objc private func choose() {
     self.handler()
-  }
-}
-
-/// Text scrolling under the toolbar fades out, as it does in other apps.
-struct SoftTopScrollEdge: ViewModifier {
-  func body(content: Content) -> some View {
-    if #available(macOS 26.0, *) {
-      content.scrollEdgeEffectStyle(.soft, for: .top)
-    } else {
-      content
-    }
   }
 }
 

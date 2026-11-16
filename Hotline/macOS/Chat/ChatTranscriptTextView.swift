@@ -923,9 +923,9 @@ final class ChatTranscriptTextView: NSTextView, NSTextViewDelegate, NSViewToolTi
 
 // MARK: - Copy Code Button
 
-/// The round button over a code block that copies its code. It grows in when the pointer comes
-/// over the block and shrinks away when it leaves, and after a copy it widens to say so, then goes
-/// until the pointer comes back to the block. Glass where the system has it.
+/// The round glass button over a code block that copies its code. It grows in when the pointer
+/// comes over the block and shrinks away when it leaves, and after a copy it widens to say so, then
+/// goes until the pointer comes back to the block.
 final class ChatCopyCodeButton: NSButton {
   static let size: CGFloat = 26
 
@@ -946,18 +946,9 @@ final class ChatCopyCodeButton: NSButton {
     self.target = target
     self.action = action
     self.wantsLayer = true
-    if #available(macOS 26.0, *) {
-      self.isBordered = true
-      self.bezelStyle = .glass
-      self.borderShape = .circle
-    }
-    else {
-      // A round tile of its own, so code running under it doesn't show through.
-      self.isBordered = false
-      self.layer?.cornerRadius = Self.size / 2
-      self.layer?.borderWidth = 1
-      self.updateTile()
-    }
+    self.isBordered = true
+    self.bezelStyle = .glass
+    self.borderShape = .circle
     self.imagePosition = .imageOnly
     self.imageScaling = .scaleNone
     self.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
@@ -989,9 +980,7 @@ final class ChatCopyCodeButton: NSButton {
     self.image = Self.copyImage
     self.imagePosition = .imageOnly
     self.contentTintColor = .secondaryLabelColor
-    if #available(macOS 26.0, *) {
-      self.borderShape = .circle
-    }
+    self.borderShape = .circle
     self.layOut(width: Self.size)
   }
 
@@ -1047,9 +1036,7 @@ final class ChatCopyCodeButton: NSButton {
     self.image = Self.copiedImage
     self.imagePosition = .imageLeading
     self.contentTintColor = .systemGreen
-    if #available(macOS 26.0, *) {
-      self.borderShape = .capsule
-    }
+    self.borderShape = .capsule
     let width = max(Self.size, ceil(self.fittingSize.width) + 6)
     NSAnimationContext.runAnimationGroup { context in
       context.duration = 0.2
@@ -1081,22 +1068,6 @@ final class ChatCopyCodeButton: NSButton {
     animation.fillMode = .forwards
     animation.isRemovedOnCompletion = to != 1
     layer.add(animation, forKey: "scale")
-  }
-
-  /// Without glass, the tile's colors, for light or dark.
-  private func updateTile() {
-    guard #unavailable(macOS 26.0) else {
-      return
-    }
-    self.effectiveAppearance.performAsCurrentDrawingAppearance {
-      self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-      self.layer?.borderColor = NSColor.separatorColor.cgColor
-    }
-  }
-
-  override func viewDidChangeEffectiveAppearance() {
-    super.viewDidChangeEffectiveAppearance()
-    self.updateTile()
   }
 }
 

@@ -396,10 +396,7 @@ struct ServerSurfaceStyle: ShapeStyle {
     let colorScheme = environment.colorScheme
     switch self.surface {
     case .content:
-      if #available(macOS 26.0, *) {
-        return AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
-      }
-      return AnyShapeStyle(Color(nsColor: .textBackgroundColor))
+      return AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
     case .page:
       return AnyShapeStyle(Color(nsColor: .underPageBackgroundColor).opacity(colorScheme == .light ? 0.25 : 1))
     case .thread:

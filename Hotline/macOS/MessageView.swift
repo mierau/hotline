@@ -1,16 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-private struct SoftScrollEdgeEffect: ViewModifier {
-  func body(content: Content) -> some View {
-    if #available(macOS 26.0, *) {
-      content.scrollEdgeEffectStyle(.soft, for: .vertical)
-    } else {
-      content
-    }
-  }
-}
-
 private struct ComposeContext: Identifiable {
   let id = UUID()
   /// The message it's a reply to, as the reply quotes it, or nil for a new message.
@@ -157,9 +147,7 @@ struct MessageView: View {
           }
       }
 
-      if #available(macOS 26.0, *) {
-        ToolbarSpacer()
-      }
+      ToolbarSpacer()
 
       ToolbarItem {
         Button {
@@ -397,7 +385,7 @@ struct MessageView: View {
       .padding(.bottom, 24)
     }
     .defaultScrollAnchor(.top)
-    .modifier(SoftScrollEdgeEffect())
+    .scrollEdgeEffectStyle(.soft, for: .vertical)
   }
 
   // MARK: - Message Card

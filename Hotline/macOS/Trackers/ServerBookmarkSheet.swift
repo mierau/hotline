@@ -272,9 +272,8 @@ struct SecureConnectionCheckRow: View {
   }
 }
 
-/// What checking found, as a symbol that draws itself in as it shows, or before macOS 26, which
-/// can't, grows in: the green checkmark of a server that supports secure connections, and the gray
-/// X of one that doesn't, or a warning.
+/// What checking found, as a symbol that draws itself in as it shows: the green checkmark of a
+/// server that supports secure connections, and the gray X of one that doesn't, or a warning.
 private struct DrawnInSymbol: View {
   let systemName: String
   var style: AnyShapeStyle = AnyShapeStyle(.primary)
@@ -284,27 +283,18 @@ private struct DrawnInSymbol: View {
   @State private var shown = false
 
   var body: some View {
-    Group {
-      if #available(macOS 26.0, *) {
-        Image(systemName: self.systemName)
-          .symbolEffect(.drawOff, isActive: !self.shown)
+    Image(systemName: self.systemName)
+      .symbolEffect(.drawOff, isActive: !self.shown)
+      .symbolRenderingMode(self.multicolor ? .multicolor : .monochrome)
+      .foregroundStyle(self.style)
+      // What was found says so.
+      .accessibilityHidden(true)
+      .task {
+        // Once it's showing, so it's seen to come in.
+        try? await Task.sleep(for: .milliseconds(60))
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+          self.shown = true
+        }
       }
-      else {
-        Image(systemName: self.systemName)
-          .scaleEffect(self.shown ? 1 : 0.3)
-          .opacity(self.shown ? 1 : 0)
-      }
-    }
-    .symbolRenderingMode(self.multicolor ? .multicolor : .monochrome)
-    .foregroundStyle(self.style)
-    // What was found says so.
-    .accessibilityHidden(true)
-    .task {
-      // Once it's showing, so it's seen to come in.
-      try? await Task.sleep(for: .milliseconds(60))
-      withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
-        self.shown = true
-      }
-    }
   }
 }

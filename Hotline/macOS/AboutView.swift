@@ -75,33 +75,6 @@ struct AboutContributorView: View {
   }
 }
 
-/// The version's soft capsule, from before Liquid Glass.
-private struct AboutVersionButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .foregroundStyle(.white.opacity(0.756))
-      .padding(.vertical, 4)
-      .padding(.horizontal, 12)
-      .background {
-        Capsule()
-          .fill(.white.opacity(0.5))
-          .blendMode(.softLight)
-      }
-  }
-}
-
-private extension View {
-  @ViewBuilder
-  func aboutVersionButtonStyle() -> some View {
-    if #available(macOS 26, *) {
-      self.buttonStyle(.glass)
-    }
-    else {
-      self.buttonStyle(AboutVersionButtonStyle())
-    }
-  }
-}
-
 /// A contributor's row, which lights up a little under the pointer and a little more while pressed.
 private struct AboutContributorButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
@@ -168,7 +141,7 @@ struct AboutView: View {
       } label: {
         Text("Version \(String(format: "%.1f", appDetails.version))b\(appDetails.build)")
       }
-      .aboutVersionButtonStyle()
+      .buttonStyle(.glass)
     }
     // Centered between the edge of the window and the contributors, whose names start 20 pt in,
     // so there's as much room on either side.

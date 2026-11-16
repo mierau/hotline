@@ -1,13 +1,8 @@
 import Cocoa
 import SwiftUI
 
-/// The 60 pt banner plus the button row, which is 52 pt with the macOS 26 glass bars and 44 pt before.
-fileprivate let HOTLINE_PANEL_SIZE: CGSize = {
-  if #available(macOS 26.0, *) {
-    return CGSize(width: 468, height: 60 + 52)
-  }
-  return CGSize(width: 468, height: 60 + 44)
-}()
+/// The 60 pt banner plus the 52 pt button row of glass bars.
+fileprivate let HOTLINE_PANEL_SIZE = CGSize(width: 468, height: 60 + 52)
 
 class HotlinePanel: NSPanel {
   init(_ view: HotlinePanelView) {

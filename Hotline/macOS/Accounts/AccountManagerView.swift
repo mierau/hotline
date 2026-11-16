@@ -104,7 +104,8 @@ struct AccountManagerView: View {
       
       Spacer(minLength: 0)
       
-      AccountHeaderGlass(spacing: AccountHeaderButtonStyle.spacing) {
+      // Drawn together, as glass can't show the glass beside it.
+      GlassEffectContainer(spacing: AccountHeaderButtonStyle.spacing) {
         HStack(spacing: AccountHeaderButtonStyle.spacing) {
           HStack(spacing: 0) {
             Button {
@@ -248,9 +249,8 @@ struct AccountManagerView: View {
 /// A symbol's button in the accounts' header, as a toolbar's are from macOS 26: round Liquid Glass
 /// that gives as it's clicked, in the text's color, and faint when it can't be clicked. Prominent,
 /// it's glass in the accent, or a server's theme's, with a white symbol, as a default button is.
-/// Joined with the buttons beside it, it's the symbol alone, on the one piece of glass, or before
-/// macOS 26 the gray, that `accountHeaderJoined()` puts behind them all. Before macOS 26, a button
-/// on its own is the symbol on the accent, or on a gray circle.
+/// Joined with the buttons beside it, it's the symbol alone, on the one piece of glass that
+/// `accountHeaderJoined()` puts behind them all.
 ///
 /// Joined buttons don't each have glass of their own, joined with `glassEffectUnion`, as each one's
 /// glass that gives as it's clicked then takes clicks across the whole piece, and the last one's
@@ -290,56 +290,20 @@ private struct AccountHeaderButtonStyle: ButtonStyle {
       .frame(width: Self.size, height: Self.size)
       .contentShape(.capsule)
     if self.joined {
-      // On its group's glass, or gray, so it shows it's clicked itself.
+      // On its group's glass, so it shows it's clicked itself.
       label
         .opacity(configuration.isPressed ? 0.5 : 1)
     }
-    else if #available(macOS 26, *) {
+    else {
       // Giving as it's clicked only when it can be.
       label.glassEffect(tinted ? .regular.tint(self.accent).interactive() : self.isEnabled ? .regular.interactive() : .regular, in: .capsule)
-    }
-    else {
-      label
-        .background {
-          if tinted {
-            Circle().fill(self.accent)
-          }
-          else {
-            Circle().fill(.quaternary)
-          }
-        }
-        .opacity(configuration.isPressed ? 0.6 : 1)
-    }
-  }
-}
-
-/// The header's glass, drawn together, from macOS 26, as glass can't show the glass beside it.
-private struct AccountHeaderGlass<Content: View>: View {
-  let spacing: CGFloat
-  @ViewBuilder let content: Content
-
-  var body: some View {
-    if #available(macOS 26, *) {
-      GlassEffectContainer(spacing: self.spacing) {
-        self.content
-      }
-    }
-    else {
-      self.content
     }
   }
 }
 
 private extension View {
-  /// Buttons joined into one piece: one capsule of glass behind them all, from macOS 26, and
-  /// before, a gray one.
-  @ViewBuilder
+  /// Buttons joined into one piece: one capsule of glass behind them all.
   func accountHeaderJoined() -> some View {
-    if #available(macOS 26, *) {
-      self.glassEffect(.regular, in: .capsule)
-    }
-    else {
-      self.background(.quaternary, in: .capsule)
-    }
+    self.glassEffect(.regular, in: .capsule)
   }
 }

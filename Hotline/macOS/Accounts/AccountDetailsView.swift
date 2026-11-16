@@ -38,17 +38,9 @@ struct AccountDetailsView: View {
   var body: some View {
     self.detailsView
       .alert(self.alertTitle, isPresented: self.$alertShown, actions: {
-        if #available(macOS 26.0, *) {
-          Button("OK", role: .confirm) {
-            self.alertShown = false
-          }
+        Button("OK", role: .confirm) {
+          self.alertShown = false
         }
-        else {
-          Button("OK") {
-            self.alertShown = false
-          }
-        }
-        
       }, message: {
         Text(self.alertMessage)
       })

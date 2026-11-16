@@ -90,8 +90,7 @@ struct ListItemView: View {
 }
 
 /// A button on a sidebar row, like the Chat row's for a private chat: its symbol, flat, and with the
-/// pointer over it, a circle of glass, which goes flat again once it's gone. Before macOS 26, with
-/// no glass, a circle in the row's text color, which darkens when it's pressed.
+/// pointer over it, a circle of glass, which goes flat again once it's gone.
 struct SidebarRowButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     SidebarRowButton(configuration: configuration)
@@ -115,22 +114,10 @@ struct SidebarRowButtonStyle: ButtonStyle {
           self.hovered = hovered
         }
 
-      Group {
-        if #available(macOS 26.0, *) {
-          label
-            .glassEffect(self.hovered ? .regular.interactive() : .identity, in: .circle)
-            .animation(.easeOut(duration: 0.15), value: self.hovered)
-        }
-        else {
-          label
-            .background {
-              Circle()
-                .fill(.primary.opacity(self.configuration.isPressed ? 0.2 : self.hovered ? 0.1 : 0))
-            }
-            .animation(.easeOut(duration: 0.12), value: self.hovered)
-        }
-      }
-      .padding(-Self.overhang)
+      label
+        .glassEffect(self.hovered ? .regular.interactive() : .identity, in: .circle)
+        .animation(.easeOut(duration: 0.15), value: self.hovered)
+        .padding(-Self.overhang)
     }
   }
 }
@@ -319,30 +306,16 @@ struct ServerView: View {
     // place kept on the right with nothing in it.
     .toolbar {
       if self.model.status == .loggedIn {
-        if #available(macOS 26.0, *) {
-          ToolbarItem(placement: .navigation) {
-            self.serverIcon
-          }
-          .sharedBackgroundVisibility(.hidden)
+        ToolbarItem(placement: .navigation) {
+          self.serverIcon
         }
-        else {
-          ToolbarItem(placement: .navigation) {
-            self.serverIcon
-          }
-        }
+        .sharedBackgroundVisibility(.hidden)
       }
       else {
-        if #available(macOS 26.0, *) {
-          ToolbarItem(placement: .primaryAction) {
-            self.toolbarPlaceholder
-          }
-          .sharedBackgroundVisibility(.hidden)
+        ToolbarItem(placement: .primaryAction) {
+          self.toolbarPlaceholder
         }
-        else {
-          ToolbarItem(placement: .primaryAction) {
-            self.toolbarPlaceholder
-          }
-        }
+        .sharedBackgroundVisibility(.hidden)
       }
     }
     .onDisappear {

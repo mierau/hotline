@@ -88,35 +88,8 @@ struct HotlinePanelView: View {
   
   // MARK: Button Row
 
-  @ViewBuilder
-  private var buttonRow: some View {
-    if #available(macOS 26.0, *) {
-      self.glassButtonRow
-    }
-    else {
-      self.classicButtonRow
-    }
-  }
-
-  private var classicButtonRow: some View {
-    // Touching 32 pt button cells with this padding put the icons where they've always been,
-    // 12 pt apart in a 44 pt row.
-    HStack(spacing: 0) {
-      self.sectionButtons
-      Spacer()
-      self.utilityButtons
-    }
-    .padding(.vertical, 8)
-    .padding(.horizontal, 6)
-    .background(self.backgroundColor)
-    .foregroundStyle(.primary)
-    .animation(.default, value: self.backgroundColor)
-    .animation(.snappy(duration: 0.25), value: self.selectedButton)
-  }
-
   /// Section buttons in a glass bar on the left, utilities in a smaller one on the right.
-  @available(macOS 26.0, *)
-  private var glassButtonRow: some View {
+  private var buttonRow: some View {
     GlassEffectContainer(spacing: 12) {
       HStack(spacing: 0) {
         // 4 pt around the 28 pt button cells makes 36 pt bars, the height of system toolbar glass,
@@ -249,7 +222,7 @@ struct HotlinePanelView: View {
         .resizable()
         .scaledToFit()
         .frame(width: 20, height: 20)
-        .frame(width: self.buttonCellWidth, height: 28)
+        .frame(width: 40, height: 28)
         .contentShape(.capsule)
     }
     .buttonStyle(.plain)
@@ -280,15 +253,6 @@ struct HotlinePanelView: View {
     }
     .disabled(disabled)
     .help(help)
-  }
-
-  /// Roomier cells in the macOS 26 glass bars. The older row keeps 32 pt cells so its icons stay
-  /// where they've always been.
-  private var buttonCellWidth: CGFloat {
-    if #available(macOS 26.0, *) {
-      return 40
-    }
-    return 32
   }
 
   // MARK: Selection
