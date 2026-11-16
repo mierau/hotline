@@ -587,6 +587,28 @@ private struct ServerThemedDivider: ViewModifier {
   }
 }
 
+/// A line between a window's parts, as news has between its topics, its articles and the article,
+/// and files have between their columns. In light mode, it's the line the system's split views
+/// draw, a point of black part way, which on a server's theme is a darker shade of its color. In
+/// dark mode, it's darker than what it's between, as the theme's color for lines would be lighter
+/// there: a pixel of black, part way in the theme, or half a point without one.
+struct ServerSplitLine: View {
+  @Environment(\.serverTheme) private var theme
+  @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.displayScale) private var displayScale
+  /// Up, between parts side by side, or across, between one over the other.
+  let axis: Axis
+
+  var body: some View {
+    let dark = self.colorScheme == .dark
+    let thickness = dark ? (self.theme == nil ? 0.5 : 1 / self.displayScale) : 1
+    Rectangle()
+      .fill(dark ? Color.black.opacity(self.theme == nil ? 1 : 0.6) : Color(nsColor: .separatorColor))
+      .frame(width: self.axis == .vertical ? thickness : nil, height: self.axis == .horizontal ? thickness : nil)
+      .allowsHitTesting(false)
+  }
+}
+
 /// How many unread there are, on a row in the sidebar: a capsule in the server's theme's accent, as
 /// the sidebar has it to stand out, or without a theme, the system's, with the count in white or
 /// black, whichever shows on it. Past 99, it's 99+, so it's never much wider.

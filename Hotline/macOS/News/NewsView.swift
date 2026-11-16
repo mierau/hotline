@@ -9,10 +9,7 @@ import SplitView
 struct NewsView: View {
   @Environment(HotlineState.self) private var model: HotlineState
   @Environment(\.openWindow) private var openWindow
-  @Environment(\.colorScheme) private var colorScheme
-  @Environment(\.serverTheme) private var theme
-  @Environment(\.displayScale) private var displayScale
-  
+
   /// The server's window, which keeps the topic and article chosen.
   let serverState: ServerState
 
@@ -79,7 +76,7 @@ struct NewsView: View {
           bottom: {
             self.articleViewer
               .overlay(alignment: .top) {
-                self.splitLine(.horizontal)
+                ServerSplitLine(axis: .horizontal)
               }
           }
         )
@@ -298,7 +295,7 @@ struct NewsView: View {
       self.open(self.topic, false)
     }
     .overlay(alignment: .trailing) {
-      self.splitLine(.vertical)
+      ServerSplitLine(axis: .vertical)
     }
   }
 
@@ -343,27 +340,6 @@ struct NewsView: View {
       Label(self.deleteLabel(for: item), systemImage: "trash")
     }
     .disabled(!self.canDeleteSelectedItem(item))
-  }
-
-  /// A line between the parts of the news, up between the topics and the articles, or across, over
-  /// the article: a pixel in the server's theme, or half a point without one, darker than what it's
-  /// between, as the system's are.
-  private func splitLine(_ axis: Axis) -> some View {
-    let thickness = self.theme == nil ? 0.5 : 1 / self.displayScale
-    return Rectangle()
-      .fill(self.splitLineColor)
-      .frame(width: axis == .vertical ? thickness : nil, height: axis == .horizontal ? thickness : nil)
-      .allowsHitTesting(false)
-  }
-
-  /// The lines' color: in light mode, the server's theme's color for lines, or gray without one, and
-  /// in dark mode, black, or in the theme, black part way, a darker shade of its color, where its
-  /// color for lines would be lighter than what they're between, as it's for text.
-  private var splitLineColor: Color {
-    if self.colorScheme == .dark {
-      return self.theme == nil ? .black : .black.opacity(0.6)
-    }
-    return self.theme.map { Color(nsColor: $0.tertiaryText) } ?? Splitter.defaultColor
   }
 
   // MARK: - Articles
