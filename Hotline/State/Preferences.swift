@@ -142,6 +142,7 @@ enum PrefsKeys: String {
   case downloadFolderBookmark = "download folder bookmark"
   case filesViewMode = "files view mode"
   case filesColumnWidth = "files column width"
+  case newsTopicsWidth = "news topics width"
   case boardPostSize = "board post size"
   case newsArticleSize = "news article size"
   case privateMessageSize = "private message size"
@@ -194,6 +195,7 @@ class Prefs {
       PrefsKeys.chatHistoryRetention.rawValue: ChatHistoryRetention.standard.rawValue,
       PrefsKeys.filesViewMode.rawValue: "grid",
       PrefsKeys.filesColumnWidth.rawValue: 230.0,
+      PrefsKeys.newsTopicsWidth.rawValue: 200.0,
       PrefsKeys.showRecentServers.rawValue: true,
       PrefsKeys.hasCompletedOnboarding.rawValue: false,
     ])
@@ -235,6 +237,7 @@ class Prefs {
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
     self.filesColumnWidth = UserDefaults.standard.double(forKey: PrefsKeys.filesColumnWidth.rawValue)
+    self.newsTopicsWidth = UserDefaults.standard.double(forKey: PrefsKeys.newsTopicsWidth.rawValue)
     self.boardPostSize = UserDefaults.standard.string(forKey: PrefsKeys.boardPostSize.rawValue) ?? ""
     self.newsArticleSize = UserDefaults.standard.string(forKey: PrefsKeys.newsArticleSize.rawValue) ?? ""
     self.privateMessageSize = UserDefaults.standard.string(forKey: PrefsKeys.privateMessageSize.rawValue) ?? ""
@@ -424,6 +427,11 @@ class Prefs {
   /// one with ⌥.
   var filesColumnWidth: Double {
     didSet { UserDefaults.standard.set(self.filesColumnWidth, forKey: PrefsKeys.filesColumnWidth.rawValue) }
+  }
+
+  /// How wide the news's topics are, beside its articles, as they were last dragged to.
+  var newsTopicsWidth: Double {
+    didSet { UserDefaults.standard.set(self.newsTopicsWidth, forKey: PrefsKeys.newsTopicsWidth.rawValue) }
   }
 
   /// How big the new post sheet was last made, to open it as big again, or nothing, for as big as

@@ -13,10 +13,8 @@ struct NewsView: View {
   /// The server's window, which keeps the topic and article chosen.
   let serverState: ServerState
 
+  /// How much of the height the topics and articles have, above the article.
   @State private var splitFraction = FractionHolder.usingUserDefaults(0.25, key: "News Split Fraction")
-  /// How much of the width the topics have, beside the articles. They keep their width as the
-  /// window's made wider or narrower, and the articles take the rest.
-  @State private var topicsFraction = FractionHolder.usingUserDefaults(0.3, key: "News Topics Split Fraction")
   /// The topic a new article's being written in, in the sheet for it.
   @State private var writingIn: NewsInfo?
   /// The article being replied to, in the sheet for it, and what the reply starts with.
@@ -57,21 +55,11 @@ struct NewsView: View {
       else {
         VSplit(
           top: {
-            HSplit(
-              left: {
-                self.topicBrowser
-              },
-              right: {
-                self.articleBrowser
-              }
-            )
-            .fraction(self.topicsFraction)
-            // As narrow as an eighth of the width, which a window as wide as most screens doesn't
-            // make wider than they were made.
-            .constraints(minPFraction: 0.12, minSFraction: 0.4, priority: .left)
-            // Without lines of their own, which would keep the color they first show with when the
-            // theme comes or goes. The topics and the article have them along their edges instead.
-            .styling(inset: 0, visibleThickness: 0, invisibleThickness: 5)
+            NewsTopicsSplit {
+              self.topicBrowser
+            } articles: {
+              self.articleBrowser
+            }
           },
           bottom: {
             self.articleViewer
@@ -82,6 +70,8 @@ struct NewsView: View {
         )
         .fraction(self.splitFraction)
         .constraints(minPFraction: 0.1, minSFraction: 0.3)
+        // Without a line of its own, which would keep the color it first shows with when the theme
+        // comes or goes. The article has one along its top instead.
         .styling(inset: 0, visibleThickness: 0, invisibleThickness: 5, hideSplitter: true)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
@@ -294,9 +284,6 @@ struct NewsView: View {
     .onKeyPress(.leftArrow) {
       self.open(self.topic, false)
     }
-    .overlay(alignment: .trailing) {
-      ServerSplitLine(axis: .vertical)
-    }
   }
 
   /// The menu for a category or topic in the topics, or for none.
@@ -362,8 +349,8 @@ struct NewsView: View {
   }
 
   /// The articles of the topic chosen, newest first, which open to show the replies to them, one of
-  /// which is chosen to read below. While they're read from the server, or without any, or without a
-  /// topic, it says so.
+  /// which is chosen to read below. While they're read from the server, or without any, it says so.
+  /// Without a topic, there's nothing to say.
   private var articleBrowser: some View {
     let topic = self.topic.flatMap { $0.type == .category ? $0 : nil }
     return ScrollViewReader { proxy in
@@ -376,19 +363,14 @@ struct NewsView: View {
       .serverThemedList(selection: self.article)
       .accessibilityLabel("Articles")
       .overlay {
-        if let topic {
-          if topic.children.isEmpty {
-            if self.loadingTopic == topic.lookupPath {
-              ProgressView()
-                .controlSize(.small)
-            }
-            else {
-              self.placeholder(self.unreadableTopic == topic.lookupPath ? "Couldn't Load Articles" : "No Articles")
-            }
+        if let topic, topic.children.isEmpty {
+          if self.loadingTopic == topic.lookupPath {
+            ProgressView()
+              .controlSize(.small)
           }
-        }
-        else {
-          self.placeholder("No Topic Selected")
+          else {
+            self.placeholder(self.unreadableTopic == topic.lookupPath ? "Couldn't Load Articles" : "No Articles")
+          }
         }
       }
       .contextMenu(forSelectionType: NewsInfo.self) { items in
@@ -679,6 +661,97 @@ struct NewsView: View {
       counter += 1
     }
     return candidate
+  }
+}
+
+/// How wide the news's topics are, beside its articles: as wide as they were last dragged to, in
+/// points, however wide the window is, but never narrower than shows a short name and its count, nor
+/// so wide that the articles have less than their share of the width. In a window too narrow for
+/// both, the articles' share comes first.
+enum NewsTopicsWidth {
+  /// The narrowest the topics are, which shows a short name and its count beside its icon.
+  static let narrowest: CGFloat = 160
+  /// How much of the width the articles always have.
+  static let articlesShare: CGFloat = 0.4
+
+  /// How wide the topics are drawn, for `width`, in `available`, the width they and the articles
+  /// have together, in whole points.
+  static func clamped(_ width: CGFloat, in available: CGFloat) -> CGFloat {
+    let widest = (available * (1 - self.articlesShare)).rounded(.down)
+    return min(max(width, self.narrowest), widest).rounded()
+  }
+}
+
+/// The topics beside the articles, with a line between them that's dragged to make the topics wider
+/// or narrower. The topics keep the width they're dragged to as the window's made wider or narrower,
+/// as far as `NewsTopicsWidth` allows, and it's kept once the drag's done, for every server.
+struct NewsTopicsSplit<Topics: View, Articles: View>: View {
+  private let topics: Topics
+  private let articles: Articles
+
+  /// How wide the topics were when the drag began.
+  @State private var dragStart: CGFloat?
+  /// How wide the topics are being dragged to, until the drag's done.
+  @State private var dragged: CGFloat?
+  /// Whether the line's being dragged, which goes back to false when a drag's cancelled, too.
+  @GestureState private var dragging = false
+
+  init(@ViewBuilder topics: () -> Topics, @ViewBuilder articles: () -> Articles) {
+    self.topics = topics()
+    self.articles = articles()
+  }
+
+  var body: some View {
+    let kept = CGFloat(Prefs.shared.newsTopicsWidth)
+    GeometryReader { geometry in
+      let available = geometry.size.width
+      let width = NewsTopicsWidth.clamped(self.dragged ?? kept, in: available)
+      HStack(spacing: 0) {
+        self.topics
+          .frame(width: width)
+          .overlay(alignment: .trailing) {
+            ServerSplitLine(axis: .vertical)
+          }
+        self.articles
+          .frame(maxWidth: .infinity)
+      }
+      // The line, wider than it's drawn, to take hold of, over the edges of both.
+      .overlay(alignment: .leading) {
+        Color.clear
+          .frame(width: 5)
+          .contentShape(.rect)
+          .pointerStyle(.columnResize)
+          .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+              .updating(self.$dragging) { _, dragging, _ in
+                dragging = true
+              }
+              .onChanged { drag in
+                let start = self.dragStart ?? width
+                self.dragStart = start
+                self.dragged = NewsTopicsWidth.clamped(start + drag.translation.width, in: available)
+              }
+              .onEnded { _ in
+                self.keep()
+              }
+          )
+          .offset(x: width - 2.5)
+      }
+    }
+    .onChange(of: self.dragging) { _, dragging in
+      if !dragging {
+        self.keep()
+      }
+    }
+  }
+
+  /// Keeps the width the topics were dragged to, for the next time news is shown.
+  private func keep() {
+    if let dragged = self.dragged {
+      Prefs.shared.newsTopicsWidth = Double(dragged)
+    }
+    self.dragged = nil
+    self.dragStart = nil
   }
 }
 
