@@ -160,6 +160,12 @@ extension HotlineState {
 
     let parentNewsGroup = self.findNews(in: self.news, at: path)
 
+    // Shown on its row as being read, while it is.
+    parentNewsGroup?.loads += 1
+    defer {
+      parentNewsGroup?.loads -= 1
+    }
+
     // Send a categories request for bundle paths or root (empty path)
     if path.isEmpty || parentNewsGroup?.type == .bundle {
       print("HotlineState: Requesting categories at: /\(path.joined(separator: "/"))")

@@ -20,7 +20,16 @@ enum NewsInfoType {
   var path: [String]
   var expanded: Bool = false
   var children: [NewsInfo] = []
-  
+
+  /// How many readings of what's in it are on their way from the server now, a category's topics or
+  /// a topic's articles, for its row to show it's being read while any are.
+  var loads = 0
+
+  /// Whether what's in it is being read from the server now.
+  var isLoading: Bool {
+    self.loads > 0
+  }
+
   var articleFlavors: [String]?
   var articleUsername: String?
   var articleDate: Date?

@@ -21,8 +21,6 @@ struct NewsView: View {
   @State private var replyingTo: NewsInfo?
   @State private var replyQuote = ""
   @State private var loading: Bool = false
-  /// The topic whose articles are being read from the server, by where it is.
-  @State private var loadingTopic: String?
   /// The topic whose articles couldn't be read from the server, by where it is.
   @State private var unreadableTopic: String?
   @State private var newFolderShown: Bool = false
@@ -349,8 +347,9 @@ struct NewsView: View {
   }
 
   /// The articles of the topic chosen, newest first, which open to show the replies to them, one of
-  /// which is chosen to read below. While they're read from the server, or without any, it says so.
-  /// Without a topic, there's nothing to say.
+  /// which is chosen to read below. Without any, or if they couldn't be read, it says so. While
+  /// they're read from the server, the topic's row says so, and without a topic, there's nothing to
+  /// say.
   private var articleBrowser: some View {
     let topic = self.topic.flatMap { $0.type == .category ? $0 : nil }
     return ScrollViewReader { proxy in
@@ -363,14 +362,8 @@ struct NewsView: View {
       .serverThemedList(selection: self.article)
       .accessibilityLabel("Articles")
       .overlay {
-        if let topic, topic.children.isEmpty {
-          if self.loadingTopic == topic.lookupPath {
-            ProgressView()
-              .controlSize(.small)
-          }
-          else {
-            self.placeholder(self.unreadableTopic == topic.lookupPath ? "Couldn't Load Articles" : "No Articles")
-          }
+        if let topic, topic.children.isEmpty, !topic.isLoading {
+          self.placeholder(self.unreadableTopic == topic.lookupPath ? "Couldn't Load Articles" : "No Articles")
         }
       }
       .contextMenu(forSelectionType: NewsInfo.self) { items in
@@ -454,12 +447,11 @@ struct NewsView: View {
     }
   }
 
-  /// Reads a topic's articles from the server, saying so while it does, or if it can't.
+  /// Reads a topic's articles from the server, saying so if it can't. Its row says so while it does.
   private func loadArticles(in topic: NewsInfo) async {
     guard let place = topic.lookupPath else {
       return
     }
-    self.loadingTopic = place
     do {
       try await self.model.getNewsList(at: topic.path)
       if self.unreadableTopic == place {
@@ -470,9 +462,6 @@ struct NewsView: View {
       if !Task.isCancelled {
         self.unreadableTopic = place
       }
-    }
-    if self.loadingTopic == place {
-      self.loadingTopic = nil
     }
   }
 

@@ -96,7 +96,15 @@ struct NewsItemView: View {
       }
       
       Spacer()
-      
+
+      // What's in it on its way from the server, as when it's been clicked, beside how many there are.
+      if (news.type == .category || news.type == .bundle) && news.isLoading {
+        ProgressView()
+          .controlSize(.mini)
+          .padding(.trailing, news.count > 0 ? 6 : 8)
+          .accessibilityLabel("Loading")
+      }
+
       // How many articles a topic has, or topics a category, as a number, in the narrow list of
       // them, with what of in its tip.
       if news.type == .category && news.count > 0 {
