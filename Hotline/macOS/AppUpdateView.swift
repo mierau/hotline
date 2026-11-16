@@ -205,13 +205,7 @@ struct ReleaseNotesView: View {
       // How long ago each came out, kept up to the minute.
       TimelineView(.everyMinute) { context in
         List(self.releases, selection: self.$selection) { release in
-          VStack(alignment: .leading, spacing: 2) {
-            Text("Hotline \(release.version)")
-            Text(self.subtitle(of: release, now: context.date))
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          }
-          .padding(.vertical, 2)
+          ReleaseNotesRow(release: release, currentBuild: self.currentBuild, now: context.date)
         }
       }
       .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
@@ -244,13 +238,6 @@ struct ReleaseNotesView: View {
     .task {
       await self.load()
     }
-  }
-
-  /// How long ago it came out, and whether it's the build that's running.
-  private func subtitle(of release: ReleaseNotes, now: Date) -> String {
-    let date = release.date.map { Self.howLongAgo($0, now: now) }
-    let installed = release.build == self.currentBuild ? "Installed" : nil
-    return [date, installed].compactMap { $0 }.joined(separator: " · ")
   }
 
   /// How long ago something was, to the nearest of the biggest unit it's been at least one of, as
@@ -341,6 +328,55 @@ struct ReleaseNotesView: View {
     case .unexpected:
       return String(localized: "GitHub didn't send them this time. Try again in a moment.")
     }
+  }
+}
+
+/// A build in the list of them: its version, in semibold while it's newer than the one running, and
+/// how long ago it came out, with a green check on the one running, and a fainter one on those before
+/// it, whose changes it has too.
+struct ReleaseNotesRow: View {
+  let release: ReleaseNotes
+  /// The build that's running.
+  let currentBuild: Int
+  let now: Date
+
+  var body: some View {
+    HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Hotline \(self.release.version)")
+          .fontWeight(self.release.build > self.currentBuild ? .semibold : .regular)
+        Text(self.subtitle)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Spacer(minLength: 0)
+
+      if self.release.build == self.currentBuild {
+        Image(systemName: "checkmark.circle.fill")
+          .symbolRenderingMode(.palette)
+          .foregroundStyle(.white, .green)
+          .help("The version you're using")
+          .accessibilityLabel("Installed")
+      }
+      else if self.release.build < self.currentBuild {
+        // The green one's check, as big and where it is, without its circle, and bold.
+        Image(systemName: "checkmark.circle.fill")
+          .symbolRenderingMode(.palette)
+          .foregroundStyle(.tertiary, .clear)
+          .fontWeight(.bold)
+          .help("In the version you're using")
+          .accessibilityLabel("In the version you're using")
+      }
+    }
+    .padding(.vertical, 2)
+  }
+
+  /// How long ago it came out, and whether it's the build that's running.
+  private var subtitle: String {
+    let date = self.release.date.map { ReleaseNotesView.howLongAgo($0, now: self.now) }
+    let installed = self.release.build == self.currentBuild ? String(localized: "Installed") : nil
+    return [date, installed].compactMap { $0 }.joined(separator: " · ")
   }
 }
 
