@@ -464,6 +464,8 @@ class HotlineState: Equatable {
 
   // News
   var news: [NewsInfo] = []
+  /// The articles read on each server, kept between visits. A test has its own, not the app's.
+  @ObservationIgnored var newsReadArticles = NewsReadArticles.shared
   /// What you're writing for the news and haven't posted, for each topic, or article you're replying
   /// to, while its sheet's open.
   var newsDrafts: [NewsDraft.Place: NewsDraft] = [:]

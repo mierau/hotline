@@ -306,7 +306,7 @@ struct NewsThreadView: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .onAppear {
-      article.read = true
+      self.model.markNewsArticleRead(article)
       self.load(entry.place)
     }
   }

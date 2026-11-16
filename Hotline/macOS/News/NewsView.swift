@@ -334,14 +334,15 @@ struct NewsView: View {
     self.serverState.newsArticle.flatMap { self.model.newsLookup[$0] }
   }
 
-  /// The article chosen, for the list of them, which is read once it's chosen.
+  /// The article chosen, for the list of them, which is read once it's chosen, and kept as read for
+  /// the next time you're on the server.
   private var articleSelection: Binding<NewsInfo?> {
     Binding {
       self.article
     } set: { article in
       self.serverState.newsArticle = article?.lookupPath
-      if let article, !article.read {
-        article.read = true
+      if let article {
+        self.model.markNewsArticleRead(article)
       }
     }
   }

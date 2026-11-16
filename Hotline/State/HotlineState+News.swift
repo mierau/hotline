@@ -239,11 +239,44 @@ extension HotlineState {
         newArticleInfos.append(newsArticleInfo)
       }
 
+      // Read, as they were when you were here before, and only those still here kept as read.
+      if let server = self.newsReadServer {
+        let listed = newArticleInfos.compactMap { article in
+          article.articleID.map { (id: $0, posted: article.articleDate) }
+        }
+        let read = self.newsReadArticles.read(of: listed, in: Self.newsTopic(at: path), on: server)
+        for article in newArticleInfos where article.articleID.map(read.contains) == true {
+          article.read = true
+        }
+      }
+
       let organizedNewsArticles: [NewsInfo] = self.organizeNewsArticles(newArticleInfos)
       if let parent = parentNewsGroup {
         parent.children = organizedNewsArticles
       }
     }
+  }
+
+  /// Marks an article read, and keeps that, so it's still read when you're back on the server.
+  func markNewsArticleRead(_ article: NewsInfo) {
+    guard !article.read else {
+      return
+    }
+    article.read = true
+    guard let server = self.newsReadServer, let id = article.articleID else {
+      return
+    }
+    self.newsReadArticles.markRead(id: id, posted: article.articleDate, in: Self.newsTopic(at: article.path), on: server)
+  }
+
+  /// How the server is known among the articles read on each, while connected to one.
+  private var newsReadServer: String? {
+    self.server.map { NewsReadArticles.server(address: $0.address, port: $0.port) }
+  }
+
+  /// How a topic is known among the articles read on its server: where it is, as its place is.
+  private static func newsTopic(at path: [String]) -> String {
+    "/" + path.joined(separator: "/")
   }
 
   @MainActor
