@@ -230,6 +230,7 @@ struct ServerView: View {
         )) {
           ServerAgreementSheet()
             .environment(self.model)
+            .environment(\.imageSources, self.agreementImageSources)
             .presentationSizing(.fitted)
         }
       }
@@ -270,6 +271,14 @@ struct ServerView: View {
           )) {
             ServerAgreementSheet()
               .environment(self.model)
+              .environment(\.imageSources, self.agreementImageSources)
+              .presentationSizing(.fitted)
+          }
+          // To read again, from the Server menu.
+          .sheet(isPresented: self.$state.agreementShown) {
+            ServerAgreementSheet(purpose: .reading)
+              .environment(self.model)
+              .environment(\.imageSources, self.imageSources)
               .presentationSizing(.fitted)
           }
           // As tall as what's in it, as that changes, as the message's bubble grows with it, which
@@ -868,12 +877,7 @@ struct ServerView: View {
     .serverTheme(self.themeColors, window: self.state.window)
     // Its pictures, from where they load by themselves, its server's own too, and those among its
     // files, through the connection to it.
-    .environment(\.imageSources, ImagePreview.Sources(
-      server: self.model.server?.address,
-      serverPort: self.model.server?.port,
-      connection: self.model.id,
-      anySite: Prefs.shared.imagePreviews == .anySite
-    ))
+    .environment(\.imageSources, self.imageSources)
     .navigationTitle(self.model.serverTitle)
     .sheet(item: self.$state.composeMessage) { compose in
       ComposeMessageView(userID: compose.userID, username: compose.username)
@@ -1001,6 +1005,23 @@ struct ServerView: View {
       return nil
     }
     return colors
+  }
+
+  /// Where the server's pictures load from by themselves: from where they can, its server's own too,
+  /// and those among its files, through the connection to it.
+  private var imageSources: ImagePreview.Sources {
+    ImagePreview.Sources(
+      server: self.model.server?.address,
+      serverPort: self.model.server?.port,
+      connection: self.model.id,
+      anySite: Prefs.shared.imagePreviews == .anySite
+    )
+  }
+
+  /// Where the agreement's pictures load from by themselves while it waits to be agreed to: as the
+  /// server's others do, but for those among its files, which aren't asked for before it's agreed to.
+  private var agreementImageSources: ImagePreview.Sources {
+    ImagePreview.Sources(server: self.model.server?.address, anySite: Prefs.shared.imagePreviews == .anySite)
   }
 
   /// The server's globe, with the lock on it while the connection is encrypted, which shows how in

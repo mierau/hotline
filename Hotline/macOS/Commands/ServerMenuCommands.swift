@@ -91,6 +91,12 @@ struct ServerMenuCommands: Commands {
 
       Divider()
 
+      // As it was shown on connecting, to read again.
+      Button("Show Agreement", systemImage: "doc.text") {
+        self.activeServerState?.agreementShown = true
+      }
+      .disabled(self.activeHotline?.status != .loggedIn || self.activeHotline?.agreement == nil)
+
       // Off once it's in your bookmarks.
       Button("Add Bookmark...", systemImage: "bookmark") {
         self.activeServerState?.addBookmarkShown = true

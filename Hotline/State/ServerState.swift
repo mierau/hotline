@@ -14,6 +14,8 @@ class ServerState: Equatable {
   var addBookmarkShown: Bool = false
   /// Your automatic response on the server, from the Server menu.
   var automaticResponseShown: Bool = false
+  /// The server's agreement, to read again, from the Server menu.
+  var agreementShown: Bool = false
   var fileNavigationPath: [String]? = nil
   var fileFolderPath: [String] = []
   /// The news topic chosen, or category of topics, and the article chosen in it, by where they are

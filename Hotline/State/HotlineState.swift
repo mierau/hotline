@@ -387,7 +387,10 @@ class HotlineState: Equatable {
   var automaticResponse: String = Prefs.shared.automaticMessage
   var access: HotlineUserAccessOptions?
   var agreed: Bool = false
+  /// The server's agreement, while it waits to be agreed to.
   var agreementText: String? = nil
+  /// The server's agreement, kept once it's agreed to, to read again while connected.
+  var agreement: String? = nil
 
   // Users
   var users: [User] = []

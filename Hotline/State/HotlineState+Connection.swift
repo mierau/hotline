@@ -568,6 +568,7 @@ extension HotlineState {
     self.access = nil
     self.agreed = false
     self.agreementText = nil
+    self.agreement = nil
     self.users = []
     self.ownUserID = nil
     self.heldUserEvents = nil
@@ -1030,6 +1031,7 @@ extension HotlineState {
       if let text {
         // Server has agreement text — show the sheet
         self.agreementText = text
+        self.agreement = text
       } else if self.status != .loggedIn {
         // No agreement required — auto-agree and complete login
         Task {
