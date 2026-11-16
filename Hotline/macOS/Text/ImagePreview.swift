@@ -33,10 +33,31 @@ enum ImagePreview {
   /// there at once, from a server that could be on a home connection.
   static let serverSizeLimit = 5 * 1024 * 1024
 
-  /// Whether a link looks like an image worth previewing. Only https, since the app doesn't allow
-  /// insecure loads anyway.
+  /// Whether a link looks like an image worth previewing: by its extension, or one GitHub gives a
+  /// picture put up there. Only https, since the app doesn't allow insecure loads anyway.
   static func canPreview(_ url: URL) -> Bool {
-    url.scheme?.lowercased() == "https" && self.imageExtensions.contains(url.pathExtension.lowercased())
+    url.scheme?.lowercased() == "https"
+      && (self.imageExtensions.contains(url.pathExtension.lowercased()) || self.isGitHubAttachment(url))
+  }
+
+  /// Whether a link is the one GitHub gives a picture put up there, which lasts:
+  /// github.com/user-attachments/assets/ and the picture's ID, or from before those,
+  /// github.com/owner/repo/assets/, the number of whoever put it up, and its ID. Each time it's
+  /// opened, it sends you on to a link to the picture that lasts five minutes. It has no extension,
+  /// and can be to a video, which isn't shown, as it isn't an image.
+  static func isGitHubAttachment(_ url: URL) -> Bool {
+    guard url.scheme?.lowercased() == "https", url.host(percentEncoded: false)?.lowercased() == "github.com" else {
+      return false
+    }
+    let parts = url.pathComponents.filter { $0 != "/" }
+    switch parts.count {
+    case 3:
+      return parts[0] == "user-attachments" && parts[1] == "assets"
+    case 5:
+      return parts[2] == "assets" && parts[3].allSatisfy { ("0"..."9").contains($0) }
+    default:
+      return false
+    }
   }
 
   /// The picture in a link to a page that only shows one: Reddit's viewer's, whose links are to
@@ -92,8 +113,8 @@ enum ImagePreview {
     }
 
     /// Whether a link is shown as its picture's preview, loading by itself: from where it can, to
-    /// one by its extension, or written as a picture in Markdown, or to image search's copies, which
-    /// have none.
+    /// one by its extension, or written as a picture in Markdown, or to image search's copies, or
+    /// to a picture put on GitHub, which have none.
     func loadsByItself(_ url: URL, isImage: Bool) -> Bool {
       guard self.trusts(url) else {
         return false
@@ -101,6 +122,7 @@ enum ImagePreview {
       return isImage
         || ImagePreview.imageExtensions.contains(url.pathExtension.lowercased())
         || ImagePreview.thumbnailHosts.contains(url.host(percentEncoded: false)?.lowercased() ?? "")
+        || ImagePreview.isGitHubAttachment(url)
     }
 
     /// The picture shown for a link, loading by itself, if there's one: the link's own, or for a
@@ -152,8 +174,12 @@ enum ImagePreview {
     // Apple's own pictures, and its artwork for apps, music and podcasts
     "www.apple.com",
     "is1-ssl.mzstatic.com", "is2-ssl.mzstatic.com", "is3-ssl.mzstatic.com", "is4-ssl.mzstatic.com", "is5-ssl.mzstatic.com",
-    // GitHub
-    "user-images.githubusercontent.com", "raw.githubusercontent.com", "avatars.githubusercontent.com",
+    // GitHub, whose links to pictures put up there send you on to links that last five minutes,
+    // on private-user-images, or when you aren't signed in, on its own storage at Amazon
+    "github.com",
+    "user-images.githubusercontent.com", "private-user-images.githubusercontent.com",
+    "raw.githubusercontent.com", "avatars.githubusercontent.com",
+    "github-production-user-asset-6210df.s3.amazonaws.com",
   ]
 
   /// Sites whose every host under their name is their own: the Internet Archive, whose downloads
@@ -166,8 +192,10 @@ enum ImagePreview {
 
   /// Image search's own copies of pictures, whose links have no extension: Google's and Bing's
   /// thumbnails, and DuckDuckGo's and Brave's, which get the picture from where it is themselves,
-  /// so that site doesn't see you either.
+  /// so that site doesn't see you either. GitHub's are copies of pictures from other sites on its
+  /// pages, as in a README, got the same way.
   static let thumbnailHosts: Set<String> = [
+    "camo.githubusercontent.com",
     "encrypted-tbn0.gstatic.com", "encrypted-tbn1.gstatic.com", "encrypted-tbn2.gstatic.com", "encrypted-tbn3.gstatic.com",
     "th.bing.com", "tse1.mm.bing.net", "tse2.mm.bing.net", "tse3.mm.bing.net", "tse4.mm.bing.net",
     "external-content.duckduckgo.com",

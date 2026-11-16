@@ -111,6 +111,41 @@ struct ImagePreviewSizesTests {
     #expect(loads("https://imgs.search.brave.com/abc/rs:fit:500:0:0/g:ce/aHR0cHM6Ly9leGFtcGxlLmNvbQ"))
   }
 
+  @Test func githubsPicturesLoadByThemselves() {
+    let sources = ImagePreview.Sources()
+    func loads(_ link: String) -> Bool {
+      sources.loadsByItself(URL(string: link)!, isImage: false)
+    }
+    // A picture put up on GitHub, by the link it's given there, which has no extension, and from
+    // before those, a repository's.
+    let attachment = URL(string: "https://github.com/user-attachments/assets/30534bb1-4274-45c6-86cd-ed2bb1dd1d98")!
+    #expect(sources.loadsByItself(attachment, isImage: false))
+    #expect(ImagePreview.canPreview(attachment))
+    #expect(loads("https://github.com/mierau/hotline/assets/55453/30534bb1-4274-45c6-86cd-ed2bb1dd1d98"))
+    // Where those send you on to, for five minutes: signed in, and not.
+    #expect(loads("https://private-user-images.githubusercontent.com/868228/329385740-80071c04-a800-42ce-bc4d-8cce52c4f2e3.png?jwt=abc"))
+    #expect(sources.trusts(URL(string: "https://github-production-user-asset-6210df.s3.amazonaws.com/55453/552852784-30534bb1-4274-45c6-86cd-ed2bb1dd1d98.png?X-Amz-Signature=abc")!))
+    // GitHub's copies of pictures from elsewhere, and a picture in a repository, by its extension.
+    #expect(loads("https://camo.githubusercontent.com/4a1b2c/68747470733a2f2f6578616d706c652e636f6d2f6361742e706e67"))
+    #expect(loads("https://github.com/mierau/hotline/raw/main/screenshot.png"))
+    // Not GitHub's pages, or the other files put up there, or another bucket at Amazon, which
+    // could be anyone's.
+    #expect(!loads("https://github.com/mierau/hotline"))
+    #expect(!loads("https://github.com/user-attachments/files/123/notes.zip"))
+    #expect(!loads("https://github.com/mierau/hotline/assets/latest/thing"))
+    #expect(!ImagePreview.canPreview(URL(string: "https://github.com/mierau/hotline")!))
+    #expect(!sources.trusts(URL(string: "https://someone-else.s3.amazonaws.com/pixel.png")!))
+    // Shown under the line its link is on, as any picture's is.
+    let shown = Markdown.shownText("the board: \(attachment.absoluteString)", layout: .board)
+    var previews: [URL] = []
+    shown.enumerateAttribute(.attachment, in: NSRange(location: 0, length: shown.length)) { value, _, _ in
+      if let preview = value as? ImageAttachment {
+        previews.append(preview.url)
+      }
+    }
+    #expect(previews == [attachment])
+  }
+
   @Test func redditsViewerLinksShowThePictureInThem() {
     let sources = ImagePreview.Sources()
     let picture = URL(string: "https://i.redd.it/z6bs0bgwzst91.jpg")!
