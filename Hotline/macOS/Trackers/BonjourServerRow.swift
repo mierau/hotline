@@ -5,13 +5,12 @@ struct BonjourServerRow: View {
   
   let server: BonjourState.BonjourServer
 
-  /// Whether it's been connected to over TLS, which is all there is to go on, as Bonjour doesn't
-  /// say whether a server takes TLS.
+  /// Whether its TXT record says the port it takes TLS on, or it's been connected to over TLS.
   private var isSecure: Bool {
     guard let server = self.server.server else {
       return false
     }
-    return ServerTrust.shared.record(address: server.address, port: server.port) != nil
+    return server.tlsPort != nil || ServerTrust.shared.record(address: server.address, port: server.port) != nil
   }
 
   var body: some View {

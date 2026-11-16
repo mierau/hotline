@@ -126,8 +126,87 @@ struct ChatHistoryRetentionTests {
 }
 
 struct BonjourServerTests {
-  private func server(address: String, port: UInt16 = 5500) -> BonjourState.BonjourServer {
-    BonjourState.BonjourServer(serviceName: "The Holographic Universe", name: "The Holographic Universe", address: address, port: port, txtRecords: [:])
+  private func server(address: String, port: UInt16 = 5500, txtRecords: [String: String] = [:]) -> BonjourState.BonjourServer {
+    BonjourState.BonjourServer(serviceName: "The Holographic Universe", name: "The Holographic Universe", address: address, port: port, txtRecords: txtRecords)
+  }
+
+  /// As Mobius 0.24 advertises a server that has TLS set up, here on a TLS port that isn't the
+  /// usual 5600, as the TXT record's port is the one to connect to.
+  private let secureRecord = ["txtv": "1", "app": "hotline", "tlsport": "5700"]
+
+  @Test func itsTLSPortIsTheOneToConnectTo() throws {
+    let found = self.server(address: "micro.local", txtRecords: self.secureRecord)
+    #expect(found.tlsPort == 5700)
+
+    let server = try #require(found.server)
+    #expect(server.tlsPort == 5700)
+    #expect(server.tlsRequired)
+    // Its own port is still the plain one, which says which server it is.
+    #expect(server.port == 5500)
+    #expect(server.address == "micro.local")
+  }
+
+  @Test func withoutATLSPortItsPlain() throws {
+    let found = self.server(address: "micro.local", txtRecords: ["txtv": "1", "app": "hotline"])
+    #expect(found.tlsPort == nil)
+
+    let server = try #require(found.server)
+    #expect(server.tlsPort == nil)
+    #expect(!server.tlsRequired)
+    #expect(server.port == 5500)
+  }
+
+  @Test(arguments: ["", "abc", "56OO", "5600abc", " 5600", "5600 ", "+5600", "-5600", "5600.0", "0x15E0", "٥٦٠٠", "0", "65535", "65536", "99999999999999999999"])
+  func aMalformedTLSPortIsIgnored(_ value: String) throws {
+    let found = self.server(address: "micro.local", txtRecords: ["txtv": "1", "app": "hotline", "tlsport": value])
+    #expect(found.tlsPort == nil)
+
+    let server = try #require(found.server)
+    #expect(server.tlsPort == nil)
+    #expect(!server.tlsRequired)
+    #expect(server.port == 5500)
+  }
+
+  @Test func aTLSPortCanBeAnyAServerCanBeOn() {
+    #expect(self.server(address: "micro.local", txtRecords: ["tlsport": "1"]).tlsPort == 1)
+    // Not 65535, which leaves no port after it for file transfers.
+    #expect(self.server(address: "micro.local", txtRecords: ["tlsport": "65534"]).tlsPort == 65534)
+  }
+
+  @Test func aTLSPortThatsItsOwnPortIsIgnored() {
+    #expect(self.server(address: "micro.local", port: 5600, txtRecords: ["tlsport": "5600"]).tlsPort == nil)
+  }
+
+  @Test func theTLSPortKeysCaseDoesntMatter() {
+    #expect(self.server(address: "micro.local", txtRecords: ["TLSPort": "5700"]).tlsPort == 5700)
+  }
+
+  @Test func bookmarkedItsStillConnectedToOverTLSOnItsPort() throws {
+    // As the Servers window's Bookmark makes it.
+    let server = try #require(self.server(address: "micro.local", txtRecords: self.secureRecord).server)
+    let bookmark = Bookmark(type: .server, name: server.name ?? server.address, address: server.address, port: server.port, tlsPort: server.tlsPort)
+
+    let opened = try #require(bookmark.server)
+    #expect(opened.tlsPort == 5700)
+    #expect(opened.tlsRequired)
+    #expect(opened.port == 5500)
+  }
+
+  @Test func restoredItsStillConnectedToOverTLSOnItsPort() throws {
+    // As its window is kept, and restored.
+    let server = try #require(self.server(address: "micro.local", txtRecords: self.secureRecord).server)
+    let restored = try JSONDecoder().decode(Server.self, from: JSONEncoder().encode(server))
+    #expect(restored.tlsPort == 5700)
+    #expect(restored.tlsRequired)
+    #expect(restored.port == 5500)
+  }
+
+  @Test func withTLSTurnedOnItsTheSameRow() {
+    // As when its TXT record changes, once it's restarted with TLS.
+    let plain = self.server(address: "micro.local", txtRecords: ["txtv": "1", "app": "hotline"])
+    let secure = self.server(address: "micro.local", txtRecords: self.secureRecord)
+    #expect(plain.id == secure.id)
+    #expect(plain != secure)
   }
 
   @Test func foundAgainItsTheSameServer() {

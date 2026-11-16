@@ -22,19 +22,50 @@ class BonjourState {
     let port: UInt16?
     let txtRecords: [String: String]
     
+    /// The TXT record key for the port a server takes TLS connections on, as in tlsport=5600, which
+    /// Mobius adds when it has TLS set up. The service's own port is still the plain one.
+    static let tlsPortKey = "tlsport"
+
     var displayName: String {
       // Use the advertised name, fall back to service name
       self.name.isEmpty ? self.serviceName : self.name
     }
     
-    /// It as a server to connect to, once it's been found, on a port a server can be on.
+    /// The port it takes TLS connections on, with its file transfers on the one after, if its TXT
+    /// record says one.
+    var tlsPort: Int? {
+      Self.tlsPort(in: self.txtRecords, port: self.port)
+    }
+
+    /// It as a server to connect to, once it's been found, on a port a server can be on. One whose
+    /// TXT record says its TLS port has to be connected to over TLS on that port, as a hotlines://
+    /// link's server does, rather than the usual TLS port, or without TLS unless that's chosen.
     var server: Server? {
       guard let address = self.address,
             let port = self.port,
             HotlinePorts.valid.contains(Int(port)) else {
         return nil
       }
-      return Server(name: self.displayName, description: nil, address: address, port: Int(port))
+      var server = Server(name: self.displayName, description: nil, address: address, port: Int(port), tlsPort: self.tlsPort)
+      server.tlsRequired = server.tlsPort != nil
+      return server
+    }
+
+    /// The TLS port a TXT record says: digits only, for a port a server can be on, and not `port`,
+    /// the service's own. Anything else is as if it weren't there. Keys in a TXT record are the same
+    /// whatever their case.
+    static func tlsPort(in txtRecords: [String: String], port: UInt16?) -> Int? {
+      let value = txtRecords[Self.tlsPortKey]
+        ?? txtRecords.first { $0.key.caseInsensitiveCompare(Self.tlsPortKey) == .orderedSame }?.value
+      guard let value,
+            !value.isEmpty,
+            value.allSatisfy({ ("0"..."9").contains($0) }),
+            let tlsPort = Int(value),
+            HotlinePorts.valid.contains(tlsPort),
+            tlsPort != port.map(Int.init) else {
+        return nil
+      }
+      return tlsPort
     }
   }
   
@@ -131,6 +162,11 @@ class BonjourState {
       port: port,
       txtRecords: txtRecords
     )
+
+    // Its TLS port, or that it has none, as a tracker's listing notes it, so connecting to it some
+    // other way while it's found, typed or from the recent servers, tries that port rather than the
+    // usual one.
+    ServerTrust.shared.noteListed(address: host, port: Int(port), tlsPort: server.tlsPort)
 
     // Update or add server
     if let index = self.discoveredServers.firstIndex(where: { $0.serviceName == name }) {

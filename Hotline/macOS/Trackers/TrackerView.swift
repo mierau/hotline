@@ -500,8 +500,8 @@ struct TrackerView: View {
         return
       }
       NSPasteboard.general.clearContents()
-      let displayAddress = (server.port == HotlinePorts.DefaultServerPort) ? server.address : "\(server.address):\(server.port)"
-      NSPasteboard.general.setString("hotline://\(displayAddress)", forType: .string)
+      // A hotlines:// link to the TLS port its TXT record says, if it says one.
+      NSPasteboard.general.setString(Server.link(address: server.address, port: server.port, tlsPort: server.tlsPort), forType: .string)
     } label: {
       Label("Copy Link", systemImage: "link")
     }
@@ -522,7 +522,8 @@ struct TrackerView: View {
       guard let server = bonjourServer.server else {
         return
       }
-      let newBookmark = Bookmark(type: .server, name: server.name ?? server.address, address: server.address, port: server.port, login: nil, password: nil)
+      // Encrypted, on the TLS port its TXT record says, if it says one.
+      let newBookmark = Bookmark(type: .server, name: server.name ?? server.address, address: server.address, port: server.port, tlsPort: server.tlsPort, login: nil, password: nil)
       Bookmark.add(newBookmark, context: modelContext)
     } label: {
       Label("Bookmark", systemImage: "bookmark")
