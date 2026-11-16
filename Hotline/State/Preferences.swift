@@ -141,6 +141,7 @@ enum PrefsKeys: String {
   case chatHistoryRetention = "chat history retention"
   case downloadFolderBookmark = "download folder bookmark"
   case filesViewMode = "files view mode"
+  case filesColumnWidth = "files column width"
   case boardPostSize = "board post size"
   case newsArticleSize = "news article size"
   case privateMessageSize = "private message size"
@@ -192,6 +193,7 @@ class Prefs {
       PrefsKeys.showChatIcons.rawValue: true,
       PrefsKeys.chatHistoryRetention.rawValue: ChatHistoryRetention.standard.rawValue,
       PrefsKeys.filesViewMode.rawValue: "grid",
+      PrefsKeys.filesColumnWidth.rawValue: 230.0,
       PrefsKeys.showRecentServers.rawValue: true,
       PrefsKeys.hasCompletedOnboarding.rawValue: false,
     ])
@@ -232,6 +234,7 @@ class Prefs {
     self.chatHistoryRetention = ChatHistoryRetention.saved
     self.downloadFolderBookmark = UserDefaults.standard.data(forKey: PrefsKeys.downloadFolderBookmark.rawValue)
     self.filesViewMode = UserDefaults.standard.string(forKey: PrefsKeys.filesViewMode.rawValue)!
+    self.filesColumnWidth = UserDefaults.standard.double(forKey: PrefsKeys.filesColumnWidth.rawValue)
     self.boardPostSize = UserDefaults.standard.string(forKey: PrefsKeys.boardPostSize.rawValue) ?? ""
     self.newsArticleSize = UserDefaults.standard.string(forKey: PrefsKeys.newsArticleSize.rawValue) ?? ""
     self.privateMessageSize = UserDefaults.standard.string(forKey: PrefsKeys.privateMessageSize.rawValue) ?? ""
@@ -415,6 +418,12 @@ class Prefs {
 
   var filesViewMode: String {
     didSet { UserDefaults.standard.set(self.filesViewMode, forKey: PrefsKeys.filesViewMode.rawValue) }
+  }
+
+  /// How wide the files' columns are, as they were last made all at once, by dragging the line after
+  /// one with ⌥.
+  var filesColumnWidth: Double {
+    didSet { UserDefaults.standard.set(self.filesColumnWidth, forKey: PrefsKeys.filesColumnWidth.rawValue) }
   }
 
   /// How big the new post sheet was last made, to open it as big again, or nothing, for as big as

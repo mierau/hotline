@@ -51,6 +51,15 @@ import UniformTypeIdentifiers
   /// Whether this folder's contents were fetched from the server
   /// (as opposed to being a placeholder created by ensureIntermediateFolders).
   var loaded: Bool = false
+
+  /// How many listings of what's in this folder are on their way from the server now, for its row to
+  /// show it's being listed while any are.
+  var listings = 0
+
+  /// Whether what's in this folder is being listed now.
+  var isListing: Bool {
+    self.listings > 0
+  }
   
   /// Its extension, or for a file without one, the one its type code goes with.
   private var fileExtension: String {

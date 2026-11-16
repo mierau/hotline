@@ -37,6 +37,13 @@ extension HotlineState {
       return cached.items
     }
 
+    // Shown on its row as being listed, while it is.
+    let folder = path.isEmpty ? nil : self.findFile(in: self.files, at: path)
+    folder?.listings += 1
+    defer {
+      folder?.listings -= 1
+    }
+
     let hotlineFiles: [HotlineFile]
     do {
       hotlineFiles = try await client.getFileList(path: path)

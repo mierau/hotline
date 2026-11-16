@@ -70,6 +70,7 @@
 		DA432EDE30A78EC3000179F6 /* HiddenWords.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432EDD30A78EC3000179F6 /* HiddenWords.swift */; };
 		DA432EE030A78ED0000179F6 /* PrivacySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432EDF30A78ED0000179F6 /* PrivacySettingsView.swift */; };
 		DA432EEB30A7A749000179F6 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DA432EEA30A7A749000179F6 /* Sparkle */; };
+		DA432F0730A8DD7E000179F6 /* FilesColumnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432F0630A8DD7E000179F6 /* FilesColumnView.swift */; };
 		DA4B8F3A2EA6FB3C00CBFD53 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */; platformFilter = ios; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
@@ -259,6 +260,7 @@
 		DA432E9930A4E52D000179F6 /* ServerTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerTrust.swift; sourceTree = "<group>"; };
 		DA432EDD30A78EC3000179F6 /* HiddenWords.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiddenWords.swift; sourceTree = "<group>"; };
 		DA432EDF30A78ED0000179F6 /* PrivacySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsView.swift; sourceTree = "<group>"; };
+		DA432F0630A8DD7E000179F6 /* FilesColumnView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesColumnView.swift; sourceTree = "<group>"; };
 		DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -545,6 +547,7 @@
 				B5398D1716A4BCD8D321268D /* FilePreviewAudioView.swift */,
 				C81F4A790BAA24C29F3FB42A /* FilePreviewControls.swift */,
 				63C7BB6A3389106DAB6006D5 /* FilePreviewArchiveView.swift */,
+				DA432F0630A8DD7E000179F6 /* FilesColumnView.swift */,
 			);
 			path = Files;
 			sourceTree = "<group>";
@@ -1033,6 +1036,7 @@
 				DAC87F072C5010E80060FADF /* HotlineExtensions.swift in Sources */,
 				DAE734FD2B2E65E9000C56F6 /* MessageBoardView.swift in Sources */,
 				DAA15B1D2F50C9E000FAC1B2 /* HotlineState+Chat.swift in Sources */,
+				DA432F0730A8DD7E000179F6 /* FilesColumnView.swift in Sources */,
 				DA432DF930A2A194000179F6 /* AutomaticResponseSheet.swift in Sources */,
 				DA6980832BFFD06C003E434B /* BookmarkDocument.swift in Sources */,
 				DA501BF22EBEF415001714F8 /* BonjourServerRow.swift in Sources */,

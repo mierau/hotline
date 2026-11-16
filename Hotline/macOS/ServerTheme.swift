@@ -181,6 +181,9 @@ extension EnvironmentValues {
   @Entry fileprivate var serverSecondaryColor: Color? = nil
   /// The color of every other row's band, in a striped server-themed list, or nil in one that isn't.
   @Entry fileprivate var serverListStripes: NSColor? = nil
+  /// Whether a server-themed list is the one in use, of several side by side, like the files'
+  /// columns, where the rest show what's selected in them as a window that isn't in front does.
+  @Entry var serverListActive: Bool = true
 }
 
 /// A server-themed list's selection, all of it, and the color and corners its selected rows have in
@@ -544,13 +547,14 @@ private struct ServerThemedRow: ViewModifier {
   @Environment(\.serverSecondaryColor) private var secondaryColor
   @Environment(\.serverUnreadColor) private var unreadColor
   @Environment(\.serverListStripes) private var stripes
+  @Environment(\.serverListActive) private var listActive
   let item: AnyHashable
 
   func body(content: Content) -> some View {
     // The same views themed or not, so the table's highlight is switched by the same view each time.
     let selectionColor = self.selection?.color
     let color = self.selection?.selected.contains(self.item) == true ? selectionColor : nil
-    let emphasized = self.controlActiveState == .key
+    let emphasized = self.controlActiveState == .key && self.listActive
     let textOnColor = emphasized ? color.map { $0.isDarkColor ? ColorScheme.dark : .light } : nil
     // What matters less, on the selection, the text's color, part way to the selection's.
     let secondaryOnColor = textOnColor.map { $0 == .dark ? Color.white.opacity(0.7) : Color.black.opacity(0.6) }

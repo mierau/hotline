@@ -51,7 +51,12 @@ struct FilesView: View {
   @State private var listPlaces = FilePlaces(space: nil)
   /// Where the list is in the window, which a drop on it is measured from.
   @State private var listFrame = CGRect.zero
+  /// Opening a folder in the list something's been dragged over a moment.
+  @State private var springLoad: Task<Void, Never>? = nil
   @FocusState private var isFileListFocused: Bool
+  /// Asks the columns for the keys to go to the column you're in, as there's more than one list
+  /// there to have them.
+  @State private var columnFocusRequest = 0
   /// Where the File menu's choices come, while the list has the keys.
   @State private var listActions = FileListActions()
 
@@ -74,6 +79,18 @@ struct FilesView: View {
             actions: actions,
             isShowingSearchResults: isShowingSearchResults,
             loading: showFolderLoading,
+            menu: { files in AnyView(self.fileMenu(for: files, inToolbar: false)) },
+            open: { files in self.open(files) },
+            renameSelection: { self.renameSelection() }
+          )
+        }
+        else if viewMode == "columns" {
+          FilesColumnView(
+            selection: $selection,
+            folderPath: $serverState.fileFolderPath,
+            actions: actions,
+            isShowingSearchResults: isShowingSearchResults,
+            focusRequest: self.columnFocusRequest,
             menu: { files in AnyView(self.fileMenu(for: files, inToolbar: false)) },
             open: { files in self.open(files) },
             renameSelection: { self.renameSelection() }
@@ -155,12 +172,20 @@ struct FilesView: View {
         }
       }
       .onChange(of: self.serverState.fileFolderPath) { oldPath, newPath in
+        // In columns, what's selected in the folder you're in now is what took you there, a click
+        // in its column, and stays selected.
+        let selectedThere = self.viewMode == "columns" && !self.selection.isEmpty && self.selection.allSatisfy { Array($0.path.dropLast()) == newPath }
         // Going into a folder from a search's results ends the search, so it's the folder that
         // shows, in a list of its own, which the keys go on in.
         if self.isShowingSearchResults {
           self.model.cancelFileSearch()
-          self.selection = []
-          self.isFileListFocused = true
+          if !selectedThere {
+            self.selection = []
+          }
+          self.focusFiles()
+          return
+        }
+        if selectedThere {
           return
         }
         // What's selected stays selected only if it's in the folder now, as when a link asked for
@@ -199,8 +224,11 @@ struct FilesView: View {
         self.dragOut.canDrag = { [actions = self.actions] file in
           !file.isUnavailable && (actions.canDownload([file]) || actions.canMove(file))
         }
+        // What's selected, as shown, if it's among it, or else the one pressed alone, as in a column
+        // you're not in, which a press there selects before the columns go to it.
         self.dragOut.items = { file in
-          self.selection.contains(file) ? self.selectedFiles : [file]
+          let selected = self.selectedFiles
+          return selected.contains(file) ? selected : [file]
         }
         self.dragOut.onPress = { file in
           self.pressedAlone = self.selection == [file] ? file : nil
@@ -231,7 +259,7 @@ struct FilesView: View {
           await self.renamed(file, to: name)
         }
         self.rename.keysBack = {
-          self.isFileListFocused = true
+          self.focusFiles()
         }
         // The File menu's, with what's selected, as the toolbar's menu has it.
         self.listActions.perform = { command in
@@ -283,6 +311,8 @@ struct FilesView: View {
                 .tag("list")
               Label("as Icons", systemImage: "square.grid.2x2")
                 .tag("grid")
+              Label("as Columns", systemImage: "rectangle.split.3x1")
+                .tag("columns")
             }
             .pickerStyle(.segmented)
             .help("View Mode")
@@ -300,8 +330,14 @@ struct FilesView: View {
               } label: {
                 Label("as Icons", systemImage: "square.grid.2x2")
               }
+
+              Button {
+                self.viewMode = "columns"
+              } label: {
+                Label("as Columns", systemImage: "rectangle.split.3x1")
+              }
             } label: {
-              Label("View", systemImage: self.viewMode == "grid" ? "square.grid.2x2" : "list.bullet")
+              Label("View", systemImage: self.viewMode == "grid" ? "square.grid.2x2" : self.viewMode == "columns" ? "rectangle.split.3x1" : "list.bullet")
             }
             .help("View Mode")
           }
@@ -401,9 +437,9 @@ struct FilesView: View {
     }
     .onChange(of: viewMode) { _, newValue in
       Prefs.shared.filesViewMode = newValue
-      // Not what's in the folders opened in the list, which the icons don't show.
+      // Not what's in the folders opened in the list, which the icons and columns don't show.
       self.selection = self.selection.intersection(self.shownFiles)
-      self.isFileListFocused = true
+      self.focusFiles()
     }
     .onAppear {
       if searchText != model.fileSearchQuery {
@@ -573,6 +609,22 @@ struct FilesView: View {
     }))
     .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
       self.listFrame = frame
+    }
+    // A closed folder it's been over a moment opens, to drop into what's in it, or into a folder in
+    // that, as the Finder's list does.
+    .onChange(of: self.dropTarget.folder) { _, folder in
+      self.springLoad?.cancel()
+      self.springLoad = nil
+      guard let folder, let file = self.shownFiles.first(where: { $0.isFolder && $0.path == folder }), !file.expanded else {
+        return
+      }
+      self.springLoad = Task {
+        try? await Task.sleep(for: .seconds(0.8))
+        guard !Task.isCancelled else {
+          return
+        }
+        file.expanded = true
+      }
     }
     .environment(\.filePlaces, self.listPlaces)
     .overlay {
@@ -834,9 +886,16 @@ struct FilesView: View {
 
   /// Whether there's room in the toolbar for the view buttons side by side, as there is with the
   /// files at least this wide, which leaves room for all the rest, and the Back button, with it, in
-  /// a folder, as measured, and otherwise, they're a menu, which takes less.
+  /// a folder, as measured with two of them, and a third's as wide again, and otherwise, they're a
+  /// menu, which takes less.
   private var viewButtonsSideBySide: Bool {
-    self.filesWidth >= (self.folderPath.isEmpty ? 480 : 520)
+    self.filesWidth >= (self.folderPath.isEmpty ? 510 : 550)
+  }
+
+  /// The keys, to the files, and in columns, to the column you're in.
+  private func focusFiles() {
+    self.isFileListFocused = true
+    self.columnFocusRequest += 1
   }
 
   private var uploadDestinationName: String? {
@@ -846,7 +905,8 @@ struct FilesView: View {
   /// What's shown, in the order it's shown: what's in the folder, or what a search found, and in
   /// the list, what's in the folders opened in it, under each.
   private var shownFiles: [FileInfo] {
-    guard self.viewMode != "grid" else {
+    // In the icons, and in the columns, the column you're in.
+    guard self.viewMode == "list" else {
       return self.displayedFiles
     }
     var shown: [FileInfo] = []
@@ -879,7 +939,7 @@ struct FilesView: View {
       print("[FileLink] Resolved pending selection: \(match.name)")
       self.pendingFileSelection = nil
       self.selection = [match]
-      self.isFileListFocused = true
+      self.focusFiles()
     }
   }
 
