@@ -14,15 +14,24 @@ struct ReleaseNotes: Identifiable, Equatable, Sendable, Codable {
   let notes: String
   /// Its page on GitHub.
   let page: URL
+  /// The app, zipped, as it's attached to the release, to download, if it is.
+  var download: URL? = nil
 
   var id: String {
     self.tag
+  }
+
+  /// Hotline's code as it was for this build, on GitHub.
+  var source: URL {
+    GitHubReleases.repository.appending(path: "tree").appending(path: self.tag)
   }
 }
 
 /// Hotline's releases on GitHub, which have every build's notes.
 enum GitHubReleases {
   private static let url = URL(string: "https://api.github.com/repos/mierau/hotline/releases?per_page=100")!
+  /// Hotline's code, on GitHub.
+  static let repository = URL(string: "https://github.com/mierau/hotline")!
 
   /// Why GitHub didn't give the releases.
   enum Failure: Error, Equatable {
@@ -96,7 +105,17 @@ enum GitHubReleases {
       return nil
     }
     let date = (release["published_at"] as? String).flatMap { try? Date($0, strategy: .iso8601) }
-    return ReleaseNotes(tag: tag, version: "\(match.1)b\(build)", build: build, date: date, notes: (release["body"] as? String) ?? "", page: page)
+    // The app, zipped: the first zip by name, as GitHub lists a release's files, which the release
+    // script makes sure is the app.
+    let zips = ((release["assets"] as? [[String: Any]]) ?? []).compactMap { asset -> (name: String, url: URL)? in
+      guard let name = asset["name"] as? String, name.lowercased().hasSuffix(".zip"),
+            let url = (asset["browser_download_url"] as? String).flatMap(URL.init(string:)) else {
+        return nil
+      }
+      return (name, url)
+    }
+    let download = zips.min { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }?.url
+    return ReleaseNotes(tag: tag, version: "\(match.1)b\(build)", build: build, date: date, notes: (release["body"] as? String) ?? "", page: page, download: download)
   }
 
   /// What's new since a build: the notes of each build after it, the newest first, under its version
@@ -113,6 +132,39 @@ enum GitHubReleases {
   private static func body(of release: ReleaseNotes) -> String {
     let notes = release.notes.trimmingCharacters(in: .whitespacesAndNewlines)
     return notes.isEmpty ? "_No release notes provided._" : notes
+  }
+}
+
+/// A build of Hotline, zipped, as its release has it, downloaded to the Downloads folder.
+enum ReleaseDownload {
+  /// Downloads it, to the Downloads folder or another, and gives where it is now.
+  static func download(_ release: ReleaseNotes, to folder: URL = .downloadsDirectory) async throws -> URL {
+    guard let url = release.download else {
+      throw URLError(.fileDoesNotExist)
+    }
+    let (temporary, response) = try await URLSession.shared.download(from: url)
+    guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+      try? FileManager.default.removeItem(at: temporary)
+      throw URLError(.badServerResponse)
+    }
+    let destination = Self.destination(for: url.lastPathComponent, in: folder)
+    try FileManager.default.moveItem(at: temporary, to: destination)
+    return destination
+  }
+
+  /// Where a file by a name goes in a folder: by that name, or with 2, 3 and on after it, before its
+  /// extension, while there's one there by that name already, as the Finder names copies.
+  static func destination(for name: String, in folder: URL, exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) }) -> URL {
+    let base = (name as NSString).deletingPathExtension
+    let pathExtension = (name as NSString).pathExtension
+    var destination = folder.appending(path: name, directoryHint: .notDirectory)
+    var number = 2
+    while exists(destination) {
+      let numbered = pathExtension.isEmpty ? "\(base) \(number)" : "\(base) \(number).\(pathExtension)"
+      destination = folder.appending(path: numbered, directoryHint: .notDirectory)
+      number += 1
+    }
+    return destination
   }
 }
 

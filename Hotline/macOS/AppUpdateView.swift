@@ -197,8 +197,24 @@ struct ReleaseNotesView: View {
   @State private var picked: ReleaseNotes.ID?
   /// Why GitHub didn't give the notes, the last time it was asked.
   @State private var failure: GitHubReleases.Failure?
+  /// The build whose app is being downloaded, while it is.
+  @State private var downloading: ReleaseNotes.ID?
+  /// Why the last download didn't work, to say so.
+  @State private var downloadFailure: DownloadFailure?
+  @Environment(\.openURL) private var openURL
 
   private let currentBuild = Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0
+
+  /// A build's app that couldn't be downloaded, and why.
+  struct DownloadFailure {
+    let version: String
+    let reason: String
+  }
+
+  /// The build chosen.
+  private var chosen: ReleaseNotes? {
+    self.releases.first { $0.id == self.selection }
+  }
 
   var body: some View {
     NavigationSplitView {
@@ -210,7 +226,7 @@ struct ReleaseNotesView: View {
       }
       .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
     } detail: {
-      if let release = self.releases.first(where: { $0.id == self.selection }) {
+      if let release = self.chosen {
         ScrollView(.vertical) {
           ReleaseNotesDetail(release: release, isInstalled: release.build == self.currentBuild)
         }
@@ -235,8 +251,83 @@ struct ReleaseNotesView: View {
       }
     }
     .navigationTitle("Release Notes")
+    .toolbar {
+      self.toolbar
+    }
+    .alert(
+      Text("Couldn't Download Hotline \(self.downloadFailure?.version ?? "")"),
+      isPresented: Binding(get: { self.downloadFailure != nil }, set: { if !$0 { self.downloadFailure = nil } }),
+      presenting: self.downloadFailure
+    ) { _ in
+      Button("OK") {}
+    } message: { failure in
+      Text(failure.reason)
+    }
     .task {
       await self.load()
+    }
+  }
+
+  /// The chosen build's app, to download, and its code and its release, on GitHub.
+  @ToolbarContentBuilder
+  private var toolbar: some ToolbarContent {
+    ToolbarItem {
+      Button {
+        if let release = self.chosen {
+          self.download(release)
+        }
+      } label: {
+        // A spinner while it's coming.
+        if self.downloading != nil, self.downloading == self.selection {
+          ProgressView()
+            .controlSize(.small)
+        }
+        else {
+          Label("Download", systemImage: "arrow.down.circle")
+        }
+      }
+      .disabled(self.chosen?.download == nil || self.downloading != nil)
+      .help(self.chosen.map { Text("Download Hotline \($0.version) to your Downloads folder") } ?? Text("Download"))
+    }
+
+    ToolbarSpacer(.fixed)
+
+    ToolbarItemGroup {
+      Button {
+        if let release = self.chosen {
+          self.openURL(release.source)
+        }
+      } label: {
+        Label("View Code", systemImage: "chevron.left.forwardslash.chevron.right")
+      }
+      .disabled(self.chosen == nil)
+      .help(self.chosen.map { Text("View the code for Hotline \($0.version) on GitHub") } ?? Text("View Code"))
+
+      Button {
+        if let release = self.chosen {
+          self.openURL(release.page)
+        }
+      } label: {
+        Label("Open on GitHub", systemImage: "arrow.up.forward")
+      }
+      .disabled(self.chosen == nil)
+      .help(self.chosen.map { Text("Open Hotline \($0.version)'s release on GitHub") } ?? Text("Open on GitHub"))
+    }
+  }
+
+  /// Downloads a build's app to the Downloads folder, and shows it there in the Finder, or says why
+  /// it couldn't.
+  private func download(_ release: ReleaseNotes) {
+    self.downloading = release.id
+    Task {
+      do {
+        let file = try await ReleaseDownload.download(release)
+        NSWorkspace.shared.activateFileViewerSelecting([file])
+      }
+      catch {
+        self.downloadFailure = DownloadFailure(version: release.version, reason: error.localizedDescription)
+      }
+      self.downloading = nil
     }
   }
 
@@ -332,8 +423,8 @@ struct ReleaseNotesView: View {
 }
 
 /// A build in the list of them: its version, in semibold while it's newer than the one running, and
-/// how long ago it came out, with a green check on the one running, and a fainter one on those before
-/// it, whose changes it has too.
+/// how long ago it came out, with a check in a circle on the one running, and a fainter check on those
+/// before it, whose changes it has too.
 struct ReleaseNotesRow: View {
   let release: ReleaseNotes
   /// The build that's running.
@@ -353,14 +444,15 @@ struct ReleaseNotesRow: View {
       Spacer(minLength: 0)
 
       if self.release.build == self.currentBuild {
+        // In the words' color, which is white on the row's color when it's chosen, with the check
+        // cut out of the circle, showing what's under it.
         Image(systemName: "checkmark.circle.fill")
-          .symbolRenderingMode(.palette)
-          .foregroundStyle(.white, .green)
+          .foregroundStyle(.primary)
           .help("The version you're using")
           .accessibilityLabel("Installed")
       }
       else if self.release.build < self.currentBuild {
-        // The green one's check, as big and where it is, without its circle, and bold.
+        // The installed one's check, as big and where it is, without its circle, and bold.
         Image(systemName: "checkmark.circle.fill")
           .symbolRenderingMode(.palette)
           .foregroundStyle(.tertiary, .clear)
@@ -380,27 +472,39 @@ struct ReleaseNotesRow: View {
   }
 }
 
-/// One build's notes: its version, when it came out, whether it's the one running, and a link to its
-/// release on GitHub, then the notes themselves.
+/// One build's notes: Hotline's icon, beside its version, when it came out, and whether it's the one
+/// running, then under a line, the notes themselves.
 struct ReleaseNotesDetail: View {
   let release: ReleaseNotes
   let isInstalled: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      VStack(alignment: .leading, spacing: 4) {
-        Text("Hotline \(self.release.version)")
-          .font(.title2)
-          .fontWeight(.semibold)
-        HStack(spacing: 0) {
-          if let details = self.details {
-            Text("\(details) · ")
-              .foregroundStyle(.secondary)
+      HStack(spacing: 12) {
+        Image(nsImage: NSApp.applicationIconImage)
+          .resizable()
+          .frame(width: 52, height: 52)
+          .accessibilityHidden(true)
+
+        VStack(alignment: .leading, spacing: 6) {
+          Text("Hotline \(self.release.version)")
+            .font(.title2)
+            .fontWeight(.semibold)
+          HStack(spacing: 8) {
+            if let date = self.release.date {
+              Text(date.formatted(date: .long, time: .omitted))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            }
+            if self.isInstalled {
+              self.installed
+            }
           }
-          Link("View on GitHub", destination: self.release.page)
         }
-        .font(.callout)
       }
+
+      Divider()
+
       let notes = self.release.notes.trimmingCharacters(in: .whitespacesAndNewlines)
       MarkdownText(text: notes.isEmpty ? "_No release notes provided._" : notes, layout: Markdown.Layout(font: .systemFont(ofSize: 13), lineSpacing: 3))
     }
@@ -408,9 +512,18 @@ struct ReleaseNotesDetail: View {
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  /// When it came out, and whether it's the build that's running.
-  private var details: String? {
-    let parts = [self.release.date?.formatted(date: .long, time: .omitted), self.isInstalled ? "Installed" : nil].compactMap { $0 }
-    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  /// That it's the build that's running: Installed, with a check, in white on a green capsule.
+  private var installed: some View {
+    HStack(spacing: 3) {
+      Image(systemName: "checkmark")
+        .fontWeight(.bold)
+        .accessibilityHidden(true)
+      Text("Installed")
+    }
+    .font(.subheadline.weight(.semibold))
+    .foregroundStyle(.white)
+    .padding(.horizontal, 7)
+    .padding(.vertical, 2)
+    .background(.green, in: .capsule)
   }
 }

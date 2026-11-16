@@ -107,4 +107,49 @@ struct AppUpdateTests {
     ReleaseNotesCache.save(releases, to: fileURL)
     #expect(ReleaseNotesCache.load(from: fileURL) == releases)
   }
+
+  // MARK: - Downloading a Build, and Its Code
+
+  @Test func aReleasesAppIsItsFirstZip() throws {
+    var release = self.release(31)
+    release["assets"] = [
+      ["name": "updates.xml", "browser_download_url": "https://github.com/mierau/hotline/releases/download/1.0beta31/updates.xml"],
+      ["name": "Hotline.b31.zip", "browser_download_url": "https://github.com/mierau/hotline/releases/download/1.0beta31/Hotline.b31.zip"],
+    ]
+    let notes = try #require(GitHubReleases.notes(from: release))
+    #expect(notes.download?.absoluteString == "https://github.com/mierau/hotline/releases/download/1.0beta31/Hotline.b31.zip")
+    // Without one, there's nothing to download.
+    #expect(try #require(GitHubReleases.notes(from: self.release(30))).download == nil)
+  }
+
+  @Test func aReleasesCodeIsAtItsTag() throws {
+    let notes = try #require(GitHubReleases.notes(from: self.release(31)))
+    #expect(notes.source.absoluteString == "https://github.com/mierau/hotline/tree/1.0beta31")
+  }
+
+  @Test func notesKeptBeforeDownloadsStillLoad() throws {
+    let fileURL = FileManager.default.temporaryDirectory.appending(path: "Release Notes \(UUID()).json")
+    defer {
+      try? FileManager.default.removeItem(at: fileURL)
+    }
+    // As a build before downloads kept them.
+    let kept = #"[{"tag":"1.0beta31","version":"1.0b31","build":31,"notes":"Hello","page":"https:\/\/github.com\/mierau\/hotline\/releases\/tag\/1.0beta31"}]"#
+    try Data(kept.utf8).write(to: fileURL)
+    let loaded = ReleaseNotesCache.load(from: fileURL)
+    #expect(loaded.map(\.build) == [31])
+    #expect(loaded.first?.download == nil)
+  }
+
+  @Test func downloadsAreNumberedAsTheFindersCopiesAre() {
+    let downloads = URL(filePath: "/Users/someone/Downloads", directoryHint: .isDirectory)
+    var there: Set<String> = []
+    func destination() -> String {
+      ReleaseDownload.destination(for: "Hotline.b31.zip", in: downloads) { there.contains($0.lastPathComponent) }.lastPathComponent
+    }
+    #expect(destination() == "Hotline.b31.zip")
+    there = ["Hotline.b31.zip"]
+    #expect(destination() == "Hotline.b31 2.zip")
+    there = ["Hotline.b31.zip", "Hotline.b31 2.zip"]
+    #expect(destination() == "Hotline.b31 3.zip")
+  }
 }
