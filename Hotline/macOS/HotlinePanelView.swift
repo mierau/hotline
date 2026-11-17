@@ -299,18 +299,14 @@ struct HotlinePanelView: View {
       if self.bannerFileURL == nil {
         self.defaultBanner
       }
-      else if self.bannerIsAnimated {
-        KFAnimatedImage
-          .url(self.bannerFileURL)
-          .cacheMemoryOnly()
-          .cacheOriginalImage()
-          .scaledToFill()
+      else if self.bannerIsAnimated, let bannerFileURL = self.bannerFileURL {
+        AnimatedBanner(fileURL: bannerFileURL)
           .frame(width: 468, height: 60)
           .frame(minWidth: 468, maxWidth: 468, minHeight: 60, maxHeight: 60)
           .clipped()
           .allowsHitTesting(false)
           .transition(.opacity)
-          .id("animated banner \(self.bannerFileURL?.absoluteString ?? "")")
+          .id("animated banner \(bannerFileURL.absoluteString)")
       }
       else {
         KFImage

@@ -72,6 +72,7 @@
 		DA432EEB30A7A749000179F6 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DA432EEA30A7A749000179F6 /* Sparkle */; };
 		DA432F0730A8DD7E000179F6 /* FilesColumnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432F0630A8DD7E000179F6 /* FilesColumnView.swift */; };
 		DA432F2830AB8E09000179F6 /* NewsReadArticles.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432F2730AB8E09000179F6 /* NewsReadArticles.swift */; };
+		DA43307330ABE683000179F6 /* AnimatedBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43307230ABE683000179F6 /* AnimatedBanner.swift */; };
 		DA4B8F3A2EA6FB3C00CBFD53 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */; platformFilter = ios; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
@@ -263,6 +264,7 @@
 		DA432EDF30A78ED0000179F6 /* PrivacySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsView.swift; sourceTree = "<group>"; };
 		DA432F0630A8DD7E000179F6 /* FilesColumnView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesColumnView.swift; sourceTree = "<group>"; };
 		DA432F2730AB8E09000179F6 /* NewsReadArticles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsReadArticles.swift; sourceTree = "<group>"; };
+		DA43307230ABE683000179F6 /* AnimatedBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedBanner.swift; sourceTree = "<group>"; };
 		DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -770,6 +772,7 @@
 				DA22F51E2F56477400E2EA02 /* OnboardingView.swift */,
 				DA22F5222F5748AE00E2EA02 /* SpinningLogoView.swift */,
 				DA432D4130A14F47000179F6 /* Commands */,
+				DA43307230ABE683000179F6 /* AnimatedBanner.swift */,
 			);
 			path = macOS;
 			sourceTree = "<group>";
@@ -1017,6 +1020,7 @@
 				DAA98C7B2F4CFF0B002C6334 /* ChatSettingsView.swift in Sources */,
 				DA872B152BDDEE1A008B1012 /* VisualEffectView.swift in Sources */,
 				DA3429AE2EB9C0280010784E /* HotlineFileUploadClient.swift in Sources */,
+				DA43307330ABE683000179F6 /* AnimatedBanner.swift in Sources */,
 				DAAEE66D2B475F1400A5BA07 /* PreviewFileInfo.swift in Sources */,
 				DAB4D8842B4CABEF0048A05C /* Extensions.swift in Sources */,
 				74BA695EDF308FC1CB040C8B /* ZipArchive.swift in Sources */,
