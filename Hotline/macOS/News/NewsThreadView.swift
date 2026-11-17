@@ -31,14 +31,6 @@ struct NewsThreadView: View {
   /// Where the conversation's scrolled to, set to go to an article, and to scroll with the keys, which
   /// it would go back to the article from otherwise, as it keeps where it was told to go.
   @State private var position = ScrollPosition(idType: NewsInfo.ID.self)
-  /// How far it's scrolled, and how much there is, kept out of sight of SwiftUI, which would show it
-  /// all again for each step of scrolling otherwise.
-  @State private var scrolled = Scrolled()
-
-  /// How far the conversation's scrolled, and how much there is.
-  private final class Scrolled {
-    var geometry: ScrollGeometry?
-  }
 
   /// The room around the replies.
   private static let margin: CGFloat = 12
@@ -116,14 +108,11 @@ struct NewsThreadView: View {
       .padding(.bottom, thread.count > 1 ? Self.margin : 0)
       // The keys scroll through it all, from the room between posts, or after a post with them is
       // scrolled away, through where it's scrolled to.
-      .background(KeyScrolling { amount, down in
-        self.scroll(amount, down: down)
+      .background(KeyScrolling { amount, down, scrollView in
+        self.scroll(amount, down: down, in: scrollView)
       })
     }
     .scrollPosition(self.$position)
-    .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, geometry in
-      self.scrolled.geometry = geometry
-    }
     // Gray behind the replies, and on down to the bottom, when there are any.
     .serverBackground(thread.count > 1 ? .thread : .content)
     .onChange(of: self.article, initial: true) { _, article in
@@ -216,19 +205,18 @@ struct NewsThreadView: View {
   }
 
   /// Scrolls as a key does, from where it's scrolled to, as far as there's more of the conversation,
-  /// or all the way, through where it's scrolled to, in place of the article it went to.
-  private func scroll(_ amount: NSScrollView.KeyScroll, down: Bool) {
-    guard let geometry = self.scrolled.geometry else {
-      return
-    }
+  /// or all the way, through where it's scrolled to, in place of the article it went to. Where it's
+  /// scrolled to is asked of the scroll view as the key's pressed, rather than watched as it scrolls,
+  /// which had SwiftUI lay the conversation out again and again in one frame, as replies were chosen
+  /// quickly, until the app crashed.
+  private func scroll(_ amount: NSScrollView.KeyScroll, down: Bool, in scrollView: NSScrollView) {
     if amount == .all {
       self.position.scrollTo(edge: down ? .bottom : .top)
       return
     }
-    let distance = amount.distance(shown: geometry.containerSize.height, whole: geometry.contentSize.height)
-    let top = -geometry.contentInsets.top
-    let bottom = max(top, geometry.contentSize.height - geometry.containerSize.height + geometry.contentInsets.bottom)
-    self.position.scrollTo(y: min(max(geometry.contentOffset.y + (down ? distance : -distance), top), bottom))
+    // SwiftUI's place is what's at the top of what shows, below anything over its top edge, and the
+    // scroll view's is the top of all of it, under that too.
+    self.position.scrollTo(y: scrollView.origin(scrolled: amount, down: down).y + scrollView.contentInsets.top)
   }
 
   // MARK: Posts

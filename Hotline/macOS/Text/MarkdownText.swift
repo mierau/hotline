@@ -648,8 +648,9 @@ extension Markdown.Colors {
 /// they're in, hand the keys on to it, to go on scrolling. The words' own keys scroll with it too.
 struct KeyScrolling: NSViewRepresentable {
   /// Scrolls as a key does, in place of scrolling what it's in itself, for a SwiftUI scroll view
-  /// told where to scroll to, which would go back there otherwise.
-  var scroll: ((NSScrollView.KeyScroll, _ down: Bool) -> Void)? = nil
+  /// told where to scroll to, which would go back there otherwise. It's given the scroll view, to see
+  /// where it's scrolled to as the key's pressed.
+  var scroll: ((NSScrollView.KeyScroll, _ down: Bool, _ scrollView: NSScrollView) -> Void)? = nil
 
   func makeNSView(context: Context) -> KeyScrollingView {
     KeyScrollingView()
@@ -662,7 +663,7 @@ struct KeyScrolling: NSViewRepresentable {
 
 final class KeyScrollingView: NSView {
   /// Scrolls as a key does, in place of scrolling what it's in itself.
-  var scrolls: ((NSScrollView.KeyScroll, Bool) -> Void)?
+  var scrolls: ((NSScrollView.KeyScroll, Bool, NSScrollView) -> Void)?
 
   /// The one in a scroll view, if it has one.
   static func `in`(_ scrollView: NSScrollView?) -> KeyScrollingView? {
@@ -674,11 +675,14 @@ final class KeyScrollingView: NSView {
 
   /// Scrolls what it's in as a key does, as it's told to, or itself.
   func scroll(_ amount: NSScrollView.KeyScroll, down: Bool) {
+    guard let scrollView = self.enclosingScrollView else {
+      return
+    }
     if let scrolls = self.scrolls {
-      scrolls(amount, down)
+      scrolls(amount, down, scrollView)
     }
     else {
-      self.enclosingScrollView?.scroll(amount, down: down)
+      scrollView.scroll(amount, down: down)
     }
   }
 
@@ -760,13 +764,21 @@ extension NSScrollView {
     }
   }
 
-  /// Scrolls what it shows down or up, as far as `amount`, as far as there's more of it.
-  func scroll(_ amount: KeyScroll, down: Bool) {
+  /// Where what it shows would start, scrolled down or up as far as `amount`, as far as there's
+  /// more of it, from where it's scrolled to now. A page is as much as shows clear of what's over
+  /// its edges, like a toolbar.
+  func origin(scrolled amount: KeyScroll, down: Bool) -> NSPoint {
     let clip = self.contentView
-    let distance = amount.distance(shown: clip.bounds.height, whole: self.documentView?.frame.height ?? 0)
+    let shown = clip.bounds.height - self.contentInsets.top - self.contentInsets.bottom
+    let distance = amount.distance(shown: shown, whole: self.documentView?.frame.height ?? 0)
     var bounds = clip.bounds
     bounds.origin.y += down == (self.documentView?.isFlipped ?? true) ? distance : -distance
-    clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
-    self.reflectScrolledClipView(clip)
+    return clip.constrainBoundsRect(bounds).origin
+  }
+
+  /// Scrolls what it shows down or up, as far as `amount`, as far as there's more of it.
+  func scroll(_ amount: KeyScroll, down: Bool) {
+    self.contentView.scroll(to: self.origin(scrolled: amount, down: down))
+    self.reflectScrolledClipView(self.contentView)
   }
 }
