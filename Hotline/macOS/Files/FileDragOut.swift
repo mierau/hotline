@@ -65,27 +65,32 @@ final class FileDragOut: NSObject {
   /// A press on something that can be dragged out, selected at once, and held until it's a click,
   /// or a drag, which starts here. A click goes on as it was: the press and its release are put
   /// back, in order, ahead of anything that's come in since, for the list to have as if the press
-  /// had never been held, with what it's handled with seeing it. With ⌘ or ⇧ down, it isn't held,
-  /// as it's for the list, to add to what's selected, or take away from it. True when the press is
-  /// held, and goes no further now.
+  /// had never been held, with what it's handled with seeing it, on what was pressed, wherever
+  /// selecting it has moved it, as in the files' columns, where the columns after its go, or one
+  /// comes after it, and they move over. So does the next press of a double click. With ⌘ or ⇧
+  /// down, it isn't held, as it's for the list, to add to what's selected, or take away from it.
+  /// True when the press is held, and goes no further now.
   private func press(_ event: NSEvent) -> Bool {
     if self.replaying {
       self.replaying = false
       return false
     }
     self.onAnyPress()
-    guard event.clickCount == 1, event.modifierFlags.intersection([.control, .command, .shift]).isEmpty,
+    if event.clickCount > 1 {
+      return self.pressAgain(event)
+    }
+    self.lastClick = nil
+    guard event.modifierFlags.intersection([.control, .command, .shift]).isEmpty,
           let file = self.file(at: event), self.canDrag(file) else {
       return false
     }
+    let target = Target(event)
     self.onPress(file)
     let start = event.locationInWindow
+    var release: NSEvent?
     while let next = NSApp.nextEvent(matching: [.leftMouseDragged, .leftMouseUp], until: .distantFuture, inMode: .eventTracking, dequeue: true) {
       if next.type == .leftMouseUp {
-        NSApp.postEvent(next, atStart: true)
-        if let place = self.place(of: event) {
-          self.onClick(file, place)
-        }
+        release = next
         break
       }
       if hypot(next.locationInWindow.x - start.x, next.locationInWindow.y - start.y) >= Self.dragDistance {
@@ -93,9 +98,84 @@ final class FileDragOut: NSObject {
         return true
       }
     }
-    NSApp.postEvent(event, atStart: true)
+    // Not at all, if what was pressed is gone.
+    var shift = CGSize.zero
+    if let target {
+      guard let moved = target.shift(in: event.window) else {
+        return true
+      }
+      shift = moved
+    }
+    let press = Self.moved(event, by: shift)
+    if let release {
+      NSApp.postEvent(Self.moved(release, by: shift), atStart: true)
+      if let place = self.place(of: press) {
+        self.onClick(file, place)
+      }
+      self.lastClick = target.map { Target(view: $0.view, point: $0.point, location: $0.location, time: release.timestamp) }
+    }
+    NSApp.postEvent(press, atStart: true)
     self.replaying = true
     return true
+  }
+
+  /// The next press of a double click, or the one after, on what the first was on, wherever it's
+  /// gone since, as it's put back. True when it's put back moved, and goes no further as it was.
+  private func pressAgain(_ event: NSEvent) -> Bool {
+    guard let last = self.lastClick, event.timestamp - last.time <= NSEvent.doubleClickInterval * Double(event.clickCount),
+          hypot(event.locationInWindow.x - last.location.x, event.locationInWindow.y - last.location.y) < Self.dragDistance,
+          let shift = last.shift(in: event.window), shift != .zero else {
+      return false
+    }
+    NSApp.postEvent(Self.moved(event, by: shift), atStart: true)
+    self.replaying = true
+    return true
+  }
+
+  /// What a press is on, as the window has it, and where on it, to find it again once it's moved.
+  @MainActor
+  private struct Target {
+    weak var view: NSView?
+    /// Where on it, as it has it.
+    let point: NSPoint
+    /// Where in the window, when it was pressed.
+    let location: NSPoint
+    let time: TimeInterval
+
+    init(view: NSView?, point: NSPoint, location: NSPoint, time: TimeInterval) {
+      self.view = view
+      self.point = point
+      self.location = location
+      self.time = time
+    }
+
+    init?(_ event: NSEvent) {
+      guard let view = event.window?.contentView?.superview?.hitTest(event.locationInWindow) else {
+        return nil
+      }
+      self.init(view: view, point: view.convert(event.locationInWindow, from: nil), location: event.locationInWindow, time: event.timestamp)
+    }
+
+    /// How far it's moved in the window since, or nil if it's not there anymore.
+    func shift(in window: NSWindow?) -> CGSize? {
+      guard let view = self.view, view.window === window else {
+        return nil
+      }
+      let now = view.convert(self.point, to: nil)
+      return CGSize(width: now.x - self.location.x, height: now.y - self.location.y)
+    }
+  }
+
+  /// The last click held here, for the press after it in a double click.
+  private var lastClick: Target?
+
+  /// A press or its release, moved by as far as what it was on has, in the window.
+  private static func moved(_ event: NSEvent, by shift: CGSize) -> NSEvent {
+    guard shift != .zero else {
+      return event
+    }
+    let location = NSPoint(x: event.locationInWindow.x + shift.width, y: event.locationInWindow.y + shift.height)
+    return NSEvent.mouseEvent(with: event.type, location: location, modifierFlags: event.modifierFlags, timestamp: event.timestamp, windowNumber: event.windowNumber, context: nil, eventNumber: event.eventNumber, clickCount: event.clickCount, pressure: event.pressure) ?? event
   }
 
   /// The press put back, for the list, which isn't to be held again.
