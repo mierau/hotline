@@ -6,9 +6,10 @@ import UniformTypeIdentifiers
 
 /// Files in columns, as the Finder shows them: what's at the top, or what a search found, then
 /// what's in each folder on the way to the one you're in, with the one gone into selected in each,
-/// and after the column you're in, what's selected there, alone: what's in a folder, or a file's
-/// details. The column you're in is the folder you're in, for all that goes by it, like Back,
-/// uploading and new folders, and what's selected in it is what's selected.
+/// and after the column you're in, what's selected there: what's in a folder selected alone, or
+/// else details of what's selected, a file, or more than one thing. The column you're in is the
+/// folder you're in, for all that goes by it, like Back, uploading and new folders, and what's
+/// selected in it is what's selected.
 ///
 /// The keys go up and down a column, as a list's do, right, into the folder selected, and left,
 /// back out of it. A click in any column selects there, and goes to it. What's in a folder that's
@@ -81,9 +82,9 @@ struct FilesColumnView: View {
           switch trailing {
           case .folder(let column):
             self.list(for: column)
-          case .file(let file):
+          case .details(let files):
             let index = columns.count
-            FileColumnDetails(file: file, actions: self.actions)
+            FileColumnDetails(files: files, actions: self.actions)
               .frame(width: self.width(of: index))
               .frame(maxHeight: .infinity)
               .id(Self.detailsID)
@@ -253,20 +254,20 @@ struct FilesColumnView: View {
     return columns
   }
 
-  /// What's after the column you're in, for what's selected there, alone: what's in a folder, or a
-  /// file's details.
+  /// What's after the column you're in, for what's selected there: what's in a folder selected
+  /// alone, or else details of what's selected, a file, or more than one thing.
   private func trailing(after columns: [FileColumn]) -> FileColumnTrailing? {
     guard let active = columns.last else {
       return nil
     }
     let selected = active.files.filter(self.selection.contains)
-    guard selected.count == 1, let file = selected.first else {
+    guard let first = selected.first else {
       return nil
     }
-    if file.isFolder {
-      return .folder(FileColumn(index: active.index + 1, path: file.path, files: file.children ?? [], listed: file.loaded))
+    if selected.count == 1, first.isFolder {
+      return .folder(FileColumn(index: active.index + 1, path: first.path, files: first.children ?? [], listed: first.loaded))
     }
-    return .file(file)
+    return .details(selected)
   }
 
   private static let detailsID = "details"
@@ -276,7 +277,7 @@ struct FilesColumnView: View {
     switch trailing {
     case .folder(let column):
       return column.id
-    case .file:
+    case .details:
       return Self.detailsID
     case nil:
       return columns.last?.id ?? ""
@@ -603,12 +604,12 @@ private struct FileColumn: Identifiable {
   }
 }
 
-/// What's after the column you're in, for what's selected there, alone.
+/// What's after the column you're in, for what's selected there.
 private enum FileColumnTrailing {
-  /// What's in a folder.
+  /// What's in a folder, selected alone.
   case folder(FileColumn)
-  /// A file's details.
-  case file(FileInfo)
+  /// Details of what's selected, in the order it's shown: a file, alone, or more than one thing.
+  case details([FileInfo])
 }
 
 /// A column's list: what's in a folder, or what a search found, with what's selected in it, drawn
@@ -787,30 +788,42 @@ private struct FileColumnIcon: View {
   }
 }
 
-/// A file selected alone, in a column of its own after it, as the Finder shows one: its icon, large,
-/// its name, what kind of file it is and how big, and what can be done with it right there.
+/// What's selected, in a column of its own after it, as the Finder shows it: a file, alone, by its
+/// icon, large, its name, and what kind of file it is and how big, and more than one thing, by a
+/// pile of their icons, how many there are, and how big the files among them are. Each with what
+/// can be done with it right there.
 private struct FileColumnDetails: View {
   @Environment(\.modelContext) private var modelContext
-  let file: FileInfo
+  /// What's selected, in the order it's shown: a file, or more than one thing.
+  let files: [FileInfo]
   let actions: FileActions
 
   var body: some View {
     VStack(spacing: 8) {
-      FileColumnIcon(file: self.file, large: true)
-        .frame(width: 96, height: 96)
-        .padding(.top, 28)
-        .padding(.bottom, 4)
+      Group {
+        if let file = self.file {
+          FileColumnIcon(file: file, large: true)
+        }
+        else {
+          FileColumnPile(files: self.files)
+        }
+      }
+      .frame(width: 96, height: 96)
+      .padding(.top, 28)
+      .padding(.bottom, 4)
 
-      Text(self.file.name.hidingOffensiveWords)
+      self.title
         .font(.headline)
         .multilineTextAlignment(.center)
         .lineLimit(5)
         .textSelection(.enabled)
 
-      Text(self.summary)
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
+      if let summary = self.summary {
+        summary
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+      }
 
       self.buttons
         .buttonBorderShape(.capsule)
@@ -822,58 +835,143 @@ private struct FileColumnDetails: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
   }
 
+  /// The file, when it's all that's selected.
+  private var file: FileInfo? {
+    self.files.count == 1 ? self.files.first : nil
+  }
+
+  /// How many of what's selected are folders.
+  private var folders: Int {
+    self.files.count(where: \.isFolder)
+  }
+
+  /// Its name, or how many there are: files, folders, or of both, items.
+  private var title: Text {
+    if let file = self.file {
+      return Text(file.name.hidingOffensiveWords)
+    }
+    let count = self.files.count
+    let folders = self.folders
+    if folders == 0 {
+      return Text("^[\(count) \("file")](inflect: true)")
+    }
+    if folders == count {
+      return Text("^[\(count) \("folder")](inflect: true)")
+    }
+    return Text("^[\(count) \("item")](inflect: true)")
+  }
+
+  /// What kind of file it is, and how big, or of more than one thing, how big the files among them
+  /// are, all together, and how many folders there are with them, as how big a folder is isn't
+  /// known, only how much is in it. Nothing for folders alone.
+  private var summary: Text? {
+    if let file = self.file {
+      return Text(Self.summary(of: file))
+    }
+    let folders = self.folders
+    let files = self.files.count - folders
+    guard files > 0 else {
+      return nil
+    }
+    let bytes = self.files.reduce(UInt(0)) { $1.isFolder ? $0 : $0 + $1.fileSize }
+    let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    guard folders > 0 else {
+      return Text(size)
+    }
+    return Text("^[\(files) \("file")](inflect: true) – \(size)\n^[\(folders) \("folder")](inflect: true)")
+  }
+
   /// What kind of file it is, and how big.
-  private var summary: String {
-    if self.file.isUnavailable {
+  private static func summary(of file: FileInfo) -> String {
+    if file.isUnavailable {
       return "Unavailable"
     }
-    if self.file.isServerBookmark {
+    if file.isServerBookmark {
       return "Server Bookmark"
     }
-    let kind = FileIconView.contentType(filename: self.file.name, fileType: self.file.type).localizedDescription ?? "Document"
-    let size = ByteCountFormatter.string(fromByteCount: Int64(self.file.fileSize), countStyle: .file)
+    let kind = FileIconView.contentType(filename: file.name, fileType: file.type).localizedDescription ?? "Document"
+    let size = ByteCountFormatter.string(fromByteCount: Int64(file.fileSize), countStyle: .file)
     return "\(kind) – \(size)"
   }
 
-  /// What can be done with it: a server bookmark, connected to, or kept with your own, and anything
-  /// else, downloaded, and looked at, if it can be. One above the other, as wide as each other, the
-  /// first what a double click does, standing out as a default button does, though not pressed by
-  /// Return, which renames what's selected here.
+  /// What can be done with it: a server bookmark, connected to, or kept with your own, anything
+  /// else, downloaded, and looked at, if it can be, and more than one thing, all downloaded, as the
+  /// toolbar's Download does. One above the other, as wide as each other, the first what a double
+  /// click does, standing out as a default button does, though not pressed by Return, which renames
+  /// what's selected here.
   @ViewBuilder
   private var buttons: some View {
-    if self.file.isServerBookmark {
+    if self.files.count > 1 {
+      Button("Download") {
+        self.actions.download(self.files)
+      }
+      .buttonStyle(.glassProminent)
+      .disabled(!self.actions.canDownload(self.files))
+    }
+    else if let file = self.file, file.isServerBookmark {
       VStack(spacing: 8) {
         Button("Connect") {
-          self.actions.connect(toServerIn: self.file)
+          self.actions.connect(toServerIn: file)
         }
         .buttonStyle(.glassProminent)
 
         Button("Add to Bookmarks") {
-          self.actions.addToBookmarks(self.file, context: self.modelContext)
+          self.actions.addToBookmarks(file, context: self.modelContext)
         }
         .buttonStyle(.glass)
         // Clear, even in a server's theme, whose color is for the first one alone.
         .tint(nil)
       }
-      .disabled(!self.actions.canDownload([self.file]))
+      .disabled(!self.actions.canDownload([file]))
     }
-    else if !self.file.isUnavailable {
+    else if let file = self.file, !file.isUnavailable {
       VStack(spacing: 8) {
         Button("Download") {
-          self.actions.download([self.file])
+          self.actions.download([file])
         }
         .buttonStyle(.glassProminent)
-        .disabled(!self.actions.canDownload([self.file]))
+        .disabled(!self.actions.canDownload([file]))
 
-        if self.file.isPreviewable {
+        if file.isPreviewable {
           Button("Quick Look") {
-            self.actions.previewFile(self.file)
+            self.actions.previewFile(file)
           }
           .buttonStyle(.glass)
           .tint(nil)
         }
       }
     }
+  }
+}
+
+/// More than one thing selected, as a pile of the first few of their icons, the first on top, and
+/// the rest under it, turned a little one way and the other, to show from under it.
+private struct FileColumnPile: View {
+  /// What's selected, in the order it's shown.
+  let files: [FileInfo]
+
+  /// How far each of the pile is turned, and moved, from the middle, from the top down.
+  private static let places: [(degrees: Double, x: CGFloat, y: CGFloat)] = [
+    (0, 0, 2),
+    (-10, -13, -1),
+    (10, 13, -1),
+  ]
+
+  var body: some View {
+    ZStack {
+      // The last first, under the rest.
+      ForEach(self.files.prefix(Self.places.count).enumerated().reversed(), id: \.element) { index, file in
+        let place = Self.places[index]
+        FileColumnIcon(file: file, large: true)
+          .frame(width: 76, height: 76)
+          .rotationEffect(.degrees(place.degrees))
+          // Straight down, on what's under it, however it's turned.
+          .shadow(color: .black.opacity(0.2), radius: 1.5, y: 1)
+          .offset(x: place.x, y: place.y)
+      }
+    }
+    // The title under it says how many there are.
+    .accessibilityHidden(true)
   }
 }
 
