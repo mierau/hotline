@@ -247,11 +247,16 @@ class ChatInputTextView: MarkdownEditingTextView {
     return view
   }()
 
+  /// The keys, once it's in a window, if they've gone to nothing else there, as on connecting, and
+  /// not from what has them, like the sidebar, when Chat's chosen in it, which keeps them.
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     if self.window != nil {
       DispatchQueue.main.async { [weak self] in
-        self?.window?.makeFirstResponder(self)
+        guard let self, let window = self.window, window.firstResponder == nil || window.firstResponder === window else {
+          return
+        }
+        window.makeFirstResponder(self)
       }
     }
   }

@@ -188,8 +188,20 @@ struct FilesColumnView: View {
     .onChange(of: self.focusedColumn) { _, index in
       self.focused(index)
     }
-    .onAppear {
-      self.focusActive()
+    // The keys, to the column you're in, once the columns are in a window, if they've gone to
+    // nothing else there, or to one of the columns, as when the columns take the list's place, and
+    // not from what has them, like the sidebar, when Files is chosen in it, which keeps them.
+    .background {
+      NSWindowAccessor { window in
+        guard let window else {
+          return
+        }
+        DispatchQueue.main.async {
+          if self.focusedColumn != nil || window.firstResponder == nil || window.firstResponder === window {
+            self.focusedColumn = self.activeIndex
+          }
+        }
+      }
     }
     // None of the keys while a name's being written, where they're for moving in it, typing a
     // space, and giving the name with Return.
