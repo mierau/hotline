@@ -76,13 +76,13 @@ struct FilesColumnView: View {
     ScrollViewReader { proxy in
       ScrollView(.horizontal) {
         HStack(spacing: 0) {
-          ForEach(columns) { column in
+          // What's in the folder selected, too, as one of them, so it's the same list once you go
+          // into it, as a click on something in it does, and isn't made again, for the keys to wait
+          // for.
+          ForEach(columns + (trailing?.column.map { [$0] } ?? [])) { column in
             self.list(for: column)
           }
-          switch trailing {
-          case .folder(let column):
-            self.list(for: column)
-          case .details(let files):
+          if case .details(let files) = trailing {
             let index = columns.count
             FileColumnDetails(files: files, actions: self.actions)
               .frame(width: self.width(of: index))
@@ -94,8 +94,6 @@ struct FilesColumnView: View {
             } ended: {
               self.resizeStart = nil
             }
-          case nil:
-            EmptyView()
           }
         }
         .frame(maxHeight: .infinity)
@@ -244,8 +242,9 @@ struct FilesColumnView: View {
     }
     var columns = [FileColumn(index: 0, path: [], files: self.model.files, listed: self.model.filesLoaded)]
     var files = self.model.files
-    for depth in self.folderPath.indices {
-      let path = Array(self.folderPath[...depth])
+    let shown = self.shownPath
+    for depth in shown.indices {
+      let path = Array(shown[...depth])
       // As it's known, which a folder on the way to one gone to by a link might not be yet.
       let folder = files.first { $0.isFolder && $0.name == path.last }
       files = folder?.children ?? []
@@ -286,7 +285,15 @@ struct FilesColumnView: View {
 
   /// Where the column you're in is, from the left.
   private var activeIndex: Int {
-    self.isShowingSearchResults ? 0 : self.folderPath.count
+    self.isShowingSearchResults ? 0 : self.shownPath.count
+  }
+
+  /// The folder you're in, as the columns show it: where what's selected is, as soon as it's all in
+  /// another folder, as when a press on a row in a column you're not in selects it there before the
+  /// columns go to it. In between, they'd show the column you were in, without the one after it,
+  /// whose row's been pressed, and scroll back to it.
+  private var shownPath: [String] {
+    self.folder(of: self.selection) ?? self.folderPath
   }
 
   /// A column's list, and the line after it, which makes it wider or narrower.
@@ -340,10 +347,11 @@ struct FilesColumnView: View {
     if column.index == active {
       return self.selection
     }
-    guard column.index < active, column.index < self.folderPath.count else {
+    let path = self.shownPath
+    guard column.index < active, column.index < path.count else {
       return []
     }
-    let name = self.folderPath[column.index]
+    let name = path[column.index]
     return Set(column.files.first { $0.isFolder && $0.name == name }.map { [$0] } ?? [])
   }
 
@@ -370,9 +378,13 @@ struct FilesColumnView: View {
 
   /// Clicked into a column on the way to where you are, on the folder selected in it, which its list
   /// doesn't say, as what it has selected is the same: you're there now, with it selected, as in the
-  /// Finder. Only for a click, as the keys can be given to a column for other reasons.
+  /// Finder. Only for a click in that column, as the keys can be given to a column for other reasons,
+  /// even while a press is held somewhere else, as one on a row is, until it's known whether it's a
+  /// drag.
   private func focused(_ index: Int?) {
-    guard let index, index < self.activeIndex, let event = NSApp.currentEvent?.type, event == .leftMouseDown || event == .leftMouseUp else {
+    guard let index, index < self.activeIndex, let event = NSApp.currentEvent, event.type == .leftMouseDown || event.type == .leftMouseUp,
+          let list = (event.window?.firstResponder as? NSView)?.enclosingScrollView,
+          list.bounds.contains(list.convert(event.locationInWindow, from: nil)) else {
       return
     }
     let columns = self.pathColumns
@@ -386,13 +398,21 @@ struct FilesColumnView: View {
   /// before its column has the press, or as something's renamed from a menu on it, is where you
   /// are then.
   private func follow(_ selection: Set<FileInfo>) {
-    guard !self.isShowingSearchResults, let first = selection.first else {
-      return
-    }
-    let folder = Array(first.path.dropLast())
-    if folder != self.folderPath, selection.allSatisfy({ Array($0.path.dropLast()) == folder }) {
+    if let folder = self.folder(of: selection) {
       self.folderPath = folder
     }
+  }
+
+  /// Where what's selected is, when it's all in one folder, other than the one you're in.
+  private func folder(of selection: Set<FileInfo>) -> [String]? {
+    guard !self.isShowingSearchResults, let first = selection.first else {
+      return nil
+    }
+    let folder = Array(first.path.dropLast())
+    guard folder != self.folderPath, selection.allSatisfy({ Array($0.path.dropLast()) == folder }) else {
+      return nil
+    }
+    return folder
   }
 
   /// What's selected, in the column you're in, in the order it's shown.
@@ -610,6 +630,14 @@ private enum FileColumnTrailing {
   case folder(FileColumn)
   /// Details of what's selected, in the order it's shown: a file, alone, or more than one thing.
   case details([FileInfo])
+
+  /// What's in the folder selected, if it's a folder.
+  var column: FileColumn? {
+    if case .folder(let column) = self {
+      return column
+    }
+    return nil
+  }
 }
 
 /// A column's list: what's in a folder, or what a search found, with what's selected in it, drawn
