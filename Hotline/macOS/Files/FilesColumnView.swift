@@ -813,7 +813,9 @@ private struct FileColumnDetails: View {
         .multilineTextAlignment(.center)
 
       self.buttons
-        .controlSize(.small)
+        .buttonBorderShape(.capsule)
+        .buttonSizing(.flexible)
+        .frame(maxWidth: 160)
         .padding(.top, 8)
     }
     .padding(.horizontal, 16)
@@ -834,31 +836,42 @@ private struct FileColumnDetails: View {
   }
 
   /// What can be done with it: a server bookmark, connected to, or kept with your own, and anything
-  /// else, looked at, if it can be, and downloaded.
+  /// else, downloaded, and looked at, if it can be. One above the other, as wide as each other, the
+  /// first what a double click does, standing out as a default button does, though not pressed by
+  /// Return, which renames what's selected here.
   @ViewBuilder
   private var buttons: some View {
     if self.file.isServerBookmark {
-      HStack(spacing: 8) {
+      VStack(spacing: 8) {
         Button("Connect") {
           self.actions.connect(toServerIn: self.file)
         }
+        .buttonStyle(.glassProminent)
+
         Button("Add to Bookmarks") {
           self.actions.addToBookmarks(self.file, context: self.modelContext)
         }
+        .buttonStyle(.glass)
+        // Clear, even in a server's theme, whose color is for the first one alone.
+        .tint(nil)
       }
       .disabled(!self.actions.canDownload([self.file]))
     }
     else if !self.file.isUnavailable {
-      HStack(spacing: 8) {
+      VStack(spacing: 8) {
+        Button("Download") {
+          self.actions.download([self.file])
+        }
+        .buttonStyle(.glassProminent)
+        .disabled(!self.actions.canDownload([self.file]))
+
         if self.file.isPreviewable {
           Button("Quick Look") {
             self.actions.previewFile(self.file)
           }
+          .buttonStyle(.glass)
+          .tint(nil)
         }
-        Button("Download") {
-          self.actions.download([self.file])
-        }
-        .disabled(!self.actions.canDownload([self.file]))
       }
     }
   }
