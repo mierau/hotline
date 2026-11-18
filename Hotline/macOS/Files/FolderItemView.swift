@@ -31,12 +31,6 @@ struct FolderItemView: View {
     self._shown = State(initialValue: file.expanded && file.loaded)
   }
 
-  /// How much is in it: as its own listing has it, once it's been listed, which is as up to date as
-  /// what's shown in it, or else as the folder it's in has it.
-  private var count: Int {
-    self.file.loaded ? self.file.children?.count ?? 0 : Int(self.file.fileSize)
-  }
-  
   var body: some View {
     HStack(alignment: .center, spacing: 0) {
       Spacer()
@@ -108,7 +102,7 @@ struct FolderItemView: View {
       }
       Spacer()
       if !file.isUnavailable {
-        Text(self.count == 0 ? "Empty" : "^[\(self.count) \("file")](inflect: true)")
+        Text(self.file.folderCount == 0 ? "Empty" : "^[\(self.file.folderCount) \("file")](inflect: true)")
           .foregroundStyle(.secondary)
           .lineLimit(1)
           .padding(.trailing, 6)

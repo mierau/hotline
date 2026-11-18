@@ -539,10 +539,19 @@ struct FilesColumnView: View {
     return (widths: widths, standard: start.standard)
   }
 
-  /// Makes a column as wide as its widest name, as a double click on the line after it does.
+  /// Makes a column as wide as its widest name, with how much is in it, for a folder, as a double
+  /// click on the line after it does.
   private func fit(_ index: Int, to files: [FileInfo]) {
     let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-    let widest = files.lazy.map { ($0.name.hidingOffensiveWords as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+    let digits = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    let widest = files.lazy.map { (file: FileInfo) -> CGFloat in
+      let name = (file.name.hidingOffensiveWords as NSString).size(withAttributes: [.font: font]).width
+      guard file.isFolder, !file.isUnavailable, file.folderCount > 0 else {
+        return name
+      }
+      // How much is in it, and the space before it.
+      return name + 6 + (file.folderCount.formatted() as NSString).size(withAttributes: [.font: digits]).width
+    }.max() ?? 0
     self.widths[index] = Self.clamped(ceil(widest) + Self.rowRoom, rounded: true)
   }
 
@@ -633,16 +642,18 @@ private struct FileColumnList: View {
       } primaryAction: { items in
         self.open(self.column.files.filter(items.contains))
       }
+      // Why it shows nothing, when it does, which clicks and menus go through, to the column, as they
+      // would to nothing there. Not that a folder's being listed, which its row says, by its arrow,
+      // in the column before, but that what's at the top is, as it has no row.
       .overlay {
-        if !self.column.listed {
-          if self.isUnlistable {
-            Text("Couldn't Load Folder")
-              .foregroundStyle(.secondary)
-              .padding()
-          }
-          else {
-            FileColumnSpinner()
-          }
+        if let note = self.note {
+          Text(note)
+            .foregroundStyle(.secondary)
+            .padding()
+            .allowsHitTesting(false)
+        }
+        else if !self.column.listed, self.column.path == [] {
+          FileColumnSpinner()
         }
       }
       .accessibilityLabel(self.column.path.map { $0.last ?? "Files" } ?? "Search Results")
@@ -655,6 +666,16 @@ private struct FileColumnList: View {
         self.reveal(with: proxy)
       }
     }
+  }
+
+  /// Why there's nothing in it, when there isn't: its folder couldn't be listed, or has nothing in
+  /// it. Not for what's at the top, which shows nothing when it couldn't be listed either, as the
+  /// list does, nor a search's results, which the bar above says of.
+  private var note: LocalizedStringKey? {
+    if !self.column.listed {
+      return self.isUnlistable ? "Couldn't Load Folder" : nil
+    }
+    return self.column.files.isEmpty && self.column.path?.isEmpty == false ? "Empty Folder" : nil
   }
 
   private func reveal(with proxy: ScrollViewProxy) {
@@ -696,14 +717,22 @@ private struct FileColumnRow: View {
 
       Spacer(minLength: 0)
 
-      // What's in it on its way, as when it's been clicked, by its arrow.
-      if self.file.isFolder && self.file.isListing {
-        ProgressView()
-          .controlSize(.mini)
-          .accessibilityLabel("Loading")
-      }
-
       if self.file.isFolder {
+        // What's in it on its way, as when it's been clicked, by its arrow, in place of how much is
+        // in it, which is only the number, as a column's narrow, and nothing when there's nothing.
+        if self.file.isListing {
+          ProgressView()
+            .controlSize(.mini)
+            .accessibilityLabel("Loading")
+        }
+        else if !self.file.isUnavailable, self.file.folderCount > 0 {
+          let count = self.file.folderCount
+          Text(count, format: .number)
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(Text("^[\(count) \("file")](inflect: true)"))
+        }
+
         Image(systemName: "chevron.right")
           .font(.system(size: 10, weight: .semibold))
           .foregroundStyle(.secondary)
@@ -835,8 +864,8 @@ private struct FileColumnDetails: View {
   }
 }
 
-/// That what's in a column's folder is being listed, once it's taken long enough to say so, so a
-/// folder that lists quickly doesn't flash it.
+/// That what's at the top is being listed, once it's taken long enough to say so, so it doesn't
+/// flash when it lists quickly.
 private struct FileColumnSpinner: View {
   @State private var shown = false
 

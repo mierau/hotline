@@ -60,6 +60,12 @@ import UniformTypeIdentifiers
   var isListing: Bool {
     self.listings > 0
   }
+
+  /// How much is in this folder: as its own listing has it, once it's been listed, which is as up to
+  /// date as what's shown in it, or else as the folder it's in has it.
+  var folderCount: Int {
+    self.loaded ? self.children?.count ?? 0 : Int(self.fileSize)
+  }
   
   /// Its extension, or for a file without one, the one its type code goes with.
   private var fileExtension: String {
