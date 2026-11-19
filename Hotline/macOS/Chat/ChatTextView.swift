@@ -477,7 +477,7 @@ struct ChatTextView: NSViewRepresentable {
         return self.renderLeftMessage(msg)
       case .renamed:
         return self.renderRenamedMessage(msg)
-      case .boardPost, .subject:
+      case .boardPost, .subject, .notice:
         return self.renderEmoteMessage(msg)
       case .signOut:
         return self.renderSignOutMessage(msg)

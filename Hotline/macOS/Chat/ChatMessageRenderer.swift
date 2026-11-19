@@ -136,6 +136,8 @@ enum ChatMessageRenderer {
       }
     case .subject:
       text = self.presence(message, marker: .symbol("quote.closing"), options: options)
+    case .notice:
+      text = self.presence(message, marker: .symbol(message.symbol ?? "info.circle"), options: options)
     case .signOut:
       text = self.divider(message, options: options)
     case .server:

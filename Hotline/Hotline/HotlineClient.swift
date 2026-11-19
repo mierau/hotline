@@ -1005,12 +1005,17 @@ public actor HotlineClient {
   /// - Parameters:
   ///   - userID: Target user ID
   ///   - options: If specified, temporarily or permanently ban the user
-  public func disconnectUser(userID: UInt16, options: HotlineUserDisconnectOptions? = nil) async throws {
+  ///   - name: Who they are, sent with a permanent ban, as the original client did, for the original
+  ///     server to keep with it in its list of bans
+  public func disconnectUser(userID: UInt16, options: HotlineUserDisconnectOptions? = nil, name: String? = nil) async throws {
     var transaction = HotlineTransaction(id: self.generateTransactionID(), type: .disconnectUser)
-    
+
     transaction.setFieldUInt16(type: .userID, val: userID)
     if let options {
       transaction.setFieldUInt16(type: .options, val: options.rawValue)
+      if options == .permanentlyBan, let name, !name.isEmpty {
+        transaction.setFieldString(type: .data, val: name)
+      }
     }
     
     try await self.sendTransaction(transaction)

@@ -661,6 +661,10 @@ struct ServerView: View {
       Button("Disconnect User", systemImage: "nosign", role: .destructive) {
         self.state.disconnectUserTarget = user
       }
+
+      Button("Ban User...", systemImage: "hand.raised", role: .destructive) {
+        self.state.banUserTarget = user
+      }
     }
   }
 
@@ -915,23 +919,7 @@ struct ServerView: View {
         self.state.selection = .chat
       }
     }
-    .alert(
-      "Are you sure you want to disconnect \(self.state.disconnectUserTarget?.name ?? "this user")?",
-      isPresented: Binding(
-        get: { self.state.disconnectUserTarget != nil },
-        set: { if !$0 { self.state.disconnectUserTarget = nil } }
-      )
-    ) {
-      Button("Disconnect", role: .destructive) {
-        if let user = self.state.disconnectUserTarget {
-          Task {
-            try? await self.model.disconnectUser(id: user.id, options: nil)
-          }
-        }
-      }
-    } message: {
-      Text("They will be disconnected from the server, but may reconnect.")
-    }
+    .modifier(UserModerationAlerts(state: self.state))
   }
 
   /// The server to connect to, from the form: its address, and a login and password typed with
@@ -1578,5 +1566,61 @@ struct EncryptionProblemAlerts: ViewModifier {
           }
           .dialogSeverity(.critical)
       }
+  }
+}
+
+/// Asking before someone's disconnected or banned, from the user list, the chat, or a command:
+/// banned for 30 minutes, as servers have it, or for good, which only the server's admin can undo,
+/// with what that means for anyone else at their address, as servers ban addresses, not accounts.
+struct UserModerationAlerts: ViewModifier {
+  let state: ServerState
+
+  @Environment(HotlineState.self) private var model
+
+  func body(content: Content) -> some View {
+    content
+      .alert(
+        "Are you sure you want to disconnect \(self.state.disconnectUserTarget?.name ?? "this user")?",
+        isPresented: Binding(
+          get: { self.state.disconnectUserTarget != nil },
+          set: { if !$0 { self.state.disconnectUserTarget = nil } }
+        )
+      ) {
+        Button("Disconnect", role: .destructive) {
+          if let user = self.state.disconnectUserTarget {
+            Task {
+              try? await self.model.disconnectUser(id: user.id, options: nil)
+            }
+          }
+        }
+      } message: {
+        Text("They will be disconnected from the server, but may reconnect.")
+      }
+      .alert(
+        "Are you sure you want to ban \(self.state.banUserTarget?.name ?? "this user")?",
+        isPresented: Binding(
+          get: { self.state.banUserTarget != nil },
+          set: { if !$0 { self.state.banUserTarget = nil } }
+        )
+      ) {
+        Button("Ban for 30 Minutes", role: .destructive) {
+          self.ban(.temporarilyBan)
+        }
+        Button("Ban Permanently", role: .destructive) {
+          self.ban(.permanentlyBan)
+        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("They’ll be disconnected, and no one at their address can connect until the ban ends. Only the server’s admin can lift a permanent ban.")
+      }
+  }
+
+  private func ban(_ options: HotlineUserDisconnectOptions) {
+    guard let user = self.state.banUserTarget else {
+      return
+    }
+    Task {
+      try? await self.model.disconnectUser(id: user.id, options: options, name: user.name)
+    }
   }
 }

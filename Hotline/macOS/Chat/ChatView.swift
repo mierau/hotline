@@ -31,6 +31,8 @@ struct ChatView: View {
   @State private var linkIndex = ChatLinkIndex()
   /// What the Format menu works through while you're typing.
   @State private var markdownEditor = MarkdownEditor()
+  /// The commands that fit what's typed, or who one's for, above the field while one's typed.
+  @State private var commandList = ChatCommandList()
 
   /// The private chat this is, while you're in it.
   private var privateChat: PrivateChat? {
@@ -165,6 +167,13 @@ struct ChatView: View {
         }
       }
       .animation(.easeOut(duration: 0.2), value: self.model.newWhileReadingBack > 0)
+      // Over the chat, just above the field, with its rows' text where what's typed starts.
+      .overlay(alignment: .bottomLeading) {
+        ChatCommandListView(list: self.commandList)
+          .padding(.leading, self.commandListInset)
+          .padding(.trailing, 12)
+          .padding(.bottom, 6)
+      }
       .onChange(of: self.messages.count) {
         if !self.searchQuery.isEmpty {
           if self.searchesSaved {
@@ -275,8 +284,13 @@ struct ChatView: View {
       iconID: Prefs.shared.showChatIcons ? self.model.ownIconID : nil,
       namesToComplete: { self.namesToComplete() },
       markdownEditor: self.markdownEditor,
-      onSubmit: { announce in
-        let message = input.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+      commands: self.commandList,
+      commandContext: { self.commandContext() },
+      onCommand: { request in
+        self.perform(request)
+      },
+      onSubmit: { message, announce in
+        let message = message.trimmingCharacters(in: .whitespacesAndNewlines)
         if !message.isEmpty {
           Task {
             if let chatID = self.chatID {
@@ -328,6 +342,163 @@ struct ChatView: View {
     }
     let rest = here.subtracting(names).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     return names + rest
+  }
+
+  // MARK: Commands
+
+  /// What commands typed here can do, and who for.
+  private func commandContext() -> ChatCommandContext {
+    var context = ChatCommandContext()
+    context.privateChatID = self.chatID
+    context.members = Set(self.privateChat?.users.map(\.id) ?? [])
+    context.access = self.model.access ?? []
+    context.people = self.peopleBySpeaking()
+    context.ownUserID = self.model.ownUserID
+    context.automaticResponseOn = self.model.automaticResponseOn
+    context.automaticResponse = self.model.automaticResponse
+    return context
+  }
+
+  /// Everyone on the server, the ones who spoke here last first, then the rest by name, as Tab
+  /// completes their names.
+  private func peopleBySpeaking() -> [User] {
+    let users = self.model.users
+    var unheard = Set(users.map(\.name))
+    var order: [String: Int] = [:]
+    for message in self.messages.reversed() {
+      // Done once everyone's been heard from, rather than go on through all of the chat.
+      if unheard.isEmpty {
+        break
+      }
+      if let name = message.username, unheard.remove(name) != nil {
+        order[name] = order.count
+      }
+    }
+    return users.sorted { a, b in
+      switch (order[a.name], order[b.name]) {
+      case (let first?, let second?):
+        return first < second
+      case (.some, nil):
+        return true
+      case (nil, .some):
+        return false
+      case (nil, nil):
+        return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+      }
+    }
+  }
+
+  /// Where the list of commands starts, so its rows' text lines up with what's typed in the field.
+  private var commandListInset: CGFloat {
+    let textStart = ChatTranscriptTextView.lineStart + (Prefs.shared.showChatIcons ? ChatMessageRenderer.textIndent : 0)
+    return max(8, textStart - 12)
+  }
+
+  /// Does what a command typed here asks, as the menus do it, with a line here only you see for what
+  /// you'd otherwise not see happen, like a private message going out.
+  private func perform(_ request: ChatCommandRequest) {
+    let chatID = self.chatID
+    switch request {
+    case .emote(let action):
+      Task {
+        if let chatID {
+          try? await self.model.sendPrivateChat(action, chatID: chatID, announce: true)
+        }
+        else {
+          try? await self.model.sendChat(action, announce: true)
+        }
+      }
+
+    case .privateMessage(let user, let message):
+      // In your messages with them too, as from Send Message, where it says if it doesn't get there.
+      do {
+        try self.model.sendInstantMessage(message, userID: user.id)
+        self.model.recordNotice("To \(user.name): \(message)", symbol: "paperplane", in: chatID)
+      }
+      catch {
+        self.model.recordNotice("Couldn’t send your message to \(user.name).", symbol: "exclamationmark.triangle", in: chatID)
+      }
+
+    case .away(let reply):
+      self.model.setOptions(automaticResponseOn: true, automaticResponse: reply)
+      self.model.recordNotice("Auto-reply is on: \(reply)", symbol: "moon.zzz", in: chatID)
+
+    case .back:
+      self.model.setOptions(automaticResponseOn: false)
+      self.model.recordNotice("Auto-reply is off.", symbol: "sun.max", in: chatID)
+
+    case .rename(let name):
+      // In Settings, for every server, as there, and shown in the chat once the server says so.
+      Prefs.shared.username = name
+
+    case .icon(let iconID):
+      Prefs.shared.userIconID = iconID
+
+    case .invite(let people, let subject):
+      let names = ListFormatter.localizedString(byJoining: people.map(\.name))
+      Task {
+        do {
+          if let chatID {
+            try await self.model.inviteToPrivateChat(chatID, userIDs: people.map(\.id))
+            self.model.recordNotice("Invited \(names).", symbol: "person.badge.plus", in: chatID)
+          }
+          else {
+            // A new one, with them, which you're in at once, as from the user list, or with no one,
+            // to invite people to from there.
+            let newChat = try await self.model.startPrivateChat(with: people.map(\.id), subject: subject)
+            self.serverState.selection = .privateChat(chatID: newChat)
+          }
+        }
+        catch {
+          let line = chatID != nil ? "Couldn’t invite \(names)." : people.isEmpty ? "Couldn’t start a private chat." : "Couldn’t start a private chat with \(names)."
+          self.model.recordNotice(line, symbol: "exclamationmark.triangle", in: chatID)
+        }
+      }
+
+    case .chooseWhoToInvite:
+      if let chatID {
+        self.serverState.privateChatInvite = PrivateChatInvite(chatID: chatID)
+      }
+
+    case .topic(let subject):
+      // Shown here once the server says it's changed, as it tells everyone in the chat.
+      if let chatID {
+        Task {
+          try? await self.model.setPrivateChatSubject(subject, chatID: chatID)
+        }
+      }
+
+    case .leave:
+      if let chatID {
+        Task {
+          await self.model.leavePrivateChat(chatID)
+        }
+      }
+
+    case .info(let user):
+      Task {
+        if let info = try? await self.model.getClientInfoText(id: user.id) {
+          self.serverState.userInfo = info
+        }
+        else {
+          self.model.recordNotice("Couldn’t get \(user.name)’s info.", symbol: "exclamationmark.triangle", in: chatID)
+        }
+      }
+
+    case .broadcast(let message):
+      // Shown in the chat once the server sends it back, as it does to everyone.
+      Task {
+        try? await self.model.sendBroadcast(message)
+      }
+
+    case .kick(let user):
+      // Asked about first, as from the user list.
+      self.serverState.disconnectUserTarget = user
+
+    case .ban(let user):
+      // Asked about first, and for how long, as from the user list.
+      self.serverState.banUserTarget = user
+    }
   }
 
   /// Opens a link from the chat: hotline:// links go to that part of this server, or connect to
@@ -421,6 +592,9 @@ struct ChatView: View {
       menu.addItem(.separator())
       menu.addItem(ChatMenuItem("Disconnect User", systemImage: "nosign") {
         self.serverState.disconnectUserTarget = user
+      })
+      menu.addItem(ChatMenuItem("Ban User...", systemImage: "hand.raised") {
+        self.serverState.banUserTarget = user
       })
     }
     return menu

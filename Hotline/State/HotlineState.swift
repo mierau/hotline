@@ -275,7 +275,7 @@ class HotlineState: Equatable {
   }
   #endif
 
-  static let classicIconSet: [Int] = [
+  nonisolated static let classicIconSet: [Int] = [
     141, 149, 150, 151, 172, 184, 204,
     2013, 2036, 2037, 2055, 2400, 2505, 2534,
     2578, 2592, 4004, 4015, 4022, 4104, 4131,

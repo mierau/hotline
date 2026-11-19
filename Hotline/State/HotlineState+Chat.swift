@@ -455,6 +455,21 @@ extension HotlineState {
     }
   }
 
+  /// A line only you see, in the public chat, or a private one, about what a command you typed there
+  /// did that you'd otherwise not see happen, like a private message going out. It isn't kept with
+  /// what's said.
+  func recordNotice(_ text: String, symbol: String, in chatID: UInt32?) {
+    var line = ChatMessage(text: text, type: .notice, date: Date())
+    line.symbol = symbol
+    guard let chatID else {
+      self.recordChatMessage(line, persist: false)
+      return
+    }
+    if let i = self.privateChats.firstIndex(where: { $0.id == chatID }) {
+      self.privateChats[i].messages.append(line)
+    }
+  }
+
   /// The chat without its oldest lines, once it has more than `limit` of either kind: messages, or
   /// lines about people connecting and disconnecting, which are counted apart, so lots of them
   /// don't push out what's said, and lots said doesn't push them out. Whichever's over goes down

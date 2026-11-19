@@ -73,6 +73,8 @@
 		DA432F0730A8DD7E000179F6 /* FilesColumnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432F0630A8DD7E000179F6 /* FilesColumnView.swift */; };
 		DA432F2830AB8E09000179F6 /* NewsReadArticles.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA432F2730AB8E09000179F6 /* NewsReadArticles.swift */; };
 		DA43307330ABE683000179F6 /* AnimatedBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43307230ABE683000179F6 /* AnimatedBanner.swift */; };
+		DA4330D130AF72D4000179F6 /* ChatCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4330D030AF72D4000179F6 /* ChatCommands.swift */; };
+		DA4330D330AF7399000179F6 /* ChatCommandList.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4330D230AF7399000179F6 /* ChatCommandList.swift */; };
 		DA4B8F3A2EA6FB3C00CBFD53 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */; platformFilter = ios; };
 		DA4F2BF82B16A17200D8ADDC /* HotlineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */; };
 		DA4F2C012B1A558E00D8ADDC /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4F2C002B1A558E00D8ADDC /* ChatView.swift */; platformFilter = ios; };
@@ -265,6 +267,8 @@
 		DA432F0630A8DD7E000179F6 /* FilesColumnView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesColumnView.swift; sourceTree = "<group>"; };
 		DA432F2730AB8E09000179F6 /* NewsReadArticles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsReadArticles.swift; sourceTree = "<group>"; };
 		DA43307230ABE683000179F6 /* AnimatedBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedBanner.swift; sourceTree = "<group>"; };
+		DA4330D030AF72D4000179F6 /* ChatCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCommands.swift; sourceTree = "<group>"; };
+		DA4330D230AF7399000179F6 /* ChatCommandList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCommandList.swift; sourceTree = "<group>"; };
 		DA4B8F392EA6FB3C00CBFD53 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
 		DA4F2BF72B16A17200D8ADDC /* HotlineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotlineProtocol.swift; sourceTree = "<group>"; };
 		DA4F2C002B1A558E00D8ADDC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -467,6 +471,7 @@
 				DAA15B182F50C9AE00FAC1B2 /* HotlineState+News.swift */,
 				DAA15B1A2F50C9D700FAC1B2 /* HotlineState+Files.swift */,
 				DA432F2730AB8E09000179F6 /* NewsReadArticles.swift */,
+				DA4330D030AF72D4000179F6 /* ChatCommands.swift */,
 			);
 			path = State;
 			sourceTree = "<group>";
@@ -592,6 +597,7 @@
 				DA6C80FC103C893CFAC21C74 /* PrivateChatInviteSheet.swift */,
 				DA6549992BEC280E00EDB697 /* ServerMessageView.swift */,
 				DA65499B2BEC3FBD00EDB697 /* ServerAgreementView.swift */,
+				DA4330D230AF7399000179F6 /* ChatCommandList.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -1053,6 +1059,7 @@
 				DA432D4730A14F54000179F6 /* HelpMenuCommands.swift in Sources */,
 				DA501BE72EBE9542001714F8 /* TrackerBookmarkSheet.swift in Sources */,
 				DAB4D87E2B4C8BCA0048A05C /* FilePreviewTextView.swift in Sources */,
+				DA4330D130AF72D4000179F6 /* ChatCommands.swift in Sources */,
 				DA5A6F122F454D4600060F18 /* ChatTextView.swift in Sources */,
 				8D3E4565628F763A7277DA53 /* ChatTranscriptView.swift in Sources */,
 				3EA91235C2B1662A012BD27C /* ChatTranscriptTextView.swift in Sources */,
@@ -1062,6 +1069,7 @@
 				150AFBF8EF104EE99BCB084A /* ChatSearch.swift in Sources */,
 				0080D3056237065F81E4BDF8 /* ImagePreview.swift in Sources */,
 				DA22F51F2F56477400E2EA02 /* OnboardingView.swift in Sources */,
+				DA4330D330AF7399000179F6 /* ChatCommandList.swift in Sources */,
 				DA3429B72EBAB1750010784E /* QuickLookPreviewView.swift in Sources */,
 				DABAFBEC2EC599700015E889 /* BroadcastMessageSheet.swift in Sources */,
 				DA432E9A30A4E52D000179F6 /* ServerTrust.swift in Sources */,

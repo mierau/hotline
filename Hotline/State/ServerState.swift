@@ -33,6 +33,8 @@ class ServerState: Equatable {
   var userInfo: HotlineUserClientInfo? = nil
   /// Someone to disconnect from the server, once that's confirmed.
   var disconnectUserTarget: User? = nil
+  /// Someone to ban from the server, once it's confirmed, and for how long.
+  var banUserTarget: User? = nil
   /// People to ask into a private chat, as they're being chosen.
   var privateChatInvite: PrivateChatInvite? = nil
   /// The private chat whose subject is being changed.

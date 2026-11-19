@@ -90,13 +90,15 @@ extension HotlineState {
     return nil
   }
 
-  func disconnectUser(id userID: UInt16, options: HotlineUserDisconnectOptions?) async throws {
+  /// Disconnects someone, and bans them, for a while or for good, when that's asked, with their name,
+  /// for the server's list of bans.
+  func disconnectUser(id userID: UInt16, options: HotlineUserDisconnectOptions?, name: String? = nil) async throws {
     guard let client = self.client else {
       throw HotlineClientError.notConnected
     }
 
     do {
-      try await client.disconnectUser(userID: userID, options: options)
+      try await client.disconnectUser(userID: userID, options: options, name: name)
     }
     catch let error as HotlineClientError {
       self.displayError(error, message: error.userMessage)

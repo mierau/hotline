@@ -63,8 +63,10 @@ extension HotlineState {
     }
 
     // Started with the first, and the rest invited to it, as some servers, like Mobius, invite only
-    // the first of the people it's started with.
-    let chatID = try await client.inviteToNewChat(userIDs: Array(userIDs.prefix(1)))
+    // the first of the people it's started with. With no one, it's started with you, as Mobius
+    // won't start one with no one, and sends you an invitation to it, which isn't kept.
+    let first = userIDs.first ?? self.ownUserID
+    let chatID = try await client.inviteToNewChat(userIDs: first.map { [$0] } ?? [])
     if self.privateChat(chatID) == nil {
       self.privateChats.append(PrivateChat(id: chatID, users: self.ownUser.map { [$0] } ?? []))
       self.recordPresence("started the chat", in: self.privateChats.count - 1)
@@ -181,6 +183,10 @@ extension HotlineState {
   // MARK: Events
 
   func handleChatInvitation(chatID: UInt32, userID: UInt16, name: String, subject: String = "") {
+    // From you, to one you started with only you in it, which Mobius sends, and you're in already.
+    guard userID != self.ownUserID else {
+      return
+    }
     // Turned down for you if you'd rather not be asked. Servers from 1.5.1 on do it themselves, and
     // older ones leave it to the client with an automatic response on, too.
     if self.refusePrivateChat || (self.serverVersion < 151 && self.automaticResponseOn) {

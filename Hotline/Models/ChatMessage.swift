@@ -13,6 +13,9 @@ enum ChatMessageType {
   case message
   case server
   case signOut
+  /// A line only you see, about what a command you typed did, like a private message you sent from
+  /// the chat. It isn't kept with what's said.
+  case notice
 }
 
 extension ChatMessageType {
@@ -36,6 +39,8 @@ extension ChatMessageType {
       return "server"
     case .signOut:
       return "signOut"
+    case .notice:
+      return "notice"
     }
   }
 
@@ -76,6 +81,8 @@ struct ChatMessage: Identifiable {
   var iconID: UInt?
   var isAdmin: Bool
   var metadata: ChatStore.EntryMetadata?
+  /// The SF Symbol a line only you see starts with, for what it's about.
+  var symbol: String? = nil
   /// The sender's name and the text, for searching. An NSString, since searching a Swift string
   /// converts it to one each time, which made that most of the work of searching a long chat.
   let searchText: NSString
