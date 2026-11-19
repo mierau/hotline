@@ -8,8 +8,25 @@ import Foundation
 struct PresenceRuleTests {
   /// Its answer, `activity` seconds since the server last heard from you, and `input` since you
   /// last used the Mac.
-  private func ask(_ rule: inout PresenceRule, activity: Int, input: Int, locked: Bool = false, idle: Bool = false) -> Bool {
-    rule.saysHere(sinceActivity: .seconds(activity), sinceInput: .seconds(input), isLocked: locked, isIdle: idle)
+  private func ask(_ rule: inout PresenceRule, activity: Int, input: Int, locked: Bool = false, idle: Bool = false, away: Bool = false) -> Bool {
+    rule.saysHere(sinceActivity: .seconds(activity), sinceInput: .seconds(input), isLocked: locked, isIdle: idle, isAway: away)
+  }
+
+  @Test func notWhileYoureAway() {
+    var rule = PresenceRule()
+    // At the Mac, a while since the server heard from you, but auto-reply's on.
+    let away = self.ask(&rule, activity: 200, input: 5, away: true)
+    #expect(!away)
+    // Idle there, sooner than Mobius would have it, as you said, while you're at the Mac.
+    let idle = self.ask(&rule, activity: 120, input: 2, idle: true, away: true)
+    #expect(!idle)
+    // Which isn't a quicker server.
+    #expect(rule.interval == PresenceRule.usualInterval)
+    // Back, which the server's just heard, and then as usual.
+    let back = self.ask(&rule, activity: 5, input: 1)
+    let later = self.ask(&rule, activity: 180, input: 3)
+    #expect(!back)
+    #expect(later)
   }
 
   @Test func notWhileTheServerIsHearingFromYou() {

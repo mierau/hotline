@@ -41,7 +41,8 @@ extension HotlineState {
   /// original server, 5 on Mobius, which doesn't count keep-alives. So while you're using your Mac
   /// and Hotline hasn't said anything to the server lately, it asks for the user list, which every
   /// server counts as you doing something there. Once you've stepped away it stops, and the server
-  /// says you're idle in its own time, as there's no way to say so yourself.
+  /// says you're idle in its own time, as there's no way to say so yourself. So it does while
+  /// auto-reply's on, which says you're away, even while you're at your Mac.
   func startPresence() {
     self.presenceTask?.cancel()
     self.presenceTask = Task { @MainActor [weak self] in
@@ -55,19 +56,22 @@ extension HotlineState {
 
         let sinceActivity = await client.timeSinceActivity
         let isIdle = self.ownUser?.isIdle ?? false
+        let isAway = self.automaticResponseOn
         let saysHere = rule.saysHere(
           sinceActivity: sinceActivity,
           sinceInput: MacPresence.timeSinceInput,
           isLocked: MacPresence.isLocked,
-          isIdle: isIdle
+          isIdle: isIdle,
+          isAway: isAway
         )
         if saysHere {
           print("HotlineState: Telling the server you're here, \(sinceActivity.formatted(.units(allowed: [.minutes, .seconds], width: .narrow))) since it last heard from you")
           try? await self.getUserList()
         }
 
-        // Sooner while the server has you as idle, for you to be back as soon as you are.
-        wait = isIdle ? PresenceRule.checkEveryWhileIdle : PresenceRule.checkEvery
+        // Sooner while the server has you as idle, for you to be back as soon as you are, unless
+        // you're away, when it's up to you.
+        wait = isIdle && !isAway ? PresenceRule.checkEveryWhileIdle : PresenceRule.checkEvery
       }
     }
   }
@@ -1122,15 +1126,17 @@ struct PresenceRule {
   ///   - sinceInput: How long since the Mac was last used.
   ///   - isLocked: Whether its screen is locked.
   ///   - isIdle: Whether the server has you as idle.
-  mutating func saysHere(sinceActivity: Duration, sinceInput: Duration, isLocked: Bool, isIdle: Bool) -> Bool {
+  ///   - isAway: Whether you've said you're away, with auto-reply.
+  mutating func saysHere(sinceActivity: Duration, sinceInput: Duration, isLocked: Bool, isIdle: Bool, isAway: Bool) -> Bool {
     let wentIdle = isIdle && !self.wasIdle
     self.wasIdle = isIdle
     if !isIdle {
       self.answeredIdle = false
     }
 
-    // Not once you've stepped away, or haven't used the Mac since the server last heard from you.
-    guard !isLocked, sinceInput < sinceActivity else {
+    // Not while you're away, for the server to say so, or once you've stepped away, or haven't used
+    // the Mac since the server last heard from you.
+    guard !isAway, !isLocked, sinceInput < sinceActivity else {
       return false
     }
 
