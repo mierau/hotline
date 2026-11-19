@@ -56,8 +56,10 @@ extension Markdown {
       storage.replaceCharacters(in: NSRange(location: bullet, length: 1), with: "•")
     }
     // Where each image's line ends, once what's hidden is gone.
-    let images = shown.images.map { image in
-      (lineEnd: image.lineEnd - shown.hidden.count(in: 0..<image.lineEnd), url: image.url, isImage: image.isImage)
+    var images = shown.images.map { image in
+      var image = image
+      image.lineEnd -= shown.hidden.count(in: 0..<image.lineEnd)
+      return image
     }
     // From the end, so what's before each one stays put.
     for range in shown.hidden.rangeView.reversed() {
@@ -65,7 +67,10 @@ extension Markdown {
     }
     let trimmed = self.trimEdges(of: storage)
     if layout.imagePreviews > 0 {
-      self.addPreviews(of: images.map { ($0.lineEnd - trimmed, $0.url, $0.isImage) }, to: storage, layout: layout)
+      for index in images.indices {
+        images[index].lineEnd -= trimmed
+      }
+      self.addPreviews(of: images, to: storage, layout: layout)
     }
     self.shortenLongLinks(in: storage)
     self.showFileLinks(in: storage)
@@ -120,12 +125,13 @@ extension Markdown {
   /// A small preview, each on a line of its own, under the line with the link to the image, or in
   /// its place, for one written as an image with nothing else on its line, up to as many as the
   /// layout has room for, and each image once.
-  private static func addPreviews(of images: [(lineEnd: Int, url: URL, isImage: Bool)], to storage: NSMutableAttributedString, layout: Layout) {
+  private static func addPreviews(of images: [Shown.Image], to storage: NSMutableAttributedString, layout: Layout) {
     var seen: Set<URL> = []
     var lines: [Int: [ImageAttachment]] = [:]
     for image in images where seen.count < layout.imagePreviews && !seen.contains(image.url) {
       seen.insert(image.url)
-      lines[min(max(0, image.lineEnd), storage.length), default: []].append(ImageAttachment(url: image.url, standsForLink: image.isImage, sources: layout.imageSources))
+      let attachment = ImageAttachment(url: image.url, standsForLink: image.standsForLink, link: image.link, linkText: image.linkText, sources: layout.imageSources)
+      lines[min(max(0, image.lineEnd), storage.length), default: []].append(attachment)
     }
     // From the end, so what's before each line stays put.
     for (at, attachments) in lines.sorted(by: { $0.key > $1.key }) {
@@ -323,8 +329,9 @@ extension Markdown {
         }
         return
       }
+      // A preview in its link's place, as the link it stands for.
       if let image = attributes[.attachment] as? ImageAttachment {
-        plain += image.standsForLink ? image.url.absoluteString : ""
+        plain += image.standsForLink ? (image.link ?? image.url).absoluteString : ""
         return
       }
       plain += (text.string as NSString).substring(with: range)

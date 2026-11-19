@@ -4,6 +4,8 @@ import Testing
 import AppKit
 import CoreGraphics
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 @testable import Hotline
 
 struct ImagePreviewSizesTests {
@@ -164,6 +166,154 @@ struct ImagePreviewSizesTests {
       }
     }
     #expect(previews == [picture])
+  }
+
+  /// The picture shown for a link, by itself, as its address.
+  private func picture(_ link: String, in sources: ImagePreview.Sources = ImagePreview.Sources()) -> String? {
+    sources.picture(for: URL(string: link)!, isImage: false)?.absoluteString
+  }
+
+  @Test func giphysPagesAndCopiesShowTheGIF() {
+    // A GIF's page, by its name and ID, or its ID alone, a sticker's, and an embed.
+    #expect(self.picture("https://giphy.com/gifs/dancing-dance-party-clubbing-blSTtZehjAZ8I") == "https://i.giphy.com/blSTtZehjAZ8I.gif")
+    #expect(self.picture("https://giphy.com/gifs/WtDLxQWQWLtw3oIXTy/") == "https://i.giphy.com/WtDLxQWQWLtw3oIXTy.gif")
+    #expect(self.picture("https://www.giphy.com/stickers/happy-cat-AbC123xyz?utm_source=share") == "https://i.giphy.com/AbC123xyz.gif")
+    #expect(self.picture("https://giphy.com/embed/blSTtZehjAZ8I") == "https://i.giphy.com/blSTtZehjAZ8I.gif")
+    // WebP and MP4 copies, which a preview can't play, as the GIF.
+    #expect(self.picture("https://i.giphy.com/blSTtZehjAZ8I.webp") == "https://i.giphy.com/blSTtZehjAZ8I.gif")
+    #expect(self.picture("https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjEx/blSTtZehjAZ8I/giphy.mp4?cid=790b7611") == "https://i.giphy.com/blSTtZehjAZ8I.gif")
+    // A GIF as it is, and not its other pages, or a site only named the same.
+    #expect(self.picture("https://media.giphy.com/media/blSTtZehjAZ8I/giphy.gif") == "https://media.giphy.com/media/blSTtZehjAZ8I/giphy.gif")
+    #expect(self.picture("https://giphy.com/explore/cats") == nil)
+    #expect(self.picture("https://giphy.com.example/gifs/cat-blSTtZehjAZ8I") == nil)
+  }
+
+  @Test func tenorsPagesShowTheGIFTheySendOnTo() {
+    #expect(self.picture("https://tenor.com/view/40dollars-baby-boy-gif-10186449") == "https://tenor.com/view/40dollars-baby-boy-gif-10186449.gif")
+    #expect(self.picture("https://tenor.com/en-GB/view/40dollars-baby-boy-gif-10186449/") == "https://tenor.com/en-GB/view/40dollars-baby-boy-gif-10186449.gif")
+    #expect(self.picture("https://www.tenor.com/view/40dollars-baby-boy-gif-10186449") == "https://tenor.com/view/40dollars-baby-boy-gif-10186449.gif")
+    // With .gif after it already, and Tenor's own GIFs, as they are.
+    #expect(self.picture("https://tenor.com/view/40dollars-baby-boy-gif-10186449.gif") == "https://tenor.com/view/40dollars-baby-boy-gif-10186449.gif")
+    #expect(self.picture("https://media1.tenor.com/m/tYiKvSqO2xAAAAAC/40dollars-baby-boy.gif") == "https://media1.tenor.com/m/tYiKvSqO2xAAAAAC/40dollars-baby-boy.gif")
+    // Not its other pages.
+    #expect(self.picture("https://tenor.com/search/cats-gifs") == nil)
+    #expect(self.picture("https://tenor.com/view/cats") == nil)
+  }
+
+  @Test func imgursPagesAndVideosOfGIFsShowThePicture() {
+    #expect(self.picture("https://imgur.com/mYNXTPw") == "https://i.imgur.com/mYNXTPw.gif")
+    #expect(self.picture("https://i.imgur.com/mYNXTPw.gifv") == "https://i.imgur.com/mYNXTPw.gif")
+    #expect(self.picture("https://i.imgur.com/mYNXTPw.mp4") == "https://i.imgur.com/mYNXTPw.gif")
+    #expect(self.picture("https://i.imgur.com/mYNXTPw.jpg") == "https://i.imgur.com/mYNXTPw.jpg")
+    // Not an album or a gallery, or Imgur's own pages.
+    #expect(self.picture("https://imgur.com/a/mYNXTPw") == nil)
+    #expect(self.picture("https://imgur.com/gallery/mYNXTPw") == nil)
+    #expect(self.picture("https://imgur.com/upload") == nil)
+    // Imgur's picture for one that's gone isn't one.
+    #expect(ImagePreview.isGone(URL(string: "https://i.imgur.com/removed.png")))
+    #expect(!ImagePreview.isGone(URL(string: "https://i.imgur.com/mYNXTPw.gif")))
+  }
+
+  @Test func gifSitesPagesShowUnderTheLineTheyreOn() {
+    let shown = Markdown.shownText("lol https://giphy.com/gifs/dancing-dance-party-clubbing-blSTtZehjAZ8I", layout: .board)
+    var previews: [URL] = []
+    shown.enumerateAttribute(.attachment, in: NSRange(location: 0, length: shown.length)) { value, _, _ in
+      if let attachment = value as? ImageAttachment {
+        previews.append(attachment.url)
+      }
+    }
+    #expect(previews == [URL(string: "https://i.giphy.com/blSTtZehjAZ8I.gif")!])
+  }
+
+  @Test func giphysShortLinksLoadTheirGIFByWhereTheySendYou() {
+    // As they are, with no extension, as an animation, and found by where they send you on to.
+    #expect(self.picture("https://gph.is/g/4LxX5Yp") == "https://gph.is/g/4LxX5Yp")
+    #expect(self.picture("https://gph.is/145Id8I") == "https://gph.is/145Id8I")
+    #expect(ImagePreview.mayBeAnimated(URL(string: "https://gph.is/g/4LxX5Yp")!))
+    #expect(ImagePreview.picture(in: URL(string: "https://giphy.com/gifs/126bpm-dancingatclub-1NVtSIcr1PQnf7X2kG")!) == URL(string: "https://i.giphy.com/1NVtSIcr1PQnf7X2kG.gif"))
+    // Not without https, or Giphy's own page.
+    #expect(self.picture("http://gph.is/145Id8I") == nil)
+    #expect(self.picture("https://gph.is/") == nil)
+  }
+
+  /// A GIF of so many frames, each a gray, shown for a twentieth of a second.
+  private func gif(frames: Int, width: Int, height: Int) throws -> Data {
+    let data = NSMutableData()
+    let destination = try #require(CGImageDestinationCreateWithData(data, UTType.gif.identifier as CFString, frames, nil))
+    let context = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    let properties = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.05]] as CFDictionary
+    for index in 0..<frames {
+      context.setFillColor(CGColor(gray: CGFloat(index % 10) / 10, alpha: 1))
+      context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+      CGImageDestinationAddImage(destination, try #require(context.makeImage()), properties)
+    }
+    #expect(CGImageDestinationFinalize(destination))
+    return data as Data
+  }
+
+  @Test func animationsAreDecodedWholeWhereTheyFit() throws {
+    let bounds = CGSize(width: 120, height: 100)
+    // Few frames, whole, at two pixels a point.
+    let short = try #require(AnimationFrames(data: self.gif(frames: 100, width: 240, height: 200), fitting: bounds))
+    #expect(short.isWhole && short.frames(0..<1, in: nil).first?.width == 240)
+    #expect(short.durations.first == 0.05)
+    // More, whole, at a pixel a point, which they fit at.
+    let longer = try #require(AnimationFrames(data: self.gif(frames: 300, width: 240, height: 200), fitting: bounds))
+    #expect(longer.isWhole && longer.frames(0..<1, in: nil).first?.width == 120)
+    // Too many for either, in parts, at two.
+    let long = try #require(AnimationFrames(data: self.gif(frames: 800, width: 240, height: 200), fitting: bounds))
+    #expect(!long.isWhole && long.frames(0..<1, in: nil).first?.width == 240)
+    // A picture of one frame isn't an animation.
+    let still = try self.gif(frames: 1, width: 240, height: 200)
+    #expect(AnimationFrames(data: still, fitting: bounds) == nil)
+  }
+
+  @Test func whatMightBeAnAnimationIsKeptWhole() {
+    #expect(ImagePreview.mayBeAnimated(URL(string: "https://i.giphy.com/blSTtZehjAZ8I.gif")!))
+    #expect(ImagePreview.mayBeAnimated(URL(string: "https://media.discordapp.net/attachments/1/2/dance.webp?animated=true")!))
+    #expect(!ImagePreview.mayBeAnimated(URL(string: "https://i.imgur.com/cat.png")!))
+  }
+
+  // MARK: - Previews in Their Links' Places
+
+  /// What's shown of some text, as its words, with a preview as a mark, and its previews.
+  private func shown(_ text: String, layout: Markdown.Layout = .board) -> (words: String, previews: [ImageAttachment]) {
+    let shown = Markdown.shownText(text, layout: layout)
+    var previews: [ImageAttachment] = []
+    shown.enumerateAttribute(.attachment, in: NSRange(location: 0, length: shown.length)) { value, _, _ in
+      if let attachment = value as? ImageAttachment {
+        previews.append(attachment)
+      }
+    }
+    let words = shown.string.replacingOccurrences(of: "\u{FFFC}", with: "[preview]").replacingOccurrences(of: "\u{2028}", with: "\n")
+    return (words, previews)
+  }
+
+  @Test func anAddressWithAPreviewIsShownAsThePreview() throws {
+    let page = "https://giphy.com/gifs/dancing-dance-party-clubbing-blSTtZehjAZ8I"
+    // Alone, as the preview alone, and with words, under them, without the space before it.
+    #expect(self.shown(page).words == "[preview]")
+    #expect(self.shown("lol \(page)").words == "lol\n[preview]")
+    #expect(self.shown("look \(page) here").words == "look here\n[preview]")
+    // Standing for the link, as it was written, which it shows should its image not be had.
+    let preview = try #require(self.shown("lol \(page)").previews.first)
+    #expect(preview.standsForLink && preview.link == URL(string: page) && preview.url == URL(string: "https://i.giphy.com/blSTtZehjAZ8I.gif"))
+    #expect(preview.linkText?.string == page)
+    // Copied as the link.
+    #expect(Markdown.plainText(Markdown.shownText("lol \(page)", layout: .board)) == "lol\n\(page)")
+  }
+
+  @Test func anAddressWithoutAPreviewStaysAsItIs() {
+    // From where pictures don't load by themselves, or with previews off.
+    #expect(self.shown("look https://tracker.example/pixel.png").words == "look https://tracker.example/pixel.png")
+    var off = Markdown.Layout.board
+    off.imagePreviews = 0
+    #expect(self.shown("look https://i.imgur.com/cat.png", layout: off).words == "look https://i.imgur.com/cat.png")
+    // The same picture again, which has only the one preview, and past as many as there's room for.
+    #expect(self.shown("https://i.imgur.com/cat.png or https://i.imgur.com/cat.png").words == "or https://i.imgur.com/cat.png\n[preview]")
+    var one = Markdown.Layout.board
+    one.imagePreviews = 1
+    #expect(self.shown("https://i.imgur.com/cat.png https://i.imgur.com/dog.png", layout: one).words == "https://i.imgur.com/dog.png\n[preview]")
   }
 
   // MARK: - Pictures Among the Server's Files

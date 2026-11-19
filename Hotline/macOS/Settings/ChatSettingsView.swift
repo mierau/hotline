@@ -9,6 +9,8 @@ struct ChatSettingsView: View {
   @State private var showDeleteAllConfirmation: Bool = false
   /// How long to keep chat for, when that's less than now, to ask about first.
   @State private var shorterRetention: ChatHistoryRetention?
+  /// Whether the system's Animated Images setting, in Accessibility, lets GIFs play by themselves.
+  @Environment(\.accessibilityPlayAnimatedImages) private var systemPlaysAnimatedImages
 
   var body: some View {
     @Bindable var preferences = Prefs.shared
@@ -16,6 +18,12 @@ struct ChatSettingsView: View {
     Form {
       Toggle("Show connections in chat", isOn: $preferences.showJoinLeaveMessages)
       Toggle("Show user icons in chat", isOn: $preferences.showChatIcons)
+      // Off, and said why, while the system's Animated Images setting has them stop.
+      Toggle(isOn: self.systemPlaysAnimatedImages ? $preferences.playsGIFs : .constant(false)) {
+        Text("Play GIFs automatically")
+        Text(self.systemPlaysAnimatedImages ? "Otherwise, a GIF plays while the pointer is over it." : "Animated images are turned off in Accessibility settings. A GIF plays while the pointer is over it.")
+      }
+      .disabled(!self.systemPlaysAnimatedImages)
 
       Section("Highlighted Words") {
         HStack(spacing: 8) {

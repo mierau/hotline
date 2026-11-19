@@ -133,6 +133,7 @@ enum PrefsKeys: String {
   case useServerThemedColors = "use server themed colors"
   case showJoinLeaveMessages = "show join leave messages"
   case showChatIcons = "show chat icons"
+  case playsGIFs = "plays gifs"
   /// Previews on or off, as they were before there was a choice of sites, read only for
   /// `ImagePreviews.saved(in:)`.
   case previewChatImages = "preview chat images"
@@ -192,6 +193,7 @@ class Prefs {
       PrefsKeys.useServerThemedColors.rawValue: true,
       PrefsKeys.showJoinLeaveMessages.rawValue: true,
       PrefsKeys.showChatIcons.rawValue: true,
+      PrefsKeys.playsGIFs.rawValue: true,
       PrefsKeys.chatHistoryRetention.rawValue: ChatHistoryRetention.standard.rawValue,
       PrefsKeys.filesViewMode.rawValue: "grid",
       PrefsKeys.filesColumnWidth.rawValue: 230.0,
@@ -231,6 +233,7 @@ class Prefs {
     self.useServerThemedColors = UserDefaults.standard.bool(forKey: PrefsKeys.useServerThemedColors.rawValue)
     self.showJoinLeaveMessages = UserDefaults.standard.bool(forKey: PrefsKeys.showJoinLeaveMessages.rawValue)
     self.showChatIcons = UserDefaults.standard.bool(forKey: PrefsKeys.showChatIcons.rawValue)
+    self.playsGIFs = UserDefaults.standard.bool(forKey: PrefsKeys.playsGIFs.rawValue)
     self.imagePreviews = ImagePreviews.saved()
     self.hideOffensiveWords = UserDefaults.standard.object(forKey: PrefsKeys.hideOffensiveWords.rawValue) as? Bool
     self.chatHistoryRetention = ChatHistoryRetention.saved
@@ -402,6 +405,18 @@ class Prefs {
   var showChatIcons: Bool {
     didSet { UserDefaults.standard.set(self.showChatIcons, forKey: PrefsKeys.showChatIcons.rawValue) }
   }
+
+  /// Whether GIFs, and other animated pictures, play by themselves in previews, unless the system's
+  /// Animated Images setting is off, or only while the pointer's over them.
+  var playsGIFs: Bool {
+    didSet {
+      UserDefaults.standard.set(self.playsGIFs, forKey: PrefsKeys.playsGIFs.rawValue)
+      NotificationCenter.default.post(name: Prefs.playsGIFsDidChange, object: nil)
+    }
+  }
+
+  /// Posted as `playsGIFs` changes, for previews, which aren't SwiftUI's, to start or stop.
+  static let playsGIFsDidChange = Notification.Name("Hotline.playsGIFsDidChange")
 
   /// Which links to pictures show the picture by itself. See `ImagePreviews`.
   var imagePreviews: ImagePreviews {

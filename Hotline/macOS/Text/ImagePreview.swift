@@ -1,3 +1,4 @@
+import Accessibility
 import AppKit
 import AVFoundation
 import CoreImage
@@ -60,16 +61,186 @@ enum ImagePreview {
     }
   }
 
-  /// The picture in a link to a page that only shows one: Reddit's viewer's, whose links are to
-  /// reddit.com/media with the picture's own link after url=.
+  /// The picture in a link to a page that only shows one, or a GIF's, in a link to it in a form a
+  /// preview can't play:
+  /// - Reddit's viewer's, whose links are to reddit.com/media with the picture's own link after url=.
+  /// - Giphy's pages, its stickers' and its embeds', and its WebP and MP4 copies of its GIFs, whose
+  ///   GIF is at i.giphy.com by its ID. A preview can't play WebP, which AppKit has as a picture a
+  ///   frame, rather than as one that plays, as a GIF.
+  /// - Tenor's pages, which send you on to their GIF with .gif after them.
+  /// - Imgur's pages for a picture, but not an album's, and its videos of GIFs, whose picture is at
+  ///   i.imgur.com by its ID, as a GIF, which Imgur sends as whatever the picture is, still or not.
   static func picture(in url: URL) -> URL? {
-    guard let host = url.host(percentEncoded: false)?.lowercased(),
-          host == "reddit.com" || host.hasSuffix(".reddit.com"),
-          url.path(percentEncoded: false) == "/media",
-          let link = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "url" })?.value else {
+    guard let host = url.host(percentEncoded: false)?.lowercased() else {
       return nil
     }
-    return URL(string: link)
+    if host == "reddit.com" || host.hasSuffix(".reddit.com") {
+      guard url.path(percentEncoded: false) == "/media",
+            let link = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "url" })?.value else {
+        return nil
+      }
+      return URL(string: link)
+    }
+    let parts = url.pathComponents.filter { $0 != "/" }
+    if let id = self.giphyID(host: host, parts: parts) {
+      return URL(string: "https://i.giphy.com/\(id).gif")
+    }
+    if host == "tenor.com" || host == "www.tenor.com" {
+      return self.tenorGIF(url, parts: parts)
+    }
+    if let id = self.imgurID(host: host, parts: parts) {
+      return URL(string: "https://i.imgur.com/\(id).gif")
+    }
+    return nil
+  }
+
+  /// The ID of the GIF a Giphy link's for, when it isn't to the GIF: its page, giphy.com/gifs/ and
+  /// its name with the ID after it, or the ID alone, a sticker's page, the same, its embed, and its
+  /// WebP and MP4 copies, at i.giphy.com, or media.giphy.com/media/ and the ID, after v1. and more,
+  /// sometimes.
+  private static func giphyID(host: String, parts: [String]) -> String? {
+    let id: Substring?
+    switch host {
+    case "giphy.com", "www.giphy.com":
+      guard parts.count == 2 else {
+        return nil
+      }
+      switch parts[0] {
+      case "gifs", "stickers":
+        id = parts[1].split(separator: "-").last
+      case "embed":
+        id = Substring(parts[1])
+      default:
+        return nil
+      }
+    case "i.giphy.com":
+      guard parts.count == 1, self.isGiphyCopy(parts[0]) else {
+        return nil
+      }
+      id = Substring((parts[0] as NSString).deletingPathExtension)
+    case _ where host.hasSuffix(".giphy.com") && self.trustedHosts.contains(host):
+      guard parts.count >= 3, parts[0] == "media", let file = parts.last, self.isGiphyCopy(file) else {
+        return nil
+      }
+      id = Substring(parts[parts.count - 2])
+    default:
+      return nil
+    }
+    guard let id, (5...40).contains(id.count), id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else {
+      return nil
+    }
+    return String(id)
+  }
+
+  /// Whether a file of Giphy's is a copy of a GIF a preview can't play: WebP, or MP4.
+  private static func isGiphyCopy(_ file: String) -> Bool {
+    ["webp", "mp4"].contains((file as NSString).pathExtension.lowercased())
+  }
+
+  /// A Tenor page's GIF: the page's link, tenor.com/view/ and its name with its number after it, or
+  /// with a language before view, with .gif after it, which Tenor sends on to the GIF.
+  private static func tenorGIF(_ url: URL, parts: [String]) -> URL? {
+    guard let view = parts.firstIndex(of: "view"), view <= 1, parts.count == view + 2,
+          let number = parts[view + 1].split(separator: "-").last, number.allSatisfy({ $0.isASCII && $0.isNumber }) else {
+      return nil
+    }
+    var path = url.path(percentEncoded: true)
+    while path.hasSuffix("/") {
+      path.removeLast()
+    }
+    return URL(string: "https://tenor.com" + path + ".gif")
+  }
+
+  /// The ID of the picture an Imgur link's for, when it isn't to a picture: its page, imgur.com/ and
+  /// the ID, but not an album's or a gallery's, and its videos of GIFs, .gifv and .mp4.
+  private static func imgurID(host: String, parts: [String]) -> String? {
+    switch host {
+    case "imgur.com", "www.imgur.com", "m.imgur.com":
+      guard parts.count == 1, self.isImgurID(parts[0]) else {
+        return nil
+      }
+      return parts[0]
+    case "i.imgur.com":
+      guard parts.count == 1 else {
+        return nil
+      }
+      let file = parts[0] as NSString
+      guard ["gifv", "mp4"].contains(file.pathExtension.lowercased()), self.isImgurID(file.deletingPathExtension) else {
+        return nil
+      }
+      return file.deletingPathExtension
+    default:
+      return nil
+    }
+  }
+
+  /// Whether a word could be Imgur's ID for a picture: five to eight letters and digits, with a
+  /// digit or a capital among them, which words for Imgur's own pages, like upload, don't have.
+  private static func isImgurID(_ word: String) -> Bool {
+    (5...8).contains(word.count)
+      && word.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+      && word.contains { $0.isNumber || $0.isUppercase }
+  }
+
+  /// Whether animations play by themselves, as Settings has it, unless the system's Animated Images
+  /// setting has them stop, or else only while the pointer's over them.
+  @MainActor
+  static var playsByThemselves: Bool {
+    Prefs.shared.playsGIFs && AccessibilitySettings.animatedImagesEnabled
+  }
+
+  /// Whether a link's picture might be an animation: a GIF or a WebP, by its extension, or a short
+  /// link to a GIF.
+  static func mayBeAnimated(_ url: URL) -> Bool {
+    ["gif", "webp"].contains(url.pathExtension.lowercased()) || self.isShortLink(url)
+  }
+
+  /// Keeps a picture as it came, rather than as a picture made from it, which for an animated WebP
+  /// would be its first frame alone.
+  static let keepsData: DefaultCacheSerializer = {
+    var serializer = DefaultCacheSerializer()
+    serializer.preferCacheOriginalData = true
+    return serializer
+  }()
+
+  /// Whether a link's a short one to a GIF's page, Giphy's, gph.is, whose GIF can't be had from the
+  /// link itself, but from the page it sends you on to.
+  static func isShortLink(_ url: URL) -> Bool {
+    url.scheme?.lowercased() == "https" && url.host(percentEncoded: false)?.lowercased() == "gph.is" && url.pathComponents.count > 1
+  }
+
+  /// Where a link to a picture goes: for a short link, the picture of the page it sends you on to,
+  /// asked for without going there, or the link as it is.
+  static func resolved(_ url: URL) async -> URL {
+    guard self.isShortLink(url) else {
+      return url
+    }
+    var request = URLRequest(url: url, timeoutInterval: 10)
+    request.httpMethod = "HEAD"
+    let session = URLSession(configuration: .ephemeral, delegate: StayingPut(), delegateQueue: nil)
+    defer {
+      session.finishTasksAndInvalidate()
+    }
+    guard let (_, response) = try? await session.data(for: request),
+          let location = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Location"),
+          let page = URL(string: location, relativeTo: url)?.absoluteURL,
+          let picture = self.picture(in: page) else {
+      return url
+    }
+    return picture
+  }
+
+  /// Doesn't go where a response sends it, so where it would is in the response.
+  private final class StayingPut: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest) async -> URLRequest? {
+      nil
+    }
+  }
+
+  /// Whether a picture's gone, by what its host sends you on to in its place: Imgur's picture that
+  /// says so, which isn't shown, as a picture that isn't there.
+  static func isGone(_ url: URL?) -> Bool {
+    url?.host(percentEncoded: false)?.lowercased() == "i.imgur.com" && url?.path(percentEncoded: false) == "/removed.png"
   }
 
   /// Where pictures load from by themselves, rather than once their link's clicked. Loading one tells
@@ -123,6 +294,7 @@ enum ImagePreview {
         || ImagePreview.imageExtensions.contains(url.pathExtension.lowercased())
         || ImagePreview.thumbnailHosts.contains(url.host(percentEncoded: false)?.lowercased() ?? "")
         || ImagePreview.isGitHubAttachment(url)
+        || ImagePreview.isShortLink(url)
     }
 
     /// The picture shown for a link, loading by itself, if there's one: the link's own, or for a
@@ -152,6 +324,10 @@ enum ImagePreview {
     "i.imgur.com", "imgur.com",
     "i.giphy.com", "media.giphy.com", "media0.giphy.com", "media1.giphy.com", "media2.giphy.com", "media3.giphy.com", "media4.giphy.com",
     "media.tenor.com", "media1.tenor.com", "c.tenor.com",
+    // Tenor's own, whose pages' links, with .gif after them, send you on to the GIF, and Giphy's
+    // short links, which send you on to the GIF's page, and from there to the GIF
+    "tenor.com",
+    "gph.is",
     "i.gyazo.com",
     "image.prntscr.com",
     "i.postimg.cc",
@@ -274,6 +450,12 @@ extension ImagePreview {
        let model = sources.connection.flatMap({ AppState.shared.hotline(id: $0) }) {
       FileActions(model: model, openWindow: openWindow).previewFile(FileInfo(linkedName: name, path: path, isFolder: false))
     }
+    // A short link's picture, rather than the page it sends you on to.
+    else if self.isShortLink(url) {
+      Task {
+        openWindow(id: "preview-quicklook", value: PreviewFileInfo(webImage: await self.resolved(url)))
+      }
+    }
     else {
       openWindow(id: "preview-quicklook", value: PreviewFileInfo(webImage: url))
     }
@@ -312,9 +494,11 @@ private final class ImageDownloadCheck: ImageDownloaderDelegate {
   static let shared = ImageDownloadCheck()
 
   /// Not one that says it's too big. One that doesn't say is stopped once too much of it has come.
+  /// Nor what a host sends in place of a picture that's gone.
   func imageDownloader(_ downloader: ImageDownloader, didReceive response: URLResponse) async -> URLSession.ResponseDisposition {
     guard response.mimeType?.lowercased().hasPrefix("image/") == true,
-          response.expectedContentLength <= ImagePreview.sizeLimit else {
+          response.expectedContentLength <= ImagePreview.sizeLimit,
+          !ImagePreview.isGone(response.url) else {
       return .cancel
     }
     return .allow
@@ -521,12 +705,13 @@ protocol LinkActions: AnyObject {
 
 extension LinkActions {
   /// What can be done with a link to an image, for its preview's menu: open the image in a preview
-  /// window, or the link the way a click on it does, or copy it, as macOS's menu for a link has.
-  func linkMenuItems(for url: URL) -> [NSMenuItem] {
+  /// window, while there's one, or the link the way a click on it does, or copy it, as macOS's menu
+  /// for a link has.
+  func linkMenuItems(for url: URL, image: URL?) -> [NSMenuItem] {
     var items: [NSMenuItem] = []
-    if let openImage = self.openImageAction {
+    if let image, let openImage = self.openImageAction {
       items.append(ChatMenuItem("Open Image", systemImage: "photo") {
-        openImage(url)
+        openImage(image)
       })
     }
     let open = self.openURLAction
@@ -552,19 +737,27 @@ extension LinkActions {
 final class ImageAttachment: NSTextAttachment {
   let url: URL
   /// Whether it's all there is of its link, for an image written as one, ![like this](where it is),
-  /// rather than a preview under a link that's there too.
+  /// or an address shown as its preview alone, rather than a preview under a link that's there too.
   let standsForLink: Bool
+  /// The link it stands for, as it was written, which its menu opens and copies, and copying it
+  /// does, and how it looks, to show in its place if its image can't be had.
+  let link: URL?
+  let linkText: NSAttributedString?
   /// The image's size in pixels, once it's known, from loading it now or before.
   var imageSize: CGSize?
   /// Whether the preview takes up any room: from the start for an image that's loaded before, or
   /// else once its image starts to come in, so a link to one that can't be had shows nothing.
   var isShown: Bool
+  /// Whether it's showing the link it stands for, as its image can't be had.
+  var showsLink = false
   /// Where it loads from by itself, which a redirect has to be to as well.
   let sources: ImagePreview.Sources
 
-  init(url: URL, standsForLink: Bool = false, sources: ImagePreview.Sources = ImagePreview.Sources()) {
+  init(url: URL, standsForLink: Bool = false, link: URL? = nil, linkText: NSAttributedString? = nil, sources: ImagePreview.Sources = ImagePreview.Sources()) {
     self.url = url
     self.standsForLink = standsForLink
+    self.link = link
+    self.linkText = standsForLink ? linkText : nil
     self.sources = sources
     self.imageSize = ImagePreview.sizes.size(for: url)
     self.isShown = self.imageSize != nil && !ImagePreview.failures.contains(url)
@@ -603,8 +796,11 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     guard let attachment = self.textAttachment as? ImageAttachment else {
       return
     }
-    let view = ImagePreviewView(url: attachment.url, sources: attachment.sources)
+    let view = ImagePreviewView(url: attachment.url, link: attachment.link, sources: attachment.sources)
     view.showsPlaceholder = attachment.isShown
+    if attachment.showsLink, let linkText = attachment.linkText {
+      view.showLink(linkText)
+    }
     view.onStart = { [weak self] in
       self?.show()
     }
@@ -624,6 +820,14 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     proposedLineFragment: CGRect,
     position: CGPoint
   ) -> CGRect {
+    // The link it stands for, as a line of words, on the line, and no wider than it, with the room
+    // a label has around its words.
+    if let attachment = self.textAttachment as? ImageAttachment, attachment.showsLink, let linkText = attachment.linkText {
+      let size = linkText.size()
+      let font = linkText.length > 0 ? linkText.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil
+      let width = min(ceil(size.width) + 6, max(1, proposedLineFragment.width - position.x))
+      return CGRect(x: 0, y: font?.descender ?? -3, width: width, height: ceil(size.height))
+    }
     // A point, rather than nothing, which TextKit would take to mean the attachment's usual size.
     guard let attachment = self.textAttachment as? ImageAttachment, attachment.isShown else {
       return CGRect(x: 0, y: 0, width: 1, height: 1)
@@ -644,7 +848,8 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
   }
 
   /// Takes the preview away, for an image that can't be had: for a while if the server refused it,
-  /// until the app opens again if it couldn't be reached, or only for now.
+  /// until the app opens again if it couldn't be reached, or only for now. One in its link's place
+  /// shows the link instead.
   private func hide(for failure: ImagePreview.Failure) {
     guard let attachment = self.textAttachment as? ImageAttachment else {
       return
@@ -652,6 +857,13 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     if failure != .notNow {
       ImagePreview.failures.insert(attachment.url, refused: failure == .refused)
       ImagePreview.sizes.forget(attachment.url)
+    }
+    if let linkText = attachment.linkText, !attachment.showsLink {
+      attachment.showsLink = true
+      attachment.isShown = false
+      (self.view as? ImagePreviewView)?.showLink(linkText)
+      self.layOutAgain()
+      return
     }
     guard attachment.isShown else {
       return
@@ -701,6 +913,9 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
 /// preview window, dragging it takes the image along, and its menu has what a link's has.
 final class ImagePreviewView: NSView, NSDraggingSource {
   let url: URL
+  /// The link it stands for, as it was written, which its menu opens and copies, when it's in the
+  /// link's place.
+  let link: URL?
   /// Where it loads from by itself, which a redirect has to be to as well.
   let sources: ImagePreview.Sources
   /// Called once the image starts to come in.
@@ -724,8 +939,22 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   /// What's over the picture while it's covered: that it might be sensitive, and Show.
   private var coverLabel: NSView?
 
-  init(url: URL, sources: ImagePreview.Sources) {
+  /// The link it stands for, shown in its place, as its image can't be had.
+  private var linkLabel: NSTextField?
+
+  /// An animation's frames, over the image view, which shows its first frame until they're here,
+  /// played by Core Animation, rather than by the image view, which would draw each frame on the
+  /// main thread.
+  private let framesView = NSView()
+  private let framesLayer = CALayer()
+  private lazy var player = AnimationPlayer(layer: self.framesLayer, in: self)
+  private var animation: AnimationFrames?
+  /// Opens the animation, if the image is one, and plays it, once it can be seen.
+  private var animate: (() -> Void)?
+
+  init(url: URL, link: URL? = nil, sources: ImagePreview.Sources) {
     self.url = url
+    self.link = link
     self.sources = sources
     super.init(frame: .zero)
 
@@ -736,21 +965,65 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.setAccessibilityLabel("Image preview")
 
     self.imageView.imageScaling = .scaleProportionallyUpOrDown
-    self.imageView.animates = true
+    self.imageView.animates = false
     self.imageView.wantsLayer = true
     self.imageView.layer?.cornerRadius = 6
     self.imageView.layer?.masksToBounds = true
     self.imageView.frame = self.bounds
     self.addSubview(self.imageView)
+
+    self.framesView.wantsLayer = true
+    self.framesView.layer?.cornerRadius = 6
+    self.framesView.layer?.masksToBounds = true
+    self.framesLayer.actions = ["bounds": NSNull(), "position": NSNull(), "contents": NSNull()]
+    self.framesLayer.contentsGravity = .resize
+    self.framesView.layer?.addSublayer(self.framesLayer)
+    self.framesView.isHidden = true
+    self.addSubview(self.framesView)
+
+    // Played while the pointer's over it, when animations don't play by themselves, and started or
+    // stopped as Settings, or the system's Animated Images setting, changes.
+    self.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self, userInfo: nil))
+    NotificationCenter.default.addObserver(self, selector: #selector(self.playingDidChange), name: Prefs.playsGIFsDidChange, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(self.playingDidChange), name: AccessibilitySettings.animatedImagesEnabledDidChangeNotification, object: nil)
+  }
+
+  /// Whether the pointer's over it, which plays an animation that doesn't play by itself.
+  private var isPointedAt = false
+
+  override func mouseEntered(with event: NSEvent) {
+    self.isPointedAt = true
+    if !ImagePreview.playsByThemselves {
+      self.animate?()
+    }
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    self.isPointedAt = false
+    if !ImagePreview.playsByThemselves {
+      self.stopAnimating()
+    }
+  }
+
+  @objc private func playingDidChange() {
+    if ImagePreview.playsByThemselves || self.isPointedAt {
+      self.animate?()
+    }
+    else {
+      self.stopAnimating()
+    }
   }
 
   // A preview of an image we haven't seen before takes the image's size once it loads, but until
   // its size catches up, keep the image from stretching: fit it from the top left.
   override func layout() {
     super.layout()
-    // What says it might be sensitive covers the picture, wherever it is.
+    // What says it might be sensitive covers the picture, wherever it is, and an animation's frames
+    // are where its first is.
     defer {
       self.coverLabel?.frame = self.imageView.frame
+      self.framesView.frame = self.imageView.frame
+      self.framesLayer.frame = self.framesView.bounds
     }
     guard let size = self.imageView.image?.size, size.width > 0, size.height > 0 else {
       self.imageView.frame = self.bounds
@@ -771,12 +1044,117 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     if self.window != nil {
       self.load()
     }
+    else {
+      // Gone, as it scrolls away, and the pointer with it, which leaves one that plays only while
+      // pointed at still.
+      self.isPointedAt = false
+      if !ImagePreview.playsByThemselves {
+        self.stopAnimating()
+      }
+    }
+    // Played again once it's back, as leaving the window takes its animation away.
+    self.player.windowDidChange()
+  }
+
+  override func viewDidChangeBackingProperties() {
+    super.viewDidChangeBackingProperties()
+    // On a screen with other colors, an animation's frames are decoded again in them.
+    if self.player.needsDecodingAgain, let animation = self.animation {
+      self.play(animation)
+    }
+  }
+
+  /// Plays an animation's frames over the image view, which goes once the first is showing, as it
+  /// would show through where a frame's clear.
+  private func play(_ animation: AnimationFrames) {
+    self.player.onShow = { [weak self] in
+      self?.framesView.isHidden = false
+      self?.imageView.isHidden = true
+    }
+    self.player.play(animation)
+  }
+
+  /// Stops an animation, leaving the image view, and its first frame, or what's in its place, but
+  /// for the link it shows in place of an image it can't have, which it leaves as it is.
+  private func stopAnimating() {
+    self.player.stop()
+    self.framesView.isHidden = true
+    if self.linkLabel == nil {
+      self.imageView.isHidden = false
+    }
+  }
+
+  /// Gets ready to play the image, should it be an animation, which might be one by its link: from
+  /// its data as it came, which for a WebP is as it's kept, rather than as a picture made from it,
+  /// off the main thread, fitted to the preview. Played now, unless it's to be checked first, or
+  /// animations don't play by themselves. Never while it's covered, or showing its link.
+  private func prepareAnimation(_ value: RetrieveImageResult, playsNow: Bool) {
+    guard ImagePreview.mayBeAnimated(self.url) else {
+      return
+    }
+    let file = value.cacheType == .none ? nil : ImagePreview.cache.diskStorage.cacheFileURL(forKey: value.source.cacheKey)
+    let data = value.data
+    let size = ImagePreview.previewSize(forImageSize: Self.pixelSize(of: value.image))
+    self.animate = { [weak self] in
+      guard let self, self.covered == nil, self.linkLabel == nil else {
+        return
+      }
+      if let animation = self.animation {
+        self.play(animation)
+        return
+      }
+      Task { [weak self] in
+        let opened = await Task.detached(priority: .userInitiated) { () -> AnimationFrames? in
+          let original = file.flatMap { try? Data(contentsOf: $0) } ?? data()
+          return original.flatMap { AnimationFrames(data: $0, fitting: size) }
+        }.value
+        guard let self, let opened, self.covered == nil, self.linkLabel == nil else {
+          return
+        }
+        self.animation = opened
+        // Unless the pointer's left it, while it was opened, when it doesn't play by itself.
+        if ImagePreview.playsByThemselves || self.isPointedAt {
+          self.play(opened)
+        }
+      }
+    }
+    if playsNow, ImagePreview.playsByThemselves || self.isPointedAt {
+      self.animate?()
+    }
   }
 
   // The layer's color doesn't follow the appearance on its own.
   override func viewDidChangeEffectiveAppearance() {
     super.viewDidChangeEffectiveAppearance()
     self.updatePlaceholder()
+  }
+
+  /// Shows the link it stands for, as words, in place of its image, which can't be had, cut short
+  /// in the middle where there isn't the room for all of it.
+  func showLink(_ text: NSAttributedString) {
+    self.player.stop()
+    self.framesView.isHidden = true
+    self.imageView.isHidden = true
+    self.showsPlaceholder = false
+    self.layer?.cornerRadius = 0
+    let shown = NSMutableAttributedString(attributedString: text)
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineBreakMode = .byTruncatingMiddle
+    shown.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: shown.length))
+    let label = self.linkLabel ?? NSTextField(labelWithAttributedString: shown)
+    label.attributedStringValue = shown
+    label.usesSingleLineMode = true
+    label.lineBreakMode = .byTruncatingMiddle
+    label.maximumNumberOfLines = 1
+    label.frame = self.bounds
+    label.autoresizingMask = [.width, .height]
+    if label.superview == nil {
+      self.addSubview(label)
+    }
+    self.linkLabel = label
+    self.toolTip = (self.link ?? self.url).absoluteString
+    self.setAccessibilityLabel("Link")
+    self.window?.invalidateCursorRects(for: self)
   }
 
   private func updatePlaceholder() {
@@ -805,9 +1183,13 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       .transition(.fade(0.2)),
     ]
     // Big images are decoded at preview size, with pixels enough for a Retina screen whatever
-    // screen it's on, so it's cached the same way everywhere. Not GIFs, which would lose their
-    // animation.
-    if self.url.pathExtension.lowercased() != "gif" {
+    // screen it's on, so it's cached the same way everywhere. Not one that might be an animation,
+    // which would lose all but its first frame, and is kept as it came, for its frames to be
+    // played from, as a WebP's wouldn't be otherwise.
+    if ImagePreview.mayBeAnimated(self.url) {
+      options.append(.cacheSerializer(ImagePreview.keepsData))
+    }
+    else {
       options.append(.processor(DownsamplingImageProcessor(size: ImagePreview.maximumSize)))
       options.append(.scaleFactor(2))
     }
@@ -824,6 +1206,11 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       source = .network(self.url)
       let sources = self.sources
       options.append(.redirectHandler(AnyRedirectHandler { _, _, request, completion in
+        // On to a page whose picture's known, as a short link's GIF's page, the picture.
+        var request = request
+        if let page = request.url, let picture = ImagePreview.picture(in: page) {
+          request.url = picture
+        }
         completion(request.url.map(sources.trusts) == true ? request : nil)
       }))
     }
@@ -861,6 +1248,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
         if checks {
           self.check(value, key: key)
         }
+        self.prepareAnimation(value, playsNow: !checks)
         self.updatePlaceholder()
         self.needsLayout = true
         self.onLoad?(Self.pixelSize(of: value.image))
@@ -918,7 +1306,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
 
   /// Where clicking it goes, for its tooltip.
   private var linkToolTip: String {
-    self.url.host(percentEncoded: false).map { "View image from \($0)" } ?? "View Image"
+    (self.link ?? self.url).host(percentEncoded: false).map { "View image from \($0)" } ?? "View Image"
   }
 
   /// Checks the picture before it's seen, then shows it, covered if it might be sensitive.
@@ -939,13 +1327,17 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       }
       self.imageView.isHidden = false
       self.updatePlaceholder()
+      // Played, as an animation, once it's known not to need covering.
+      if cover == nil, ImagePreview.playsByThemselves || self.isPointedAt {
+        self.animate?()
+      }
     }
   }
 
   /// Blurs the picture, which might be sensitive, and says so, until it's asked for.
   private func cover(_ image: NSImage, with cover: SensitiveContent.Cover) {
     self.covered = (image, cover.finding)
-    self.imageView.animates = false
+    self.stopAnimating()
     // At the picture's size, which the preview's laid out by.
     self.imageView.image = NSImage(cgImage: cover.image, size: image.size)
     let label = NSHostingView(rootView: SensitiveContentLabel(style: .preview))
@@ -978,9 +1370,12 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.coverLabel?.removeFromSuperview()
     self.coverLabel = nil
     self.imageView.image = covered.image
-    self.imageView.animates = true
     self.toolTip = self.linkToolTip
     self.setAccessibilityLabel("Image preview")
+    // Played again, as an animation.
+    if ImagePreview.playsByThemselves || self.isPointedAt {
+      self.animate?()
+    }
   }
 
   /// Covers the picture again, once it's been shown, for one that might be sensitive.
@@ -1009,9 +1404,10 @@ final class ImagePreviewView: NSView, NSDraggingSource {
 
   // MARK: Clicking
 
-  // Clicks go to the preview, not the image view inside it, and nowhere while it isn't showing.
+  // Clicks go to the preview, not the image view inside it, or the link it shows in its place, and
+  // nowhere while it isn't showing.
   override func hitTest(_ point: NSPoint) -> NSView? {
-    guard self.showsPlaceholder || self.imageView.image != nil else {
+    guard self.showsPlaceholder || self.imageView.image != nil || self.linkLabel != nil else {
       return nil
     }
     return self.frame.contains(point) ? self : nil
@@ -1046,15 +1442,17 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       self.showCovered()
       return
     }
+    // The image in a preview window, or showing its link in its place, the link, as a click on it.
     let textView = self.textView
-    if let openImage = textView?.openImageAction {
+    let link = self.link ?? self.url
+    if self.linkLabel == nil, let openImage = textView?.openImageAction {
       openImage(self.url)
     }
     else if let openURL = textView?.openURLAction {
-      openURL(self.url)
+      openURL(link)
     }
     else {
-      NSWorkspace.shared.open(self.url)
+      NSWorkspace.shared.open(link)
     }
   }
 
@@ -1092,12 +1490,13 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   }
 
   /// What can be done with its link: a picture among the server's files has its file's menu, as its
-  /// link does, and any other picture a link's.
+  /// link does, and any other picture a link's, for the link as it was written, and the image, but
+  /// for one that can't be had.
   private func linkMenu() -> NSMenu? {
     if self.sources.serverFile(at: self.url) != nil, let menu = self.textView?.fileLinkMenu?(self.url) {
       return menu
     }
-    guard let items = self.textView?.linkMenuItems(for: self.url) else {
+    guard let items = self.textView?.linkMenuItems(for: self.link ?? self.url, image: self.linkLabel == nil ? self.url : nil) else {
       return nil
     }
     let menu = NSMenu()

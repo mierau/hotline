@@ -866,10 +866,20 @@ enum Markdown {
     var addresses: [NSRange] = []
     /// Where a list's - * or + is, which shows as a bullet.
     var bullets: [Int] = []
-    /// Links to images, with the end of the line each is on, for its preview, under it, and
-    /// whether it was written as an image, ![like this](where it is), which is shown as the image
-    /// alone.
-    var images: [(lineEnd: Int, url: URL, isImage: Bool)] = []
+    /// Links to images, for their previews, under their lines.
+    var images: [Image] = []
+
+    /// A link to an image: the end of the line it's on, for its preview, under it, the image, and
+    /// whether the preview stands for the link, shown in its place: one written as an image,
+    /// ![like this](where it is), or an address, which isn't shown with its preview. Then the link
+    /// it stands for, and how it looks, to show in its place if the image can't be had.
+    struct Image {
+      var lineEnd: Int
+      var url: URL
+      var standsForLink: Bool
+      var link: URL? = nil
+      var linkText: NSAttributedString? = nil
+    }
   }
 
   /// The code blocks in some text, and its drawings, where its lines can be more than words, as the
@@ -1034,6 +1044,34 @@ enum Markdown {
 
   /// What a \ before it keeps from being a mark.
   private static let escapable = "*_~`[]\\#>+-!".utf16
+
+  /// An address's preview, which stands in its place, as an image written as one does, unless the
+  /// layout has room for no more, or it's the same image again, or one that's failed before, which
+  /// is left as its address. The address is hidden, and a space beside it, so the words around it
+  /// don't have two between them, and kept, as it looks, shorter, as a long link shows, to show in
+  /// the preview's place should its image not be had.
+  private static func preview(of picture: URL, at address: NSRange, for link: URL, in line: NSRange, of storage: NSMutableAttributedString, layout: Layout, shown: Shown, hide: (NSRange) -> Void) -> Shown.Image {
+    let string = storage.string as NSString
+    let lineEnd = self.contentEnd(of: line, in: string)
+    let previews = Set(shown.images.map(\.url))
+    guard layout.imagePreviews > previews.count, !previews.contains(picture), !ImagePreview.failures.contains(picture) else {
+      return Shown.Image(lineEnd: lineEnd, url: picture, standsForLink: false)
+    }
+    let written = string.substring(with: address)
+    let font = storage.attribute(.font, at: address.location, effectiveRange: nil) as? NSFont ?? layout.font
+    let linkText = NSAttributedString(string: self.shortLink(written) ?? written, attributes: [.font: font, .foregroundColor: self.linkColor])
+    hide(address)
+    func isBlank(_ index: Int) -> Bool {
+      index >= line.location && index < lineEnd && (string.character(at: index) == 0x20 || string.character(at: index) == 0x09)
+    }
+    if isBlank(address.location - 1) {
+      hide(NSRange(location: address.location - 1, length: 1))
+    }
+    else if isBlank(NSMaxRange(address)) {
+      hide(NSRange(location: NSMaxRange(address), length: 1))
+    }
+    return Shown.Image(lineEnd: lineEnd, url: picture, standsForLink: true, link: link, linkText: linkText)
+  }
 
   /// Styles the words in a range of whole lines, but for what's in the ranges it skips, which are
   /// code blocks and drawings, and gives back where `code` among them is. To show them, it keeps
@@ -1239,7 +1277,10 @@ enum Markdown {
       if isImage, let url, layout.imagePreviews > 0, let picture = layout.imageSources.picture(for: url, isImage: true) {
         shown.hidden.insert(integersIn: whole.location..<NSMaxRange(whole))
         take(words)
-        shown.images.append((lineEnd, picture, true))
+        // Its words, or where it is, as a link, should the image not be had.
+        let wordsText = string.substring(with: words)
+        let linkText = NSAttributedString(string: wordsText.isEmpty ? url.absoluteString : wordsText, attributes: [.font: layout.font, .foregroundColor: linkColor])
+        shown.images.append(Shown.Image(lineEnd: lineEnd, url: picture, standsForLink: true, link: url, linkText: linkText))
         continue
       }
       // Its words, as a link to where it goes, without the rest, or as words, if it goes nowhere.
@@ -1256,7 +1297,7 @@ enum Markdown {
           shown.links.append((words, url))
         }
         if let picture = layout.imageSources.picture(for: url, isImage: isImage) {
-          shown.images.append((lineEnd, picture, false))
+          shown.images.append(Shown.Image(lineEnd: lineEnd, url: picture, standsForLink: false))
         }
       }
       else {
@@ -1283,8 +1324,8 @@ enum Markdown {
         take(address)
         shown?.links.append((address, link.url))
         shown?.addresses.append(address)
-        if let picture = layout.imageSources.picture(for: link.url, isImage: false) {
-          shown?.images.append((self.contentEnd(of: line, in: string), picture, false))
+        if let shown, let picture = layout.imageSources.picture(for: link.url, isImage: false) {
+          shown.images.append(self.preview(of: picture, at: address, for: link.url, in: line, of: storage, layout: layout, shown: shown, hide: hide))
         }
       }
     }

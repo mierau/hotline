@@ -160,7 +160,8 @@ struct ChatFormattingTests {
     var options = ChatMessageRenderer.Options()
     options.previewsImages = true
     let text = ChatMessageRenderer.render(ChatMessage(text: "mars: look https://i.imgur.com/cat.png", type: .message, date: Date()), options: options)
-    #expect(text.string == "mars: look https://i.imgur.com/cat.png\u{2028}\u{FFFC}")
+    // In its link's place, under the words before it.
+    #expect(text.string == "mars: look\u{2028}\u{FFFC}")
     options.previewsImages = false
     #expect(ChatMessageRenderer.render(ChatMessage(text: "mars: look https://i.imgur.com/cat.png", type: .message, date: Date()), options: options).string == "mars: look https://i.imgur.com/cat.png")
   }

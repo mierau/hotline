@@ -1,14 +1,10 @@
 #if os(macOS)
+import Accessibility
 import SwiftUI
 import ImageIO
 
-/// A server's animated GIF banner, played by Core Animation.
-///
-/// Its frames are decoded off the main thread and handed to Core Animation as an animation at the
-/// GIF's own frame timings, which the window server plays. So the app does nothing from one frame
-/// to the next, and nothing's drawn while the banner toolbar's hidden. A GIF whose frames fit in
-/// 16 MB is decoded once and loops by itself. A longer one is decoded a part at a time, each
-/// queued while the one before it plays, and only while the banner can be seen.
+/// A server's animated GIF banner, played by Core Animation, as `AnimationPlayer` plays it, only
+/// while the banner can be seen, and only while the system's Animated Images setting lets it.
 ///
 /// It's placed the way Kingfisher's animated image view, which played them before, placed it:
 /// filling the banner, cropped, but never scaled up, so a GIF smaller than the banner is centered
@@ -40,12 +36,11 @@ final class AnimatedBannerView: NSView {
   }
 
   private let framesLayer = CALayer()
-  private var gif: BannerGIF?
+  private lazy var player = AnimationPlayer(layer: self.framesLayer, in: self)
+  private var frames: AnimationFrames?
   /// The GIF that's been opened, or is being.
   private var openedFileURL: URL?
-  /// The colors the frames playing were decoded in.
-  private var decodedColorSpace: CGColorSpace?
-  private var playing: Task<Void, Never>?
+  private var opening: Task<Void, Never>?
 
   init() {
     super.init(frame: .zero)
@@ -56,6 +51,15 @@ final class AnimatedBannerView: NSView {
     self.framesLayer.contentsGravity = .resize
     self.layer?.addSublayer(self.framesLayer)
     self.setAccessibilityElement(false)
+    // Still, while the system's Animated Images setting has animations stop, and played again
+    // once it doesn't.
+    NotificationCenter.default.addObserver(self, selector: #selector(self.animatedImagesDidChange), name: AccessibilitySettings.animatedImagesEnabledDidChangeNotification, object: nil)
+  }
+
+  @objc private func animatedImagesDidChange() {
+    if let frames = self.frames {
+      self.player.play(frames, animates: AccessibilitySettings.animatedImagesEnabled)
+    }
   }
 
   required init?(coder: NSCoder) {
@@ -82,35 +86,23 @@ final class AnimatedBannerView: NSView {
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    // A GIF played in parts plays them while it's in a window.
-    guard let gif = self.gif, !gif.isWhole else {
-      return
-    }
-    self.playing?.cancel()
-    self.playing = nil
-    if self.window != nil {
-      self.playing = Task { [weak self] in
-        await self?.playInParts(gif)
-      }
-    }
+    self.player.windowDidChange()
   }
 
   override func viewDidChangeBackingProperties() {
     super.viewDidChangeBackingProperties()
     // On a screen with other colors, the frames are decoded again in them.
-    if self.gif != nil, let colorSpace = self.windowColorSpace, colorSpace != self.decodedColorSpace {
+    if self.player.needsDecodingAgain {
       self.reset()
     }
   }
 
   private func reset() {
-    self.playing?.cancel()
-    self.playing = nil
+    self.opening?.cancel()
+    self.opening = nil
     self.openedFileURL = nil
-    self.decodedColorSpace = nil
-    self.gif = nil
-    self.framesLayer.removeAllAnimations()
-    self.framesLayer.contents = nil
+    self.frames = nil
+    self.player.stop()
     self.needsLayout = true
   }
 
@@ -122,27 +114,22 @@ final class AnimatedBannerView: NSView {
     }
     self.openedFileURL = fileURL
     let size = self.bounds.size
-    self.playing = Task { [weak self] in
+    self.opening = Task { [weak self] in
       let opened = await Task.detached(priority: .userInitiated) {
-        BannerGIF(contentsOf: fileURL, shownIn: size)
+        AnimationFrames(contentsOf: fileURL, filling: size)
       }.value
-      guard let gif = opened, let self, !Task.isCancelled, self.fileURL == fileURL else {
+      guard let frames = opened, let self, !Task.isCancelled, self.fileURL == fileURL else {
         return
       }
-      self.gif = gif
+      self.frames = frames
       self.placeFrames()
-      if gif.isWhole {
-        await self.playWhole(gif)
-      }
-      else if self.window != nil {
-        await self.playInParts(gif)
-      }
+      self.player.play(frames, animates: AccessibilitySettings.animatedImagesEnabled)
     }
   }
 
   /// Fills the banner, cropping what's outside it, but not past the GIF's own size, centered.
   private func placeFrames() {
-    guard let size = self.gif?.size else {
+    guard let size = self.frames?.size else {
       return
     }
     let bounds = self.bounds
@@ -150,29 +137,133 @@ final class AnimatedBannerView: NSView {
     let drawn = CGSize(width: size.width * scale, height: size.height * scale)
     self.framesLayer.frame = CGRect(x: bounds.midX - drawn.width / 2, y: bounds.midY - drawn.height / 2, width: drawn.width, height: drawn.height)
   }
+}
 
-  /// Every frame at once, looping by itself from now on.
-  private func playWhole(_ gif: BannerGIF) async {
+/// Plays an animation's frames on a layer, by Core Animation, at the animation's own timings.
+///
+/// Its frames are decoded off the main thread and handed to Core Animation as an animation, which
+/// the window server plays. So the app does nothing from one frame to the next, and nothing's drawn
+/// while its view can't be seen. An animation whose frames fit in 16 MB is decoded once and loops by
+/// itself. A longer one is decoded a part at a time, each queued while the one before it plays, and
+/// only while its view's in a window that can be seen.
+@MainActor
+final class AnimationPlayer {
+  private let layer: CALayer
+  private weak var view: NSView?
+  private var frames: AnimationFrames?
+  /// Whether it plays them, or shows the first alone, still.
+  private var animates = true
+  private var playing: Task<Void, Never>?
+  /// The colors the frames playing were decoded in.
+  private var decodedColorSpace: CGColorSpace?
+  /// Called once its first frame's showing.
+  var onShow: (() -> Void)?
+
+  init(layer: CALayer, in view: NSView) {
+    self.layer = layer
+    self.view = view
+  }
+
+  /// Plays frames from the start, in place of any it was, or shows the first alone, still.
+  func play(_ frames: AnimationFrames, animates: Bool = true) {
+    self.stop()
+    self.frames = frames
+    self.animates = animates
+    self.playing = Task { [weak self] in
+      guard let self else {
+        return
+      }
+      if !animates {
+        await self.showFirst(frames)
+      }
+      else if frames.isWhole {
+        await self.playWhole(frames)
+      }
+      else if self.view?.window != nil {
+        await self.playInParts(frames)
+      }
+    }
+  }
+
+  /// Stops, and shows nothing.
+  func stop() {
+    self.playing?.cancel()
+    self.playing = nil
+    self.frames = nil
+    self.decodedColorSpace = nil
+    self.layer.removeAllAnimations()
+    self.layer.contents = nil
+  }
+
+  /// For when its view's moved into a window, or out of one, as a preview is as it scrolls away and
+  /// back, which takes its animation away, and the frames it holds with it. It's played again from
+  /// the start once it's back, with what showed as it left showing until then. Parts aren't decoded
+  /// while it's out of one.
+  func windowDidChange() {
+    guard let frames = self.frames, self.animates else {
+      return
+    }
+    self.playing?.cancel()
+    self.playing = nil
+    self.layer.removeAllAnimations()
+    guard self.view?.window != nil else {
+      return
+    }
+    self.playing = Task { [weak self] in
+      if frames.isWhole {
+        await self?.playWhole(frames)
+      }
+      else {
+        await self?.playInParts(frames)
+      }
+    }
+  }
+
+  /// Whether the frames playing were decoded in other colors than the screen's it's on now.
+  var needsDecodingAgain: Bool {
+    guard self.frames != nil, let colorSpace = self.windowColorSpace else {
+      return false
+    }
+    return colorSpace != self.decodedColorSpace
+  }
+
+  /// The first frame alone, still.
+  private func showFirst(_ frames: AnimationFrames) async {
     let colorSpace = self.windowColorSpace
     let images = await Task.detached(priority: .userInitiated) {
-      gif.frames(0..<gif.count, in: colorSpace)
+      frames.frames(0..<1, in: colorSpace)
     }.value
     guard !Task.isCancelled else {
       return
     }
     self.decodedColorSpace = colorSpace
-    self.framesLayer.contents = images.first
+    self.layer.contents = images.first
+    self.onShow?()
+  }
+
+  /// Every frame at once, looping by itself from now on.
+  private func playWhole(_ frames: AnimationFrames) async {
+    let colorSpace = self.windowColorSpace
+    let images = await Task.detached(priority: .userInitiated) {
+      frames.frames(0..<frames.count, in: colorSpace)
+    }.value
+    guard !Task.isCancelled else {
+      return
+    }
+    self.decodedColorSpace = colorSpace
+    self.layer.contents = images.first
+    self.onShow?()
     guard images.count > 1 else {
       return
     }
-    let animation = Self.animation(images, durations: gif.durations[...])
+    let animation = Self.animation(images, durations: frames.durations[...])
     animation.repeatCount = .infinity
-    self.framesLayer.add(animation, forKey: "frames")
+    self.layer.add(animation, forKey: "frames")
   }
 
-  /// A part at a time, from now on, each queued to start as the one before it ends. While the
-  /// banner can't be seen, nothing's decoded, and once it can, it goes on from where the time is.
-  private func playInParts(_ gif: BannerGIF) async {
+  /// A part at a time, from now on, each queued to start as the one before it ends. While its view
+  /// can't be seen, nothing's decoded, and once it can, it goes on from where the time is.
+  private func playInParts(_ frames: AnimationFrames) async {
     let origin = self.layerTime
     // Where the next part starts.
     var loop = 0
@@ -180,31 +271,32 @@ final class AnimatedBannerView: NSView {
     var added: [String] = []
     var serial = 0
 
-    while !Task.isCancelled, self.window != nil {
-      let range = next..<min(next + gif.partLength, gif.count)
-      let start = origin + Double(loop) * gif.loopDuration + gif.starts[range.lowerBound]
-      let end = start + gif.starts[range.upperBound] - gif.starts[range.lowerBound]
+    while !Task.isCancelled, self.view?.window != nil {
+      let range = next..<min(next + frames.partLength, frames.count)
+      let start = origin + Double(loop) * frames.loopDuration + frames.starts[range.lowerBound]
+      let end = start + frames.starts[range.upperBound] - frames.starts[range.lowerBound]
       let colorSpace = self.windowColorSpace
       let images = await Task.detached(priority: added.isEmpty ? .userInitiated : .utility) {
-        gif.frames(range, in: colorSpace)
+        frames.frames(range, in: colorSpace)
       }.value
       guard !Task.isCancelled else {
         return
       }
       self.decodedColorSpace = colorSpace
 
-      let animation = Self.animation(images, durations: gif.durations[range])
+      let animation = Self.animation(images, durations: frames.durations[range])
       animation.beginTime = start
       // Its last frame stays until the next part covers it, should that start late.
       animation.fillMode = .forwards
       animation.isRemovedOnCompletion = false
       if added.isEmpty {
-        self.framesLayer.contents = images.first
+        self.layer.contents = images.first
+        self.onShow?()
       }
       serial += 1
-      self.framesLayer.add(animation, forKey: "part \(serial)")
+      self.layer.add(animation, forKey: "part \(serial)")
       added.append("part \(serial)")
-      if range.upperBound == gif.count {
+      if range.upperBound == frames.count {
         loop += 1
         next = 0
       }
@@ -224,7 +316,7 @@ final class AnimatedBannerView: NSView {
         }
       }
       for key in added.dropLast() {
-        self.framesLayer.removeAnimation(forKey: key)
+        self.layer.removeAnimation(forKey: key)
       }
       added.removeFirst(added.count - 1)
 
@@ -234,32 +326,32 @@ final class AnimatedBannerView: NSView {
         if now > end {
           // The parts queued have run out. Go on from the frame showing now.
           let elapsed = now - origin
-          loop = Int(elapsed / gif.loopDuration)
-          next = gif.frame(at: elapsed - Double(loop) * gif.loopDuration)
+          loop = Int(elapsed / frames.loopDuration)
+          next = frames.frame(at: elapsed - Double(loop) * frames.loopDuration)
         }
       }
     }
   }
 
-  /// The time in the frames layer's clock, which animations begin by.
+  /// The time in the layer's clock, which animations begin by.
   private var layerTime: CFTimeInterval {
-    self.framesLayer.convertTime(CACurrentMediaTime(), from: nil)
+    self.layer.convertTime(CACurrentMediaTime(), from: nil)
   }
 
   /// The window's colors, which frames are decoded in, so Core Animation doesn't convert each one
   /// on the main thread as it's handed over.
   private var windowColorSpace: CGColorSpace? {
-    self.window?.colorSpace?.cgColorSpace
+    self.view?.window?.colorSpace?.cgColorSpace
   }
 
   /// Whether any of the window can be seen.
   private var isShown: Bool {
-    self.window?.occlusionState.contains(.visible) == true
+    self.view?.window?.occlusionState.contains(.visible) == true
   }
 
-  /// Waits until some of the window can be seen, or it's left the window.
+  /// Waits until some of the window can be seen, or its view's left the window.
   private func untilShown() async {
-    guard let window = self.window else {
+    guard let window = self.view?.window else {
       return
     }
     let changes = NotificationCenter.default.notifications(named: NSWindow.didChangeOcclusionStateNotification, object: window)
@@ -267,7 +359,7 @@ final class AnimatedBannerView: NSView {
       return
     }
     for await _ in changes {
-      if self.isShown || self.window !== window {
+      if self.isShown || self.view?.window !== window {
         return
       }
     }
@@ -294,15 +386,21 @@ final class AnimatedBannerView: NSView {
   }
 }
 
-/// An animated GIF, opened to play: how long each frame shows, and its frames, decoded when
-/// they're asked for, one call at a time.
-private final class BannerGIF: @unchecked Sendable {
-  /// The most memory the frames of a GIF that's decoded once can take.
+/// An animation, a GIF, an animated WebP, or an animated PNG, opened to play: how long each frame
+/// shows, and its frames, decoded when they're asked for, one call at a time.
+///
+/// One decoded whole costs nothing as it plays, but its memory. One decoded in parts costs as much
+/// as decoding each frame as it shows, as a part is decoded again each time round.
+final class AnimationFrames: @unchecked Sendable {
+  /// The most memory the frames of a banner that's decoded once can take.
   static let wholeLimit = 16 * 1024 * 1024
-  /// The most memory each part of a longer GIF takes. The part playing and the next are kept.
+  /// The most memory a preview's can, as there are few on screen at once, and they're small, so
+  /// most are decoded whole, which a longer one can be at fewer pixels.
+  static let previewWholeLimit = 32 * 1024 * 1024
+  /// The most memory each part of a longer one takes. The part playing and the next are kept.
   static let partLimit = 4 * 1024 * 1024
 
-  /// The GIF's own size, in pixels, which it's drawn at in points.
+  /// The animation's own size, in pixels, which it's drawn at in points.
   let size: CGSize
   /// How long each frame shows, in seconds.
   let durations: [TimeInterval]
@@ -332,11 +430,34 @@ private final class BannerGIF: @unchecked Sendable {
     self.partLength >= self.count
   }
 
-  /// The GIF at `fileURL`, decoded with no more pixels than it needs to fill `bounds` on a Retina
-  /// screen. Nil if it isn't an image.
-  init?(contentsOf fileURL: URL, shownIn bounds: CGSize) {
-    guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil),
-          let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+  /// The animation at `fileURL`, decoded with no more pixels than it needs to fill `bounds` on a
+  /// Retina screen, as a banner is, cropped. Nil if it isn't an image.
+  convenience init?(contentsOf fileURL: URL, filling bounds: CGSize) {
+    guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else {
+      return nil
+    }
+    self.init(source: source, wholeLimit: Self.wholeLimit) { size in
+      [min(1, 2 * min(1, max(bounds.width / size.width, bounds.height / size.height)))]
+    }
+  }
+
+  /// An animation, as it came, decoded with no more pixels than it needs to fit in `bounds` on a
+  /// Retina screen, as a preview is, or a pixel for each point, if that lets it be decoded whole.
+  /// Nil if it isn't an image, or has only one frame, which isn't an animation.
+  convenience init?(data: Data, fitting bounds: CGSize) {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 1 else {
+      return nil
+    }
+    self.init(source: source, wholeLimit: Self.previewWholeLimit) { size in
+      let fit = min(bounds.width / size.width, bounds.height / size.height)
+      return [min(1, 2 * fit), min(1, fit)]
+    }
+  }
+
+  /// An animation's frames, and how long each shows, scaled from the animation's size by the first
+  /// of `scales` its frames fit whole at, or else the first, in parts.
+  private init?(source: CGImageSource, wholeLimit: Int, scales: (CGSize) -> [CGFloat]) {
+    guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
           let width = properties[kCGImagePropertyPixelWidth] as? Int,
           let height = properties[kCGImagePropertyPixelHeight] as? Int,
           width > 0, height > 0 else {
@@ -361,15 +482,18 @@ private final class BannerGIF: @unchecked Sendable {
       return nil
     }
 
-    // Two pixels for each point it's drawn at, unless it has fewer of its own.
     let size = CGSize(width: width, height: height)
-    let scale = min(1, 2 * min(1, max(bounds.width / size.width, bounds.height / size.height)))
-    self.pixelWidth = max(1, Int((size.width * scale).rounded()))
-    self.pixelHeight = max(1, Int((size.height * scale).rounded()))
+    let pixels = { (scale: CGFloat) in
+      (width: max(1, Int((size.width * scale).rounded())), height: max(1, Int((size.height * scale).rounded())))
+    }
+    let candidates = scales(size).map(pixels)
+    let whole = candidates.first { $0.width * $0.height * 4 * indexes.count <= wholeLimit }
+    let chosen = whole ?? candidates.first ?? pixels(1)
+    self.pixelWidth = chosen.width
+    self.pixelHeight = chosen.height
 
     let frameBytes = self.pixelWidth * self.pixelHeight * 4
-    let fitsWhole = frameBytes * indexes.count <= Self.wholeLimit
-    self.partLength = fitsWhole ? indexes.count : max(1, Self.partLimit / frameBytes)
+    self.partLength = whole != nil ? indexes.count : max(1, Self.partLimit / frameBytes)
 
     var starts: [TimeInterval] = [0]
     for duration in durations {
@@ -404,12 +528,22 @@ private final class BannerGIF: @unchecked Sendable {
     }
   }
 
-  /// How long a frame shows: its delay, or a tenth of a second for none or next to none, as
-  /// browsers and Kingfisher do.
+  /// How long a frame shows: its delay, as a GIF, a WebP, or a PNG has it, or a tenth of a second
+  /// for none or next to none, as browsers and Kingfisher do.
   private static func duration(of source: CGImageSource, at index: Int) -> TimeInterval {
     let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any]
-    let gif = properties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
-    let delay = (gif?[kCGImagePropertyGIFUnclampedDelayTime] as? Double) ?? (gif?[kCGImagePropertyGIFDelayTime] as? Double) ?? 0
+    let delays: [(dictionary: CFString, unclamped: CFString, clamped: CFString)] = [
+      (kCGImagePropertyGIFDictionary, kCGImagePropertyGIFUnclampedDelayTime, kCGImagePropertyGIFDelayTime),
+      (kCGImagePropertyWebPDictionary, kCGImagePropertyWebPUnclampedDelayTime, kCGImagePropertyWebPDelayTime),
+      (kCGImagePropertyPNGDictionary, kCGImagePropertyAPNGUnclampedDelayTime, kCGImagePropertyAPNGDelayTime),
+    ]
+    var delay: Double = 0
+    for keys in delays {
+      if let frame = properties?[keys.dictionary] as? [CFString: Any] {
+        delay = (frame[keys.unclamped] as? Double) ?? (frame[keys.clamped] as? Double) ?? 0
+        break
+      }
+    }
     return delay > 0.011 ? delay : 0.1
   }
 

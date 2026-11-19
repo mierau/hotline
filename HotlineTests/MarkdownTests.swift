@@ -182,9 +182,10 @@ struct MarkdownTests {
   }
 
   @Test func linksToImagesHavePreviews() {
-    #expect(look("https://i.imgur.com/cat.png") == "[l:https://i.imgur.com/cat.png]⏎[P:▢]")
+    // An address, in its place, and a link's words, over it.
+    #expect(look("https://i.imgur.com/cat.png") == "[P:▢]")
     #expect(look("[my cat](https://i.imgur.com/cat.png)") == "[l:my cat]⏎[P:▢]")
-    #expect(look("two https://i.imgur.com/a.png https://i.imgur.com/b.png") == "two [l:https://i.imgur.com/a.png] [l:https://i.imgur.com/b.png]⏎[P:▢]⏎[P:▢]")
+    #expect(look("two https://i.imgur.com/a.png https://i.imgur.com/b.png") == "two⏎[P:▢]⏎[P:▢]")
   }
 
   @Test func imagesCopyAsTheirLinks() {

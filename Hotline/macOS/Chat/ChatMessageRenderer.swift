@@ -178,8 +178,9 @@ enum ChatMessageRenderer {
 
     // A message starts where the name does, unless it goes on from the one before it, under its
     // first line, as the rest of its lines are. A quote, a list's item, a heading, or code, at the
-    // start, goes on the line after the name.
-    let startsWithWords = text.length == 0 || text.attribute(Markdown.blockKey, at: 0, effectiveRange: nil) == nil
+    // start, goes on the line after the name, as does a preview in its link's place.
+    let startsWithWords = text.length == 0
+      || (text.attribute(Markdown.blockKey, at: 0, effectiveRange: nil) == nil && !(text.attribute(.attachment, at: 0, effectiveRange: nil) is ImageAttachment))
     if named, !startsWithWords {
       text.insert(NSAttributedString(string: "\n", attributes: [.font: self.baseFont, .paragraphStyle: layout.paragraph()]), at: 0)
     }
