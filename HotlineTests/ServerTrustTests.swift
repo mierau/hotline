@@ -10,7 +10,7 @@ import Observation
 struct ServerTrustTests {
   /// A certificate as a handshake would find it, with a key made from `seed`.
   private func certificate(_ seed: UInt8, name: String = "hotline.example.com", fromAuthority: Bool = false) -> ServerTrust.Certificate {
-    ServerTrust.Certificate(key: Data(repeating: seed, count: 32), name: name, isFromAuthority: fromAuthority, isVerified: false, data: Data())
+    ServerTrust.Certificate(key: Data(repeating: seed, count: 32), name: name, isFromAuthority: fromAuthority, isVerified: false, chain: [], host: "hotline.example.com")
   }
 
   private let identity = ServerTrust.identity(address: "Hotline.Example.com", port: 5500)
@@ -264,7 +264,7 @@ struct ServerTrustTests {
     let fileURL = URL.temporaryDirectory.appending(path: "ServerTrustTests-\(UUID().uuidString)/Encrypted Servers.json")
     defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
     func certificate(_ seed: UInt8) -> ServerTrust.Certificate {
-      ServerTrust.Certificate(key: Data(repeating: seed, count: 32), name: "hotline.example.com", isFromAuthority: false, isVerified: false, data: Data([0x30, 0x82, seed]))
+      ServerTrust.Certificate(key: Data(repeating: seed, count: 32), name: "hotline.example.com", isFromAuthority: false, isVerified: false, chain: [Data([0x30, 0x82, seed])], host: "hotline.example.com")
     }
 
     // As it was given when it's kept, in its file too, and the new one, once that's trusted.
