@@ -47,15 +47,32 @@ final class ServerTrust: Observable, @unchecked Sendable {
     /// Whether it's from one, for the address that was connected to, as a browser would have it,
     /// or false if it wasn't checked.
     let isVerified: Bool
-    /// As it is, to show.
-    let data: Data
+    /// The certificate chain from the handshake, leaf first.
+    private let chain: [Data]
+    /// The leaf certificate kept in the remembered server's record.
+    var data: Data? { self.chain.first }
+    /// The address used for the TLS hostname check.
+    private let host: String
 
-    init(key: Data, name: String, isFromAuthority: Bool, isVerified: Bool, data: Data) {
+    /// Trust for the certificate viewer, evaluated with the connection's hostname and chain.
+    var displayTrust: SecTrust? {
+      let certificates = self.chain.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
+      guard !certificates.isEmpty, certificates.count == self.chain.count else { return nil }
+      let policy = SecPolicyCreateSSL(true, self.host as CFString)
+      var trust: SecTrust?
+      guard SecTrustCreateWithCertificates(certificates as CFArray, policy, &trust) == errSecSuccess else {
+        return nil
+      }
+      return trust
+    }
+
+    init(key: Data, name: String, isFromAuthority: Bool, isVerified: Bool, chain: [Data], host: String) {
       self.key = key
       self.name = name
       self.isFromAuthority = isFromAuthority
       self.isVerified = isVerified
-      self.data = data
+      self.chain = chain
+      self.host = host
     }
 
     /// The certificate a server gave, checked with the authorities browsers trust, for the
@@ -72,7 +89,8 @@ final class ServerTrust: Observable, @unchecked Sendable {
       }
       self.key = Data(SHA256.hash(data: keyData))
       self.name = (SecCertificateCopySubjectSummary(leaf) as String?) ?? ""
-      self.data = SecCertificateCopyData(leaf) as Data
+      self.chain = chain.map { SecCertificateCopyData($0) as Data }
+      self.host = host
 
       guard self.key != knownKey else {
         self.isFromAuthority = false

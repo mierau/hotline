@@ -1479,7 +1479,10 @@ private struct EncryptedConnectionPopover: View {
 extension ServerTrust.Certificate {
   /// Shows the certificate in the system's certificate panel, until it's closed.
   func show() {
-    ServerTrust.showCertificate(self.data)
+    guard let trust = self.displayTrust else {
+      return
+    }
+    _ = SFCertificatePanel.shared().runModal(for: trust, showGroup: true)
   }
 }
 
