@@ -6,7 +6,7 @@ A modern remake of Hotline for macOS.
 [Download the Latest](https://github.com/mierau/hotline/releases/latest)
 
 **Required:** macOS 26 (Tahoe) and up.  
-iOS, iPadOS, and visionOS are still in the works.
+iOS and iPadOS are in the works.
 
 To keep this software fresh and running on Apple's latest platforms, the intention is to support the last two major OS releases from Apple. This gives people time to move to the latest major OS release while also allowing this project to make use of the latest APIs.
 
@@ -33,47 +33,13 @@ Perhaps that’s why you can still find Hotline servers and trackers running tod
 And this project is an attempt to create a modern open source version of Hotline for modern Apple systems. Join in. Contribute. Run your own server! Perhaps Hotline can live on for another 25 years. :)
 
 # Run a Hotline Server
+
 This project (so far) does not include server software. This is a client for connecting to and participating on Hotline servers. If you would like to host your own Hotline server (and you should—it's free!), please checkout the very capable Mobius project: https://github.com/jhalter/mobius
-
-# Status
-
-| Feature                    | macOS | iOS   | iPadOS | visionOS |
-|----------------------------|-------|-------|--------|----------|
-| Trackers listing           |   ✓   |   ✓   |        |          |
-| Multiple trackers          |   ✓   |       |        |          |
-| Connect to servers         |   ✓   |   ✓   |        |          |
-| Connect to multiple servers|   ✓   |       |        |          |
-| Server accounts            |   ✓   |       |        |          |
-| Server bookmarks           |   ✓   |       |        |          |
-| Change name & icon         |   ✓   |       |        |          |
-| Privacy settings           |   ✓   |       |        |          |
-| Autoresponse               |   ✓   |       |        |          |
-| Display server agreement   |   ✓   |   ✓   |        |          |
-| Display server banner      |   ✓   |   ✓   |        |          |
-| Public chat                |   ✓   |   ✓   |        |          |
-| Public chat search         |   ✓   |       |        |          |
-| Public chat persistence    |   ✓   |       |        |          |
-| Private messages           |   ✓   |       |        |          |
-| User list                  |   ✓   |   ✓   |        |          |
-| User icons                 |   ✓   |   ✓   |        |          |
-| User administration        |   ✓   |       |        |          |
-| News reading               |   ✓   |   ✓   |        |          |
-| News posting               |   ✓   |       |        |          |
-| Message board reading      |   ✓   |   ✓   |        |          |
-| Message board posting      |   ✓   |       |        |          |
-| File browsing              |   ✓   |   ✓   |        |          |
-| File downloading           |   ✓   |       |        |          |
-| File uploading             |   ✓   |       |        |          |
-| File info                  |   ✓   |       |        |          |
-| File search                |   ✓   |       |        |          |
-| File management            |       |       |        |          |
-| Folder downloading         |   ✓   |       |        |          |
-| Folder uploading           |   ✓   |       |        |          |
-| Custom icon sets           |       |       |        |          |
 
 ---
 
 # Goals
+
 - Build a Hotline client for modern Apple systems.
 - Keep the HotlineProtocol, HotlineClient, HotlineTrackerClient, and HotlineFileClient Swift code reusable so people can use it in other Swift Hotline projects.
 - Bring a modern Hotline client to iOS, iPadOS, and macOS using one codebase.
