@@ -30,6 +30,9 @@ final class ServerTrust: Observable, @unchecked Sendable {
     var name: String
     /// When it was last connected to with this certificate.
     var date: Date
+    /// The certificate itself, as it was given then, to show. Optional, so a record kept before it
+    /// was is still read, which has it once the server's connected to again.
+    var certificate: Data?
   }
 
   /// A server's certificate, as a TLS handshake finds it.
@@ -322,7 +325,7 @@ final class ServerTrust: Observable, @unchecked Sendable {
   func trust(_ certificate: Certificate, address: String, port: Int, tlsPort: Int) {
     let identity = Self.identity(address: address, port: port)
     self.lock.withLock {
-      self.records[identity] = Record(tlsPort: tlsPort, key: certificate.key, name: certificate.name, date: .now)
+      self.records[identity] = Record(tlsPort: tlsPort, key: certificate.key, name: certificate.name, date: .now, certificate: certificate.data)
     }
     self.save()
     self.recordsChanged()
@@ -507,7 +510,7 @@ final class ServerTrust: Observable, @unchecked Sendable {
     let (outcome, hadAbsence): (Outcome, Bool) = self.lock.withLock {
       let outcome = Self.outcome(of: certificate, against: self.records[identity])
       if outcome != .changed {
-        self.records[identity] = Record(tlsPort: tlsPort, key: certificate.key, name: certificate.name, date: .now)
+        self.records[identity] = Record(tlsPort: tlsPort, key: certificate.key, name: certificate.name, date: .now, certificate: certificate.data)
       }
       // It's taken TLS, so whatever went wrong trying it before was passing.
       let hadAbsence = self.withoutSecurePort.removeValue(forKey: identity) != nil

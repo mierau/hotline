@@ -260,6 +260,37 @@ struct ServerTrustTests {
     #expect(reopened.compare(self.certificate(1), identity: self.identity) == .known)
   }
 
+  @Test func certificatesAreKeptToShow() throws {
+    let fileURL = URL.temporaryDirectory.appending(path: "ServerTrustTests-\(UUID().uuidString)/Encrypted Servers.json")
+    defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+    func certificate(_ seed: UInt8) -> ServerTrust.Certificate {
+      ServerTrust.Certificate(key: Data(repeating: seed, count: 32), name: "hotline.example.com", isFromAuthority: false, isVerified: false, data: Data([0x30, 0x82, seed]))
+    }
+
+    // As it was given when it's kept, in its file too, and the new one, once that's trusted.
+    let trust = ServerTrust(fileURL: fileURL)
+    trust.keep(certificate(1), identity: self.identity, tlsPort: 5600)
+    #expect(trust.record(address: "hotline.example.com", port: 5500)?.certificate == Data([0x30, 0x82, 1]))
+    #expect(ServerTrust(fileURL: fileURL).record(address: "hotline.example.com", port: 5500)?.certificate == Data([0x30, 0x82, 1]))
+    trust.trust(certificate(2), address: "hotline.example.com", port: 5500, tlsPort: 5600)
+    #expect(trust.record(address: "hotline.example.com", port: 5500)?.certificate == Data([0x30, 0x82, 2]))
+  }
+
+  @Test func recordsKeptBeforeCertificatesWereAreStillRead() throws {
+    let fileURL = URL.temporaryDirectory.appending(path: "ServerTrustTests-\(UUID().uuidString)/Encrypted Servers.json")
+    defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+    // A file as it was before, without them, which, unread, would have every server forgotten.
+    let key = Data(repeating: 1, count: 32).base64EncodedString()
+    let before = #"{"\#(self.identity)":{"tlsPort":5600,"key":"\#(key)","name":"hotline.example.com","date":785000000}}"#
+    try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(before.utf8).write(to: fileURL)
+
+    let trust = ServerTrust(fileURL: fileURL)
+    let record = try #require(trust.record(address: "hotline.example.com", port: 5500))
+    #expect(record.tlsPort == 5600 && record.certificate == nil)
+    #expect(trust.compare(self.certificate(1), identity: self.identity) == .known)
+  }
+
   @Test func serversConnectedToSecurelyAreListedNewestFirst() async throws {
     let trust = ServerTrust(fileURL: nil)
     trust.keep(self.certificate(1), identity: ServerTrust.identity(address: "Older.Example.com", port: 5500), tlsPort: 5600)

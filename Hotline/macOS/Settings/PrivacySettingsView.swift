@@ -35,7 +35,7 @@ struct PrivacySettingsView: View {
       } header: {
         Text("Image Previews")
       } footer: {
-        Text("Previews only load over secure connections, from sites with registered names, never from IP addresses or local names like localhost, except the server you're on.")
+        Text("Image previews only load over secure connections from sites with registered names and never from IP addresses beyond the server you're on.")
           .font(.footnote)
           .foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -108,11 +108,13 @@ struct PrivacySettingsView: View {
 }
 
 /// The servers that have been connected to securely, which are only connected to that way since,
-/// each of which can be forgotten, as for one that's stopped taking secure connections.
+/// any of which can be picked and forgotten, as for one that's stopped taking secure connections.
 struct EncryptedServersView: View {
   @Environment(\.dismiss) private var dismiss
-  /// The server to forget, once it's asked about.
-  @State private var forgetting: ServerTrust.Remembered?
+  /// The servers picked in the list.
+  @State private var selection = Set<ServerTrust.Remembered.ID>()
+  /// The servers to forget, once they're asked about.
+  @State private var forgetting: [ServerTrust.Remembered] = []
 
   var body: some View {
     let servers = ServerTrust.shared.remembered
@@ -123,7 +125,7 @@ struct EncryptedServersView: View {
           ContentUnavailableView("No Encrypted Servers", systemImage: "lock", description: Text("Servers you connect to securely are listed here."))
         }
         else {
-          List(servers) { server in
+          List(servers, selection: self.$selection) { server in
             HStack(spacing: 8) {
               Image(systemName: "lock.fill")
                 .foregroundStyle(.secondary)
@@ -133,13 +135,31 @@ struct EncryptedServersView: View {
                   .font(.caption)
                   .foregroundStyle(.secondary)
               }
-              Spacer()
-              Button("Forget…") {
-                self.forgetting = server
-              }
-              .controlSize(.small)
+              Spacer(minLength: 0)
             }
             .padding(.vertical, 2)
+            .listRowSeparator(.hidden)
+          }
+          .alternatingRowBackgrounds()
+          // Delete, and the menu for what's picked, or what's clicked, forget those too, and a
+          // double-click, or Return, shows one's certificate.
+          .onDeleteCommand {
+            self.askToForget(self.selection, of: servers)
+          }
+          .contextMenu(forSelectionType: ServerTrust.Remembered.ID.self) { picked in
+            if let server = Self.single(picked, of: servers) {
+              Button("Show Certificate") {
+                Self.showCertificate(of: server)
+              }
+              .disabled(server.record.certificate == nil)
+            }
+            Button("Forget…") {
+              self.askToForget(picked, of: servers)
+            }
+          } primaryAction: { picked in
+            if let server = Self.single(picked, of: servers) {
+              Self.showCertificate(of: server)
+            }
           }
         }
       }
@@ -148,6 +168,20 @@ struct EncryptedServersView: View {
       Divider()
 
       HStack {
+        Button("Forget…") {
+          self.askToForget(self.selection, of: servers)
+        }
+        .disabled(self.selection.isEmpty)
+        let picked = Self.single(self.selection, of: servers)
+        Button("Show Certificate") {
+          if let picked {
+            Self.showCertificate(of: picked)
+          }
+        }
+        .disabled(picked?.record.certificate == nil)
+        .help(picked != nil && picked?.record.certificate == nil
+          ? "Its certificate's kept the next time you connect to it."
+          : "The certificate it gave the last time you connected.")
         Spacer()
         Button("Done") {
           self.dismiss()
@@ -158,25 +192,63 @@ struct EncryptedServersView: View {
     }
     .frame(width: 460, height: 340)
     .confirmationDialog(
-      "Forget \(self.forgetting.map(Self.name(of:)) ?? "this server")?",
+      self.forgettingTitle,
       isPresented: Binding(
-        get: { self.forgetting != nil },
-        set: { if !$0 { self.forgetting = nil } }
+        get: { !self.forgetting.isEmpty },
+        set: { if !$0 { self.forgetting = [] } }
       ),
       titleVisibility: .visible
     ) {
-      if let server = self.forgetting {
-        Button("Forget") {
+      Button("Forget") {
+        for server in self.forgetting {
           ServerTrust.shared.forget(address: server.address, port: server.port)
-          self.forgetting = nil
         }
+        self.selection.subtract(self.forgetting.map(\.id))
+        self.forgetting = []
       }
       Button("Cancel", role: .cancel) {
-        self.forgetting = nil
+        self.forgetting = []
       }
     } message: {
-      Text("The next time you connect, whatever certificate it has will be trusted, as it was the first time.")
+      Text(self.forgetting.count > 1
+        ? "The next time you connect to each, whatever certificate it has will be trusted, as it was the first time."
+        : "The next time you connect, whatever certificate it has will be trusted, as it was the first time.")
     }
+  }
+
+  /// The one server picked, should just one be.
+  private static func single(_ picked: Set<ServerTrust.Remembered.ID>, of servers: [ServerTrust.Remembered]) -> ServerTrust.Remembered? {
+    guard picked.count == 1, let id = picked.first else {
+      return nil
+    }
+    return servers.first { $0.id == id }
+  }
+
+  /// Shows the certificate a server gave the last time it was connected to, once what asked for it
+  /// is done, as the panel waits until it's closed.
+  private static func showCertificate(of server: ServerTrust.Remembered) {
+    guard let data = server.record.certificate else {
+      return
+    }
+    DispatchQueue.main.async {
+      ServerTrust.showCertificate(data)
+    }
+  }
+
+  /// Asks about forgetting the servers picked, in the list's order.
+  private func askToForget(_ picked: Set<ServerTrust.Remembered.ID>, of servers: [ServerTrust.Remembered]) {
+    let chosen = servers.filter { picked.contains($0.id) }
+    if !chosen.isEmpty {
+      self.forgetting = chosen
+    }
+  }
+
+  /// The server it asks about forgetting, by name, or how many.
+  private var forgettingTitle: String {
+    guard self.forgetting.count > 1 else {
+      return "Forget \(self.forgetting.first.map(Self.name(of:)) ?? "this server")?"
+    }
+    return "Forget \(self.forgetting.count) servers?"
   }
 
   private static func name(of server: ServerTrust.Remembered) -> String {
