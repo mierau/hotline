@@ -1033,11 +1033,11 @@ final class ImageAttachment: NSTextAttachment {
   /// The image's size in pixels, once it's known, from loading it now or before.
   var imageSize: CGSize?
   /// Whether the preview takes up any room: from the start for an image that's loaded before, or
-  /// else once its image starts to come in, so a link to one that can't be had takes none.
+  /// one that stands for its link, whose box says where it's coming from while it waits, or else
+  /// once its image starts to come in, so a link to one that can't be had takes none.
   var isShown: Bool
-  /// Whether it's showing the link it stands for in its place: until its image starts to come in,
-  /// so the link's never missing while it waits, or once its image can't be had.
-  var showsLink: Bool
+  /// Whether it's showing the link it stands for in its place, as its image can't be had.
+  var showsLink = false
   /// Where it loads from by itself, which a redirect has to be to as well.
   let sources: ImagePreview.Sources
 
@@ -1048,8 +1048,7 @@ final class ImageAttachment: NSTextAttachment {
     self.linkText = standsForLink ? linkText : nil
     self.sources = sources
     self.imageSize = ImagePreview.sizes.size(for: url)
-    self.isShown = self.imageSize != nil && !ImagePreview.failures.contains(url)
-    self.showsLink = !self.isShown && self.linkText != nil
+    self.isShown = (self.imageSize != nil || self.linkText != nil) && !ImagePreview.failures.contains(url)
     super.init(data: nil, ofType: nil)
     self.allowsTextAttachmentView = true
   }
@@ -1087,6 +1086,10 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     }
     let view = ImagePreviewView(url: attachment.url, link: attachment.link, sources: attachment.sources)
     view.showsPlaceholder = attachment.isShown
+    // A link not previewed before says where its picture's coming from, in its box, as it waits.
+    if attachment.imageSize == nil, let linkText = attachment.linkText {
+      view.placeholderText = linkText.string
+    }
     if attachment.showsLink, let linkText = attachment.linkText {
       view.showLink(linkText)
     }
@@ -1127,7 +1130,7 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
   }
 
   /// Makes room for the preview once its image starts to come in, until it's here, in place of the
-  /// link it stands for, should it have been showing that while it waited.
+  /// link it stands for, should it be trying again after it couldn't be had.
   private func show() {
     guard let attachment = self.textAttachment as? ImageAttachment, !attachment.isShown else {
       return
@@ -1225,6 +1228,35 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       self.updatePlaceholder()
     }
   }
+  /// What the gray box says while the image is coming the first time: the link it stands for, as a
+  /// caption, in the tertiary color, as a placeholder's words are, along its bottom, shortened in
+  /// the middle to fit.
+  var placeholderText: String? {
+    didSet {
+      guard let text = self.placeholderText else {
+        self.placeholderLabel?.removeFromSuperview()
+        self.placeholderLabel = nil
+        return
+      }
+      let scheme = ["https://", "http://"].first { text.lowercased().hasPrefix($0) }
+      let label = self.placeholderLabel ?? NSTextField(labelWithString: "")
+      label.stringValue = scheme.map { String(text.dropFirst($0.count)) } ?? text
+      label.font = .preferredFont(forTextStyle: .caption1)
+      label.textColor = .tertiaryLabelColor
+      label.alignment = .center
+      label.lineBreakMode = .byTruncatingMiddle
+      label.usesSingleLineMode = true
+      label.maximumNumberOfLines = 1
+      label.isHidden = true
+      if label.superview == nil {
+        self.addSubview(label)
+      }
+      self.placeholderLabel = label
+      self.needsLayout = true
+      self.updatePlaceholder()
+    }
+  }
+  private var placeholderLabel: NSTextField?
 
   private let imageView = NSImageView()
   private var started = false
@@ -1354,6 +1386,10 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       self.framesLayer.frame = self.framesView.bounds
       let side = self.progress.frame.size
       self.progress.setFrameOrigin(NSPoint(x: (self.bounds.midX - side.width / 2).rounded(), y: (self.bounds.midY - side.height / 2).rounded()))
+      if let label = self.placeholderLabel {
+        let height = ceil(label.fittingSize.height)
+        label.frame = NSRect(x: 8, y: self.bounds.height - height - 6, width: max(0, self.bounds.width - 16), height: height)
+      }
       self.updatePlaceholder()
     }
     guard let size = self.imageView.image?.size, size.width > 0, size.height > 0 else {
@@ -1583,6 +1619,11 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       else {
         self.progress.stopAnimation(nil)
       }
+    }
+    // And where it's coming from, until it's been had once, so it never shows as it's had again.
+    if let label = self.placeholderLabel {
+      label.isHidden = !(showsPlaceholder && self.imageView.image == nil && self.pictureSize == nil && self.linkLabel == nil
+        && self.bounds.width >= 60 && self.bounds.height >= 40)
     }
   }
 

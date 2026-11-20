@@ -307,22 +307,30 @@ struct ImagePreviewPlaybackTests {
     #expect(!preview.subviews.contains { $0 is NSTextField })
   }
 
-  @Test func newLinkShowsItselfUntilItsPictureStartsToCome() throws {
-    // A link never previewed, shown as its preview alone: the link, in its place, while it waits.
+  @Test func newLinksBoxSaysWhereItsPictureIsComing() throws {
+    // A link never previewed, shown as its preview alone: its box from the start, saying where its
+    // picture's coming from, without the https://, while it comes.
     let url = URL(string: "https://example.com/\(UUID().uuidString)/cat.png")!
     let attachment = ImageAttachment(url: url, standsForLink: true, link: url, linkText: NSAttributedString(string: url.absoluteString))
-    #expect(attachment.showsLink && !attachment.isShown)
+    #expect(attachment.isShown && !attachment.showsLink)
+    #expect(attachment.previewSize == ImagePreview.placeholderSize)
     let storage = NSTextContentStorage()
     storage.attributedString = NSAttributedString(attachment: attachment)
     let provider = ImagePreviewProvider(textAttachment: attachment, parentView: nil, textLayoutManager: nil, location: storage.documentRange.location)
     provider.loadView()
     let preview = try #require(provider.view as? ImagePreviewView)
-    #expect(preview.subviews.contains { $0 is NSTextField })
-    // Room for its picture once it starts to come, in the link's place.
-    preview.onStart?()
-    #expect(attachment.isShown && !attachment.showsLink)
-    #expect(!preview.subviews.contains { $0 is NSTextField })
-    // One under a line that has its link already takes no room until then.
+    preview.frame = NSRect(origin: .zero, size: ImagePreview.placeholderSize)
+    preview.needsLayout = true
+    preview.layoutSubtreeIfNeeded()
+    func shown() -> [String] {
+      preview.subviews.compactMap { $0 as? NSTextField }.filter { !$0.isHidden }.map(\.stringValue)
+    }
+    #expect(shown() == [String(url.absoluteString.dropFirst("https://".count))])
+    // Should it not be had, the link in its place, as it was written.
+    preview.onFail?(.unreachable)
+    #expect(attachment.showsLink && !attachment.isShown)
+    #expect(shown() == [url.absoluteString])
+    // One under a line that has its link already takes no room until its picture starts to come.
     let under = ImageAttachment(url: URL(string: "https://example.com/\(UUID().uuidString)/dog.png")!)
     #expect(!under.showsLink && !under.isShown)
   }
