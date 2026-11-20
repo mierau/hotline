@@ -126,6 +126,52 @@ struct ImagePreviewSizesTests {
     #expect(loads("https://imgs.search.brave.com/abc/rs:fit:500:0:0/g:ce/aHR0cHM6Ly9leGFtcGxlLmNvbQ"))
   }
 
+  /// A picture of a size, as a kind of file, turned as it says.
+  private func encoded(_ type: UTType, width: Int, height: Int, orientation: Int = 1) -> Data {
+    let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    context.setFillColor(CGColor(srgbRed: 0.3, green: 0.5, blue: 0.8, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    let data = NSMutableData()
+    let destination = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil)!
+    CGImageDestinationAddImage(destination, context.makeImage()!, [kCGImagePropertyOrientation: orientation] as CFDictionary)
+    CGImageDestinationFinalize(destination)
+    return data as Data
+  }
+
+  @Test func picturesSayTheirSizeInTheirFirstBytes() {
+    // A GIF and a PNG, by their headers' first few dozen bytes, and not before.
+    let gif = self.encoded(.gif, width: 480, height: 270)
+    #expect(ImagePreview.pixelSize(ofStart: gif.prefix(10)) == CGSize(width: 480, height: 270))
+    #expect(ImagePreview.pixelSize(ofStart: gif.prefix(9)) == nil)
+    let png = self.encoded(.png, width: 300, height: 200)
+    #expect(ImagePreview.pixelSize(ofStart: png.prefix(24)) == CGSize(width: 300, height: 200))
+    #expect(ImagePreview.pixelSize(ofStart: png.prefix(23)) == nil)
+    // A JPEG, as ImageIO reads it, turned the way it says it is.
+    #expect(ImagePreview.pixelSize(ofStart: self.encoded(.jpeg, width: 1200, height: 700).prefix(4096)) == CGSize(width: 1200, height: 700))
+    #expect(ImagePreview.pixelSize(ofStart: self.encoded(.jpeg, width: 1200, height: 700, orientation: 6).prefix(4096)) == CGSize(width: 700, height: 1200))
+    // A WebP of each kind: extended, as an animation is, lossy, and lossless.
+    func webP(_ chunk: String, _ start: [UInt8]) -> Data {
+      Data("RIFF".utf8) + Data([0, 0, 0, 0]) + Data("WEBP".utf8) + Data(chunk.utf8) + Data([0, 0, 0, 0]) + Data(start)
+    }
+    // 640 x 360, each less one, in three bytes, after its flags.
+    #expect(ImagePreview.pixelSize(ofStart: webP("VP8X", [0x10, 0, 0, 0, 0x7F, 0x02, 0x00, 0x67, 0x01, 0x00])) == CGSize(width: 640, height: 360))
+    // 320 x 240, after its frame tag and start code.
+    #expect(ImagePreview.pixelSize(ofStart: webP("VP8 ", [0x10, 0x02, 0x00, 0x9D, 0x01, 0x2A, 0x40, 0x01, 0xF0, 0x00])) == CGSize(width: 320, height: 240))
+    // 100 x 50, each less one, in 14 bits, after its signature.
+    #expect(ImagePreview.pixelSize(ofStart: webP("VP8L", [0x2F, 0x63, 0x40, 0x0C, 0x00, 0, 0, 0, 0, 0])) == CGSize(width: 100, height: 50))
+    // HEIC, which ImageIO only reads whole, and nothing.
+    #expect(ImagePreview.pixelSize(ofStart: self.encoded(.heic, width: 300, height: 200).prefix(4096)) == nil)
+    #expect(ImagePreview.pixelSize(ofStart: Data()) == nil)
+  }
+
+  @Test func picturesInNewerFormatsArePreviewed() {
+    // AVIF and JPEG XL, which macOS reads, by their extensions, as other pictures are.
+    #expect(ImagePreview.canPreview(URL(string: "https://example.com/photo.avif")!))
+    #expect(ImagePreview.canPreview(URL(string: "https://example.com/photo.JXL")!))
+    #expect(self.shown("look https://i.imgur.com/cat.avif").words == "look\n[preview]")
+  }
+
   @Test func githubsPicturesLoadByThemselves() {
     let sources = ImagePreview.Sources()
     func loads(_ link: String) -> Bool {

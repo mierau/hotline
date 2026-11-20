@@ -256,6 +256,119 @@ struct ImagePreviewPlaybackTests {
     try? FileManager.default.removeItem(at: ImagePreview.directory)
   }
 
+  @Test func copiedPictureGoesOnTheClipboardAsItCame() async throws {
+    // A GIF kept whole on disk, as an animation's original is, had from there, not the network.
+    let gif = Self.gif(delays: [0.1, 0.1, 0.1])
+    let url = URL(string: "https://example.invalid/\(UUID().uuidString)/dance.gif")!
+    try await ImagePreview.cache.storeToDisk(gif, forKey: url.absoluteString)
+    defer {
+      ImagePreview.cache.clearMemoryCache()
+      try? FileManager.default.removeItem(at: ImagePreview.directory)
+    }
+    let original = try #require(await ImagePreview.original(of: url, sources: ImagePreview.Sources(server: "example.invalid")))
+    #expect(original == gif)
+    // On a clipboard of the tests' own, as the GIF it is, to keep it moving where it's pasted, and as
+    // an image, made once one's asked for.
+    let pasteboard = NSPasteboard(name: NSPasteboard.Name("Hotline Tests \(UUID().uuidString)"))
+    defer {
+      pasteboard.releaseGlobally()
+    }
+    ImagePreview.copy(original, to: pasteboard)
+    #expect(pasteboard.data(forType: NSPasteboard.PasteboardType("com.compuserve.gif")) == gif)
+    let tiff = try #require(pasteboard.data(forType: .tiff))
+    #expect(NSImage(data: tiff)?.size == CGSize(width: 480, height: 270))
+  }
+
+  @Test func loadedPreviewsMenuSavesAndCopiesIt() async throws {
+    let url = URL(string: "https://example.invalid/\(UUID().uuidString)/photo.jpg")!
+    try await ImagePreview.cache.storeToDisk(Self.picture(), forKey: url.absoluteString)
+    let textView = MarkdownTextView(usingTextLayoutManager: true)
+    textView.configure()
+    textView.openImageAction = { _ in }
+    textView.frame = NSRect(x: 0, y: 0, width: 300, height: 200)
+    let preview = ImagePreviewView(url: url, link: url, sources: ImagePreview.Sources(server: "example.invalid"))
+    preview.frame = NSRect(x: 0, y: 0, width: 240, height: 135)
+    textView.addSubview(preview)
+    let window = SeenWindow(contentRect: NSRect(x: -4000, y: 0, width: 300, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView?.addSubview(textView)
+    window.orderFront(nil)
+    defer {
+      Self.cleanUp(window)
+    }
+    #expect(try await Self.until { Self.still(of: preview) != nil })
+    let click = try #require(NSEvent.mouseEvent(with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                 context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+    // Once it's here: saved or copied, after opening it, then its link's.
+    #expect(preview.menu(for: click)?.items.map(\.title) == ["Open Image", "Save Image…", "Copy Image", "Open Link", "Copy Link"])
+    // Its link, in its place, only the link's.
+    preview.showLink(NSAttributedString(string: url.absoluteString))
+    #expect(preview.menu(for: click)?.items.map(\.title) == ["Open Link", "Copy Link"])
+  }
+
+  /// pictures.example, for downloads through the shared session: a picture, whole, for anything.
+  final class AnyPicture: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var body = Data()
+
+    override class func canInit(with request: URLRequest) -> Bool {
+      request.url?.host == "pictures.example"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+      request
+    }
+
+    override func startLoading() {
+      let response = HTTPURLResponse(url: self.request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                                     headerFields: ["Content-Type": "image/jpeg", "Content-Length": "\(Self.body.count)"])!
+      self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+      self.client?.urlProtocol(self, didLoad: Self.body)
+      self.client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+  }
+
+  @Test func savedPictureTakesThePlaceOfWhatsThere() async throws {
+    URLProtocol.registerClass(AnyPicture.self)
+    defer {
+      URLProtocol.unregisterClass(AnyPicture.self)
+    }
+    AnyPicture.body = Self.picture()
+    let folder = URL.temporaryDirectory.appending(path: "Saved Pictures \(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer {
+      try? FileManager.default.removeItem(at: folder)
+    }
+    // Saved over a file, as the save panel lets it be once it's asked about, in its place.
+    let destination = folder.appending(path: "photo.jpg")
+    try Data("not a picture".utf8).write(to: destination)
+    let failure: String? = await withCheckedContinuation { continuation in
+      ImageFilePromise.download(URL(string: "https://pictures.example/photo.jpg")!, to: destination) { error in
+        continuation.resume(returning: error.map { "\($0)" })
+      }
+    }
+    #expect(failure == nil)
+    #expect(try Data(contentsOf: destination) == AnyPicture.body)
+  }
+
+  @Test func avifPicturesArePreviewed() async throws {
+    // The photo-like picture as an AVIF, as macOS writes one.
+    let data = NSMutableData()
+    let destination = try #require(CGImageDestinationCreateWithData(data, "public.avif" as CFString, 1, nil))
+    CGImageDestinationAddImage(destination, Self.decoded(Self.picture()), nil)
+    #expect(CGImageDestinationFinalize(destination))
+    let (preview, window) = try await Self.preview(of: data as Data, named: "photo.avif")
+    defer {
+      Self.cleanUp(window)
+    }
+    #expect(try await Self.until { Self.still(of: preview) != nil })
+    // Its blue middle, in its orange.
+    let still = try #require(Self.still(of: preview))
+    #expect(Self.same(Self.averageColor(of: still, in: Self.middle), [51, 153, 230], slack: 25))
+    #expect(Self.same(Self.averageColor(of: still, in: Self.edge), [217, 115, 51], slack: 25))
+  }
+
   @Test func previewLetsGoOffScreen() async throws {
     let (preview, window) = try await Self.preview(of: Self.gif(delays: Array(repeating: 0.04, count: 12)), named: "playing.gif")
     defer {
@@ -305,6 +418,52 @@ struct ImagePreviewPlaybackTests {
     NotificationCenter.default.post(name: ImagePreview.networkDidReturn, object: nil)
     #expect(try await Self.until { Self.still(of: preview) != nil })
     #expect(!preview.subviews.contains { $0 is NSTextField })
+  }
+
+  @Test func previewsAreNamedForVoiceOver() throws {
+    // Kept, as a text view keeps them, while it's shown.
+    var providers: [ImagePreviewProvider] = []
+    func preview(_ attachment: ImageAttachment) throws -> ImagePreviewView {
+      let storage = NSTextContentStorage()
+      storage.attributedString = NSAttributedString(attachment: attachment)
+      let provider = ImagePreviewProvider(textAttachment: attachment, parentView: nil, textLayoutManager: nil, location: storage.documentRange.location)
+      provider.loadView()
+      providers.append(provider)
+      return try #require(provider.view as? ImagePreviewView)
+    }
+    // A Markdown image, by the words written for it, as one picture.
+    let cat = URL(string: "https://example.com/\(UUID().uuidString)/cat.png")!
+    let described = try preview(ImageAttachment(url: cat, standsForLink: true, link: cat, linkText: NSAttributedString(string: "A cat on a keyboard")))
+    #expect(described.isAccessibilityElement() && described.accessibilityRole() == .image)
+    #expect(described.accessibilityLabel() == "A cat on a keyboard")
+    // An address, by where it's from, and once it can't be had, as the link in its place.
+    let dog = URL(string: "https://example.com/\(UUID().uuidString)/dog.png")!
+    let address = try preview(ImageAttachment(url: dog, standsForLink: true, link: dog, linkText: NSAttributedString(string: dog.absoluteString)))
+    #expect(address.accessibilityRole() == .image && address.accessibilityLabel() == "From example.com")
+    address.onFail?(.unreachable)
+    #expect(address.accessibilityRole() == .link && address.accessibilityLabel() == dog.absoluteString)
+    // Its parts aren't said again, but for its progress, while that's shown.
+    #expect(address.subviews.allSatisfy { !$0.isAccessibilityElement() || $0 is NSProgressIndicator })
+    #expect(address.accessibilityChildren()?.isEmpty == true)
+    #expect(described.accessibilityChildren()?.isEmpty == true)
+  }
+
+  @Test func voiceOverReadsPreviewsAmongTheWords() throws {
+    // A post with a picture by its address, and one written as a Markdown image, with words.
+    let textView = MarkdownTextView(usingTextLayoutManager: true)
+    textView.configure()
+    let address = "https://i.imgur.com/\(UUID().uuidString.prefix(8)).png"
+    textView.show("look \(address)\n\n![A cat on a keyboard](https://i.imgur.com/\(UUID().uuidString.prefix(8)).png)", layout: .board)
+    let string = textView.string as NSString
+    let attachments = (0..<string.length).filter { string.character(at: $0) == 0xFFFC }
+    #expect(attachments.count == 2)
+    // Each, where it is in the words, as the picture it is, by where it's from, or its words.
+    let named = try attachments.map { index -> String in
+      let words = try #require(textView.accessibilityAttributedString(for: NSRange(location: index, length: 1)))
+      let element = words.attribute(NSAttributedString.Key(rawValue: "AXAttachment"), at: 0, effectiveRange: nil) as? NSAccessibilityElement
+      return "\(element?.accessibilityRole()?.rawValue ?? "nothing") \(element?.accessibilityLabel() ?? "")"
+    }
+    #expect(named.sorted() == ["AXImage A cat on a keyboard", "AXImage From i.imgur.com"])
   }
 
   @Test func newLinksBoxSaysWhereItsPictureIsComing() throws {
@@ -373,6 +532,77 @@ struct ImagePreviewPlaybackTests {
   /// The link of the last picture said to have started to come.
   private final class Started: @unchecked Sendable {
     var url: URL?
+  }
+
+  /// The start of a picture, and then nothing more, as from a host slow to send the rest.
+  final class PictureStart: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var start = Data()
+
+    override class func canInit(with request: URLRequest) -> Bool {
+      true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+      request
+    }
+
+    override func startLoading() {
+      let response = HTTPURLResponse(url: self.request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                                     headerFields: ["Content-Type": "image/gif", "Content-Length": "1000000"])!
+      self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+      self.client?.urlProtocol(self, didLoad: Self.start)
+    }
+
+    override func stopLoading() {}
+  }
+
+  /// The link and size of the last picture whose first bytes said how big it is.
+  private final class Sized: @unchecked Sendable {
+    var url: URL?
+    var size: CGSize?
+  }
+
+  @Test func pictureSaysItsSizeBeforeItsHere() async throws {
+    // Through a downloader set up as previews' is, to a GIF said to be a megabyte, whose first
+    // kilobyte is all that comes. URLSession holds a response's first 512 bytes back, to tell what
+    // it is, so it's more than that, as the first of any picture to come over a network is.
+    let downloader = ImageDownloader(name: "Picture Starts for Tests")
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [PictureStart.self]
+    downloader.sessionConfiguration = configuration
+    downloader.sessionDelegate = ImageDownloadLimit()
+    PictureStart.start = Self.gif(delays: Array(repeating: 0.1, count: 6)).prefix(1024)
+    let url = URL(string: "https://slow.example/\(UUID().uuidString)/dance.gif")!
+    let sized = Sized()
+    let observer = NotificationCenter.default.addObserver(forName: ImagePreview.pictureSizeDidArrive, object: nil, queue: .main) { notification in
+      sized.url = notification.object as? URL
+      sized.size = (notification.userInfo?["size"] as? NSValue)?.sizeValue
+    }
+    let download = Task {
+      try? await downloader.downloadImage(with: url)
+    }
+    defer {
+      download.cancel()
+      NotificationCenter.default.removeObserver(observer)
+    }
+    #expect(try await Self.until { sized.url == url })
+    #expect(sized.size == CGSize(width: 480, height: 270))
+  }
+
+  @Test func newPreviewTakesItsPicturesShapeBeforeItsHere() throws {
+    let url = URL(string: "https://example.com/\(UUID().uuidString)/tall.jpg")!
+    let attachment = ImageAttachment(url: url, standsForLink: true, link: url, linkText: NSAttributedString(string: url.absoluteString))
+    #expect(attachment.previewSize == ImagePreview.placeholderSize)
+    let storage = NSTextContentStorage()
+    storage.attributedString = NSAttributedString(attachment: attachment)
+    let provider = ImagePreviewProvider(textAttachment: attachment, parentView: nil, textLayoutManager: nil, location: storage.documentRange.location)
+    provider.loadView()
+    let preview = try #require(provider.view as? ImagePreviewView)
+    // A tall photo, by its first bytes: its shape, before the rest of it's here.
+    preview.onSize?(CGSize(width: 700, height: 1200))
+    #expect(attachment.imageSize == CGSize(width: 700, height: 1200))
+    #expect(attachment.previewSize == CGSize(width: 117, height: 200))
+    withExtendedLifetime(provider) {}
   }
 
   @Test func pictureThatDoesntSayHowBigItIsStopsAtTheLimit() async throws {

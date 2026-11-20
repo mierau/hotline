@@ -26,13 +26,75 @@ enum ImagePreview {
   /// The size of an image we haven't seen before, until it loads.
   static let placeholderSize = CGSize(width: 160, height: 90)
 
-  private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff"]
+  /// The kinds of pictures macOS reads, AVIF and JPEG XL among them.
+  private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "avif", "jxl", "bmp", "tif", "tiff"]
 
   /// Bigger images don't download, whether they say how big they are first or not.
   static let sizeLimit: Int64 = 10 * 1024 * 1024
 
   /// Why a picture's download was stopped: more of it came than a preview's worth.
   struct TooBig: Error {}
+
+  /// How much of a picture's start is kept to read its size from. Most say it in their first few
+  /// dozen bytes, and a photo whose camera says a lot about it, a few kilobytes in.
+  static let sizingLimit = 256 * 1024
+
+  /// A picture's size in pixels, the way it's shown, from as much of its start as has come, once
+  /// that's enough to tell: straight from a GIF's, PNG's or WebP's header, which says it in its first
+  /// 30 bytes, or else as ImageIO reads it, as for a JPEG, turned the way it says. Nil until then,
+  /// and for HEIC and AVIF, which ImageIO only reads whole.
+  static func pixelSize(ofStart data: Data) -> CGSize? {
+    let bytes = [UInt8](data.prefix(32))
+    func says(_ text: String, at index: Int) -> Bool {
+      bytes.count >= index + text.utf8.count && bytes[index..<(index + text.utf8.count)].elementsEqual(text.utf8)
+    }
+    func little16(_ index: Int) -> Int {
+      Int(bytes[index]) | Int(bytes[index + 1]) << 8
+    }
+    func little24(_ index: Int) -> Int {
+      little16(index) | Int(bytes[index + 2]) << 16
+    }
+    func big32(_ index: Int) -> Int {
+      Int(bytes[index]) << 24 | Int(bytes[index + 1]) << 16 | Int(bytes[index + 2]) << 8 | Int(bytes[index + 3])
+    }
+    func size(_ width: Int, _ height: Int) -> CGSize? {
+      width > 0 && height > 0 ? CGSize(width: width, height: height) : nil
+    }
+    if says("GIF8", at: 0) {
+      return bytes.count >= 10 ? size(little16(6), little16(8)) : nil
+    }
+    if bytes.count >= 8, bytes[0..<8].elementsEqual([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+      return bytes.count >= 24 && says("IHDR", at: 12) ? size(big32(16), big32(20)) : nil
+    }
+    if says("RIFF", at: 0) {
+      guard bytes.count >= 30, says("WEBP", at: 8) else {
+        return nil
+      }
+      // Extended, as an animation is, lossy, and lossless.
+      if says("VP8X", at: 12) {
+        return size(little24(24) + 1, little24(27) + 1)
+      }
+      if says("VP8 ", at: 12), bytes[23] == 0x9D, bytes[24] == 0x01, bytes[25] == 0x2A {
+        return size(little16(26) & 0x3FFF, little16(28) & 0x3FFF)
+      }
+      if says("VP8L", at: 12), bytes[20] == 0x2F {
+        let bits = little16(21) | little16(23) << 16
+        return size((bits & 0x3FFF) + 1, (bits >> 14 & 0x3FFF) + 1)
+      }
+      return nil
+    }
+    if says("ftyp", at: 4) {
+      return nil
+    }
+    let source = CGImageSourceCreateIncremental(nil)
+    CGImageSourceUpdateData(source, data as CFData, false)
+    guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+          let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int else {
+      return nil
+    }
+    let orientation = properties[kCGImagePropertyOrientation] as? UInt32 ?? 1
+    return orientation >= 5 ? size(height, width) : size(width, height)
+  }
 
   /// Bigger pictures among a server's files aren't previewed: one linked to downloads to everyone
   /// there at once, from a server that could be on a home connection.
@@ -627,6 +689,11 @@ enum ImagePreview {
   /// come, which Kingfisher says nothing of, with the link it was asked for as its object.
   static let pictureDidStart = Notification.Name("ImagePreviewPictureDidStart")
 
+  /// Posted on the main thread once a picture from the web's first bytes say how big it is, before
+  /// the rest of it's here, with the link it was asked for as its object, and its size in pixels,
+  /// as an NSValue, as "size".
+  static let pictureSizeDidArrive = Notification.Name("ImagePreviewPictureSizeDidArrive")
+
   private static let network: NWPathMonitor = {
     let monitor = NWPathMonitor()
     // On a network to start with, so only coming back to one, after being off, counts.
@@ -655,6 +722,53 @@ enum ImagePreview {
   static func watchNetwork() {
     _ = self.network
   }
+
+  /// Where a picture's download may be sent on to: on to a page whose picture's known, as a short
+  /// link's GIF's page, the picture, and only somewhere it could load from by itself, so a link from
+  /// a host it trusts can't send it somewhere else that would see you.
+  static func redirects(for sources: Sources) -> AnyRedirectHandler {
+    AnyRedirectHandler { _, _, request, completion in
+      var request = request
+      if let page = request.url, let picture = ImagePreview.picture(in: page) {
+        request.url = picture
+      }
+      completion(request.url.map(sources.trusts) == true ? request : nil)
+    }
+  }
+
+  /// A picture as it is where it's from, to copy: from disk, should it be kept whole there, as an
+  /// animation is, or else downloaded again, as its preview was, an image no bigger than a preview's
+  /// limit, from where it could load from by itself.
+  static func original(of url: URL, sources: Sources) async -> Data? {
+    let key = url.absoluteString
+    if let data = await Task.detached(priority: .userInitiated, operation: { ImagePreview.animation(forKey: key) }).value {
+      return data
+    }
+    return try? await self.downloader.downloadImage(with: url, options: [.redirectHandler(self.redirects(for: sources))]).originalData
+  }
+
+  /// Puts a picture on the clipboard as it came, for an app that takes that kind of file, as a
+  /// GIF's to keep it moving, and as an image any app takes, made only once one asks for it.
+  @MainActor
+  static func copy(_ data: Data, to pasteboard: NSPasteboard = .general) {
+    let item = NSPasteboardItem()
+    let type: NSPasteboard.PasteboardType? = CGImageSourceCreateWithData(data as CFData, nil)
+      .flatMap { CGImageSourceGetType($0) as String? }
+      .map { NSPasteboard.PasteboardType(rawValue: $0) }
+    if let type {
+      item.setData(data, forType: type)
+    }
+    if type != NSPasteboard.PasteboardType.tiff {
+      let image = CopiedImage(data)
+      item.setDataProvider(image, forTypes: [.tiff])
+      self.copied = image
+    }
+    pasteboard.clearContents()
+    pasteboard.writeObjects([item])
+  }
+
+  /// The picture last copied, kept while the clipboard might ask it for its image.
+  @MainActor private static var copied: CopiedImage?
 
   /// Downloads previews, turning away anything that isn't an image, and stopping one once it's more
   /// than a preview's worth, or still coming after a minute.
@@ -752,10 +866,13 @@ private final class ImageDownloadCheck: ImageDownloaderDelegate {
 
 /// Stops a preview's download once more of it has come than a preview's worth, which one that
 /// doesn't say how big it is could send without end, as Kingfisher only counts what's come of one
-/// that does. And says when one like that starts to come, which Kingfisher doesn't either.
+/// that does. And says when one like that starts to come, which Kingfisher doesn't either, and how
+/// big any picture is, as soon as its first bytes say, before the rest of it's here.
 final class ImageDownloadLimit: SessionDelegate, @unchecked Sendable {
-  /// How much of each download has come, only touched on the session's queue, one call at a time.
+  /// How much of each download has come, and the start of each whose picture's size isn't known
+  /// yet, only touched on the session's queue, one call at a time.
   private var received: [Int: Int64] = [:]
+  private var starts: [Int: Data] = [:]
 
   override func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
     let id = dataTask.taskIdentifier
@@ -765,21 +882,39 @@ final class ImageDownloadLimit: SessionDelegate, @unchecked Sendable {
       // Ended as too big for whoever's waiting on it, then stopped, which Kingfisher, done with it,
       // pays no attention to.
       self.received[id] = nil
+      self.starts[id] = nil
       super.urlSession(session, task: dataTask, didCompleteWithError: ImagePreview.TooBig())
       dataTask.cancel()
       return
     }
     self.received[id] = received
-    if isFirst, (dataTask.response?.expectedContentLength ?? -1) < 0, let url = dataTask.originalRequest?.url {
+    let url = dataTask.originalRequest?.url
+    if isFirst, (dataTask.response?.expectedContentLength ?? -1) < 0, let url {
       DispatchQueue.main.async {
         NotificationCenter.default.post(name: ImagePreview.pictureDidStart, object: url)
       }
     }
     super.urlSession(session, dataTask: dataTask, didReceive: data)
+    // Its size, as soon as its start says it, or not, should it say nothing that far in.
+    guard isFirst || self.starts[id] != nil, let url else {
+      return
+    }
+    var start = self.starts[id] ?? Data()
+    start.append(data.prefix(ImagePreview.sizingLimit - start.count))
+    if let size = ImagePreview.pixelSize(ofStart: start) {
+      self.starts[id] = nil
+      DispatchQueue.main.async {
+        NotificationCenter.default.post(name: ImagePreview.pictureSizeDidArrive, object: url, userInfo: ["size": NSValue(size: size)])
+      }
+    }
+    else {
+      self.starts[id] = start.count < ImagePreview.sizingLimit ? start : nil
+    }
   }
 
   override func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
     self.received[task.taskIdentifier] = nil
+    self.starts[task.taskIdentifier] = nil
     super.urlSession(session, task: task, didCompleteWithError: error)
   }
 }
@@ -990,6 +1125,43 @@ protocol LinkActions: AnyObject {
   func previewDidResize()
 }
 
+extension NSTextView {
+  /// The words VoiceOver reads, with each preview among them as the picture it shows, called what
+  /// it's called, where the text system leaves an attachment with nothing to say: the preview
+  /// itself, while it's laid out, or else one standing in for it, as it's scrolled away.
+  func withPreviewsForAccessibility(_ text: NSAttributedString?, in range: NSRange) -> NSAttributedString? {
+    guard let text, let storage = self.textContentStorage?.textStorage else {
+      return text
+    }
+    let searched = NSIntersectionRange(range, NSRange(location: 0, length: storage.length))
+    guard searched.length > 0 else {
+      return text
+    }
+    var shown: NSMutableAttributedString?
+    storage.enumerateAttribute(.attachment, in: searched) { value, found, _ in
+      let offset = found.location - range.location
+      guard let attachment = value as? ImageAttachment, offset >= 0, offset + found.length <= text.length else {
+        return
+      }
+      let words = shown ?? NSMutableAttributedString(attributedString: text)
+      words.addAttribute(NSAttributedString.Key(rawValue: "AXAttachment"), value: self.accessibilityElement(for: attachment, at: found.location),
+                         range: NSRange(location: offset, length: found.length))
+      shown = words
+    }
+    return shown ?? text
+  }
+
+  private func accessibilityElement(for attachment: ImageAttachment, at index: Int) -> Any {
+    if let textLayoutManager = self.textLayoutManager, let content = textLayoutManager.textContentManager,
+       let location = content.location(content.documentRange.location, offsetBy: index),
+       let fragment = textLayoutManager.textLayoutFragment(for: location),
+       let view = fragment.textAttachmentViewProviders.first(where: { $0.textAttachment === attachment })?.view {
+      return view
+    }
+    return NSAccessibilityElement.element(withRole: attachment.showsLink ? .link : .image, frame: .zero, label: attachment.accessibilityName, parent: self) as Any
+  }
+}
+
 extension LinkActions {
   /// What can be done with a link to an image, for its preview's menu: open the image in a preview
   /// window, while there's one, or the link the way a click on it does, or copy it, as macOS's menu
@@ -1077,6 +1249,23 @@ final class ImageAttachment: NSTextAttachment {
   var previewSize: CGSize {
     ImagePreview.previewSize(forImageSize: self.imageSize)
   }
+
+  /// The words written for the picture, as a Markdown image's are, rather than its link.
+  var altText: String? {
+    guard let words = self.linkText?.string, !words.isEmpty, !words.contains("://") else {
+      return nil
+    }
+    return words
+  }
+
+  /// What VoiceOver calls it: by the words written for it, or where it's from, or, showing its link
+  /// in its place, the link.
+  var accessibilityName: String {
+    if self.showsLink, let linkText = self.linkText {
+      return linkText.string
+    }
+    return self.altText ?? (self.link ?? self.url).host(percentEncoded: false).map { "From \($0)" } ?? "Picture"
+  }
 }
 
 final class ImagePreviewProvider: NSTextAttachmentViewProvider {
@@ -1090,11 +1279,16 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     if attachment.imageSize == nil, let linkText = attachment.linkText {
       view.placeholderText = linkText.string
     }
+    // Called by the words written for it, as a Markdown image's are, rather than its link.
+    view.altText = attachment.altText
     if attachment.showsLink, let linkText = attachment.linkText {
       view.showLink(linkText)
     }
     view.onStart = { [weak self] in
       self?.show()
+    }
+    view.onSize = { [weak self] imageSize in
+      self?.sizeDidArrive(imageSize)
     }
     view.onLoad = { [weak self] imageSize in
       self?.imageDidLoad(imageSize: imageSize)
@@ -1139,6 +1333,24 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     attachment.showsLink = false
     (self.view as? ImagePreviewView)?.hideLink()
     (self.view as? ImagePreviewView)?.showsPlaceholder = true
+    self.layOutAgain()
+  }
+
+  /// Takes the picture's shape as soon as its first bytes say what that is, before the rest of it's
+  /// here, so nothing moves once it is.
+  private func sizeDidArrive(_ imageSize: CGSize) {
+    guard let attachment = self.textAttachment as? ImageAttachment, attachment.imageSize == nil, !attachment.showsLink,
+          imageSize.width > 0, imageSize.height > 0 else {
+      return
+    }
+    let previousSize = attachment.previewSize
+    let wasShown = attachment.isShown
+    attachment.imageSize = imageSize
+    attachment.isShown = true
+    (self.view as? ImagePreviewView)?.showsPlaceholder = true
+    guard attachment.previewSize != previousSize || !wasShown else {
+      return
+    }
     self.layOutAgain()
   }
 
@@ -1218,6 +1430,8 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   let sources: ImagePreview.Sources
   /// Called once the image starts to come in.
   var onStart: (() -> Void)?
+  /// Called with the image's size in pixels, as soon as its first bytes say it, before it's here.
+  var onSize: ((CGSize) -> Void)?
   /// Called with the image's size in pixels once it loads.
   var onLoad: ((CGSize) -> Void)?
   /// Called if the image can't be had, with why.
@@ -1248,6 +1462,8 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       label.usesSingleLineMode = true
       label.maximumNumberOfLines = 1
       label.isHidden = true
+      // Said already, by the preview's own name.
+      label.setAccessibilityElement(false)
       if label.superview == nil {
         self.addSubview(label)
       }
@@ -1257,6 +1473,12 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     }
   }
   private var placeholderLabel: NSTextField?
+  /// The words written for the picture, as a Markdown image's are, which VoiceOver calls it by.
+  var altText: String? {
+    didSet {
+      self.updateAccessibility()
+    }
+  }
 
   private let imageView = NSImageView()
   private var started = false
@@ -1306,8 +1528,12 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.layer?.cornerRadius = 6
     self.layer?.masksToBounds = true
     self.toolTip = self.linkToolTip
-    self.setAccessibilityLabel("Image preview")
+    // One picture to VoiceOver, named for what it's of, which a press opens, as a click does.
+    self.setAccessibilityElement(true)
+    self.updateAccessibility()
 
+    self.imageView.setAccessibilityElement(false)
+    self.framesView.setAccessibilityElement(false)
     self.imageView.imageScaling = .scaleProportionallyUpOrDown
     self.imageView.animates = false
     self.imageView.wantsLayer = true
@@ -1344,8 +1570,10 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     // Tried again, should it not have been had, once the network's back.
     ImagePreview.watchNetwork()
     NotificationCenter.default.addObserver(self, selector: #selector(self.networkDidReturn), name: ImagePreview.networkDidReturn, object: nil)
-    // Made room for once it starts to come, should it not say how big it is.
+    // Made room for once it starts to come, should it not say how big it is, and given its shape as
+    // soon as its first bytes say what that is.
     NotificationCenter.default.addObserver(self, selector: #selector(self.pictureDidStart(_:)), name: ImagePreview.pictureDidStart, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(self.pictureSizeDidArrive(_:)), name: ImagePreview.pictureSizeDidArrive, object: nil)
   }
 
   /// Whether the pointer's over it, which plays an animation that doesn't play by itself.
@@ -1597,8 +1825,9 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       self.addSubview(label)
     }
     self.linkLabel = label
+    label.setAccessibilityElement(false)
     self.toolTip = (self.link ?? self.url).absoluteString
-    self.setAccessibilityLabel("Link")
+    self.updateAccessibility()
     self.window?.invalidateCursorRects(for: self)
   }
 
@@ -1695,15 +1924,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     }
     else {
       source = .network(self.url)
-      let sources = self.sources
-      options.append(.redirectHandler(AnyRedirectHandler { _, _, request, completion in
-        // On to a page whose picture's known, as a short link's GIF's page, the picture.
-        var request = request
-        if let page = request.url, let picture = ImagePreview.picture(in: page) {
-          request.url = picture
-        }
-        completion(request.url.map(sources.trusts) == true ? request : nil)
-      }))
+      options.append(.redirectHandler(ImagePreview.redirects(for: self.sources)))
       // A Giphy animation's GIF, should its WebP not be had, as some at other sizes aren't.
       if let gif = ImagePreview.giphyGIF(for: self.url) {
         options.append(.alternativeSources([.network(gif)]))
@@ -1750,7 +1971,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.imageView.isHidden = self.isChecking
     self.showsPlaceholder = true
     self.toolTip = self.linkToolTip
-    self.setAccessibilityLabel("Image preview")
+    self.updateAccessibility()
     self.window?.invalidateCursorRects(for: self)
   }
 
@@ -1785,11 +2006,29 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   /// A picture from the web that doesn't say how big it is has started to come, which, should it be
   /// this one's, it makes room for, as it does for one that says.
   @objc private func pictureDidStart(_ notification: Notification) {
-    guard self.isLoading, !self.isDownloading, let url = notification.object as? URL,
-          url == self.url || url == self.source?.url || url == ImagePreview.giphyGIF(for: self.url) else {
+    guard self.isLoading, !self.isDownloading, self.isHaving(notification.object as? URL) else {
       return
     }
     self.pictureStarted()
+  }
+
+  /// A picture from the web's first bytes have said how big it is, which, should it be this one's,
+  /// the first time it's had, it takes the shape of, before the rest of it's here.
+  @objc private func pictureSizeDidArrive(_ notification: Notification) {
+    guard self.isLoading, self.pictureSize == nil, self.isHaving(notification.object as? URL),
+          let size = (notification.userInfo?["size"] as? NSValue)?.sizeValue else {
+      return
+    }
+    self.onSize?(size)
+  }
+
+  /// Whether a link's the one its picture's being had from: its own, the one it's had from since it
+  /// fell back to it, or a Giphy animation's GIF, should its WebP not be had.
+  private func isHaving(_ url: URL?) -> Bool {
+    guard let url else {
+      return false
+    }
+    return url == self.url || url == self.source?.url || url == ImagePreview.giphyGIF(for: self.url)
   }
 
   /// Fades its picture in, as it's just come.
@@ -1955,6 +2194,19 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     (self.link ?? self.url).host(percentEncoded: false).map { "View image from \($0)" } ?? "View Image"
   }
 
+  /// What VoiceOver says it is: the picture, by the words written for it, or where it's from, and
+  /// that it might be sensitive, while it's covered, or the link, when that's in its place.
+  private func updateAccessibility() {
+    if let label = self.linkLabel {
+      self.setAccessibilityRole(.link)
+      self.setAccessibilityLabel(label.stringValue)
+      return
+    }
+    self.setAccessibilityRole(.image)
+    let name = self.altText ?? (self.link ?? self.url).host(percentEncoded: false).map { "From \($0)" } ?? "Picture"
+    self.setAccessibilityLabel(self.covered != nil ? "\(name), may be sensitive" : name)
+  }
+
   /// Checks the picture before it's seen, then shows it, covered if it might be sensitive.
   private func check(_ value: RetrieveImageResult, key: String) {
     let image = value.image
@@ -1994,7 +2246,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.addSubview(label)
     self.coverLabel = label
     self.toolTip = "This may be sensitive. Click to show it."
-    self.setAccessibilityLabel("Image preview that may be sensitive")
+    self.updateAccessibility()
   }
 
   /// Shows the picture, once it's asked for: straight away, or for a child, once they're sure.
@@ -2020,7 +2272,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.coverLabel = nil
     self.imageView.image = covered.image
     self.toolTip = self.linkToolTip
-    self.setAccessibilityLabel("Image preview")
+    self.updateAccessibility()
     // Played again, as an animation.
     self.animate(waiting: false)
   }
@@ -2084,6 +2336,22 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     guard !self.dragged, self.bounds.contains(self.convert(event.locationInWindow, from: nil)) else {
       return
     }
+    self.open()
+  }
+
+  override func accessibilityPerformPress() -> Bool {
+    self.open()
+    return true
+  }
+
+  // Its parts aren't said again, as its name says them, but for its progress, while that's shown.
+  override func accessibilityChildren() -> [Any]? {
+    self.progress.isHidden ? [] : [self.progress]
+  }
+
+  /// What a click does: shows a picture covered as it might be sensitive, or else opens the image
+  /// in a preview window, or the link, should that be in its place.
+  private func open() {
     // Covered, as it might be sensitive, it's shown here, rather than opened.
     if self.covered != nil {
       self.showCovered()
@@ -2149,14 +2417,67 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     if self.sources.serverFile(at: self.url) != nil, let menu = self.textView?.fileLinkMenu?(self.url) {
       return menu
     }
-    guard let items = self.textView?.linkMenuItems(for: self.link ?? self.url, image: self.linkLabel == nil ? self.fileURL : nil) else {
+    guard let textView = self.textView else {
       return nil
     }
     let menu = NSMenu()
-    for item in items {
+    for item in textView.linkMenuItems(for: self.link ?? self.url, image: self.linkLabel == nil ? self.fileURL : nil) {
       menu.addItem(item)
     }
+    // The picture itself, once it's here, and seen, saved or copied as it is where it's from, after
+    // opening it.
+    if self.linkLabel == nil, self.pictureSize != nil, self.covered == nil, !self.isChecking {
+      let index = textView.openImageAction == nil ? 0 : 1
+      menu.insertItem(ChatMenuItem("Copy Image", systemImage: "doc.on.doc") { [weak self] in
+        self?.copyImage()
+      }, at: index)
+      menu.insertItem(ChatMenuItem("Save Image…", systemImage: "square.and.arrow.down") { [weak self] in
+        self?.saveImage()
+      }, at: index)
+    }
     return menu
+  }
+
+  /// Copies the picture as it is where it's from: straight away, should it be kept whole already,
+  /// as an animation is, or else once it's downloaded again.
+  private func copyImage() {
+    let url = self.fileURL
+    let sources = self.sources
+    Task {
+      guard let data = await ImagePreview.original(of: url, sources: sources) else {
+        NSSound.beep()
+        return
+      }
+      ImagePreview.copy(data)
+    }
+  }
+
+  /// Saves the picture as it is where it's from, where it's asked to go, as dragging it out does.
+  private func saveImage() {
+    guard let window = self.window else {
+      return
+    }
+    let url = self.fileURL
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue = ImageFilePromise.fileName(for: url)
+    if let type = UTType(filenameExtension: url.pathExtension) {
+      panel.allowedContentTypes = [type]
+    }
+    panel.beginSheetModal(for: window) { [weak window] response in
+      guard response == .OK, let destination = panel.url else {
+        return
+      }
+      ImageFilePromise.download(url, to: destination) { error in
+        guard let error else {
+          return
+        }
+        DispatchQueue.main.async {
+          if let window {
+            window.presentError(error)
+          }
+        }
+      }
+    }
   }
 
   // MARK: Dragging
@@ -2228,10 +2549,14 @@ final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelega
     }
   }
 
-  /// Its address's last part, decoded once, as it already is, as one name, so it lands where it's
-  /// dropped whatever the link says.
   func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String) -> String {
-    let name = self.url.lastPathComponent
+    Self.fileName(for: self.url)
+  }
+
+  /// A picture's address's last part, decoded once, as it already is, as one name, so it lands
+  /// where it's dropped, or saved, whatever the link says.
+  static func fileName(for url: URL) -> String {
+    let name = url.lastPathComponent
     return (name.isEmpty || name == "/" ? "Image" : name).safeFileName
   }
 
@@ -2247,17 +2572,28 @@ final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelega
       }
       return
     }
-    URLSession.shared.downloadTask(with: self.url) { downloaded, response, error in
+    Self.download(self.url, to: url, completion: completionHandler)
+  }
+
+  /// A picture from the web, downloaded whole to where it's to go, in place of what's there, which
+  /// is asked about first, when it's saved.
+  static func download(_ source: URL, to url: URL, completion: @escaping ((any Error)?) -> Void) {
+    URLSession.shared.downloadTask(with: source) { downloaded, response, error in
       guard let downloaded, let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) else {
-        completionHandler(error ?? URLError(.badServerResponse))
+        completion(error ?? URLError(.badServerResponse))
         return
       }
       do {
-        try FileManager.default.moveItem(at: downloaded, to: url)
-        completionHandler(nil)
+        if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
+          _ = try FileManager.default.replaceItemAt(url, withItemAt: downloaded)
+        }
+        else {
+          try FileManager.default.moveItem(at: downloaded, to: url)
+        }
+        completion(nil)
       }
       catch {
-        completionHandler(error)
+        completion(error)
       }
     }.resume()
   }
@@ -2278,6 +2614,24 @@ final class ImageFilePromise: NSFilePromiseProvider, NSFilePromiseProviderDelega
       }
       // Stopped from the transfers list, or the Finder, which isn't an error to show.
       completion(error is CancellationError ? CocoaError(.userCancelled) : error)
+    }
+  }
+}
+
+// MARK: - Copying
+
+/// A copied picture's image, made only once an app pasting it asks for one, as one that doesn't take
+/// the kind of file it is would.
+final class CopiedImage: NSObject, NSPasteboardItemDataProvider {
+  let data: Data
+
+  init(_ data: Data) {
+    self.data = data
+  }
+
+  func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {
+    if type == .tiff, let tiff = NSImage(data: self.data)?.tiffRepresentation {
+      item.setData(tiff, forType: .tiff)
     }
   }
 }

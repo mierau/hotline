@@ -305,6 +305,14 @@ final class MarkdownTextView: NSTextView, LinkActions {
     return true
   }
 
+  // MARK: Accessibility
+
+  // Images' previews, to VoiceOver, as the pictures they show, rather than attachments with nothing
+  // to say.
+  override func accessibilityAttributedString(for range: NSRange) -> NSAttributedString? {
+    self.withPreviewsForAccessibility(super.accessibilityAttributedString(for: range), in: range)
+  }
+
   // MARK: Pointer
 
   override func updateTrackingAreas() {
