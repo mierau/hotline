@@ -199,6 +199,9 @@ struct Application: App {
         AppState.openTransfersWindow = {
           self.openWindow(id: "transfers")
         }
+        AppState.openPreviewWindow = { info in
+          self.openWindow(id: "preview-quicklook", value: info)
+        }
         if !Prefs.shared.hasCompletedOnboarding {
           self.dismissWindow(id: "servers")
           self.openWindow(id: "onboarding")

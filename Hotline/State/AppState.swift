@@ -27,6 +27,10 @@ final class AppState {
   /// Called from AppDelegate to open the Transfers window when a transfer notification is clicked.
   static var openTransfersWindow: (() -> Void)?
 
+  /// Opens something in a preview window, for what can't open windows itself, like a picture or a
+  /// video clicked in release notes' web view.
+  static var openPreviewWindow: ((PreviewFileInfo) -> Void)?
+
   var bonjourState = BonjourState()
 
   // MARK: - Windows

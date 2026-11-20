@@ -204,7 +204,8 @@ struct FilePreviewQuickLookView: View {
     guard let info = self.info else {
       return false
     }
-    if info.isArchive || (self.preview?.isStreaming == true && self.preview?.fileURL == nil) {
+    // Not from the web, which is only downloaded here.
+    if info.isArchive || (self.preview?.isStreaming == true && self.preview?.fileURL == nil && info.webURL == nil) {
       return !self.downloadStarted
     }
     return self.preview?.fileURL != nil

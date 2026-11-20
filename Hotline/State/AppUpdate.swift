@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import Sparkle
+import WebKit
 
 /// What's new in one of Hotline's builds, as its release on GitHub has it.
 struct ReleaseNotes: Identifiable, Equatable, Sendable, Codable {
@@ -16,6 +17,10 @@ struct ReleaseNotes: Identifiable, Equatable, Sendable, Codable {
   let page: URL
   /// The app, zipped, as it's attached to the release, to download, if it is.
   var download: URL? = nil
+  /// As GitHub shows them, in HTML, with its videos and all of its Markdown, and links to pictures
+  /// and videos that last. Empty for a build without notes, and nil when GitHub didn't give it, as
+  /// in notes kept before Hotline asked for it.
+  var html: String? = nil
 
   var id: String {
     self.tag
@@ -46,10 +51,13 @@ enum GitHubReleases {
 
   /// Every build's notes, the newest first, kept for next time, or the failure that says why not.
   static func fetch() async throws -> [ReleaseNotes] {
+    var request = URLRequest(url: self.url)
+    // Each release's notes in HTML too, as GitHub shows them, beside the Markdown.
+    request.setValue("application/vnd.github.full+json", forHTTPHeaderField: "Accept")
     let data: Data
     let response: URLResponse
     do {
-      (data, response) = try await URLSession.shared.data(from: self.url)
+      (data, response) = try await URLSession.shared.data(for: request)
     }
     catch {
       throw Self.failure(for: error)
@@ -115,7 +123,25 @@ enum GitHubReleases {
       return (name, url)
     }
     let download = zips.min { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }?.url
-    return ReleaseNotes(tag: tag, version: "\(match.1)b\(build)", build: build, date: date, notes: (release["body"] as? String) ?? "", page: page, download: download)
+    let notes = (release["body"] as? String) ?? ""
+    // Without HTML, there's none to show only when there are no notes.
+    let html = (release["body_html"] as? String).map(Self.lasting) ?? (notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : nil)
+    return ReleaseNotes(tag: tag, version: "\(match.1)b\(build)", build: build, date: date, notes: notes, page: page, download: download, html: html)
+  }
+
+  /// GitHub's HTML, with its links to pictures and videos, which only work for five minutes, put
+  /// back as the links they were put up with, which last, and lead to a fresh one each time.
+  static func lasting(_ html: String) -> String {
+    html.replacing(#/https://private-user-images\.githubusercontent\.com/\d+/\d+-(?<id>[0-9A-Fa-f-]{36})(?:\.\w+)?\?jwt=[^"'\s<>]+/#) { match in
+      "https://github.com/user-attachments/assets/\(match.id)"
+    }
+  }
+
+  /// The notes of a build that was found and of those before it, or nil without its own, as in notes
+  /// kept from before it came out, which would have an older one's notes stand for its.
+  static func notes(_ releases: [ReleaseNotes], through build: Int) -> [ReleaseNotes]? {
+    let through = releases.filter { $0.build <= build }
+    return through.contains { $0.build == build } ? through : nil
   }
 
   /// What's new since a build: the notes of each build after it, the newest first, under its version
@@ -129,9 +155,27 @@ enum GitHubReleases {
     return sections.joined(separator: "\n\n---\n\n")
   }
 
+  /// What's new since a build, as `combined` has it, in GitHub's HTML, or nil when there's a build
+  /// without it, from notes kept before Hotline asked for it.
+  static func combinedHTML(_ releases: [ReleaseNotes], since build: Int) -> String? {
+    let newer = releases.filter { $0.build > build }
+    guard let newest = newer.first, newer.allSatisfy({ $0.html != nil }) else {
+      return nil
+    }
+    // A version's only digits, dots and a b, with nothing to escape.
+    let sections = [Self.htmlBody(of: newest)] + newer.dropFirst().map { "<h2>Hotline \($0.version)</h2>\n\(Self.htmlBody(of: $0))" }
+    return sections.joined(separator: "\n<hr>\n")
+  }
+
   private static func body(of release: ReleaseNotes) -> String {
     let notes = release.notes.trimmingCharacters(in: .whitespacesAndNewlines)
     return notes.isEmpty ? "_No release notes provided._" : notes
+  }
+
+  /// A build's notes in HTML, or that it has none.
+  static func htmlBody(of release: ReleaseNotes) -> String {
+    let html = (release.html ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return html.isEmpty ? "<p><em>No release notes provided.</em></p>" : html
   }
 }
 
@@ -238,6 +282,9 @@ final class AppUpdate: NSObject {
   private(set) var version = ""
   /// What's new since this build, the newest first, in Markdown.
   private(set) var notes = ""
+  /// The same, as GitHub shows them, in a web view, once they're in, which the window shows in
+  /// their place.
+  private(set) var notesPage: WebPage?
   /// Whether a check can start now, which Check for Updates is for.
   private(set) var canCheck = false
 
@@ -363,6 +410,7 @@ final class AppUpdate: NSObject {
     }
     else {
       self.showWindow = false
+      self.notesPage = nil
     }
   }
 
@@ -378,6 +426,7 @@ final class AppUpdate: NSObject {
   private func close() {
     self.showWindow = false
     self.stage = .found
+    self.notesPage = nil
   }
 
   /// Whether a build was put off, and not long enough ago to bring it up again.
@@ -429,14 +478,40 @@ final class AppUpdate: NSObject {
   }
 
   /// What's new since this build, from GitHub, or as it last gave them, in place of the feed's notes,
-  /// which are only the newest build's.
-  private func loadNotes(for version: String) async {
-    let releases = (try? await GitHubReleases.fetch()) ?? ReleaseNotesCache.load()
-    guard let combined = GitHubReleases.combined(releases, since: Self.currentBuild),
+  /// which are only the newest build's: in Markdown, then in a web view, once it's loaded them. Only
+  /// up to the build that was found, and only once they have it, which notes kept from before it
+  /// came out don't.
+  private func loadNotes(for version: String, build: Int?) async {
+    guard let build,
+          let releases = GitHubReleases.notes((try? await GitHubReleases.fetch()) ?? ReleaseNotesCache.load(), through: build),
+          let combined = GitHubReleases.combined(releases, since: Self.currentBuild),
           self.version == version else {
       return
     }
     self.notes = combined
+    // Not where pictures shouldn't load, as the settings can say.
+    guard Prefs.shared.imagePreviews != .never,
+          let html = GitHubReleases.combinedHTML(releases, since: Self.currentBuild) else {
+      return
+    }
+    let page = ReleaseNotesWeb.page()
+    if await ReleaseNotesWeb.show(html, style: .update, in: page), self.version == version, self.choose != nil || self.showWindow {
+      self.notesPage = page
+    }
+  }
+
+  /// Opens the window for an update that was found, unless it's been answered since, or another's
+  /// been found, or it's open.
+  private func showFoundUpdate(_ version: String) {
+    guard self.version == version, self.choose != nil, !self.showWindow else {
+      return
+    }
+    self.showWindow = true
+    #if DEBUG
+    if Self.testFeed != nil, UserDefaults.standard.bool(forKey: "UpdateTestInstall") {
+      self.install()
+    }
+    #endif
   }
 }
 
@@ -468,18 +543,21 @@ extension AppUpdate: SPUUserDriver {
     }
     self.version = version
     self.notes = appcastItem.itemDescription ?? ""
+    self.notesPage = nil
     self.choose = reply
     // Even one already downloaded, or partway installed, waits for Install Update, which finishes it.
     self.stage = .found
-    self.showWindow = true
+    // The window opens with GitHub's notes for every build since this one, once they're in, or
+    // after a couple of seconds, with the feed's until they are.
+    let build = Int(appcastItem.versionString)
     Task {
-      await self.loadNotes(for: version)
+      await self.loadNotes(for: version, build: build)
+      self.showFoundUpdate(version)
     }
-    #if DEBUG
-    if Self.testFeed != nil, UserDefaults.standard.bool(forKey: "UpdateTestInstall") {
-      self.install()
+    Task {
+      try? await Task.sleep(for: .seconds(2))
+      self.showFoundUpdate(version)
     }
-    #endif
   }
 
   /// Notes come with the feed, or from GitHub, rather than from a link.

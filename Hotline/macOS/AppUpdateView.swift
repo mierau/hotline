@@ -1,6 +1,8 @@
 import SwiftUI
 import AppKit
 import Observation
+import UniformTypeIdentifiers
+import WebKit
 
 /// A newer build of Hotline, and what's new since this one, to install or not, then its coming in and
 /// installing, which quits and relaunches Hotline, all in one window.
@@ -59,11 +61,21 @@ struct AppUpdateView: View {
     }
   }
 
+  /// What's new, in a box: as GitHub shows it, once that's loaded, which it usually is before the
+  /// window opens, or until then, as the feed has it.
   private var releaseNotes: some View {
-    let notes = self.update.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-    return ScrollView(.vertical) {
-      MarkdownText(text: notes.isEmpty ? "_No release notes provided._" : notes, layout: Markdown.Layout(font: .systemFont(ofSize: 12), lineSpacing: 3), inset: NSSize(width: 12, height: 12))
-        .frame(maxWidth: .infinity, alignment: .leading)
+    Group {
+      if let page = self.update.notesPage {
+        ReleaseNotesWebView(page: page)
+          .clipShape(.rect(cornerRadius: 12))
+      }
+      else {
+        let notes = self.update.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        ScrollView(.vertical) {
+          MarkdownText(text: notes.isEmpty ? "_No release notes provided._" : notes, layout: Markdown.Layout(font: .systemFont(ofSize: 12), lineSpacing: 3), inset: NSSize(width: 12, height: 12))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+      }
     }
     .frame(minHeight: 220, maxHeight: 260)
     .background(
@@ -226,7 +238,12 @@ struct ReleaseNotesView: View {
       }
       .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
     } detail: {
-      if let release = self.chosen {
+      // As GitHub shows them, unless they were kept from before Hotline asked for that, or pictures
+      // shouldn't load, as the settings can say.
+      if let release = self.chosen, release.html != nil, Prefs.shared.imagePreviews != .never {
+        ReleaseNotesWebDetail(release: release, isInstalled: release.build == self.currentBuild)
+      }
+      else if let release = self.chosen {
         ScrollView(.vertical) {
           ReleaseNotesDetail(release: release, isInstalled: release.build == self.currentBuild)
         }
@@ -472,37 +489,15 @@ struct ReleaseNotesRow: View {
   }
 }
 
-/// One build's notes: Hotline's icon, beside its version and when it came out, and at the other side,
-/// whether it's the one running, then under a line, the notes themselves.
+/// One build's notes, in Hotline's own text, which shows their pictures, but not their videos or
+/// GIFs, and not all of GitHub's Markdown: its header, then under a line, the notes themselves.
 struct ReleaseNotesDetail: View {
   let release: ReleaseNotes
   let isInstalled: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      HStack(spacing: 12) {
-        Image(nsImage: NSApp.applicationIconImage)
-          .resizable()
-          .frame(width: 52, height: 52)
-          .accessibilityHidden(true)
-
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Hotline \(self.release.version)")
-            .font(.title2)
-            .fontWeight(.semibold)
-          if let date = self.release.date {
-            Text(date.formatted(date: .long, time: .omitted))
-              .font(.callout)
-              .foregroundStyle(.secondary)
-          }
-        }
-
-        Spacer(minLength: 0)
-
-        if self.isInstalled {
-          self.installed
-        }
-      }
+      ReleaseNotesHeader(release: self.release, isInstalled: self.isInstalled)
 
       Divider()
 
@@ -511,6 +506,95 @@ struct ReleaseNotesDetail: View {
     }
     .padding(24)
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+/// One build's notes as GitHub shows them, in a web view, which plays their videos and GIFs: its
+/// header, then under a line, which stays put as they scroll, the notes, out to the window's sides,
+/// for its scroller. The same page shows each build that's chosen, which takes a few hundredths of
+/// a second. It's empty for the first one, for about a quarter of a second, and in Hotline's own
+/// text, if it doesn't load.
+struct ReleaseNotesWebDetail: View {
+  let release: ReleaseNotes
+  let isInstalled: Bool
+
+  @State private var page: WebPage?
+  @State private var failed = false
+
+  private var html: String {
+    GitHubReleases.htmlBody(of: self.release)
+  }
+
+  var body: some View {
+    ZStack {
+      if self.failed {
+        ScrollView(.vertical) {
+          ReleaseNotesDetail(release: self.release, isInstalled: self.isInstalled)
+        }
+        .id(self.release.id)
+      }
+      else {
+        VStack(alignment: .leading, spacing: 0) {
+          VStack(alignment: .leading, spacing: 16) {
+            ReleaseNotesHeader(release: self.release, isInstalled: self.isInstalled)
+            Divider()
+          }
+          .padding([.horizontal, .top], 24)
+
+          // In the window as it loads, which has it at the window's size sooner.
+          if let page = self.page {
+            ReleaseNotesWebView(page: page)
+          }
+          else {
+            Spacer(minLength: 0)
+          }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      }
+    }
+    .task(id: self.html) {
+      let page = self.page ?? ReleaseNotesWeb.page()
+      self.page = page
+      let shown = await ReleaseNotesWeb.show(self.html, style: .window, in: page)
+      // Unless another build's been chosen since.
+      guard !Task.isCancelled else {
+        return
+      }
+      self.failed = !shown
+    }
+  }
+}
+
+/// A build's header: Hotline's icon, beside its version and when it came out, and at the other side,
+/// whether it's the one running.
+struct ReleaseNotesHeader: View {
+  let release: ReleaseNotes
+  let isInstalled: Bool
+
+  var body: some View {
+    HStack(spacing: 12) {
+      Image(nsImage: NSApp.applicationIconImage)
+        .resizable()
+        .frame(width: 52, height: 52)
+        .accessibilityHidden(true)
+
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Hotline \(self.release.version)")
+          .font(.title2)
+          .fontWeight(.semibold)
+        if let date = self.release.date {
+          Text(date.formatted(date: .long, time: .omitted))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+      }
+
+      Spacer(minLength: 0)
+
+      if self.isInstalled {
+        self.installed
+      }
+    }
   }
 
   /// That it's the build that's running: Installed, with a check, in white on a green capsule.
@@ -526,5 +610,239 @@ struct ReleaseNotesDetail: View {
     .padding(.horizontal, 7)
     .padding(.vertical, 2)
     .background(.green, in: .capsule)
+  }
+}
+
+// MARK: - Release Notes as GitHub Shows Them
+
+/// Notes in a web view, on what's behind it, without the gestures for going back, zooming or
+/// previewing links, as it only shows them.
+struct ReleaseNotesWebView: View {
+  let page: WebPage
+
+  var body: some View {
+    WebView(self.page)
+      .webViewContentBackground(.hidden)
+      .webViewLinkPreviews(.disabled)
+      .webViewMagnificationGestures(.disabled)
+      .webViewBackForwardNavigationGestures(.disabled)
+  }
+}
+
+/// Release notes as GitHub shows them, in HTML, in a web view, which plays their GIFs, shows their
+/// videos, and has all of GitHub's Markdown, where Hotline's own text shows links and stills. It
+/// runs none of their scripts, keeps nothing, loads only their pictures and videos, and opens their
+/// links in the browser. Their pictures and videos open in a preview window, as a picture in chat
+/// does. GIFs play by the system's Animated Images setting, which Hotline's own can't change.
+@MainActor
+enum ReleaseNotesWeb {
+  /// Where the notes are, for their links, and the only page that loads in the web view.
+  static let base = URL(string: "https://github.com/mierau/hotline/releases/")!
+
+  enum Style {
+    /// The Release Notes window's: 13 points, 24 points in from its sides.
+    case window
+    /// The update window's: 12 points, inside its box, with pictures and videos no taller than a
+    /// preview.
+    case update
+
+    fileprivate var css: String {
+      switch self {
+      case .window:
+        """
+        body { padding: 16px 24px 24px; }
+        """
+      case .update:
+        // GitHub's videos say how tall they can be themselves, which only !important overrides.
+        """
+        body { font-size: 12px; padding: 12px; }
+        img, video { max-height: 200px !important; width: auto; }
+        details.details-reset { display: inline-block; max-width: 100%; vertical-align: top; }
+        details.details-reset video { width: auto; max-width: 100%; }
+        .hotline-video { display: inline-block; vertical-align: top; }
+        """
+      }
+    }
+  }
+
+  /// A page for notes, empty until they're shown in it, which opens their links in the browser, and
+  /// their pictures and videos in a preview window, or as a test would rather.
+  static func page(opening open: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }, previewing preview: @escaping @MainActor (PreviewFileInfo) -> Void = { AppState.openPreviewWindow?($0) }) -> WebPage {
+    var configuration = WebPage.Configuration()
+    configuration.websiteDataStore = .nonPersistent()
+    configuration.defaultNavigationPreferences.allowsContentJavaScript = false
+    configuration.userContentController.addUserScript(WKUserScript(source: Self.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
+    configuration.userContentController.add(MediaClicks(preview: preview), contentWorld: .defaultClient, name: "preview")
+    return WebPage(configuration: configuration, navigationDecider: LinksInBrowser(open: open))
+  }
+
+  /// Hotline's own script in the page, in a world of its own, as the notes' don't run. A picture
+  /// or video that's clicked goes to the preview window, rather than the browser, unless it's a
+  /// link to something else, as a badge can be, with its name: a video's file's, which GitHub shows
+  /// over it, or a picture's description, and its type, which GitHub gives a picture. A video shows
+  /// its first frame, under a play button, rather than playing where it is.
+  private static let script = """
+  for (const video of document.querySelectorAll('video')) {
+    video.removeAttribute('controls');
+    const frame = document.createElement('span');
+    frame.className = 'hotline-video';
+    video.replaceWith(frame);
+    frame.append(video);
+  }
+  document.addEventListener('click', (event) => {
+    const media = event.target instanceof Element ? event.target.closest('img, video') : null;
+    if (!media || !media.src) {
+      return;
+    }
+    const link = media.closest('a[href]');
+    if (link && link.href !== media.src) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const isVideo = media.tagName === 'VIDEO';
+    const summary = isVideo ? media.closest('details')?.querySelector('summary') : null;
+    window.webkit.messageHandlers.preview.postMessage({
+      url: media.src,
+      name: (isVideo ? summary?.textContent : media.getAttribute('alt')) ?? '',
+      type: media.getAttribute('content-type-secured-asset') ?? '',
+      video: isVideo,
+    });
+  }, true);
+  """
+
+  /// What a picture or a video from the notes is called in its preview window, and as a file: its
+  /// name, as the page has it, or for one without, or with GitHub's own, Picture or Video, with the
+  /// extension of its type, when it doesn't have one already.
+  static func mediaName(_ name: String, type: String, isVideo: Bool) -> String {
+    var name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    if name.isEmpty || name.lowercased() == "image" {
+      name = isVideo ? "Video" : "Picture"
+    }
+    let named = UTType(filenameExtension: (name as NSString).pathExtension)
+    if named?.conforms(to: .image) != true, named?.conforms(to: .audiovisualContent) != true,
+       let pathExtension = UTType(mimeType: type)?.preferredFilenameExtension {
+      name += ".\(pathExtension)"
+    }
+    return name
+  }
+
+  /// Hears from Hotline's script in the page about a picture or video that's clicked.
+  private final class MediaClicks: NSObject, WKScriptMessageHandler {
+    let preview: @MainActor (PreviewFileInfo) -> Void
+
+    init(preview: @escaping @MainActor (PreviewFileInfo) -> Void) {
+      self.preview = preview
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+      guard let clicked = message.body as? [String: Any], let link = clicked["url"] as? String,
+            let url = URL(string: link), url.scheme?.lowercased() == "https" else {
+        return
+      }
+      let name = ReleaseNotesWeb.mediaName(clicked["name"] as? String ?? "", type: clicked["type"] as? String ?? "", isVideo: clicked["video"] as? Bool ?? false)
+      self.preview(PreviewFileInfo(webImage: url, name: name))
+    }
+  }
+
+  /// Shows notes in a page, in a style, and waits until their words are in, which takes up to a
+  /// quarter of a second in the first page Hotline makes, and under a tenth after. Their pictures
+  /// and videos come in after. False if they didn't load.
+  @discardableResult
+  static func show(_ html: String, style: Style, in page: WebPage) async -> Bool {
+    // Until it's showing them, as loaded waits for a video's first frame, which can take seconds.
+    do {
+      for try await event in page.load(html: Self.document(html, style: style), baseURL: Self.base) {
+        if event == .committed || event == .finished {
+          break
+        }
+      }
+    }
+    catch {
+      return false
+    }
+    // Then until they've all been read in, which is soon after.
+    for _ in 0..<40 {
+      let state = try? await page.callJavaScript("return document.readyState", contentWorld: .defaultClient)
+      if let state = state as? String, state != "loading" {
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(5))
+    }
+    return true
+  }
+
+  /// Notes, in a page of their own, in a style, which loads only their pictures and videos.
+  static func document(_ html: String, style: Style) -> String {
+    let policy = "default-src 'none'; img-src https: data:; media-src https:; style-src 'unsafe-inline'"
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"\(policy)\"><style>\(Self.css)\(style.css)</style></head><body>\(html)</body></html>"
+  }
+
+  /// GitHub's HTML as Hotline's own text has it: the system's font and colors, its bullets and
+  /// headings, and pictures and videos no wider than the notes.
+  private static let css = """
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font: 13px/1.45 -apple-system, system-ui, sans-serif; color: CanvasText; color: -apple-system-label; overflow-wrap: anywhere; }
+  p { margin: 0 0 6px; }
+  h1, h2, h3, h4, h5, h6 { margin: 14px 0 6px; line-height: 1.25; font-size: 1em; font-weight: bold; }
+  h1 { font-size: 1.5em; } h2 { font-size: 1.3em; } h3 { font-size: 1.15em; }
+  body > :first-child, body > .markdown-heading:first-child > * { margin-top: 0; }
+  .markdown-heading .anchor { display: none; }
+  ul, ol { margin: 0 0 8px; padding-left: 10px; }
+  ol { padding-left: 22px; }
+  li > ul, li > ol { margin: 2px 0 0; }
+  ul { list-style: none; }
+  ul > li { position: relative; }
+  ul > li::before { content: "\\2022"; position: absolute; left: -10px; color: rgba(128,128,128,.6); color: -apple-system-tertiary-label; }
+  .contains-task-list { padding-left: 0; }
+  li.task-list-item::before { content: none; }
+  .task-list-item-checkbox { margin: 0 6px 0 0; vertical-align: -1px; }
+  a { color: LinkText; text-decoration: none; }
+  img, video { max-width: 100%; height: auto; border-radius: 6px; cursor: pointer; }
+  .hotline-video { position: relative; display: block; }
+  .hotline-video::after { content: ""; position: absolute; top: 50%; left: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; pointer-events: none; -webkit-backdrop-filter: blur(8px); background: rgba(0,0,0,.45) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M9 6.5v11l9-5.5z'/%3E%3C/svg%3E") no-repeat center / 26px; }
+  code, kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(0,0,0,.05); padding: 1px 4px; border-radius: 4px; }
+  kbd { border: 1px solid rgba(128,128,128,.3); }
+  pre { background: rgba(0,0,0,.04); padding: 10px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  blockquote, .markdown-alert { margin: 0 0 8px; padding-left: 10px; border-left: 3px solid rgba(128,128,128,.35); color: rgba(128,128,128,1); color: -apple-system-secondary-label; }
+  .markdown-alert-title { display: flex; align-items: center; gap: 4px; font-weight: 600; }
+  hr { border: 0; border-top: 1px solid rgba(128,128,128,.3); margin: 12px 0; }
+  table { border-collapse: collapse; margin: 0 0 8px; }
+  th, td { border: 1px solid rgba(128,128,128,.3); padding: 4px 8px; }
+  details.details-reset { border: 1px solid rgba(128,128,128,.3); border-radius: 8px; overflow: hidden; margin: 8px 0; }
+  details.details-reset > summary { list-style: none; display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12px; color: rgba(128,128,128,1); color: -apple-system-secondary-label; }
+  details.details-reset > summary::-webkit-details-marker { display: none; }
+  details.details-reset video { display: block; width: 100%; border-radius: 0; }
+  .dropdown-caret { display: none; }
+  svg.octicon { fill: currentColor; }
+  @media (prefers-color-scheme: dark) {
+    code, kbd { background: rgba(255,255,255,.08); }
+    pre { background: rgba(255,255,255,.06); }
+  }
+  """
+
+  /// Lets only the notes load in the page, and jumps within them, and opens other links in the
+  /// browser, whether they're clicked, opened from a link's menu, or for a new window.
+  private struct LinksInBrowser: WebPage.NavigationDeciding {
+    let open: @MainActor (URL) -> Void
+
+    @MainActor
+    func decidePolicy(for action: WebPage.NavigationAction, preferences: inout WebPage.NavigationPreferences) async -> WKNavigationActionPolicy {
+      guard let url = action.request.url else {
+        return .cancel
+      }
+      var page = URLComponents(url: url, resolvingAgainstBaseURL: false)
+      page?.fragment = nil
+      if page?.url == ReleaseNotesWeb.base {
+        return .allow
+      }
+      // Not what a frame in them would load, which isn't a link.
+      if action.target?.isMainFrame ?? true, let scheme = url.scheme?.lowercased(), ["http", "https", "mailto"].contains(scheme) {
+        self.open(url)
+      }
+      return .cancel
+    }
   }
 }

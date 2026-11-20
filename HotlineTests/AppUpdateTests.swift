@@ -2,6 +2,7 @@
 
 import Testing
 import Foundation
+import UniformTypeIdentifiers
 @testable import Hotline
 
 struct AppUpdateTests {
@@ -40,6 +41,92 @@ struct AppUpdateTests {
   @Test func aBuildWithoutNotesSaysSo() throws {
     let releases = [GitHubReleases.notes(from: self.release(32, notes: "  \n"))].compactMap { $0 }
     #expect(GitHubReleases.combined(releases, since: 31) == "_No release notes provided._")
+  }
+
+  @Test func whatsNewIsOnlyShownWithTheFoundBuildsOwnNotes() throws {
+    let releases = [35, 34, 33].compactMap { GitHubReleases.notes(from: self.release($0)) }
+    // Up to the build that was found, without any after it.
+    #expect(GitHubReleases.notes(releases, through: 34)?.map(\.build) == [34, 33])
+    // Notes kept from before it came out have an older build's, which wouldn't do for its.
+    #expect(GitHubReleases.notes(Array(releases.dropFirst(2)), through: 34) == nil)
+  }
+
+  // MARK: - Notes as GitHub Shows Them
+
+  /// A release as GitHub gives it, with its notes in HTML too.
+  private func release(_ build: Int, notes: String = "Notes", html: String) -> [String: Any] {
+    var release = self.release(build, notes: notes)
+    release["body_html"] = html
+    return release
+  }
+
+  /// A link to a picture in GitHub's HTML, which only works for five minutes, and the one it was
+  /// put up with, which lasts.
+  private let signedLink = "https://private-user-images.githubusercontent.com/55453/294246818-aee8de6a-bec5-4cf3-8364-69a98c87d372.gif?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIn0.vTdA2kGESTZCj8ZPtDoWy2yunMJ_WVeHpj17_F0ZDx8"
+  private let lastingLink = "https://github.com/user-attachments/assets/aee8de6a-bec5-4cf3-8364-69a98c87d372"
+
+  @Test func aReleasesHTMLIsKeptWithLinksThatLast() throws {
+    let html = #"<p><a target="_blank" href="\#(self.signedLink)"><img src="\#(self.signedLink)" alt="CleanShot"></a></p>"#
+    let notes = try #require(GitHubReleases.notes(from: self.release(6, html: html)))
+    #expect(notes.html == #"<p><a target="_blank" href="\#(self.lastingLink)"><img src="\#(self.lastingLink)" alt="CleanShot"></a></p>"#)
+    #expect(notes.notes == "Notes")
+  }
+
+  @Test func onlyGitHubsShortLivedLinksAreChanged() {
+    // A video's, without an extension.
+    let video = "https://private-user-images.githubusercontent.com/55453/294646889-16b1c6f0-ec64-4d64-82d9-6a67ad9acd5d?jwt=abc.def-ghi_jkl"
+    #expect(GitHubReleases.lasting(#"<video src="\#(video)" controls>"#) == #"<video src="https://github.com/user-attachments/assets/16b1c6f0-ec64-4d64-82d9-6a67ad9acd5d" controls>"#)
+    // Links that last already, and to anything else, stay as they are.
+    let others = #"<a href="https://github.com/jhalter">@jhalter</a> <img src="https://camo.githubusercontent.com/abc/def"> <img src="\#(self.lastingLink)">"#
+    #expect(GitHubReleases.lasting(others) == others)
+  }
+
+  @Test func notesWithoutHTMLAreShownFromTheirMarkdown() throws {
+    // GitHub didn't give HTML for notes it has, as it didn't before Hotline asked for it.
+    #expect(try #require(GitHubReleases.notes(from: self.release(31, notes: "Hello"))).html == nil)
+    // Without notes, there's no HTML to give.
+    #expect(try #require(GitHubReleases.notes(from: self.release(31, notes: " \n"))).html == "")
+  }
+
+  @Test func whatsNewInHTMLIsEveryNewerBuildsNotesNewestFirst() throws {
+    let releases = [33, 32, 31, 30].compactMap { GitHubReleases.notes(from: self.release($0, html: "<p>In b\($0).</p>\n")) }
+    let combined = try #require(GitHubReleases.combinedHTML(releases, since: 31))
+    // The newest's under the window's own title, and each older one under its version.
+    #expect(combined == "<p>In b33.</p>\n<hr>\n<h2>Hotline 1.0b32</h2>\n<p>In b32.</p>")
+    #expect(GitHubReleases.combinedHTML(releases, since: 33) == nil)
+  }
+
+  @Test func whatsNewInHTMLNeedsEveryBuildsHTML() throws {
+    let releases = [GitHubReleases.notes(from: self.release(33, html: "<p>In b33.</p>")), GitHubReleases.notes(from: self.release(32))].compactMap { $0 }
+    #expect(GitHubReleases.combinedHTML(releases, since: 31) == nil)
+    #expect(GitHubReleases.combinedHTML(releases, since: 32) == "<p>In b33.</p>")
+  }
+
+  @Test func aBuildWithoutNotesSaysSoInHTML() throws {
+    let releases = [GitHubReleases.notes(from: self.release(32, notes: ""))].compactMap { $0 }
+    #expect(GitHubReleases.combinedHTML(releases, since: 31) == "<p><em>No release notes provided.</em></p>")
+  }
+
+  @Test @MainActor func picturesAndVideosInNotesAreNamedForTheirPreview() {
+    // A picture's description, with its type's extension, and a video's file's name, as it is.
+    #expect(ReleaseNotesWeb.mediaName("CleanShot 2024-01-04 at 08 53 35", type: "image/gif", isVideo: false) == "CleanShot 2024-01-04 at 08 53 35.gif")
+    #expect(ReleaseNotesWeb.mediaName(" File.Previews.mp4\n", type: "", isVideo: true) == "File.Previews.mp4")
+    #expect(ReleaseNotesWeb.mediaName("Shot 1.5", type: "image/png", isVideo: false) == "Shot 1.5.png")
+    // GitHub's own description, or none.
+    #expect(ReleaseNotesWeb.mediaName("image", type: "image/png", isVideo: false) == "Picture.png")
+    #expect(ReleaseNotesWeb.mediaName("", type: "", isVideo: true) == "Video")
+  }
+
+  @Test func aVideoFromTheWebPlaysAsItComes() {
+    let url = URL(string: "https://github.com/user-attachments/assets/16b1c6f0-ec64-4d64-82d9-6a67ad9acd5d")!
+    #expect(PreviewFileInfo(webImage: url, name: "File.Previews.mp4").webPlayableType == .mpeg4Movie)
+    // A picture, which comes whole, and one from a Hotline server, which plays as it comes otherwise.
+    #expect(PreviewFileInfo(webImage: url, name: "CleanShot.gif").webPlayableType == nil)
+    var serverFile = PreviewFileInfo(webImage: url, name: "File.Previews.mp4")
+    serverFile.webURL = nil
+    #expect(serverFile.webPlayableType == nil)
+    // Without a name, it's the end of its address, as a picture linked in chat is.
+    #expect(PreviewFileInfo(webImage: url).name == "16b1c6f0-ec64-4d64-82d9-6a67ad9acd5d")
   }
 
   /// One of Sparkle's errors, as it reports them, with the reason under it.
@@ -103,9 +190,10 @@ struct AppUpdateTests {
       try? FileManager.default.removeItem(at: fileURL)
     }
     #expect(ReleaseNotesCache.load(from: fileURL).isEmpty)
-    let releases = [32, 31].compactMap { GitHubReleases.notes(from: self.release($0, notes: "In b\($0).")) }
+    let releases = [32, 31].compactMap { GitHubReleases.notes(from: self.release($0, notes: "In b\($0).", html: "<p>In b\($0).</p>")) }
     ReleaseNotesCache.save(releases, to: fileURL)
     #expect(ReleaseNotesCache.load(from: fileURL) == releases)
+    #expect(ReleaseNotesCache.load(from: fileURL).first?.html == "<p>In b32.</p>")
   }
 
   // MARK: - Downloading a Build, and Its Code
@@ -138,6 +226,8 @@ struct AppUpdateTests {
     let loaded = ReleaseNotesCache.load(from: fileURL)
     #expect(loaded.map(\.build) == [31])
     #expect(loaded.first?.download == nil)
+    // And before HTML, which is shown from its Markdown.
+    #expect(loaded.first?.html == nil)
   }
 
   @Test func downloadsAreNumberedAsTheFindersCopiesAre() {

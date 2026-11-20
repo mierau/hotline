@@ -73,6 +73,15 @@ struct PreviewFileInfo: Identifiable, Codable {
     return type
   }
 
+  /// What audio or video from the web is, going by its name, when it can play from its link as it
+  /// comes.
+  var webPlayableType: UTType? {
+    guard self.webURL != nil, let type = self.fileType, type.conforms(to: .audiovisualContent), FilePreviewStream.canPlay(type) else {
+      return nil
+    }
+    return type
+  }
+
   /// What it is, going by its name, or its type code, for a file without an extension.
   private var fileType: UTType? {
     var fileExtension = (self.name as NSString).pathExtension
@@ -85,10 +94,11 @@ struct PreviewFileInfo: Identifiable, Codable {
 
 extension PreviewFileInfo {
   /// A picture linked in chat, named for the end of its address, which is all there is to go on,
-  /// and known by its address, so opening it again brings its window back.
-  init(webImage url: URL) {
+  /// unless it's given a name, as a picture or video in release notes is, and known by its
+  /// address, so opening it again brings its window back.
+  init(webImage url: URL, name: String? = nil) {
     // Decoded once, as it already is, so "%252F" stays "%2F", rather than becoming a "/".
-    let name = url.lastPathComponent
+    let name = name ?? url.lastPathComponent
     self.init(id: UInt32(truncatingIfNeeded: url.absoluteString.hashValue), address: url.host() ?? "", port: url.port ?? 443, size: 0, name: name.isEmpty || name == "/" ? "Image" : name)
     self.webURL = url
   }

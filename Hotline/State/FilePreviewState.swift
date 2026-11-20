@@ -125,6 +125,11 @@ final class FilePreviewState {
           return
         }
 
+        if let webURL = self.info.webURL, let type = self.info.webPlayableType, !Self.checksBeforePlaying(type) {
+          try await self.streamFromWeb(webURL)
+          return
+        }
+
         if let webURL = self.info.webURL {
           self.state = .loading
           self.progress = 0.0
@@ -232,6 +237,10 @@ final class FilePreviewState {
       }
       self.total = Int(update.expected)
       self.progress = Double(update.written) / Double(update.expected)
+      // From the start, for audio or video playing from its link meanwhile.
+      if self.isStreaming {
+        self.downloadedParts = [0..<self.progress]
+      }
       let elapsed = Date().timeIntervalSince(started)
       if elapsed > 0.5, update.written > 0 {
         self.timeRemaining = Double(Int(update.expected) - update.written) / (Double(update.written) / elapsed)
@@ -325,6 +334,37 @@ final class FilePreviewState {
     if playing != nil {
       player.play()
     }
+  }
+
+  /// Audio or video from the web, played from its link as it comes, as the player streams it, from
+  /// wherever it's skipped to, while all of it comes into a file too, as any other file from the web
+  /// does, which is what's downloaded or shared.
+  private func streamFromWeb(_ url: URL) async throws {
+    self.isStreaming = true
+    self.state = .loading
+    self.progress = 0.0
+    self.transferred = 0
+    self.timeRemaining = nil
+    async let file = self.downloadFromWeb(url)
+
+    let asset = AVURLAsset(url: url)
+    let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
+    player.actionAtItemEnd = .pause
+    let playing = await Self.playing(asset, with: player)
+    // Shown once it's known, unless it's stopped, or can't play, when it's shown once it's here, as
+    // any other file is.
+    if !Task.isCancelled {
+      self.playing = playing
+      self.isUnplayable = playing == nil
+      playing?.player.play()
+    }
+
+    let fileURL = try await file
+    self.state = .loaded
+    self.progress = 1.0
+    self.timeRemaining = nil
+    self.downloadedParts = [0..<1]
+    self.fileURL = fileURL
   }
 
   /// How far audio or video playing as it comes has got, and once all of it has, the file.
