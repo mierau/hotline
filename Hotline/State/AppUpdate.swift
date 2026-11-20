@@ -311,7 +311,7 @@ final class AppUpdate: NSObject {
     super.init()
   }
 
-  /// Starts checking, which Sparkle does once a day, the first time when it's due.
+  /// Starts checking: now, as Hotline opens, and once a day after, as Sparkle does.
   func start() {
     guard self.updater == nil else {
       return
@@ -331,12 +331,17 @@ final class AppUpdate: NSObject {
         self?.canCheck = canCheck
       }
     }
+    // Checked as Hotline opens, too, rather than only once a day, so a build that's just out is
+    // found then, the way Sparkle has it done: straight after starting, while it checks by itself.
+    // Quietly, as its own checks are, so one that can't reach GitHub, as when offline, says nothing.
+    var checks = updater.automaticallyChecksForUpdates
     #if DEBUG
-    // Pointed at a test feed, checked straight away, rather than when it's due.
-    if Self.testFeed != nil {
+    // Pointed at a test feed, whatever the setting.
+    checks = checks || Self.testFeed != nil
+    #endif
+    if checks {
       updater.checkForUpdatesInBackground()
     }
-    #endif
   }
 
   #if DEBUG
