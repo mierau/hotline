@@ -20,7 +20,7 @@ struct PrivacySettingsView: View {
         Toggle("Refuse private messages", isOn: $preferences.refusePrivateMessages)
       }
 
-      Section("Image Previews") {
+      Section {
         Picker(selection: $preferences.imagePreviews) {
           ForEach(ImagePreviews.allCases) { previews in
             Text(previews.title)
@@ -32,6 +32,13 @@ struct PrivacySettingsView: View {
             Text(explanation)
           }
         }
+      } header: {
+        Text("Image Previews")
+      } footer: {
+        Text("Previews only load over secure connections, from sites with registered names, never from IP addresses or local names like localhost, except the server you're on.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       Section("Sensitive Content") {

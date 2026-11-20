@@ -45,6 +45,19 @@ struct ImagePreviewSizesTests {
     #expect(sizes.size(for: URL(string: "https://example.com/10.png")!) == CGSize(width: 110, height: 100))
   }
 
+  @Test func unreachableLinksAreTriedAgainOnceTheNetworksBack() {
+    let failures = ImagePreviewFailures(fileURL: self.makeFile())
+    let unreachable = URL(string: "https://example.com/down.png")!
+    let refused = URL(string: "https://example.com/gone.png")!
+    failures.insert(unreachable, refused: false)
+    failures.insert(refused, refused: true)
+    #expect(failures.contains(unreachable) && failures.contains(refused))
+    // Back on a network, those that couldn't be reached are tried again, but not those refused.
+    failures.forgetUnreachable()
+    #expect(!failures.contains(unreachable))
+    #expect(failures.contains(refused))
+  }
+
   @Test func smallImagesShowAtTheirOwnSize() {
     #expect(ImagePreview.previewSize(forImageSize: CGSize(width: 64, height: 48)) == CGSize(width: 64, height: 48))
   }
@@ -173,19 +186,36 @@ struct ImagePreviewSizesTests {
     sources.picture(for: URL(string: link)!, isImage: false)?.absoluteString
   }
 
-  @Test func giphysPagesAndCopiesShowTheGIF() {
-    // A GIF's page, by its name and ID, or its ID alone, a sticker's, and an embed.
-    #expect(self.picture("https://giphy.com/gifs/dancing-dance-party-clubbing-blSTtZehjAZ8I") == "https://i.giphy.com/blSTtZehjAZ8I.gif")
-    #expect(self.picture("https://giphy.com/gifs/WtDLxQWQWLtw3oIXTy/") == "https://i.giphy.com/WtDLxQWQWLtw3oIXTy.gif")
-    #expect(self.picture("https://www.giphy.com/stickers/happy-cat-AbC123xyz?utm_source=share") == "https://i.giphy.com/AbC123xyz.gif")
-    #expect(self.picture("https://giphy.com/embed/blSTtZehjAZ8I") == "https://i.giphy.com/blSTtZehjAZ8I.gif")
-    // WebP and MP4 copies, which a preview can't play, as the GIF.
-    #expect(self.picture("https://i.giphy.com/blSTtZehjAZ8I.webp") == "https://i.giphy.com/blSTtZehjAZ8I.gif")
-    #expect(self.picture("https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjEx/blSTtZehjAZ8I/giphy.mp4?cid=790b7611") == "https://i.giphy.com/blSTtZehjAZ8I.gif")
-    // A GIF as it is, and not its other pages, or a site only named the same.
-    #expect(self.picture("https://media.giphy.com/media/blSTtZehjAZ8I/giphy.gif") == "https://media.giphy.com/media/blSTtZehjAZ8I/giphy.gif")
+  @Test func giphysPagesAndCopiesShowItsWebP() {
+    // A GIF's page, by its name and ID, or its ID alone, a sticker's, and an embed, as its WebP,
+    // which is smaller.
+    #expect(self.picture("https://giphy.com/gifs/dancing-dance-party-clubbing-blSTtZehjAZ8I") == "https://i.giphy.com/blSTtZehjAZ8I.webp")
+    #expect(self.picture("https://giphy.com/gifs/WtDLxQWQWLtw3oIXTy/") == "https://i.giphy.com/WtDLxQWQWLtw3oIXTy.webp")
+    #expect(self.picture("https://www.giphy.com/stickers/happy-cat-AbC123xyz?utm_source=share") == "https://i.giphy.com/AbC123xyz.webp")
+    #expect(self.picture("https://giphy.com/embed/blSTtZehjAZ8I") == "https://i.giphy.com/blSTtZehjAZ8I.webp")
+    // Its GIFs at their own size, and MP4 copies, the same, and a WebP as it is.
+    #expect(self.picture("https://i.giphy.com/blSTtZehjAZ8I.gif") == "https://i.giphy.com/blSTtZehjAZ8I.webp")
+    #expect(self.picture("https://media.giphy.com/media/blSTtZehjAZ8I/giphy.gif") == "https://i.giphy.com/blSTtZehjAZ8I.webp")
+    #expect(self.picture("https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjEx/blSTtZehjAZ8I/giphy.mp4?cid=790b7611") == "https://i.giphy.com/blSTtZehjAZ8I.webp")
+    #expect(self.picture("https://i.giphy.com/blSTtZehjAZ8I.webp") == "https://i.giphy.com/blSTtZehjAZ8I.webp")
+    // Its GIFs at other sizes as they are, as some have no WebP, and not its other pages, or a site
+    // only named the same.
+    #expect(self.picture("https://media.giphy.com/media/blSTtZehjAZ8I/giphy-downsized.gif") == "https://media.giphy.com/media/blSTtZehjAZ8I/giphy-downsized.gif")
     #expect(self.picture("https://giphy.com/explore/cats") == nil)
     #expect(self.picture("https://giphy.com.example/gifs/cat-blSTtZehjAZ8I") == nil)
+  }
+
+  @Test func giphysGIFsPreviewedBeforeStayGIFs() {
+    // As they're kept, and their sizes are known, rather than their WebP downloading.
+    let gif = URL(string: "https://i.giphy.com/Zq9Xw8Vv7Uu6.gif")!
+    ImagePreview.sizes.remember(CGSize(width: 480, height: 270), for: gif)
+    defer {
+      ImagePreview.sizes.forget(gif)
+    }
+    #expect(self.picture("https://giphy.com/gifs/Zq9Xw8Vv7Uu6") == gif.absoluteString)
+    // Opened, or dragged out, as the GIF, whatever it's previewed as.
+    #expect(ImagePreview.giphyGIF(for: URL(string: "https://i.giphy.com/blSTtZehjAZ8I.webp")!) == URL(string: "https://i.giphy.com/blSTtZehjAZ8I.gif"))
+    #expect(ImagePreview.giphyGIF(for: URL(string: "https://media.giphy.com/media/blSTtZehjAZ8I/200.gif")!) == nil)
   }
 
   @Test func tenorsPagesShowTheGIFTheySendOnTo() {
@@ -222,15 +252,15 @@ struct ImagePreviewSizesTests {
         previews.append(attachment.url)
       }
     }
-    #expect(previews == [URL(string: "https://i.giphy.com/blSTtZehjAZ8I.gif")!])
+    #expect(previews == [URL(string: "https://i.giphy.com/blSTtZehjAZ8I.webp")!])
   }
 
-  @Test func giphysShortLinksLoadTheirGIFByWhereTheySendYou() {
+  @Test func giphysShortLinksLoadTheirAnimationByWhereTheySendYou() {
     // As they are, with no extension, as an animation, and found by where they send you on to.
     #expect(self.picture("https://gph.is/g/4LxX5Yp") == "https://gph.is/g/4LxX5Yp")
     #expect(self.picture("https://gph.is/145Id8I") == "https://gph.is/145Id8I")
     #expect(ImagePreview.mayBeAnimated(URL(string: "https://gph.is/g/4LxX5Yp")!))
-    #expect(ImagePreview.picture(in: URL(string: "https://giphy.com/gifs/126bpm-dancingatclub-1NVtSIcr1PQnf7X2kG")!) == URL(string: "https://i.giphy.com/1NVtSIcr1PQnf7X2kG.gif"))
+    #expect(ImagePreview.picture(in: URL(string: "https://giphy.com/gifs/126bpm-dancingatclub-1NVtSIcr1PQnf7X2kG")!) == URL(string: "https://i.giphy.com/1NVtSIcr1PQnf7X2kG.webp"))
     // Not without https, or Giphy's own page.
     #expect(self.picture("http://gph.is/145Id8I") == nil)
     #expect(self.picture("https://gph.is/") == nil)
@@ -297,7 +327,7 @@ struct ImagePreviewSizesTests {
     #expect(self.shown("look \(page) here").words == "look here\n[preview]")
     // Standing for the link, as it was written, which it shows should its image not be had.
     let preview = try #require(self.shown("lol \(page)").previews.first)
-    #expect(preview.standsForLink && preview.link == URL(string: page) && preview.url == URL(string: "https://i.giphy.com/blSTtZehjAZ8I.gif"))
+    #expect(preview.standsForLink && preview.link == URL(string: page) && preview.url == URL(string: "https://i.giphy.com/blSTtZehjAZ8I.webp"))
     #expect(preview.linkText?.string == page)
     // Copied as the link.
     #expect(Markdown.plainText(Markdown.shownText("lol \(page)", layout: .board)) == "lol\n\(page)")
@@ -356,6 +386,34 @@ struct ImagePreviewSizesTests {
     #expect(sources.trusts(URL(string: "https://i.imgur.com/removed.png")!))
     #expect(sources.trusts(URL(string: "https://hotline.example.com/moved.png")!))
     #expect(!sources.trusts(URL(string: "https://tracker.example/pixel")!))
+    // Nor on to an address, as a router's.
+    #expect(!ImagePreview.Sources(server: "hotline.example.com", anySite: true).trusts(URL(string: "https://192.168.1.1/moved.png")!))
+  }
+
+  @Test func addressesAndLocalNamesNeverLoadByThemselves() {
+    // Not even from any site, as Settings can have it: an IP address reaches whatever's at it, as a
+    // router or a printer, on any network, and so does a name only a network of its own knows.
+    let anywhere = ImagePreview.Sources(server: "hotline.example.com", anySite: true)
+    let links = [
+      "https://192.168.1.1/cat.png", "https://10.0.0.5/cat.png", "https://203.0.113.9/cat.png", "https://2130706433/cat.png",
+      "https://[::1]/cat.png", "https://[fe80::1]/cat.png", "https://[2001:db8::1]/cat.png",
+      "https://localhost/cat.png", "https://localhost./cat.png", "https://app.localhost/cat.png", "https://printer.local/cat.png",
+      "https://nas/cat.png", "https://router.lan/cat.png", "https://files.home.arpa/cat.png", "https://wiki.internal/cat.png",
+    ]
+    for link in links {
+      #expect(!anywhere.trusts(URL(string: link)!), "\(link)")
+    }
+    // Sites by their names.
+    #expect(anywhere.trusts(URL(string: "https://example.com/cat.png")!))
+    #expect(anywhere.trusts(URL(string: "https://photos.example.co.uk/cat.png")!))
+    #expect(anywhere.trusts(URL(string: "https://example.com./cat.png")!))
+    // But the server you're on, by whatever address it has, as it has yours already, as a server
+    // in a dorm could, and its files, which come through the connection to it.
+    let dorm = ImagePreview.Sources(server: "10.0.5.23", serverPort: 5500, connection: UUID())
+    #expect(dorm.trusts(URL(string: "https://10.0.5.23/cat.png")!))
+    #expect(!dorm.trusts(URL(string: "https://10.0.5.24/cat.png")!))
+    #expect(dorm.trusts(URL(string: "hotline://10.0.5.23/files/Pictures/cat.png")!))
+    #expect(ImagePreview.Sources(server: "fe80::1").trusts(URL(string: "https://[fe80::1]/cat.png")!))
   }
 
   @Test func markdownPicturesFromElsewhereStayLinks() {

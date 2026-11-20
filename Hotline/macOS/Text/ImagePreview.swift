@@ -3,6 +3,7 @@ import AppKit
 import AVFoundation
 import CoreImage
 import Kingfisher
+import Network
 import os
 #if SENSITIVE_CONTENT_ANALYSIS
 import SensitiveContentAnalysis
@@ -29,6 +30,9 @@ enum ImagePreview {
 
   /// Bigger images don't download, whether they say how big they are first or not.
   static let sizeLimit: Int64 = 10 * 1024 * 1024
+
+  /// Why a picture's download was stopped: more of it came than a preview's worth.
+  struct TooBig: Error {}
 
   /// Bigger pictures among a server's files aren't previewed: one linked to downloads to everyone
   /// there at once, from a server that could be on a home connection.
@@ -61,12 +65,12 @@ enum ImagePreview {
     }
   }
 
-  /// The picture in a link to a page that only shows one, or a GIF's, in a link to it in a form a
-  /// preview can't play:
+  /// The picture in a link to a page that only shows one, or an animation's, in a link to it in a
+  /// form a preview can't play, or one it can have smaller:
   /// - Reddit's viewer's, whose links are to reddit.com/media with the picture's own link after url=.
-  /// - Giphy's pages, its stickers' and its embeds', and its WebP and MP4 copies of its GIFs, whose
-  ///   GIF is at i.giphy.com by its ID. A preview can't play WebP, which AppKit has as a picture a
-  ///   frame, rather than as one that plays, as a GIF.
+  /// - Giphy's pages, its stickers' and its embeds', its GIFs at their own size, and its MP4 copies
+  ///   of them, whose WebP copy, a third to two thirds the size of the GIF, is at i.giphy.com by its
+  ///   ID. Not its GIFs at other sizes, some of which have no WebP.
   /// - Tenor's pages, which send you on to their GIF with .gif after them.
   /// - Imgur's pages for a picture, but not an album's, and its videos of GIFs, whose picture is at
   ///   i.imgur.com by its ID, as a GIF, which Imgur sends as whatever the picture is, still or not.
@@ -83,7 +87,7 @@ enum ImagePreview {
     }
     let parts = url.pathComponents.filter { $0 != "/" }
     if let id = self.giphyID(host: host, parts: parts) {
-      return URL(string: "https://i.giphy.com/\(id).gif")
+      return URL(string: "https://i.giphy.com/\(id).webp")
     }
     if host == "tenor.com" || host == "www.tenor.com" {
       return self.tenorGIF(url, parts: parts)
@@ -94,10 +98,10 @@ enum ImagePreview {
     return nil
   }
 
-  /// The ID of the GIF a Giphy link's for, when it isn't to the GIF: its page, giphy.com/gifs/ and
-  /// its name with the ID after it, or the ID alone, a sticker's page, the same, its embed, and its
-  /// WebP and MP4 copies, at i.giphy.com, or media.giphy.com/media/ and the ID, after v1. and more,
-  /// sometimes.
+  /// The ID of the animation a Giphy link's for, when it isn't to its WebP at its own size: its
+  /// page, giphy.com/gifs/ and its name with the ID after it, or the ID alone, a sticker's page, the
+  /// same, its embed, and its GIF or MP4, at i.giphy.com, or its GIF at its own size, giphy.gif, or
+  /// an MP4 or WebP of any, at media.giphy.com/media/ and the ID, after v1. and more, sometimes.
   private static func giphyID(host: String, parts: [String]) -> String? {
     let id: Substring?
     switch host {
@@ -114,12 +118,13 @@ enum ImagePreview {
         return nil
       }
     case "i.giphy.com":
-      guard parts.count == 1, self.isGiphyCopy(parts[0]) else {
+      guard parts.count == 1, ["gif", "mp4"].contains((parts[0] as NSString).pathExtension.lowercased()) else {
         return nil
       }
       id = Substring((parts[0] as NSString).deletingPathExtension)
     case _ where host.hasSuffix(".giphy.com") && self.trustedHosts.contains(host):
-      guard parts.count >= 3, parts[0] == "media", let file = parts.last, self.isGiphyCopy(file) else {
+      guard parts.count >= 3, parts[0] == "media", let file = parts.last?.lowercased(),
+            file == "giphy.gif" || ["mp4", "webp"].contains((file as NSString).pathExtension) else {
         return nil
       }
       id = Substring(parts[parts.count - 2])
@@ -132,9 +137,14 @@ enum ImagePreview {
     return String(id)
   }
 
-  /// Whether a file of Giphy's is a copy of a GIF a preview can't play: WebP, or MP4.
-  private static func isGiphyCopy(_ file: String) -> Bool {
-    ["webp", "mp4"].contains((file as NSString).pathExtension.lowercased())
+  /// The GIF of a Giphy animation previewed as its WebP, at i.giphy.com: what's opened, or dragged
+  /// out, as that's what's expected of a file of one, what's had should its WebP not be, and what
+  /// it was previewed as before WebP was.
+  static func giphyGIF(for url: URL) -> URL? {
+    guard url.host(percentEncoded: false)?.lowercased() == "i.giphy.com", url.pathExtension.lowercased() == "webp" else {
+      return nil
+    }
+    return url.deletingPathExtension().appendingPathExtension("gif")
   }
 
   /// A Tenor page's GIF: the page's link, tenor.com/view/ and its name with its number after it, or
@@ -183,25 +193,24 @@ enum ImagePreview {
   }
 
   /// Whether animations play by themselves, as Settings has it, unless the system's Animated Images
-  /// setting has them stop, or else only while the pointer's over them.
+  /// setting has them stop, or the Mac's in Low Power Mode, or else only while the pointer's over
+  /// them.
   @MainActor
   static var playsByThemselves: Bool {
-    Prefs.shared.playsGIFs && AccessibilitySettings.animatedImagesEnabled
+    Prefs.shared.playsGIFs && AccessibilitySettings.animatedImagesEnabled && !LowPowerMode.isOn
   }
+
+  /// How long an animation's stayed where it is on screen before it's decoded and played.
+  static let animationDelay: Duration = .milliseconds(100)
+  /// How long one that's moving, as you scroll, has been on screen before it's played anyway, as it
+  /// is while you scroll slowly. One that flies by never is.
+  static let movingAnimationDelay: Duration = .milliseconds(300)
 
   /// Whether a link's picture might be an animation: a GIF or a WebP, by its extension, or a short
   /// link to a GIF.
   static func mayBeAnimated(_ url: URL) -> Bool {
     ["gif", "webp"].contains(url.pathExtension.lowercased()) || self.isShortLink(url)
   }
-
-  /// Keeps a picture as it came, rather than as a picture made from it, which for an animated WebP
-  /// would be its first frame alone.
-  static let keepsData: DefaultCacheSerializer = {
-    var serializer = DefaultCacheSerializer()
-    serializer.preferCacheOriginalData = true
-    return serializer
-  }()
 
   /// Whether a link's a short one to a GIF's page, Giphy's, gph.is, whose GIF can't be had from the
   /// link itself, but from the page it sends you on to.
@@ -273,14 +282,22 @@ enum ImagePreview {
       if self.serverFile(at: url) != nil {
         return true
       }
-      guard url.scheme?.lowercased() == "https", let host = url.host(percentEncoded: false)?.lowercased() else {
+      guard url.scheme?.lowercased() == "https", let host = url.host(percentEncoded: false).map(ImagePreview.hostName) else {
+        return false
+      }
+      // The server you're on, by whatever address it has, as it has yours already.
+      if let server = self.server, ImagePreview.hostName(server) == host {
+        return true
+      }
+      // Never an IP address, or a name only a network of its own knows, which reach whatever's
+      // there, as a router, a printer, or something on this Mac, rather than a site.
+      guard !ImagePreview.isAddressOrLocalName(host) else {
         return false
       }
       return self.anySite
         || ImagePreview.trustedHosts.contains(host)
         || ImagePreview.trustedDomains.contains { host == $0 || host.hasSuffix("." + $0) }
         || ImagePreview.thumbnailHosts.contains(host)
-        || self.server?.lowercased() == host
     }
 
     /// Whether a link is shown as its picture's preview, loading by itself: from where it can, to
@@ -301,7 +318,12 @@ enum ImagePreview {
     /// link to a page that only shows a picture, the picture in it, which loads from where it is,
     /// without the page.
     func picture(for url: URL, isImage: Bool) -> URL? {
-      let picture = ImagePreview.picture(in: url) ?? url
+      var picture = ImagePreview.picture(in: url) ?? url
+      // A Giphy animation previewed before as its GIF, as it was before its WebP was, as it's kept,
+      // and its size is known, rather than its WebP downloading.
+      if let gif = ImagePreview.giphyGIF(for: picture), ImagePreview.sizes.size(for: gif) != nil {
+        picture = gif
+      }
       guard self.loadsByItself(picture, isImage: isImage) else {
         return nil
       }
@@ -314,6 +336,34 @@ enum ImagePreview {
       }
       return picture
     }
+  }
+
+  /// A host as it's compared: in lowercase, without an IPv6 address's brackets, or the dot after a
+  /// name.
+  static func hostName(_ host: String) -> String {
+    var name = host.lowercased()
+    if name.hasPrefix("["), name.hasSuffix("]") {
+      name = String(name.dropFirst().dropLast())
+    }
+    while name.hasSuffix(".") {
+      name.removeLast()
+    }
+    return name
+  }
+
+  /// Whether a host's an IP address, IPv6, with its colons, or IPv4, or a number standing for one,
+  /// as no site's name ends in a number, or a name only a network of its own knows: one word alone,
+  /// as a router's or a printer's can be, and `localhost`, or names under it, or `local`,
+  /// `internal`, `home.arpa`, `lan` or `home`, which aren't the internet's.
+  static func isAddressOrLocalName(_ host: String) -> Bool {
+    let name = self.hostName(host)
+    guard !name.contains(":"), let last = name.split(separator: ".").last else {
+      return true
+    }
+    if last.allSatisfy({ $0.isASCII && $0.isNumber }) || last.hasPrefix("0x") || !name.contains(".") {
+      return true
+    }
+    return ["localhost", "local", "internal", "home.arpa", "lan", "home"].contains { name == $0 || name.hasSuffix("." + $0) }
   }
 
   /// Hosts of pictures where whoever put one up can't see who looked at it: image hosts, chat's and
@@ -390,12 +440,16 @@ enum ImagePreview {
 
   /// In the app's Caches folder, which macOS can clear when space runs low. A preview that's gone
   /// downloads again. Named for chat, where previews were first, so the ones kept then still are.
-  private static let directory = URL.cachesDirectory
+  /// Tests keep theirs in another, so they never touch yours.
+  static let directory = URL.cachesDirectory
     .appending(path: Bundle.main.bundleIdentifier ?? "Hotline", directoryHint: .isDirectory)
-    .appending(path: "Chat Image Previews", directoryHint: .isDirectory)
+    .appending(path: ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil ? "Chat Image Previews" : "Image Previews for Tests",
+               directoryHint: .isDirectory)
 
   /// Previews that have loaded. Only the preview is kept, not the full image, since clicking a
-  /// preview opens its link rather than showing the image here.
+  /// preview opens its link rather than showing the image here, but for an animation, which is kept
+  /// on disk as it came, for its frames to be played from. In memory, it's its preview alone, its
+  /// first frame, made from that file again once it's gone from there.
   static let cache: ImageCache = {
     // Kingfisher's own folder, since it clears out files it doesn't know.
     let images = directory.appending(path: "Images", directoryHint: .isDirectory)
@@ -407,20 +461,210 @@ enum ImagePreview {
     return cache
   }()
 
+  /// A picture that might be an animation, as it came, from the file it's kept in, by its link's
+  /// key. Off the main thread, since even the file's name takes a while, a hash of the link.
+  static func animation(forKey key: String) -> Data? {
+    try? Data(contentsOf: self.cache.diskStorage.cacheFileURL(forKey: key))
+  }
+
+  /// The most pixels a preview's picture has along its longer side: enough for a Retina screen,
+  /// whatever screen it's on, so it's kept the same way everywhere.
+  static func previewPixels(scale: CGFloat) -> CGFloat {
+    max(self.maximumSize.width, self.maximumSize.height) * scale
+  }
+
+  /// The colors a window's previews are decoded in: its own, if they're RGB, or else sRGB.
+  static func previewColors(_ colorSpace: CGColorSpace?) -> CGColorSpace {
+    colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+  }
+
+  /// A preview's picture, from a picture as it came, or a preview kept before: decoded with no more
+  /// than `maxPixelSize` pixels along its longer side, in a window's colors, premultiplied BGRA, as
+  /// an animation's frames are. So Core Animation shows it as it is, rather than keeping a copy of
+  /// it in those colors as well, made on the main thread. A point for each pixel, as Kingfisher
+  /// makes its own, since it reckons the memory one takes by its size.
+  static func still(from data: Data, maxPixelSize: CGFloat, in colorSpace: CGColorSpace) -> NSImage? {
+    let thumbnail = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+    ] as CFDictionary
+    guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+          let frame = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnail) else {
+      return nil
+    }
+    return self.still(drawing: frame, in: colorSpace)
+  }
+
+  /// Whether a picture has no see-through parts: none at all, or, as premultiplied BGRA, as a
+  /// preview's is, none whole all over. Any other layout is taken to have some.
+  static func isOpaque(_ picture: CGImage) -> Bool {
+    switch picture.alphaInfo {
+    case .none, .noneSkipFirst, .noneSkipLast:
+      return true
+    case .premultipliedFirst where picture.bitsPerPixel == 32
+      && picture.bitmapInfo.rawValue & CGBitmapInfo.byteOrderMask.rawValue == CGBitmapInfo.byteOrder32Little.rawValue:
+      guard let data = picture.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else {
+        return false
+      }
+      for y in 0..<picture.height {
+        let row = bytes + y * picture.bytesPerRow
+        for x in 0..<picture.width where row[x * 4 + 3] != 255 {
+          return false
+        }
+      }
+      return true
+    default:
+      return false
+    }
+  }
+
+  /// A preview's picture drawn again, at the size it is, in a window's colors, premultiplied BGRA.
+  static func still(drawing picture: CGImage, in colorSpace: CGColorSpace) -> NSImage? {
+    guard let context = CGContext(data: nil, width: picture.width, height: picture.height, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) else {
+      return nil
+    }
+    context.draw(picture, in: CGRect(x: 0, y: 0, width: picture.width, height: picture.height))
+    guard let image = context.makeImage() else {
+      return nil
+    }
+    let representation = NSBitmapImageRep(cgImage: image)
+    let still = NSImage(size: representation.size)
+    still.addRepresentation(representation)
+    return still
+  }
+
+  /// Makes a preview's picture, as `still(from:maxPixelSize:in:)` does, at preview size.
+  struct Still: ImageProcessor {
+    let identifier: String
+    private let colorSpace: CGColorSpace
+
+    /// For a picture that might be an animation: its first frame, only ever kept in memory, by a
+    /// name with the window's colors in it, so a window with other colors makes its own.
+    static func firstFrame(in colorSpace: CGColorSpace?) -> Still {
+      let space = ImagePreview.previewColors(colorSpace)
+      // A screen's colors often have no name, but a profile, which is the same for each window on
+      // the screen.
+      let colors = (space.name as String?) ?? "\((space.copyICCData() as Data?)?.hashValue ?? 0)"
+      let size = ImagePreview.maximumSize
+      return Still(identifier: "co.goodmake.hotline.ImagePreview.FirstFrame(\(size.width)x\(size.height), \(colors))", colorSpace: space)
+    }
+
+    /// For a still picture, whose preview's kept on disk, by the name Kingfisher's downsampler gave
+    /// the previews it made before, so they're still found, and read in the window's colors by
+    /// `StillSerializer`, rather than downloading again.
+    static func preview(in colorSpace: CGColorSpace?) -> Still {
+      Still(identifier: DownsamplingImageProcessor(size: ImagePreview.maximumSize).identifier, colorSpace: ImagePreview.previewColors(colorSpace))
+    }
+
+    private init(identifier: String, colorSpace: CGColorSpace) {
+      self.identifier = identifier
+      self.colorSpace = colorSpace
+    }
+
+    func process(item: ImageProcessItem, options: KingfisherParsedOptionsInfo) -> KFCrossPlatformImage? {
+      let data: Data?
+      switch item {
+      case .data(let given):
+        data = given
+      case .image(let image):
+        data = image.kf.data(format: .GIF) ?? image.kf.data(format: .unknown)
+      }
+      return data.flatMap { ImagePreview.still(from: $0, maxPixelSize: ImagePreview.previewPixels(scale: options.scaleFactor), in: self.colorSpace) }
+    }
+  }
+
+  /// Keeps a still picture's preview on disk, with its colors, and reads one back in the window's
+  /// colors, as `Still` makes it, including those kept before. As a JPEG, about a quarter the size
+  /// of one at full quality, with no difference to see at a preview's size, whatever the picture
+  /// came as, unless it has see-through parts, which only a PNG keeps.
+  struct StillSerializer: CacheSerializer {
+    private let colorSpace: CGColorSpace
+
+    init(in colorSpace: CGColorSpace?) {
+      self.colorSpace = ImagePreview.previewColors(colorSpace)
+    }
+
+    func data(with image: KFCrossPlatformImage, original: Data?) -> Data? {
+      guard let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        return nil
+      }
+      let isJPEG = ImagePreview.isOpaque(picture)
+      let data = NSMutableData()
+      guard let destination = CGImageDestinationCreateWithData(data, (isJPEG ? UTType.jpeg : UTType.png).identifier as CFString, 1, nil) else {
+        return nil
+      }
+      CGImageDestinationAddImage(destination, picture, isJPEG ? [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary : nil)
+      return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
+
+    func image(with data: Data, options: KingfisherParsedOptionsInfo) -> KFCrossPlatformImage? {
+      ImagePreview.still(from: data, maxPixelSize: ImagePreview.previewPixels(scale: options.scaleFactor), in: self.colorSpace)
+    }
+
+    /// What it keeps is a JPEG or a PNG, which anything can read.
+    var producesDecodableImageData: Bool {
+      true
+    }
+  }
+
   /// The sizes of images previewed before.
   static let sizes = ImagePreviewSizes(fileURL: directory.appending(path: "Sizes.plist", directoryHint: .notDirectory))
 
   /// Links whose image couldn't be had, which aren't shown or tried again for a while.
   static let failures = ImagePreviewFailures(fileURL: directory.appending(path: "Failures.plist", directoryHint: .notDirectory))
 
-  /// Downloads previews, turning away anything that isn't an image or is too big to be worth it, or
-  /// still coming after a minute, as one that never ends would be.
+  /// How long after a preview's picture couldn't be had for now, as a server's busy with others',
+  /// it's tried again, once it's on screen.
+  static let retryDelay: Duration = .seconds(15)
+
+  /// Posted on the main thread once the Mac's back on a network, after being off one, when the links
+  /// that couldn't be reached are tried again.
+  static let networkDidReturn = Notification.Name("ImagePreviewNetworkDidReturn")
+
+  /// Posted on the main thread as a picture from the web that doesn't say how big it is starts to
+  /// come, which Kingfisher says nothing of, with the link it was asked for as its object.
+  static let pictureDidStart = Notification.Name("ImagePreviewPictureDidStart")
+
+  private static let network: NWPathMonitor = {
+    let monitor = NWPathMonitor()
+    // On a network to start with, so only coming back to one, after being off, counts.
+    let wasOn = OSAllocatedUnfairLock(initialState: true)
+    monitor.pathUpdateHandler = { path in
+      let isOn = path.status == .satisfied
+      let cameBack = wasOn.withLock { wasOn in
+        defer {
+          wasOn = isOn
+        }
+        return isOn && !wasOn
+      }
+      guard cameBack else {
+        return
+      }
+      ImagePreview.failures.forgetUnreachable()
+      DispatchQueue.main.async {
+        NotificationCenter.default.post(name: ImagePreview.networkDidReturn, object: nil)
+      }
+    }
+    monitor.start(queue: DispatchQueue(label: "Image Previews' Network"))
+    return monitor
+  }()
+
+  /// Watches for the network coming back, from now on.
+  static func watchNetwork() {
+    _ = self.network
+  }
+
+  /// Downloads previews, turning away anything that isn't an image, and stopping one once it's more
+  /// than a preview's worth, or still coming after a minute.
   static let downloader: ImageDownloader = {
     let downloader = ImageDownloader(name: "Chat Image Previews")
     downloader.downloadTimeout = 20
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForResource = 60
     downloader.sessionConfiguration = configuration
+    downloader.sessionDelegate = ImageDownloadLimit()
     downloader.delegate = ImageDownloadCheck.shared
     return downloader
   }()
@@ -453,7 +697,8 @@ extension ImagePreview {
     // A short link's picture, rather than the page it sends you on to.
     else if self.isShortLink(url) {
       Task {
-        openWindow(id: "preview-quicklook", value: PreviewFileInfo(webImage: await self.resolved(url)))
+        let picture = await self.resolved(url)
+        openWindow(id: "preview-quicklook", value: PreviewFileInfo(webImage: self.giphyGIF(for: picture) ?? picture))
       }
     }
     else {
@@ -493,8 +738,8 @@ struct ServerPicture: ImageDataProvider {
 private final class ImageDownloadCheck: ImageDownloaderDelegate {
   static let shared = ImageDownloadCheck()
 
-  /// Not one that says it's too big. One that doesn't say is stopped once too much of it has come.
-  /// Nor what a host sends in place of a picture that's gone.
+  /// Not one that says it's too big. One that doesn't say is stopped once too much of it has come,
+  /// by `ImageDownloadLimit`. Nor what a host sends in place of a picture that's gone.
   func imageDownloader(_ downloader: ImageDownloader, didReceive response: URLResponse) async -> URLSession.ResponseDisposition {
     guard response.mimeType?.lowercased().hasPrefix("image/") == true,
           response.expectedContentLength <= ImagePreview.sizeLimit,
@@ -502,6 +747,40 @@ private final class ImageDownloadCheck: ImageDownloaderDelegate {
       return .cancel
     }
     return .allow
+  }
+}
+
+/// Stops a preview's download once more of it has come than a preview's worth, which one that
+/// doesn't say how big it is could send without end, as Kingfisher only counts what's come of one
+/// that does. And says when one like that starts to come, which Kingfisher doesn't either.
+final class ImageDownloadLimit: SessionDelegate, @unchecked Sendable {
+  /// How much of each download has come, only touched on the session's queue, one call at a time.
+  private var received: [Int: Int64] = [:]
+
+  override func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    let id = dataTask.taskIdentifier
+    let isFirst = self.received[id] == nil
+    let received = self.received[id, default: 0] + Int64(data.count)
+    guard received <= ImagePreview.sizeLimit else {
+      // Ended as too big for whoever's waiting on it, then stopped, which Kingfisher, done with it,
+      // pays no attention to.
+      self.received[id] = nil
+      super.urlSession(session, task: dataTask, didCompleteWithError: ImagePreview.TooBig())
+      dataTask.cancel()
+      return
+    }
+    self.received[id] = received
+    if isFirst, (dataTask.response?.expectedContentLength ?? -1) < 0, let url = dataTask.originalRequest?.url {
+      DispatchQueue.main.async {
+        NotificationCenter.default.post(name: ImagePreview.pictureDidStart, object: url)
+      }
+    }
+    super.urlSession(session, dataTask: dataTask, didReceive: data)
+  }
+
+  override func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+    self.received[task.taskIdentifier] = nil
+    super.urlSession(session, task: task, didCompleteWithError: error)
   }
 }
 
@@ -536,6 +815,14 @@ final class ImagePreviewFailures: @unchecked Sendable {
         return false
       }
       return Date().timeIntervalSince1970 - date < self.keepFor
+    }
+  }
+
+  /// Forgets the links that couldn't be reached, to be tried again, as the network's come back. Not
+  /// those the server refused, which are kept as long as ever.
+  func forgetUnreachable() {
+    self.lock.withLock {
+      self.thisTime.removeAll()
     }
   }
 
@@ -746,10 +1033,11 @@ final class ImageAttachment: NSTextAttachment {
   /// The image's size in pixels, once it's known, from loading it now or before.
   var imageSize: CGSize?
   /// Whether the preview takes up any room: from the start for an image that's loaded before, or
-  /// else once its image starts to come in, so a link to one that can't be had shows nothing.
+  /// else once its image starts to come in, so a link to one that can't be had takes none.
   var isShown: Bool
-  /// Whether it's showing the link it stands for, as its image can't be had.
-  var showsLink = false
+  /// Whether it's showing the link it stands for in its place: until its image starts to come in,
+  /// so the link's never missing while it waits, or once its image can't be had.
+  var showsLink: Bool
   /// Where it loads from by itself, which a redirect has to be to as well.
   let sources: ImagePreview.Sources
 
@@ -761,6 +1049,7 @@ final class ImageAttachment: NSTextAttachment {
     self.sources = sources
     self.imageSize = ImagePreview.sizes.size(for: url)
     self.isShown = self.imageSize != nil && !ImagePreview.failures.contains(url)
+    self.showsLink = !self.isShown && self.linkText != nil
     super.init(data: nil, ofType: nil)
     self.allowsTextAttachmentView = true
   }
@@ -837,12 +1126,15 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
     return CGRect(x: 0, y: -4, width: size.width, height: size.height)
   }
 
-  /// Makes room for the preview once its image starts to come in, until it's here.
+  /// Makes room for the preview once its image starts to come in, until it's here, in place of the
+  /// link it stands for, should it have been showing that while it waited.
   private func show() {
     guard let attachment = self.textAttachment as? ImageAttachment, !attachment.isShown else {
       return
     }
     attachment.isShown = true
+    attachment.showsLink = false
+    (self.view as? ImagePreviewView)?.hideLink()
     (self.view as? ImagePreviewView)?.showsPlaceholder = true
     self.layOutAgain()
   }
@@ -890,16 +1182,19 @@ final class ImagePreviewProvider: NSTextAttachmentViewProvider {
   }
 
   /// Once the image loads, remembers its size for next time and, unless the preview was already
-  /// showing at the right size, lays the line out again at it.
+  /// showing at the right size, lays the line out again at it, in place of its link, should that
+  /// have shown as the image couldn't be had before.
   private func imageDidLoad(imageSize: CGSize) {
     guard let attachment = self.textAttachment as? ImageAttachment, imageSize.width > 0, imageSize.height > 0 else {
       return
     }
     ImagePreview.sizes.remember(imageSize, for: attachment.url)
     let previousSize = attachment.previewSize
-    let wasShown = attachment.isShown
+    // Shown already, rather than its link in its place, as when it couldn't be had before.
+    let wasShown = attachment.isShown && !attachment.showsLink
     attachment.imageSize = imageSize
     attachment.isShown = true
+    attachment.showsLink = false
     guard attachment.previewSize != previousSize || !wasShown else {
       return
     }
@@ -933,6 +1228,9 @@ final class ImagePreviewView: NSView, NSDraggingSource {
 
   private let imageView = NSImageView()
   private var started = false
+  /// Whether the picture's hidden while it's checked, as it might be sensitive, before it's seen.
+  /// Not to be played, dragged out, or shown until it's known not to be.
+  private var isChecking = false
   /// The picture as it came, while it's covered, blurred, since it might be sensitive, and what was
   /// found in it.
   private var covered: (image: NSImage, finding: SensitiveContent.Finding)?
@@ -948,14 +1246,28 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   private let framesView = NSView()
   private let framesLayer = CALayer()
   private lazy var player = AnimationPlayer(layer: self.framesLayer, in: self)
+  /// The animation, once it's opened, while it's on screen.
   private var animation: AnimationFrames?
-  /// Opens the animation, if the image is one, and plays it, once it can be seen.
-  private var animate: (() -> Void)?
+  /// Opening the animation, once it's been on screen a moment.
+  private var opening: Task<Void, Never>?
+
+  /// Where its picture comes from, and how it's had, once it's started to load, so it can be had
+  /// again from the cache once it's back on screen, as it lets it go while it's away. Its preview's
+  /// made for its window's colors then, which change as the window moves to another screen.
+  private var source: Source?
+  private var baseOptions: KingfisherOptionsInfo = []
+  /// The picture's size in pixels, once it's loaded.
+  private var pictureSize: CGSize?
+  /// Whether its picture might be an animation, by its link.
+  private let mayBeAnimated: Bool
+  /// The pixels to a point of the screen its animation was opened for.
+  private var animationScale: CGFloat?
 
   init(url: URL, link: URL? = nil, sources: ImagePreview.Sources) {
     self.url = url
     self.link = link
     self.sources = sources
+    self.mayBeAnimated = ImagePreview.mayBeAnimated(url)
     super.init(frame: .zero)
 
     self.wantsLayer = true
@@ -981,11 +1293,27 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.framesView.isHidden = true
     self.addSubview(self.framesView)
 
+    self.progress.style = .spinning
+    self.progress.controlSize = .small
+    self.progress.isDisplayedWhenStopped = false
+    self.progress.isIndeterminate = true
+    self.progress.isHidden = true
+    self.progress.setAccessibilityLabel("Loading image")
+    self.progress.sizeToFit()
+    self.addSubview(self.progress)
+
     // Played while the pointer's over it, when animations don't play by themselves, and started or
-    // stopped as Settings, or the system's Animated Images setting, changes.
+    // stopped as Settings, the system's Animated Images setting, or Low Power Mode, changes.
     self.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self, userInfo: nil))
     NotificationCenter.default.addObserver(self, selector: #selector(self.playingDidChange), name: Prefs.playsGIFsDidChange, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(self.playingDidChange), name: AccessibilitySettings.animatedImagesEnabledDidChangeNotification, object: nil)
+    LowPowerMode.watch()
+    NotificationCenter.default.addObserver(self, selector: #selector(self.playingDidChange), name: LowPowerMode.didChange, object: nil)
+    // Tried again, should it not have been had, once the network's back.
+    ImagePreview.watchNetwork()
+    NotificationCenter.default.addObserver(self, selector: #selector(self.networkDidReturn), name: ImagePreview.networkDidReturn, object: nil)
+    // Made room for once it starts to come, should it not say how big it is.
+    NotificationCenter.default.addObserver(self, selector: #selector(self.pictureDidStart(_:)), name: ImagePreview.pictureDidStart, object: nil)
   }
 
   /// Whether the pointer's over it, which plays an animation that doesn't play by itself.
@@ -994,7 +1322,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   override func mouseEntered(with event: NSEvent) {
     self.isPointedAt = true
     if !ImagePreview.playsByThemselves {
-      self.animate?()
+      self.animate(waiting: false)
     }
   }
 
@@ -1007,7 +1335,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
 
   @objc private func playingDidChange() {
     if ImagePreview.playsByThemselves || self.isPointedAt {
-      self.animate?()
+      self.animate(waiting: false)
     }
     else {
       self.stopAnimating()
@@ -1019,11 +1347,14 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   override func layout() {
     super.layout()
     // What says it might be sensitive covers the picture, wherever it is, and an animation's frames
-    // are where its first is.
+    // are where its first is. Its progress, should it be slow to come, is in the middle.
     defer {
       self.coverLabel?.frame = self.imageView.frame
       self.framesView.frame = self.imageView.frame
       self.framesLayer.frame = self.framesView.bounds
+      let side = self.progress.frame.size
+      self.progress.setFrameOrigin(NSPoint(x: (self.bounds.midX - side.width / 2).rounded(), y: (self.bounds.midY - side.height / 2).rounded()))
+      self.updatePlaceholder()
     }
     guard let size = self.imageView.image?.size, size.width > 0, size.height > 0 else {
       self.imageView.frame = self.bounds
@@ -1043,24 +1374,78 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     super.viewDidMoveToWindow()
     if self.window != nil {
       self.load()
+      // Showing it's still coming, should it have become slow to while it was away.
+      self.updatePlaceholder()
     }
     else {
-      // Gone, as it scrolls away, and the pointer with it, which leaves one that plays only while
-      // pointed at still.
+      // Gone, as it scrolls away, and the pointer with it.
       self.isPointedAt = false
-      if !ImagePreview.playsByThemselves {
-        self.stopAnimating()
-      }
+      self.letGo()
     }
-    // Played again once it's back, as leaving the window takes its animation away.
+    // Played again in another window, as leaving one takes its animation away.
     self.player.windowDidChange()
+  }
+
+  /// Lets go of its picture and an animation's frames as it leaves the window, so a preview that's
+  /// scrolled away holds nothing. Once it's back, its picture's had again from the cache, straight
+  /// away from memory, or a moment later from disk, and an animation's frames are decoded again once
+  /// it's been back a moment. Not while it's covered, as it might be sensitive, or still loading the
+  /// first time, which lets go once it's loaded.
+  private func letGo() {
+    self.stopAnimating()
+    self.animation = nil
+    guard self.pictureSize != nil, self.covered == nil else {
+      return
+    }
+    self.imageView.kf.cancelDownloadTask()
+    self.isLoading = false
+    self.stopShowingProgress()
+    self.imageView.image = nil
+    self.updatePlaceholder()
   }
 
   override func viewDidChangeBackingProperties() {
     super.viewDidChangeBackingProperties()
-    // On a screen with other colors, an animation's frames are decoded again in them.
-    if self.player.needsDecodingAgain, let animation = self.animation {
+    // On a screen with other colors, its picture's drawn again in them, and an animation's frames
+    // are decoded again in them, or opened again for one with other pixels to a point.
+    self.recolorIfNeeded()
+    guard let animation = self.animation else {
+      return
+    }
+    if let scale = self.window?.backingScaleFactor, scale != self.animationScale {
+      self.stopAnimating()
+      self.animation = nil
+      self.animate(waiting: false)
+    }
+    else if self.player.needsDecodingAgain {
       self.play(animation)
+    }
+  }
+
+  /// Draws its picture again in its window's colors, off the main thread, should it be in others,
+  /// as one made for a window on another screen is, or for this one before it moved, and keeps it in
+  /// memory in their place, so Core Animation shows it as it is, rather than keeping a copy of it in
+  /// those colors as well.
+  private func recolorIfNeeded() {
+    guard let colorSpace = self.window?.colorSpace?.cgColorSpace, let key = self.source?.cacheKey, self.covered == nil,
+          let image = self.imageView.image, let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+      return
+    }
+    let colors = ImagePreview.previewColors(colorSpace)
+    guard picture.colorSpace != colors else {
+      return
+    }
+    let name = self.previewName(in: colorSpace)
+    Task { [weak self] in
+      let redrawn = await Task.detached(priority: .userInitiated) {
+        ImagePreview.still(drawing: picture, in: colors)
+      }.value
+      // Unless it's had another picture since, or let go of it.
+      guard let self, let redrawn, self.imageView.image === image else {
+        return
+      }
+      self.imageView.image = redrawn
+      ImagePreview.cache.store(redrawn, forKey: key, processorIdentifier: name, toDisk: false, completionHandler: nil)
     }
   }
 
@@ -1074,53 +1459,78 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.player.play(animation)
   }
 
-  /// Stops an animation, leaving the image view, and its first frame, or what's in its place, but
-  /// for the link it shows in place of an image it can't have, which it leaves as it is.
+  /// Stops an animation, or its opening, leaving the image view, and its first frame, or what's in
+  /// its place, but for the link it shows in place of an image it can't have, which it leaves as it
+  /// is.
   private func stopAnimating() {
+    self.opening?.cancel()
+    self.opening = nil
     self.player.stop()
     self.framesView.isHidden = true
-    if self.linkLabel == nil {
+    if self.linkLabel == nil, !self.isChecking {
       self.imageView.isHidden = false
     }
   }
 
-  /// Gets ready to play the image, should it be an animation, which might be one by its link: from
-  /// its data as it came, which for a WebP is as it's kept, rather than as a picture made from it,
-  /// off the main thread, fitted to the preview. Played now, unless it's to be checked first, or
-  /// animations don't play by themselves. Never while it's covered, or showing its link.
-  private func prepareAnimation(_ value: RetrieveImageResult, playsNow: Bool) {
-    guard ImagePreview.mayBeAnimated(self.url) else {
+  /// Plays the picture, should it be an animation, while animations play by themselves, or it's
+  /// pointed at: once it's settled on screen, so one that only goes by as you scroll is never
+  /// decoded, or straight away. Opened from the file it's kept in, as it came, off the main thread,
+  /// fitted to the preview. Never while it's being checked, or covered, or showing its link, or out
+  /// of a window.
+  private func animate(waiting: Bool = true) {
+    guard self.mayBeAnimated, ImagePreview.playsByThemselves || self.isPointedAt, self.window != nil, !self.isChecking, self.covered == nil,
+          self.linkLabel == nil, self.imageView.image != nil, let key = self.source?.cacheKey, let pictureSize = self.pictureSize else {
       return
     }
-    let file = value.cacheType == .none ? nil : ImagePreview.cache.diskStorage.cacheFileURL(forKey: value.source.cacheKey)
-    let data = value.data
-    let size = ImagePreview.previewSize(forImageSize: Self.pixelSize(of: value.image))
-    self.animate = { [weak self] in
-      guard let self, self.covered == nil, self.linkLabel == nil else {
+    if let animation = self.animation {
+      self.play(animation)
+      return
+    }
+    // Being opened, or found not to be an animation, since it came back.
+    guard self.opening == nil else {
+      return
+    }
+    let size = ImagePreview.previewSize(forImageSize: pictureSize)
+    self.opening = Task { [weak self] in
+      // Once it's stayed where it is a moment, or else been on screen a while, as it is while you
+      // scroll slowly, so one that flies by isn't decoded.
+      if waiting {
+        var place = self?.placeInWindow
+        var waited = Duration.zero
+        while waited < ImagePreview.movingAnimationDelay {
+          try? await Task.sleep(for: ImagePreview.animationDelay)
+          waited += ImagePreview.animationDelay
+          guard let self, !Task.isCancelled else {
+            return
+          }
+          let now = self.placeInWindow
+          if now == place {
+            break
+          }
+          place = now
+        }
+      }
+      guard !Task.isCancelled else {
         return
       }
-      if let animation = self.animation {
-        self.play(animation)
+      // With pixels enough for the screen it's on.
+      let scale = self?.window?.backingScaleFactor ?? 2
+      let opened = await Task.detached(priority: .userInitiated) {
+        ImagePreview.animation(forKey: key).flatMap { AnimationFrames(data: $0, fitting: size, scale: scale) }
+      }.value
+      // Unless it's stopped since, as when it's left the window, or the pointer's left it.
+      guard let self, let opened, !Task.isCancelled else {
         return
       }
-      Task { [weak self] in
-        let opened = await Task.detached(priority: .userInitiated) { () -> AnimationFrames? in
-          let original = file.flatMap { try? Data(contentsOf: $0) } ?? data()
-          return original.flatMap { AnimationFrames(data: $0, fitting: size) }
-        }.value
-        guard let self, let opened, self.covered == nil, self.linkLabel == nil else {
-          return
-        }
-        self.animation = opened
-        // Unless the pointer's left it, while it was opened, when it doesn't play by itself.
-        if ImagePreview.playsByThemselves || self.isPointedAt {
-          self.play(opened)
-        }
-      }
+      self.animation = opened
+      self.animationScale = scale
+      self.play(opened)
     }
-    if playsNow, ImagePreview.playsByThemselves || self.isPointedAt {
-      self.animate?()
-    }
+  }
+
+  /// Where it is in its window, which changes as it scrolls.
+  private var placeInWindow: NSPoint {
+    self.convert(NSPoint.zero, to: nil)
   }
 
   // The layer's color doesn't follow the appearance on its own.
@@ -1132,8 +1542,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   /// Shows the link it stands for, as words, in place of its image, which can't be had, cut short
   /// in the middle where there isn't the room for all of it.
   func showLink(_ text: NSAttributedString) {
-    self.player.stop()
-    self.framesView.isHidden = true
+    self.stopAnimating()
     self.imageView.isHidden = true
     self.showsPlaceholder = false
     self.layer?.cornerRadius = 0
@@ -1159,47 +1568,88 @@ final class ImagePreviewView: NSView, NSDraggingSource {
 
   private func updatePlaceholder() {
     // Until the picture's here, and checked, if it's to be.
-    let showsPlaceholder = self.showsPlaceholder && (self.imageView.image == nil || self.imageView.isHidden)
+    let showsPlaceholder = self.showsPlaceholder && (self.imageView.image == nil || self.isChecking)
     self.effectiveAppearance.performAsCurrentDrawingAppearance {
       self.layer?.backgroundColor = showsPlaceholder ? NSColor.quaternarySystemFill.cgColor : nil
     }
+    // And, should it be slow to come, that it's coming, where there's room for that.
+    let showsProgress = showsPlaceholder && self.isSlow && self.imageView.image == nil && self.linkLabel == nil
+      && self.window != nil && self.bounds.width >= 32 && self.bounds.height >= 24
+    if showsProgress == self.progress.isHidden {
+      self.progress.isHidden = !showsProgress
+      if showsProgress {
+        self.progress.startAnimation(nil)
+      }
+      else {
+        self.progress.stopAnimation(nil)
+      }
+    }
+  }
+
+  /// Shown in the gray box, should the picture be slow to come: filling as it comes, when it's
+  /// known how big it is, or else spinning.
+  private let progress = NSProgressIndicator()
+  /// Whether the picture's been coming a while, waiting to show its progress.
+  private var isSlow = false
+  private var slow: Task<Void, Never>?
+
+  /// Waits a moment before showing that its picture's coming, so it never shows for one that
+  /// comes quickly, from the cache, or a fast connection.
+  private func waitToShowProgress() {
+    self.stopShowingProgress()
+    self.slow = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(1))
+      guard let self, !Task.isCancelled, self.isLoading, self.imageView.image == nil else {
+        return
+      }
+      self.isSlow = true
+      self.updatePlaceholder()
+    }
+  }
+
+  /// How much of the picture's come, of how much it said there is, if it said.
+  private func showProgress(received: Int64, of total: Int64) {
+    guard total > 0 else {
+      return
+    }
+    self.progress.isIndeterminate = false
+    self.progress.doubleValue = min(100, Double(received) / Double(total) * 100)
+  }
+
+  private func stopShowingProgress() {
+    self.slow?.cancel()
+    self.slow = nil
+    self.isSlow = false
+    self.progress.isIndeterminate = true
+    self.progress.doubleValue = 0
+    self.updatePlaceholder()
   }
 
   private func load() {
     guard !self.started else {
+      if self.failedAt != nil {
+        self.tryAgain()
+      }
+      else {
+        self.loadAgain()
+      }
       return
     }
     self.started = true
-    guard !ImagePreview.failures.contains(self.url) else {
-      self.onFail?(.notNow)
-      return
-    }
 
-    // From the cache if it's been shown before, which fades in only after a download.
+    // From the cache if it's been shown before.
     var options: KingfisherOptionsInfo = [
       .targetCache(ImagePreview.cache),
       .downloader(ImagePreview.downloader),
-      .backgroundDecode,
-      .transition(.fade(0.2)),
+      .scaleFactor(2),
     ]
-    // Big images are decoded at preview size, with pixels enough for a Retina screen whatever
-    // screen it's on, so it's cached the same way everywhere. Not one that might be an animation,
-    // which would lose all but its first frame, and is kept as it came, for its frames to be
-    // played from, as a WebP's wouldn't be otherwise.
-    if ImagePreview.mayBeAnimated(self.url) {
-      options.append(.cacheSerializer(ImagePreview.keepsData))
-    }
-    else {
-      options.append(.processor(DownsamplingImageProcessor(size: ImagePreview.maximumSize)))
-      options.append(.scaleFactor(2))
-    }
     // A picture among the server's files, through the connection to it, or one from the web, only
     // redirected on to somewhere it could load from by itself, so a link from a host it trusts
     // can't send it somewhere else that would see you.
     let source: Source
     if let path = self.sources.serverFile(at: self.url), let connection = self.sources.connection {
       source = .provider(ServerPicture(url: self.url, path: path, connection: connection) { [weak self] in
-        self?.onStart?()
+        self?.pictureStarted()
       })
     }
     else {
@@ -1213,53 +1663,199 @@ final class ImagePreviewView: NSView, NSDraggingSource {
         }
         completion(request.url.map(sources.trusts) == true ? request : nil)
       }))
+      // A Giphy animation's GIF, should its WebP not be had, as some at other sizes aren't.
+      if let gif = ImagePreview.giphyGIF(for: self.url) {
+        options.append(.alternativeSources([.network(gif)]))
+      }
     }
+    self.source = source
+    self.baseOptions = options
+    // Not one that couldn't be had a while ago, until it can be tried again.
+    guard !ImagePreview.failures.contains(self.url) else {
+      self.failedAt = .now
+      self.onFail?(.notNow)
+      return
+    }
+    self.loadPicture(first: true)
+  }
 
+  /// When its picture last couldn't be had, until it's had, which it's tried for again.
+  private var failedAt: ContinuousClock.Instant?
+
+  /// Tries again for its picture, which couldn't be had before: once it's back on screen, a while
+  /// after, or straight away, as once the network's back. Not while it's among the links that
+  /// can't be had for a while, as one the server refused.
+  private func tryAgain(now: Bool = false) {
+    guard let failedAt = self.failedAt, self.window != nil, now || ContinuousClock.now - failedAt >= ImagePreview.retryDelay,
+          !ImagePreview.failures.contains(self.url) else {
+      return
+    }
+    self.failedAt = nil
+    self.loadPicture(first: true)
+  }
+
+  @objc private func networkDidReturn() {
+    self.tryAgain(now: true)
+  }
+
+  /// Takes away the link shown in its picture's place, now it's coming, or here.
+  func hideLink() {
+    guard let label = self.linkLabel else {
+      return
+    }
+    label.removeFromSuperview()
+    self.linkLabel = nil
+    self.layer?.cornerRadius = 6
+    self.imageView.isHidden = self.isChecking
+    self.showsPlaceholder = true
+    self.toolTip = self.linkToolTip
+    self.setAccessibilityLabel("Image preview")
+    self.window?.invalidateCursorRects(for: self)
+  }
+
+  /// How its picture's had: decoded at preview size, in its window's colors, off the main thread.
+  /// One that might be an animation is kept on disk as it came, for its frames to be played from,
+  /// and in memory as its first frame alone, which is made from that file again once it's gone from
+  /// there. It's on disk before it shows, for its frames to be read from. A still one is kept as its
+  /// preview.
+  private var options: KingfisherOptionsInfo {
+    let colorSpace = self.window?.colorSpace?.cgColorSpace
+    if self.mayBeAnimated {
+      return self.baseOptions + [.processor(ImagePreview.Still.firstFrame(in: colorSpace)), .cacheOriginalImage, .cacheMemoryOnly, .waitForCache]
+    }
+    return self.baseOptions + [.processor(ImagePreview.Still.preview(in: colorSpace)), .cacheSerializer(ImagePreview.StillSerializer(in: colorSpace))]
+  }
+
+  /// The name its preview's kept in memory by, made for a window's colors.
+  private func previewName(in colorSpace: CGColorSpace?) -> String {
+    (self.mayBeAnimated ? ImagePreview.Still.firstFrame(in: colorSpace) : ImagePreview.Still.preview(in: colorSpace)).identifier
+  }
+
+  /// Whether its picture's coming from where it is, rather than from the cache, which it fades in
+  /// from once it's here.
+  private var isDownloading = false
+
+  /// Its picture's started to come from where it is, which makes room for the preview.
+  private func pictureStarted() {
+    self.isDownloading = true
+    self.onStart?()
+  }
+
+  /// A picture from the web that doesn't say how big it is has started to come, which, should it be
+  /// this one's, it makes room for, as it does for one that says.
+  @objc private func pictureDidStart(_ notification: Notification) {
+    guard self.isLoading, !self.isDownloading, let url = notification.object as? URL,
+          url == self.url || url == self.source?.url || url == ImagePreview.giphyGIF(for: self.url) else {
+      return
+    }
+    self.pictureStarted()
+  }
+
+  /// Fades its picture in, as it's just come.
+  private func fadeIn() {
+    let fade = CABasicAnimation(keyPath: "opacity")
+    fade.fromValue = 0
+    fade.toValue = 1
+    fade.duration = 0.2
+    fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+    self.imageView.layer?.add(fade, forKey: "fade in")
+  }
+
+  /// Its picture again, once it's back on screen, having let it go while it was away: from memory,
+  /// straight away, or else made again from what's on disk.
+  private func loadAgain() {
+    guard self.pictureSize != nil, self.imageView.image == nil, self.covered == nil, self.linkLabel == nil else {
+      return
+    }
+    self.loadPicture(first: false)
+  }
+
+  /// Has its picture, and shows it, checked first if it's to be, and plays it, should it be an
+  /// animation. Only the first time does a picture that can't be had take the preview away.
+  private func loadPicture(first: Bool) {
+    guard let source = self.source else {
+      return
+    }
     // Checked before it's seen, while the Mac asks for that, unless it's been shown already.
     let key = self.url.absoluteString
     let checks = SensitiveContent.isOn && !SensitiveContent.shown.contains(key)
+    self.isChecking = checks
     self.imageView.isHidden = checks
 
     var reportedStart = false
-    var tooBig = false
-    self.imageView.kf.setImage(with: source, options: options, progressBlock: { [weak self] received, _ in
-      // Stopped once more has come than a preview's worth, which one that didn't say how big it is
-      // could be, without end.
-      if received > ImagePreview.sizeLimit, !tooBig {
-        tooBig = true
-        self?.imageView.kf.cancelDownloadTask()
-        return
-      }
+    self.isDownloading = false
+    self.isLoading = true
+    // Its progress, which Kingfisher only gives for a picture that says how big it is. One that
+    // doesn't is stopped by the downloader once it's more than a preview's worth, and says it's
+    // started to come through `pictureDidStart`.
+    self.imageView.kf.setImage(with: source, options: self.options, progressBlock: { [weak self] received, total in
+      self?.showProgress(received: received, of: total)
       guard !reportedStart else {
         return
       }
       reportedStart = true
-      self?.onStart?()
+      self?.pictureStarted()
     }) { [weak self] result in
       guard let self else {
         return
       }
-      if tooBig {
-        self.onFail?(.refused)
+      // Not one it's had again since, which this says nothing of.
+      if case .failure(let error) = result, error.isNotCurrentTask {
         return
       }
+      self.isLoading = false
+      self.stopShowingProgress()
       switch result {
       case .success(let value):
+        let downloaded = self.isDownloading
+        self.isDownloading = false
+        // In place of the link it showed, should it not have been had before.
+        self.failedAt = nil
+        self.hideLink()
+        // Had from where it falls back to, as a Giphy animation's GIF, which it's had from from now
+        // on, its frames played from, and kept by.
+        if value.source.cacheKey != source.cacheKey {
+          self.source = value.source
+        }
+        let size = Self.pixelSize(of: value.image)
+        self.pictureSize = size
         if checks {
           self.check(value, key: key)
         }
-        self.prepareAnimation(value, playsNow: !checks)
         self.updatePlaceholder()
         self.needsLayout = true
-        self.onLoad?(Self.pixelSize(of: value.image))
+        self.onLoad?(size)
+        // Let go of again, should it have left the window while it loaded, or else played, should
+        // it be an animation, unless it's to be checked first.
+        if self.window == nil {
+          self.letGo()
+        }
+        else {
+          // In this window's colors, should it have been made for another's.
+          self.recolorIfNeeded()
+          if downloaded, !checks {
+            self.fadeIn()
+          }
+          if !checks {
+            self.animate()
+          }
+        }
       case .failure(let error):
-        // Not when it was only stopped, as when the view went away.
-        if !error.isNotCurrentTask, let failure = Self.failure(of: error) {
+        // Not when it was only stopped, as when the view went away, or loading again.
+        if first, !error.isNotCurrentTask, let failure = Self.failure(of: error) {
+          self.failedAt = .now
           self.onFail?(failure)
         }
       }
     }
+    // Still coming, as it wasn't in memory, which it shows, should it take a while.
+    if self.isLoading {
+      self.waitToShowProgress()
+    }
   }
+
+  /// Whether its picture's being had.
+  private var isLoading = false
 
   /// Why the image couldn't be had. Refused, when the server said no: turned the request away, or
   /// sent something that isn't an image, or one too big, or one that can't be read. Unreachable,
@@ -1275,11 +1871,20 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       return (400..<500).contains(response.statusCode) && response.statusCode != 408 && response.statusCode != 429 ? .refused : .unreachable
     case .responseError(reason: .cancelledByDelegate), .processorError:
       return .refused
+    // Stopped as more of it came than a preview's worth.
+    case .responseError(reason: .URLSessionError(error: let error)) where error is ImagePreview.TooBig:
+      return .refused
     case .imageSettingError(reason: .dataProviderError(provider: _, error: let error)):
       if error is CancellationError {
         return nil
       }
       return (error as? ServerPictureError)?.isFinal == true ? .refused : .notNow
+    // A Giphy animation's WebP and then its GIF, as the GIF couldn't be had.
+    case .imageSettingError(reason: .alternativeSourcesExhausted(let errors)):
+      guard let last = errors.last else {
+        return .unreachable
+      }
+      return self.failure(of: last.error)
     default:
       return .unreachable
     }
@@ -1312,24 +1917,27 @@ final class ImagePreviewView: NSView, NSDraggingSource {
   /// Checks the picture before it's seen, then shows it, covered if it might be sensitive.
   private func check(_ value: RetrieveImageResult, key: String) {
     let image = value.image
-    // An animation's frames from along it, as it came, since its first can be harmless, or the
-    // picture as it's previewed.
-    let animation = (image.kf.imageFrameCount ?? 1) > 1 ? value.data : nil
+    // An animation's frames from along it, from the file it's kept in, as it came, since its first
+    // can be harmless, or the picture as it's previewed.
+    let animation = (self.mayBeAnimated ? self.source?.cacheKey : nil).map { key -> @Sendable () -> Data? in
+      { ImagePreview.animation(forKey: key) }
+    }
     let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
     Task { [weak self] in
       let cover = await SensitiveContent.cover(for: picture, animation: animation, key: key)
-      // Unless it's gone. It only ever loads once.
-      guard let self else {
+      // Unless it's gone, or covered already, by a check from when it loaded before.
+      guard let self, self.covered == nil else {
         return
       }
+      self.isChecking = false
       if let cover {
         self.cover(image, with: cover)
       }
       self.imageView.isHidden = false
       self.updatePlaceholder()
       // Played, as an animation, once it's known not to need covering.
-      if cover == nil, ImagePreview.playsByThemselves || self.isPointedAt {
-        self.animate?()
+      if cover == nil {
+        self.animate()
       }
     }
   }
@@ -1373,9 +1981,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     self.toolTip = self.linkToolTip
     self.setAccessibilityLabel("Image preview")
     // Played again, as an animation.
-    if ImagePreview.playsByThemselves || self.isPointedAt {
-      self.animate?()
-    }
+    self.animate(waiting: false)
   }
 
   /// Covers the picture again, once it's been shown, for one that might be sensitive.
@@ -1446,7 +2052,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     let textView = self.textView
     let link = self.link ?? self.url
     if self.linkLabel == nil, let openImage = textView?.openImageAction {
-      openImage(self.url)
+      openImage(self.fileURL)
     }
     else if let openURL = textView?.openURLAction {
       openURL(link)
@@ -1454,6 +2060,12 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     else {
       NSWorkspace.shared.open(link)
     }
+  }
+
+  /// The picture as a file, to open, or drag out: for a Giphy animation previewed as its WebP, its
+  /// GIF, as that's what's expected of a file of one.
+  private var fileURL: URL {
+    ImagePreview.giphyGIF(for: self.url) ?? self.url
   }
 
   /// The text view it's in.
@@ -1496,7 +2108,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
     if self.sources.serverFile(at: self.url) != nil, let menu = self.textView?.fileLinkMenu?(self.url) {
       return menu
     }
-    guard let items = self.textView?.linkMenuItems(for: self.link ?? self.url, image: self.linkLabel == nil ? self.url : nil) else {
+    guard let items = self.textView?.linkMenuItems(for: self.link ?? self.url, image: self.linkLabel == nil ? self.fileURL : nil) else {
       return nil
     }
     let menu = NSMenu()
@@ -1508,10 +2120,10 @@ final class ImagePreviewView: NSView, NSDraggingSource {
 
   // MARK: Dragging
 
-  // Dragged a little way, it takes the image along, which arrives whole where it's dropped. Not
-  // while it's covered.
+  // Dragged a little way, it takes the image along, which arrives whole where it's dropped, with
+  // its first frame as it goes, should it be playing. Not while it's being checked, or covered.
   override func mouseDragged(with event: NSEvent) {
-    guard !self.dragged, self.covered == nil, !self.imageView.isHidden, let down = self.mouseDownEvent, let image = self.imageView.image else {
+    guard !self.dragged, !self.isChecking, self.covered == nil, let down = self.mouseDownEvent, let image = self.imageView.image else {
       return
     }
     let start = down.locationInWindow
@@ -1520,7 +2132,7 @@ final class ImagePreviewView: NSView, NSDraggingSource {
       return
     }
     self.dragged = true
-    let item = NSDraggingItem(pasteboardWriter: ImageFilePromise(url: self.url, sources: self.sources))
+    let item = NSDraggingItem(pasteboardWriter: ImageFilePromise(url: self.fileURL, sources: self.sources))
     item.setDraggingFrame(self.imageView.frame, contents: image)
     self.beginDraggingSession(with: [item], event: down, source: self)
   }

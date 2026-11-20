@@ -38,8 +38,9 @@ final class AnimatedBannerView: NSView {
   private let framesLayer = CALayer()
   private lazy var player = AnimationPlayer(layer: self.framesLayer, in: self)
   private var frames: AnimationFrames?
-  /// The GIF that's been opened, or is being.
+  /// The GIF that's been opened, or is being, and the pixels to a point of the screen it was for.
   private var openedFileURL: URL?
+  private var openedScale: CGFloat?
   private var opening: Task<Void, Never>?
 
   init() {
@@ -51,14 +52,21 @@ final class AnimatedBannerView: NSView {
     self.framesLayer.contentsGravity = .resize
     self.layer?.addSublayer(self.framesLayer)
     self.setAccessibilityElement(false)
-    // Still, while the system's Animated Images setting has animations stop, and played again
-    // once it doesn't.
+    // Still, while the system's Animated Images setting has animations stop, or the Mac's in Low
+    // Power Mode, and played again once it isn't.
     NotificationCenter.default.addObserver(self, selector: #selector(self.animatedImagesDidChange), name: AccessibilitySettings.animatedImagesEnabledDidChangeNotification, object: nil)
+    LowPowerMode.watch()
+    NotificationCenter.default.addObserver(self, selector: #selector(self.animatedImagesDidChange), name: LowPowerMode.didChange, object: nil)
+  }
+
+  /// Whether it plays, or shows its first frame alone, still.
+  private var animates: Bool {
+    AccessibilitySettings.animatedImagesEnabled && !LowPowerMode.isOn
   }
 
   @objc private func animatedImagesDidChange() {
     if let frames = self.frames {
-      self.player.play(frames, animates: AccessibilitySettings.animatedImagesEnabled)
+      self.player.play(frames, animates: self.animates)
     }
   }
 
@@ -91,8 +99,9 @@ final class AnimatedBannerView: NSView {
 
   override func viewDidChangeBackingProperties() {
     super.viewDidChangeBackingProperties()
-    // On a screen with other colors, the frames are decoded again in them.
-    if self.player.needsDecodingAgain {
+    // On a screen with other colors, or pixels to a point, the frames are decoded again for it.
+    let scale = self.window?.backingScaleFactor
+    if self.player.needsDecodingAgain || (scale != nil && self.openedScale != nil && scale != self.openedScale) {
       self.reset()
     }
   }
@@ -114,16 +123,18 @@ final class AnimatedBannerView: NSView {
     }
     self.openedFileURL = fileURL
     let size = self.bounds.size
+    let scale = self.window?.backingScaleFactor ?? 2
+    self.openedScale = scale
     self.opening = Task { [weak self] in
       let opened = await Task.detached(priority: .userInitiated) {
-        AnimationFrames(contentsOf: fileURL, filling: size)
+        AnimationFrames(contentsOf: fileURL, filling: size, scale: scale)
       }.value
       guard let frames = opened, let self, !Task.isCancelled, self.fileURL == fileURL else {
         return
       }
       self.frames = frames
       self.placeFrames()
-      self.player.play(frames, animates: AccessibilitySettings.animatedImagesEnabled)
+      self.player.play(frames, animates: self.animates)
     }
   }
 
@@ -139,13 +150,33 @@ final class AnimatedBannerView: NSView {
   }
 }
 
+/// Low Power Mode, which animations don't play by themselves in, to save power.
+enum LowPowerMode {
+  /// Posted on the main thread as it's turned on or off.
+  static let didChange = Notification.Name("LowPowerModeDidChange")
+
+  static var isOn: Bool {
+    ProcessInfo.processInfo.isLowPowerModeEnabled
+  }
+
+  nonisolated(unsafe) private static let observer = NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { _ in
+    NotificationCenter.default.post(name: LowPowerMode.didChange, object: nil)
+  }
+
+  /// Tells of it turning on or off from now on.
+  static func watch() {
+    _ = self.observer
+  }
+}
+
 /// Plays an animation's frames on a layer, by Core Animation, at the animation's own timings.
 ///
 /// Its frames are decoded off the main thread and handed to Core Animation as an animation, which
 /// the window server plays. So the app does nothing from one frame to the next, and nothing's drawn
 /// while its view can't be seen. An animation whose frames fit in 16 MB is decoded once and loops by
-/// itself. A longer one is decoded a part at a time, each queued while the one before it plays, and
-/// only while its view's in a window that can be seen.
+/// itself, after playing as it's decoded the first time round. A longer one is decoded a part at a
+/// time, each queued while the one before it plays, and only while its view's in a window that can
+/// be seen. Stopped, it stops decoding, partway.
 @MainActor
 final class AnimationPlayer {
   private let layer: CALayer
@@ -195,10 +226,9 @@ final class AnimationPlayer {
     self.layer.contents = nil
   }
 
-  /// For when its view's moved into a window, or out of one, as a preview is as it scrolls away and
-  /// back, which takes its animation away, and the frames it holds with it. It's played again from
-  /// the start once it's back, with what showed as it left showing until then. Parts aren't decoded
-  /// while it's out of one.
+  /// For when its view's moved into a window, or out of one, which takes its animation away, and the
+  /// frames it holds with it. It's played again from the start once it's back, with what showed as
+  /// it left showing until then. Parts aren't decoded while it's out of one.
   func windowDidChange() {
     guard let frames = self.frames, self.animates else {
       return
@@ -230,9 +260,7 @@ final class AnimationPlayer {
   /// The first frame alone, still.
   private func showFirst(_ frames: AnimationFrames) async {
     let colorSpace = self.windowColorSpace
-    let images = await Task.detached(priority: .userInitiated) {
-      frames.frames(0..<1, in: colorSpace)
-    }.value
+    let images = await Self.decode(frames, 0..<1, in: colorSpace)
     guard !Task.isCancelled else {
       return
     }
@@ -241,24 +269,60 @@ final class AnimationPlayer {
     self.onShow?()
   }
 
-  /// Every frame at once, looping by itself from now on.
+  /// Every frame, looping by itself once they're all decoded. The first time round, they play as
+  /// they're decoded, a part at a time, each decoded while the one before it plays, so it moves
+  /// straight away, rather than once they're all here.
   private func playWhole(_ frames: AnimationFrames) async {
     let colorSpace = self.windowColorSpace
-    let images = await Task.detached(priority: .userInitiated) {
-      frames.frames(0..<frames.count, in: colorSpace)
-    }.value
-    guard !Task.isCancelled else {
-      return
+    let origin = self.layerTime
+    var images: [CGImage] = []
+    images.reserveCapacity(frames.count)
+    var added: [String] = []
+    while images.count < frames.count {
+      let range = images.count..<min(images.count + frames.firstPartLength, frames.count)
+      let part = await Self.decode(frames, range, in: colorSpace, priority: images.isEmpty ? .userInitiated : .utility)
+      guard !Task.isCancelled else {
+        return
+      }
+      if images.isEmpty {
+        self.decodedColorSpace = colorSpace
+        self.layer.contents = part.first
+        self.onShow?()
+      }
+      images += part
+      guard images.count < frames.count else {
+        break
+      }
+      // In its place the first time round, its last frame staying until the next part covers it,
+      // should that come late.
+      let start = origin + frames.starts[range.lowerBound]
+      let animation = Self.animation(part, durations: frames.durations[range])
+      animation.beginTime = start
+      animation.fillMode = .forwards
+      animation.isRemovedOnCompletion = false
+      let key = "first \(range.lowerBound)"
+      self.layer.add(animation, forKey: key)
+      added.append(key)
+      // The next part's decoded once this one starts, while it plays.
+      let wait = start - self.layerTime
+      if wait > 0 {
+        try? await Task.sleep(for: .seconds(wait), tolerance: .seconds(min(0.1, wait / 4)), clock: .suspending)
+        guard !Task.isCancelled else {
+          return
+        }
+      }
     }
-    self.decodedColorSpace = colorSpace
-    self.layer.contents = images.first
-    self.onShow?()
     guard images.count > 1 else {
       return
     }
+    // All of them, from the start of the first time round, so it goes on from where it is.
     let animation = Self.animation(images, durations: frames.durations[...])
+    animation.beginTime = origin
     animation.repeatCount = .infinity
     self.layer.add(animation, forKey: "frames")
+    for key in added {
+      self.layer.removeAnimation(forKey: key)
+    }
   }
 
   /// A part at a time, from now on, each queued to start as the one before it ends. While its view
@@ -276,9 +340,7 @@ final class AnimationPlayer {
       let start = origin + Double(loop) * frames.loopDuration + frames.starts[range.lowerBound]
       let end = start + frames.starts[range.upperBound] - frames.starts[range.lowerBound]
       let colorSpace = self.windowColorSpace
-      let images = await Task.detached(priority: added.isEmpty ? .userInitiated : .utility) {
-        frames.frames(range, in: colorSpace)
-      }.value
+      let images = await Self.decode(frames, range, in: colorSpace, priority: added.isEmpty ? .userInitiated : .utility)
       guard !Task.isCancelled else {
         return
       }
@@ -330,6 +392,19 @@ final class AnimationPlayer {
           next = frames.frame(at: elapsed - Double(loop) * frames.loopDuration)
         }
       }
+    }
+  }
+
+  /// Frames decoded off the main thread, which stops partway should what's waiting for them be
+  /// cancelled, as it is when it's stopped.
+  private static func decode(_ frames: AnimationFrames, _ range: Range<Int>, in colorSpace: CGColorSpace?, priority: TaskPriority = .userInitiated) async -> [CGImage] {
+    let decoding = Task.detached(priority: priority) {
+      frames.frames(range, in: colorSpace)
+    }
+    return await withTaskCancellationHandler {
+      await decoding.value
+    } onCancel: {
+      decoding.cancel()
     }
   }
 
@@ -408,6 +483,9 @@ final class AnimationFrames: @unchecked Sendable {
   let starts: [TimeInterval]
   /// How many frames are decoded at a time.
   let partLength: Int
+  /// How many frames are decoded at a time the first time round, for one decoded whole, which plays
+  /// as they are.
+  let firstPartLength: Int
 
   private let source: CGImageSource
   /// One decode at a time, should parts restart while one's still being decoded.
@@ -431,26 +509,26 @@ final class AnimationFrames: @unchecked Sendable {
   }
 
   /// The animation at `fileURL`, decoded with no more pixels than it needs to fill `bounds` on a
-  /// Retina screen, as a banner is, cropped. Nil if it isn't an image.
-  convenience init?(contentsOf fileURL: URL, filling bounds: CGSize) {
+  /// screen with `scale` pixels to a point, as a banner is, cropped. Nil if it isn't an image.
+  convenience init?(contentsOf fileURL: URL, filling bounds: CGSize, scale: CGFloat = 2) {
     guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else {
       return nil
     }
     self.init(source: source, wholeLimit: Self.wholeLimit) { size in
-      [min(1, 2 * min(1, max(bounds.width / size.width, bounds.height / size.height)))]
+      [min(1, scale * min(1, max(bounds.width / size.width, bounds.height / size.height)))]
     }
   }
 
   /// An animation, as it came, decoded with no more pixels than it needs to fit in `bounds` on a
-  /// Retina screen, as a preview is, or a pixel for each point, if that lets it be decoded whole.
-  /// Nil if it isn't an image, or has only one frame, which isn't an animation.
-  convenience init?(data: Data, fitting bounds: CGSize) {
+  /// screen with `scale` pixels to a point, as a preview is, or a pixel for each point, if that lets
+  /// it be decoded whole. Nil if it isn't an image, or has only one frame, which isn't an animation.
+  convenience init?(data: Data, fitting bounds: CGSize, scale: CGFloat = 2) {
     guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 1 else {
       return nil
     }
     self.init(source: source, wholeLimit: Self.previewWholeLimit) { size in
       let fit = min(bounds.width / size.width, bounds.height / size.height)
-      return [min(1, 2 * fit), min(1, fit)]
+      return [min(1, scale * fit), min(1, fit)]
     }
   }
 
@@ -493,7 +571,9 @@ final class AnimationFrames: @unchecked Sendable {
     self.pixelHeight = chosen.height
 
     let frameBytes = self.pixelWidth * self.pixelHeight * 4
-    self.partLength = whole != nil ? indexes.count : max(1, Self.partLimit / frameBytes)
+    let partLength = max(1, Self.partLimit / frameBytes)
+    self.partLength = whole != nil ? indexes.count : partLength
+    self.firstPartLength = min(indexes.count, partLength)
 
     var starts: [TimeInterval] = [0]
     for duration in durations {
@@ -514,12 +594,16 @@ final class AnimationFrames: @unchecked Sendable {
   }
 
   /// Frames decoded, in the format and colors Core Animation shows without converting them. One
-  /// that can't be decoded shows the one before it.
+  /// that can't be decoded shows the one before it. Fewer, should the task decoding them be
+  /// cancelled.
   func frames(_ range: Range<Int>, in colorSpace: CGColorSpace?) -> [CGImage] {
     self.lock.withLock {
       var images: [CGImage] = []
       images.reserveCapacity(range.count)
       for index in range {
+        guard !Task.isCancelled else {
+          break
+        }
         if let image = self.decode(self.indexes[index], in: colorSpace) ?? images.last ?? self.blank(in: colorSpace) {
           images.append(image)
         }
